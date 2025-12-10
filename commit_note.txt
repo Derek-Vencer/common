@@ -1,0 +1,6 @@
+release from bes origin/cust/earphones_com_sdk_from_ep10_1.0:
+       mcu-commit: f79f32d5d28cdf5a3f216f8114569e37eaff4413
+    bthost-commit: 06fe55f85f5c388d5a6823a8f7d6faf61c109fb9
+ btservice-commit: be7a3c595ccfb505c8eb8bd1e119191d297304d8
+multimedia-commit: 0bf1ecac71f1f167cc5bd45ce956ed12f87d7481
+    mm-lib-commit: 1aa0896abcc1e3700d1d250f258e22269bf36e3e

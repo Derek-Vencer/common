@@ -1,0 +1,167 @@
+CHIP		?= best1306
+
+NOSTD ?= 0
+RTOS ?= 0
+NOAPP ?= 1
+
+export ARM_CMSE ?= 1
+
+export CORE_DUMP ?= 0
+
+export LIBC_ROM ?= 1
+
+ifneq ($(filter best1306 best1501p,$(CHIP)),)
+export OSC_26M_X4_AUD2BB ?= 0
+else
+export OSC_26M_X4_AUD2BB ?= 1
+endif
+
+export ULTRA_LOW_POWER ?= 1
+
+export POWER_MODE ?= DIG_DCDC
+
+ifneq ($(filter best1306 best1306p best1501 best1501p best1502p best1502x best1503,$(CHIP)),)
+export INTSRAM_RUN := 1
+endif
+
+ifeq ($(INTSRAM_RUN),1)
+KBUILD_CPPFLAGS += -DINTSRAM_RUN
+export BOOT_CODE_IN_RAM := 1
+endif
+
+export TRACE_BUF_SIZE ?= 0
+export TRACE_GLOBAL_TAG ?= 1
+export DUMP_LOG_ENABLE ?= 1
+export LOG_DUMP_SECTION_SIZE ?= 0
+
+export CUSTOM_PARAMETER_SECTION_SIZE ?= 0
+
+export CUSTOM_PARAMETER_SECTION_SIZE ?= 0
+
+export FACTORY_SECTION_SIZE ?= 0
+
+export RESERVED_SECTION_SIZE ?= 0
+
+export USERDATA_SECTION_SIZE ?= 0
+
+export PSRAM_SIZE ?= 0x800000
+
+export PSRAMUHS_SIZE ?= 0x800000
+
+export OTA_CODE_OFFSET ?= 0x20000
+KBUILD_CPPFLAGS += -DOTA_CODE_OFFSET=$(OTA_CODE_OFFSET)
+
+export FLASH_REGION_SIZE ?= 0x60000
+KBUILD_CPPFLAGS += -DFLASH_REGION_SIZE=$(FLASH_REGION_SIZE)
+
+export FLASH_S_SIZE ?= 0x80000
+KBUILD_CPPFLAGS += -DFLASH_S_SIZE=$(FLASH_S_SIZE)
+
+export NS_APP_START_OFFSET ?= 0x80000
+KBUILD_CPPFLAGS += -DNS_APP_START_OFFSET=$(NS_APP_START_OFFSET)
+
+export SYS_PSRAM_S_SIZE ?= 0x200000
+KBUILD_CPPFLAGS += -DSYS_PSRAM_S_SIZE=$(SYS_PSRAM_S_SIZE)
+
+export OTA_SEC_BOOT_INFO_OFFSET ?= 0x18000
+ifneq ($(OTA_SEC_BOOT_INFO_OFFSET), 0)
+KBUILD_CPPFLAGS += -DOTA_SEC_BOOT_INFO_OFFSET=$(OTA_SEC_BOOT_INFO_OFFSET)
+endif
+
+export CUSTOMER_LOAD_SRAM_TEXT_RAMX_SECTION_SIZE 	?= 1216
+export CUSTOMER_LOAD_RAM_DATA_SECTION_SIZE 			?= 384
+export CUSTOMER_LOAD_ENC_DEC_RECORD_SECTION_SIZE 	?= 0x4000
+
+export SPA_AUDIO_SEC ?= 0
+export CMSE_CRYPT_TEST_DEMO ?= 0
+
+KBUILD_CPPFLAGS += -DFAST_XRAM_SECTION_SIZE=32
+
+ifeq ($(CMSE_CRYPT_TEST_DEMO),1)
+KBUILD_CPPFLAGS += -DCMSE_CRYPT_TEST_DEMO
+endif
+
+include config/noapp_test/target.mk
+
+ifneq ($(filter best1306 best1306p,$(CHIP)),)
+LDS_FILE	:= best1000_1306.lds
+else
+LDS_FILE	:= best1000.lds
+endif
+
+ifneq ($(SPA_AUDIO_SEC)-$(OTA_TZ_ENABLE),0-0)
+core-y += utils/heap/
+core-y += utils/crc/
+ifeq ($(SPA_AUDIO_SEC),1)
+core-y += thirdparty/userapi/spa_dummy_app/sec/
+endif
+
+ifeq ($(OTA_TZ_ENABLE),1)
+core-y += services/norflash_api/cmse/
+core-y += services/ota/cmse/
+KBUILD_CPPFLAGS += -DOTA_TZ_ENABLE
+endif
+endif
+
+core-y += platform/drivers/mpc/
+core-y += platform/drivers/ana/
+
+ifeq ($(USER_SECURE_BOOT),1)
+export USER_SECURE_BOOT_JUMP_ENTRY_ADDR ?= $(NS_APP_START_OFFSET)
+endif
+
+ifneq ($(filter best1306 best1306p best1502p,$(CHIP)),)
+export CMSE_RAM_RAMX_LEND_NSE ?= 1
+endif
+
+ifeq ($(CMSE_RAM_RAMX_LEND_NSE),1)
+KBUILD_CPPFLAGS += -DCMSE_RAM_RAMX_LEND_NSE
+endif
+
+#########################################################################################
+
+export SE_OTP_DEMO_TEST := 0
+ifeq ($(SE_OTP_DEMO_TEST),1)
+KBUILD_CPPFLAGS += -DSE_OTP_DEMO_TEST
+endif
+
+export DLB_SEC_LOAD_DEMO ?= 1
+ifeq ($(DLB_SEC_LOAD_DEMO),1)
+KBUILD_CPPFLAGS += -DDLB_SEC_LOAD_DEMO
+endif
+
+KBUILD_CPPFLAGS += -DTHIRD_ALGO_PRIVATE_KEY_ADDR=0x031C
+
+export FLASH_SUSPEND ?= 1
+ifeq ($(FLASH_SUSPEND), 1)
+KBUILD_CPPFLAGS += -DFLASH_SUSPEND
+endif
+
+export FLASH_PROTECTION ?= 0
+ifeq ($(FLASH_PROTECTION),1)
+KBUILD_CPPFLAGS += -DFLASH_PROTECTION
+endif
+
+export FLASH_PROTECTION_BOOT_SECTION_FIRST ?= 0
+ifeq ($(FLASH_PROTECTION_BOOT_SECTION_FIRST),1)
+KBUILD_CPPFLAGS += -DFLASH_PROTECTION_BOOT_SECTION_FIRST
+endif
+
+export OTA_CODE_OFFSET ?= 0
+ifneq ($(OTA_CODE_OFFSET),)
+KBUILD_CPPFLAGS += -DOTA_CODE_OFFSET=$(OTA_CODE_OFFSET)
+endif
+
+export FLASH_REMAP ?= 0
+ifeq ($(FLASH_REMAP),1)
+KBUILD_CPPFLAGS += -DFLASH_REMAP
+export OTA_REMAP_OFFSET ?= 0x30000
+ifneq ($(OTA_REMAP_OFFSET),)
+KBUILD_CPPFLAGS += -DOTA_REMAP_OFFSET=$(OTA_REMAP_OFFSET)
+endif
+else
+export CMSE_OTA_BACKUP_START_ADDRESS ?= 0x50000
+export CMSE_OTA_BACKUP_SIZE ?= 0x20000
+KBUILD_CPPFLAGS += -DCMSE_OTA_BACKUP_START_ADDRESS=$(CMSE_OTA_BACKUP_START_ADDRESS)
+KBUILD_CPPFLAGS += -DCMSE_OTA_BACKUP_SIZE=$(CMSE_OTA_BACKUP_SIZE)
+endif

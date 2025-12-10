@@ -1,0 +1,1 @@
+./tools/com_sdk/cust/build_pro_1306p_0015.sh
