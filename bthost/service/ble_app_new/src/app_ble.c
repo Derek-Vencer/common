@@ -68,6 +68,8 @@
 #include "bt_mesh_ble_export.h"
 #endif
 
+#include "ble_aiwang_srv.h"
+
 #ifndef ADV_DATA_LEN
 #define ADV_DATA_LEN                    (0x1F)
 #endif
@@ -6005,6 +6007,12 @@ void app_ble_init(void)
 #error BLE_WIFI_SRV_ENABLED
     ble_wifi_srv_init();
 #endif
+
+#ifdef BLE_AIWANG_SRV_ENABLED
+    ble_aiwang_srv_init();
+#endif
+
+
 }
 
 uint32_t app_ble_save_ctx(uint8_t conidx, uint8_t *buf, uint16_t buf_len)

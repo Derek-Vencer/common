@@ -18,7 +18,7 @@
 #include "app_ble.h"
 #include "nvrecord_env.h"
 
-#define BLE_BATTERY_INSTANCE_NUM (2)
+#define BLE_BATTERY_INSTANCE_NUM  (1)//(2)
 
 GATT_DECL_PRI_SERVICE(g_ble_batt_service, GATT_UUID_BAT_SERVICE);
 

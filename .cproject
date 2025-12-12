@@ -71,6 +71,11 @@
 									<listOptionValue builtIn="false" value="MEDIA_PLAYER_SUPPORT=1"/>
 									<listOptionValue builtIn="false" value="BT_HFP_SUPPORT=1"/>
 									<listOptionValue builtIn="false" value="BT_A2DP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="GFPS_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BLE_BATT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BTHOST_DEBUG=1"/>
+									<listOptionValue builtIn="false" value="DBG_DEBUG_PRINT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__IAG_BLE_INCLUDE__=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -120,6 +125,11 @@
 									<listOptionValue builtIn="false" value="MEDIA_PLAYER_SUPPORT=1"/>
 									<listOptionValue builtIn="false" value="BT_HFP_SUPPORT=1"/>
 									<listOptionValue builtIn="false" value="BT_A2DP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="GFPS_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BLE_BATT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BTHOST_DEBUG=1"/>
+									<listOptionValue builtIn="false" value="DBG_DEBUG_PRINT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__IAG_BLE_INCLUDE__=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

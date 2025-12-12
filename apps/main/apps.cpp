@@ -446,6 +446,8 @@ extern void app_rbplay_audio_reset_pause_status(void);
 uint8_t  app_poweroff_flag = 0;
 static enum APP_POWERON_CASE_T g_pwron_case = APP_POWERON_CASE_INVALID;
 
+extern void sparraw_service_init(void);
+
 #ifndef BESUI_STEREO_EN
 #ifndef APP_TEST_MODE
 POSSIBLY_UNUSED static uint8_t app_status_indication_init(void)
@@ -2680,6 +2682,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         ota_basic_env_init();
 #endif
 
+       sparraw_service_init();
+
 
 #if defined(GATT_RATE_TESTS) || defined(GATT_RATE_TESTC)
     gatt_rate_test_begin();
@@ -2815,6 +2819,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #if defined(OTA_ENABLE)
             ota_basic_env_init();
 #endif
+
+            sparraw_service_init();
 
 #if defined(GATT_RATE_TESTS) || defined(GATT_RATE_TESTC)
     gatt_rate_test_begin();
