@@ -428,6 +428,7 @@ static void hal_pwrkey_handle_irq_state(enum HAL_PWRKEY_IRQ_T state)
 #else
 #define PWRKEY_IRQ_HDLR_PARAM           void
 #endif
+
 static void hal_pwrkey_irqhandler(PWRKEY_IRQ_HDLR_PARAM)
 {
     enum HAL_PWRKEY_IRQ_T state;
@@ -1318,6 +1319,7 @@ int hal_key_open(int checkPwrKey, int (* cb)(uint32_t, uint8_t))
 #ifndef NO_PWRKEY
     hal_pwrkey_open();
 #endif
+
 #if (CFG_HW_ADCKEY_NUMBER > 0)
     hal_adckey_open();
 #endif

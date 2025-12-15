@@ -25,6 +25,8 @@
 #include "besui_common.h"
 #endif
 
+#include "charger_with_icp1205.h"
+
 #ifndef TRACE
 #define TRACE(attr, str, ...)   TR_DEBUG(attr, str, ##__VA_ARGS__)
 #endif
@@ -416,9 +418,11 @@ void sparraw_rx_thread_init(void)
 void sparraw_service_init(void)
 {
 	TRACE(0,"[%s]",__func__);
+	// ble_aiwang_srv_init();
+	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
     sparraw_rx_thread_init();
-   // ble_aiwang_srv_init();
-    ble_aiwang_srv_register_event_cb(sparraw_event_handle);
+    //start charger_manager_thread
+    charger_manager_start();
 }
 
 

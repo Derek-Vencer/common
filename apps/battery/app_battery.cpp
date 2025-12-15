@@ -136,7 +136,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #ifdef BLE_ONLY_ENABLED
 #define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (25000)
 #else
-#define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (10000)
+#define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (10*1000)
 #endif
 #define APP_BATTERY_CHARGING_PERIODIC_MS (APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS)
 
@@ -214,7 +214,26 @@ osTimerDef (APP_BATTERY, app_battery_timer_handler);
 static osTimerId app_battery_timer = NULL;
 static struct APP_BATTERY_MEASURE_T app_battery_measure;
 
+
+
 static int app_battery_charger_handle_process(void);
+
+static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
+	static const int battery_table_level[11] = {4130,4040,3940,3880,3830,3790,3750,3720,3660,3580,3100}; //unit:mv
+	uint8_t level = 0;
+	uint8_t index = 0;
+	//uint16_t last_mv = battery_table_level[0];
+	for (index = 0; index < sizeof(battery_table_level)/sizeof(battery_table_level[0]); index++)
+	{
+		if(app_battery_measure.currvolt >= battery_table_level[index]) {
+			level   = 10 - index;
+			//last_mv = battery_table_level[0];
+			break;
+		}
+	}
+	return level;
+}
+
 
 #ifdef BESUI_STEREO_EN
 int app_ui_battery_charger_handle_process(void)
@@ -346,6 +365,7 @@ static void app_battery_timer_start(enum APP_BATTERY_MEASURE_PERIODIC_T periodic
                 break;
             case APP_BATTERY_MEASURE_PERIODIC_NORMAL:
                 periodic_millisec = APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS;
+                break;
             default:
                 break;
         }
@@ -474,6 +494,9 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             app_battery_measure.currlevel = level;
 #endif
 #endif
+            BATTERY_TRACE(0,"previous_level=%d", level);
+            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
+            BATTERY_TRACE(0,"actutal level=%d currvolt=%d", level, app_battery_measure.currvolt);
             app_status_battery_report(level);
             break;
         case APP_BATTERY_STATUS_PDVOLT:
@@ -576,9 +599,7 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
 #endif
         }
     }
-
     app_battery_timer_start(APP_BATTERY_MEASURE_PERIODIC_CHARGING);
-
     return 0;
 }
 

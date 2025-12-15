@@ -11,6 +11,8 @@ subdir-ccflags-y += -Iapps/common \
                     -Iapps/main \
                     -Iplatform/drivers/bt \
                     -Iplatform/hal \
+                    -Iplatform/hal/best1306p/ \
+                    -Iplatform/drivers/ana/ \
                     $(BLUETOOTH_ADAPTER_INCLUDES) \
                     $(BT_SERVICE_UX_INCLUDES) \
                 	-Imultimedia/inc \
@@ -65,6 +67,7 @@ subdir-ccflags-y += -Iapps/common \
 				    -Iservices/nv_section/customparam_section \
 				    -Ibthost/service/ble_app_new/inc  \
 				    -Iutils/hsm \
-				    -Ibthost/adapter/inc/ble/aob
+				    -Ibthost/adapter/inc/ble/aob \
+				    
 				    
 				    
