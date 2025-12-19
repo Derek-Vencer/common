@@ -8,6 +8,7 @@ obj-y := $(obj_c:.c=.o) $(obj_s:.S=.o) $(obj_cpp:.cpp=.o)
 
 
 ifeq ($(BESUI_TWS_EN),1)
+$(error BESUI_TWS_EN)
 obj-y += tws_ui/
 endif
 

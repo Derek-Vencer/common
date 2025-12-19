@@ -263,7 +263,7 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
     uint8_t i;
     uint32_t meanBattVolt = 0;
     HAL_GPADC_MV_T vbat = volt;
-    BATTERY_TRACE(2,"%s %d",__func__, vbat);
+    BATTERY_TRACE(2,"%s %dmv app_vbat_volt_div=%d",__func__, vbat, app_vbat_volt_div);
     if ((vbat == HAL_GPADC_BAD_VALUE) || ((vbat * app_vbat_volt_div) <= APP_BATTERY_ERR_MV))
     {
         app_battery_measure.cb(APP_BATTERY_STATUS_INVALID, vbat);
@@ -477,22 +477,28 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 level /= 10;
             }
 #else
+
 #ifdef BESUI_TWS_EN
             level = app_battery_level_tran_process(app_battery_measure.currvolt);
             app_battery_measure.currlevel = level;
             app_battery_low_voice_enable_set(app_battery_measure.currlevel);
             level = app_battery_level_compare();
             app_battery_low_voice_play_process();
+
 #ifdef BATTERY_SWITCH_ROLE_EN
             besui_battery_role_switch();
 #endif
+
 #else
+
 #if defined(BESUI_STEREO_EN)
             level = stereo_battery_level_process(app_battery_measure.status, app_battery_measure.currvolt);
             BATTERY_TRACE(0,"stereo return level=%d", level);
 #endif
+
             app_battery_measure.currlevel = level;
 #endif
+
 #endif
             BATTERY_TRACE(0,"previous_level=%d", level);
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
@@ -537,11 +543,13 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 
 int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
+    uint8_t level = 0;
 #if defined(BESUI_TWS_EN)
+#error BESUI_TWS_EN
     BATTERY_TRACE(1,"[UIBAT] status = %d, volt %d",status, prams.volt);
     app_battery_level_tran_process(prams.volt);
 #elif defined(BESUI_STEREO_EN)
-    uint8_t level = 0;
+#error BESUI_STEREO_EN
     level = stereo_battery_level_process(status, prams.volt);
     BATTERY_TRACE(1,"[UIBAT] status=%d, volt=%d, level=%d",status, prams.volt, level);
 #endif
@@ -551,7 +559,9 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
         case APP_BATTERY_STATUS_NORMAL:
         case APP_BATTERY_STATUS_UNDERVOLT:
             app_battery_measure.currvolt = prams.volt;
-            app_status_battery_report(prams.volt);
+            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
+            BATTERY_TRACE(1,"[UIBAT] status=%d, volt=%d, level=%d",status, prams.volt, level);
+            app_status_battery_report(level/*prams.volt*/);
             break;
         case APP_BATTERY_STATUS_CHARGING:
             BATTERY_TRACE(1,"CHARGING:%d", prams.charger);
