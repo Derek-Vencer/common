@@ -106,6 +106,8 @@ static int app_key_handle_process(APP_MESSAGE_BODY *msg_body)
 
     if (key_handle != NULL && key_handle->function!= NULL)
         ((APP_KEY_HANDLE_CB_T)key_handle->function)(&key_status,key_handle->param);
+    else
+    	KEY_TRACE(0,"%s not handle_key",__func__);
 
     return 0;
 }

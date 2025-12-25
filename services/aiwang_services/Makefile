@@ -69,5 +69,9 @@ subdir-ccflags-y += -Iapps/common \
 				    -Iutils/hsm \
 				    -Ibthost/adapter/inc/ble/aob \
 				    
-				    
+ifeq ($(BESUI_TWS_EN), 1)
+subdir-ccflags-y += -Iapps/besui \
+					
+					
+endif				    
 				    

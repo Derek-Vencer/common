@@ -84,6 +84,11 @@
 									<listOptionValue builtIn="false" value="I2C2_BASE=1"/>
 									<listOptionValue builtIn="false" value="CHIP_GPIO_VER=2"/>
 									<listOptionValue builtIn="false" value="GPIO_BASE=1"/>
+									<listOptionValue builtIn="false" value="DEBUG=1"/>
+									<listOptionValue builtIn="false" value="BT_AVRCP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_VOLUME_DEFAULT=13"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SIRI=1"/>
+									<listOptionValue builtIn="false" value="BT_SERVICE_ENABLE=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -146,6 +151,11 @@
 									<listOptionValue builtIn="false" value="I2C2_BASE=1"/>
 									<listOptionValue builtIn="false" value="CHIP_GPIO_VER=2"/>
 									<listOptionValue builtIn="false" value="GPIO_BASE=1"/>
+									<listOptionValue builtIn="false" value="DEBUG=1"/>
+									<listOptionValue builtIn="false" value="BT_AVRCP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_VOLUME_DEFAULT=13"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SIRI=1"/>
+									<listOptionValue builtIn="false" value="BT_SERVICE_ENABLE=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

@@ -62,6 +62,7 @@
 #endif
 
 #include "besui_hfp.h"
+#include "app_ibrt_internal.h"
 
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 extern "C" int32_t bt_sco_chain_bypass_tx_algo(uint32_t sel_ch);

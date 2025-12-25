@@ -107,7 +107,7 @@ static void hal_trace_fault_cp_handler(void);
 #endif
 
 #ifndef TRACE_PRINTF_LEN
-#define TRACE_PRINTF_LEN                (120)
+#define TRACE_PRINTF_LEN                (256)//(120)
 #endif
 
 #ifndef TRACE_DUMP_LEN

@@ -2681,7 +2681,12 @@ const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_TRIPLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_ULTRACLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_RAMPAGECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_TRIPLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+
+    //AiWang added
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_FIFTH_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_SIXTY_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLE_AND_HOLD},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
 
     {{APP_KEY_CODE_FN1,APP_KEY_EVENT_CLICK},"app_ibrt_service_test_key", app_tws_ibrt_test_key_io_event, NULL},
     {{APP_KEY_CODE_FN1,APP_KEY_EVENT_DOUBLECLICK},"app_ibrt_service_test_key", app_tws_ibrt_test_key_io_event, NULL},

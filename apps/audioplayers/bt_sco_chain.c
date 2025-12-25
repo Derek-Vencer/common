@@ -43,9 +43,11 @@
 #ifdef BESUI_TWS_EN
 #include "twsui_comm.h"
 #endif
+
 #if defined(BESUI_COMM_EN)
 #include "besui_common.h"
 #endif
+
 #ifdef BESUI_STEREO_EN
 #include "stereo_prompt.h"
 #include "app_thread.h"

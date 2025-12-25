@@ -678,6 +678,7 @@ void bt_key_handle(void)
                 break;
 #if defined(SUPPORT_SIRI) && defined(HF_CUSTOM_FEATURE_SUPPORT)
             case BTAPP_RELEASE_KEY:
+            	DEBUG_INFO(0,"bt_key_handle  SUPPORT_SIRI");
                 bt_key_handle_siri_key((enum APP_KEY_EVENT_T)bt_key.event);
                 break;
 #endif
@@ -696,6 +697,7 @@ void bt_key_init(void)
     bt_key.code = 0xff;
     bt_key.event = 0xff;
 #endif
+    DEBUG_INFO(1, "%s", __func__);
 }
 
 bool app_bt_update_tx_power_idx(uint16_t handle, int8_t tx_power_idx)

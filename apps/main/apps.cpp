@@ -529,11 +529,11 @@ APP_10_SECOND_TIMER_STRUCT app_10_second_array[] =
     INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 32, PairingTransferToConnectable),
     INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 32, CloseEarphone),
 #else
-    INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 12, bes_bt_me_transfer_pairing_to_connectable),
+    INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 12, bes_bt_me_transfer_pairing_to_connectable), // 2min
 #ifdef BESUI_STEREO_EN
     INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 90, CloseEarphone),
 #else
-    INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 30, CloseEarphone),
+    INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 30, CloseEarphone), //300s ------ 5 min
 #endif
 #endif
 #endif
@@ -2731,6 +2731,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         gfps_reg_battery_handler(app_tell_battery_info_handler);
         gfps_set_battery_datatype(SHOW_UI_INDICATION);
 #endif
+
 #ifdef __THIRDPARTY
 #if defined(__AI_VOICE__)
         app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO1,THIRDPARTY_INIT, AI_SPEC_INIT);
@@ -2739,7 +2740,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO3,THIRDPARTY_START, AI_SPEC_INIT);
 #endif
 #endif
+
 #if defined( APP_10_SECOND_TIMER_EN) && defined(__BTIF_BT_RECONNECT__)
+#error __BTIF_BT_RECONNECT__
 #if defined(FREEMAN_ENABLED_STERO)
         osDelay(100);
 #ifdef BESUI_STEREO_EN

@@ -307,13 +307,13 @@ extern "C" void app_enter_fastpairing_mode(void);
 void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, void *param)
 {
     uint8_t conn_devices = 0;
-    EARBUDS_TRACE(0,"%s code=0x%02x", __func__, status->code);
+    EARBUDS_TRACE(0,"%s code=0x%02x event=%d", __func__, status->code, status->event);
     if (APP_KEY_CODE_GOOGLE != status->code)
     {
-        switch(status->event)
+        switch( status->event )
         {
             case APP_KEY_EVENT_CLICK:
-                EARBUDS_TRACE(0,"first blood. app_ibrt_normal_ui_handle_key_v2");
+                EARBUDS_TRACE(0,"first blood. click, app_ibrt_normal_ui_handle_key_v2");
                 //goodocom why function the below functions?
                 //app_ibrt_middleware_handle_click();
                 bt_key_handle_bt_func_click();
@@ -328,8 +328,18 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 app_enter_fastpairing_mode();
 #endif
                 break;
+
+            case APP_KEY_EVENT_DOUBLE_AND_HOLD:
+            	EARBUDS_TRACE(0,"DOUBLE_AND_HOLD kill,enter freeman mode");
+            	//app_bt_volumeup();
+            	//app_bt_volumedown();
+            	bt_adapter_local_volume_up();
+            	//bt_adapter_local_volume_down()
+            	break;
+
             case APP_KEY_EVENT_LONGPRESS:
                 conn_devices = app_bt_count_connected_device();
+                EARBUDS_TRACE(0,"LONG kill");
                 EARBUDS_TRACE(0,"%s conn_devices %d", __func__, conn_devices);
                 if (conn_devices > 0)
                 {
@@ -374,6 +384,10 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
             case APP_KEY_EVENT_ULTRACLICK:
                 EARBUDS_TRACE(0,"ultra kill");
                 break;
+
+            case APP_KEY_EVENT_FIFTH_CLICK:
+            	EARBUDS_TRACE(0,"five kill");
+            	break;
 
             case APP_KEY_EVENT_RAMPAGECLICK:
                 EARBUDS_TRACE(0,"rampage kill!you are crazy!");
@@ -422,6 +436,8 @@ void app_ibrt_keyboard_request_handler_v2(uint16_t rsp_seq, uint8_t *p_buff, uin
 
     struct ibrt_keyboard_notify_v2_t *req = (struct ibrt_keyboard_notify_v2_t *)p_buff;
 
+    EARBUDS_TRACE(0,"%s", __func__);
+
     if (bts_bt_if_is_dev_link_connected(&req->remote))
     {
 #ifdef IBRT_SEARCH_UI
@@ -429,6 +445,10 @@ void app_ibrt_keyboard_request_handler_v2(uint16_t rsp_seq, uint8_t *p_buff, uin
 #else
         app_ibrt_normal_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #endif
+    }
+    else
+    {
+    	EARBUDS_TRACE(0,"%s Error", __func__);
     }
 #endif
 }
@@ -541,7 +561,7 @@ void app_ibrt_ui_perform_user_action_v2(uint8_t *p_buff, uint16_t length)
     }
 
     curr_device = app_bt_get_device(device_id);
-
+    EARBUDS_TRACE(0,"%s action=0x%02x", __func__, action);
     switch (action)
     {
         case IBRT_ACTION_PLAY:

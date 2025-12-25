@@ -852,7 +852,8 @@ static void charger_manager_handler_thread(const void *arg)
 	Icp1205IntEnable();
 	while(true)
 	{
-		osSignalWait(0x02,2000);
+		//osSignalWait(0x02,2000);
+		osSignalWait(0x02,osWaitForever);
 		Icp1205UpdataIntSts();
 		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
 	}

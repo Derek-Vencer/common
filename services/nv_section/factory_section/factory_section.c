@@ -329,6 +329,7 @@ uint8_t* factory_section_get_bt_name(void)
     }
 }
 
+
 int factory_section_set_bt_name(const char *name,int len)
 {
     uint8_t *mempool = NULL;
@@ -525,4 +526,23 @@ void factory_section_original_btaddr_get(uint8_t *btAddr)
         memcpy(btAddr, bt_global_addr, 6);
     }
 }
+
+void factory_section_original_bleaddr_get(uint8_t *bleAddr)
+{
+    if(factory_section_p){
+        NV_SECTION_TRACE(0,"get factory_section_p");
+        if (1 == nv_record_dev_rev)
+        {
+            memcpy(bleAddr, factory_section_p->data.ble_address, 6);
+        }
+        else
+        {
+            memcpy(bleAddr, factory_section_p->data.rev2_ble_addr, 6);
+        }
+    }else{
+        NV_SECTION_TRACE(0,"get bt_addr");
+        memcpy(bleAddr, ble_global_addr, 6);
+    }
+}
+
 

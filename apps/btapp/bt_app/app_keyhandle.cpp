@@ -887,10 +887,17 @@ void app_key_doubleclick_handle_bt_func(void)
 
     HFCALL_MACHINE_ENUM hfcall_machine = app_get_hfcall_machine();
 
-#ifdef SUPPORT_SIRI
-    open_siri_flag=0;
-#endif
+
     BTAPP_TRACE(0,"goc %s hfcall_machine=%d", __func__, hfcall_machine);
+
+#ifdef SUPPORT_SIRI
+    if(open_siri_flag)
+    {
+    	open_siri_flag = 0;
+        app_hfp_siri_voice(false);
+        return;
+    }
+#endif
     switch(hfcall_machine)
     {
         case HFCALL_MACHINE_CURRENT_IDLE:
@@ -900,7 +907,6 @@ void app_key_doubleclick_handle_bt_func(void)
 #else
             //bt_key_handle_customer_doubleclick();
             BTAPP_TRACE(0,"::goc next song double hf idle");
-            app_hfp_siri_voice(false);
             app_audio_control_media_forward();
 #endif
         break;
@@ -998,9 +1004,11 @@ void app_key_longpress_handle_bt_func(void)
 #ifdef SUPPORT_SIRI
     open_siri_flag=0;
 #endif
+
 #ifndef FPGA
     media_PlayAudio(AUD_ID_BT_WARNING, 0);
 #endif
+
     BTAPP_TRACE(0,"goc %s hfcall_machine=%d", __func__, hfcall_machine);
     switch(hfcall_machine)
     {
@@ -1008,20 +1016,36 @@ void app_key_longpress_handle_bt_func(void)
         case HFCALL_MACHINE_CURRENT_IDLE_ANOTHER_IDLE:
         default:
         {
-            bt_key_handle_customer_volume();
+            //bt_key_handle_customer_volume();
 #ifdef BT_PBAP_SUPPORT
             app_bt_pbap_client_test();
 #endif
+
 #ifdef BT_MAP_SUPPORT
             bt_map_client_test(&app_bt_get_device(BT_DEVICE_ID_1)->remote);
 #endif
+
+#ifdef SUPPORT_SIRI
+            if(open_siri_flag == 0 )
+            {
+                if( 0 == app_hfp_siri_voice(true))
+                {
+                    open_siri_flag = 1;
+                    BTAPP_TRACE(0,"goc %s Enable voiceRecognition", __func__);
+                }
+            }
+            break;
+#endif
+
 #if HF_CUSTOM_FEATURE_SUPPORT & HF_CUSTOM_FEATURE_SIRI_REPORT
+#error HF_CUSTOM_FEATURE_SIRI_REPORT
             if(open_siri_flag == 0 )
             {
 #ifndef FPGA
                 media_PlayAudio(AUD_ID_BT_WARNING, 0);
 #endif
                 open_siri_flag = 1;
+                app_hfp_siri_voice(true);
             }
 #endif
         }

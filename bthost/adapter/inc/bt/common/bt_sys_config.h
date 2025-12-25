@@ -613,6 +613,7 @@ extern "C" {
 #define L2CAP_CFG_ERTX 300
 
 #if !defined(BLE_ONLY_ENABLED) && !defined(BT_SERVICE_ENABLE)
+#error  __BTIF_BT_RECONNECT__
 #define  __BTIF_BT_RECONNECT__
 #endif
 

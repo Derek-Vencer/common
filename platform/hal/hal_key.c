@@ -87,11 +87,12 @@ typedef uint32_t                            GPIO_MAP_T[GPIO_MAP_WORD_CNT];
 #define KEY_INIT_LONGLONGPRESS_THRESHOLD    MS_TO_TICKS(CFG_SW_KEY_INIT_LLPRESS_THRESH_MS)
 
 #define KEY_CHECKER_INTERVAL                MS_TO_TICKS(CFG_SW_KEY_CHECK_INTERVAL_MS)
+#define KEY_HOLD_THRESHOLD                  MS_TO_TICKS(1000)
 
 #define KEY_DEBOUNCE_INTERVAL               (KEY_CHECKER_INTERVAL * 2)
 #define KEY_DITHER_INTERVAL                 (KEY_CHECKER_INTERVAL * 1)
 
-#define MAX_KEY_CLICK_COUNT                 (HAL_KEY_EVENT_RAMPAGECLICK - HAL_KEY_EVENT_CLICK)
+#define MAX_KEY_CLICK_COUNT                 (HAL_KEY_EVENT_RAMPAGECLICK - HAL_KEY_EVENT_CLICK) //12 - 8
 
 struct HAL_KEY_ADCKEY_T {
     bool debounce;
@@ -125,6 +126,7 @@ struct HAL_KEY_STATUS_T {
     uint32_t time_click;
     uint8_t cnt_repeat;
     uint8_t cnt_click;
+    uint8_t cnt_has_click_up;
 };
 
 static int (*key_detected_callback)(uint32_t, uint8_t) = NULL;
@@ -1076,7 +1078,9 @@ static void hal_key_debounce_handler(void *param)
     down_new = code_down & ~key_status.code_down;
     up_new = ~code_down & key_status.code_down;
 
-    //HAL_TRACE(5,"keyDbn: code_down=0x%X/0x%X down_new=0x%X up_new=0x%X event=%d", key_status.code_down, code_down, down_new, up_new, key_status.event);
+//    HAL_TRACE(5,"keyDbn: code_down=0x%X/0x%X down_new=0x%X up_new=0x%X event=%d code_ready=0x%X code_click=0x%X cnt_click=%d",
+//    		key_status.code_down, code_down, down_new, up_new, key_status.event,
+//			key_status.code_ready, key_status.code_click, key_status.cnt_click);
 
     // Check newly up keys
     map = up_new;
@@ -1088,13 +1092,22 @@ static void hal_key_debounce_handler(void *param)
             if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
                 send_key_event((1 << index), HAL_KEY_EVENT_UP_AFTER_LONGPRESS);
             }
+            if (key_status.event == HAL_KEY_EVENT_DOUBLE_AND_HOLD)
+            {
+            	TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD release***");
+            }
             key_status.time_updown = time;
         }
         index++;
     }
 
     if (up_new) {
-        if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
+        if (key_status.event == HAL_KEY_EVENT_DOUBLE_AND_HOLD) {
+        	key_status.event = HAL_KEY_EVENT_NONE;
+        	key_status.code_click = HAL_KEY_CODE_NONE;
+        	key_status.cnt_has_click_up = 0;
+        	TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD release 2***");
+        } else if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
             // LongPress is finished when all of the LongPress keys are released
             if ((code_down & key_status.code_ready) == 0) {
                 key_status.event = HAL_KEY_EVENT_NONE;
@@ -1107,7 +1120,6 @@ static void hal_key_debounce_handler(void *param)
 
     if (key_status.event == HAL_KEY_EVENT_UP) {
         //ASSERT(key_status.code_ready != HAL_KEY_CODE_NONE, "Bad code_ready");
-
         if (key_status.code_click == HAL_KEY_CODE_NONE || key_status.code_click != key_status.code_ready) {
             if (key_status.code_click != HAL_KEY_CODE_NONE) {
                 send_key_event(key_status.code_click, HAL_KEY_EVENT_CLICK + key_status.cnt_click);
@@ -1119,6 +1131,7 @@ static void hal_key_debounce_handler(void *param)
             key_status.cnt_click++;
             key_status.time_click = time;
         }
+
         if (time - key_status.time_click >= KEY_DOUBLECLICK_THRESHOLD || key_status.cnt_click >= MAX_KEY_CLICK_COUNT) {
             send_key_event(key_status.code_click, HAL_KEY_EVENT_CLICK + key_status.cnt_click);
             key_status.code_click = HAL_KEY_CODE_NONE;
@@ -1153,21 +1166,39 @@ static void hal_key_debounce_handler(void *param)
     }
 
     if (down_new) {
+    	if (key_status.event == HAL_KEY_EVENT_UP)
+    	{
+    		if (down_new && (down_new | key_status.code_down) == key_status.code_click)
+    		{
+                key_status.cnt_has_click_up++;
+    		}
+    	}
         if (key_status.event == HAL_KEY_EVENT_NONE || key_status.event == HAL_KEY_EVENT_UP) {
             key_status.event = HAL_KEY_EVENT_DOWN;
         }
+
     }
 
     // LongPress should be stopped if any key is released
     if ((code_down & key_status.code_ready) == key_status.code_ready) {
-        if (key_status.event == HAL_KEY_EVENT_DOWN) {
-            if (time - key_status.time_updown >= KEY_LONGPRESS_THRESHOLD) {
+        if (HAL_KEY_EVENT_DOWN == key_status.event) {
+        	if ( ((time - key_status.time_updown) >= KEY_HOLD_THRESHOLD) && (0 <  key_status.cnt_has_click_up))
+        	{
+                key_status.event = HAL_KEY_EVENT_DOUBLE_AND_HOLD;
+                send_key_event(key_status.code_ready, key_status.event);
+                HAL_TRACE(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD ***");
+        	}
+        	else
+
+        	if (time - key_status.time_updown >= KEY_LONGPRESS_THRESHOLD) {
                 key_status.cnt_repeat = 0;
                 key_status.event = HAL_KEY_EVENT_LONGPRESS;
                 send_key_event(key_status.code_ready, key_status.event);
             }
+
         } else if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
             key_status.cnt_repeat++;
+            key_status.cnt_has_click_up = 0;
             if (key_status.cnt_repeat == KEY_LONGPRESS_REPEAT_THRESHOLD / KEY_CHECKER_INTERVAL) {
                 key_status.cnt_repeat = 0;
                 send_key_event(key_status.code_ready, HAL_KEY_EVENT_REPEAT);

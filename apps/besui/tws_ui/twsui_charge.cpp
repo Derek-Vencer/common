@@ -11,9 +11,11 @@
 #include "earbud_ux_api.h"
 #include "app_ui_param_config.h"
 #include "app_media_player.h"
+
 #ifdef USER_APP_BLE_DIS_EN
 #include "app_tota.h"
 #endif
+
 #ifdef BESUI_KEY_EN
 #include "twsui_key.h"
 #endif

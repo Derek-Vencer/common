@@ -69,6 +69,7 @@
 #endif
 
 #include "ble_aiwang_srv.h"
+#include "factory_section.h"
 
 #ifndef ADV_DATA_LEN
 #define ADV_DATA_LEN                    (0x1F)
@@ -3406,6 +3407,35 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 {
     DEBUG_INFO(0, "%s", __func__);
     bool adv_enable = false;
+
+    BLE_ADV_PARAM_T *ble_adv = (BLE_ADV_PARAM_T*)param;
+    const char* ble_name = (const char*)factory_section_get_ble_name();
+    const uint8_t aiWangPrimaryService[16] = { 0xCD, 0x4B, 0xEF, 0xBA, 0x10, 0xDA, 0xFA, 0x9D, 0x65, 0x43, 0x20, 0x6D, 0x76, 0x4F, 0xAE, 0xCA};
+
+    memset(ble_adv->advData,0,sizeof(ble_adv->advData));
+	ble_adv->advDataLen = 0;
+	ble_adv->advData[ble_adv->advDataLen++] = 17;
+	ble_adv->advData[ble_adv->advDataLen++] = 0x07;
+	memcpy(&ble_adv->advData[ble_adv->advDataLen], aiWangPrimaryService, 16);
+	ble_adv->advDataLen += 16;
+
+    memset(ble_adv->scanRspData,0,sizeof(ble_adv->scanRspData));
+    ble_adv->scanRspDataLen = 17;
+    ble_adv->scanRspData[0]  = 0x10;
+    ble_adv->scanRspData[1]  = 0xFF; //manufactory tag
+    ble_adv->scanRspData[2]  = 0x9B;
+    ble_adv->scanRspData[3]  = 0x0C;
+    factory_section_original_bleaddr_get(&ble_adv->scanRspData[4]); //6Bytes
+    memcpy(&ble_adv->scanRspData[10], "MBE003", 6);
+    ble_adv->scanRspData[16] = 0x42; //Black 0x42 Gold 0x47 //color code
+    DEBUG_INFO(0, "%s BleName=%s", __func__, ble_name);
+    uint32_t scan_rsp_nameLen = (strlen(ble_name) >=12)?12:strlen(ble_name);
+    ble_adv->scanRspData[ble_adv->scanRspDataLen++] = scan_rsp_nameLen + 1;
+    ble_adv->scanRspData[ble_adv->scanRspDataLen++] = 0x08;
+    memcpy(&ble_adv->scanRspData[ble_adv->scanRspDataLen], ble_name, scan_rsp_nameLen);
+    ble_adv->scanRspDataLen += scan_rsp_nameLen;
+
+
     do {
 #if (BLE_APP_HID)
         BLE_ADV_PARAM_T *cmd = (BLE_ADV_PARAM_T*)param;

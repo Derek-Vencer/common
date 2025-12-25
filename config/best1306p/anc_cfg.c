@@ -378,7 +378,7 @@ static const struct_anc_cfg POSSIBLY_UNUSED AncFirCoef_50p7k_mode0 = {
 #endif
 };
 
-#ifdef VOICE_ASSIST_ADA_IIR
+#if defined(VOICE_ASSIST_ADA_IIR) || defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 static struct_anc_cfg POSSIBLY_UNUSED AncFirCoef_50p7k_mode1 = {
     .anc_cfg_ff_l = {
         .total_gain = 512,
@@ -1006,14 +1006,14 @@ const struct_anc_cfg * anc_coef_list_50p7k[ANC_COEF_LIST_NUM] = {
 
 const struct_anc_cfg * anc_coef_list_48k[ANC_COEF_LIST_NUM] = {
     &AncFirCoef_48k_mode0,
-#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#if defined(BES_TWSPRO_EN) //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     &AncFirCoef_48k_mode1,
 #endif
 };
 
 const struct_anc_cfg *anc_coef_list_44p1k[ANC_COEF_LIST_NUM] = {
     &AncFirCoef_44p1k_mode0,
-#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#if defined(BES_TWSPRO_EN) //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     &AncFirCoef_44p1k_mode1,
 #endif
 };

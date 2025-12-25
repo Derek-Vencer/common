@@ -73,7 +73,7 @@ const FIR_CFG_T * const audio_eq_hw_fir_cfg_list[EQ_HW_FIR_LIST_NUM]={
     &audio_eq_hw_fir_cfg_96k,
 };
 
-#if !defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN)
+#if 1 //!defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN)
 //hardware dac iir eq
 const IIR_CFG_T audio_eq_hw_dac_iir_cfg = {
 #if defined(AUDIO_HEARING_COMPSATN)

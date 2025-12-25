@@ -586,7 +586,7 @@ int app_hfp_siri_voice(bool en)
     struct BT_DEVICE_T* curr_device = NULL;
 
     device_id = app_audio_adm_get_bt_active_device();
-
+    DEBUG_INFO(0, "%s en=%d", __func__, en);
     if(device_id == BT_DEVICE_INVALID_ID)
     {
         DEBUG_INFO(0, "active device is null");

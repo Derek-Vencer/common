@@ -351,7 +351,9 @@ int algo_msg_process(APP_MESSAGE_BODY *msg_body)
     POSSIBLY_UNUSED uint32_t algo_mode3 = (uint32_t)msg_body->message_Param3;
     POSSIBLY_UNUSED uint32_t algo_voice = msg_body->message_ptr;
 
+#ifdef BESUI_APP_EN
     nv_record_env_get(&nvrecord_uienv);
+#endif
 
     BESUI_TRACE(7,"[UIALGO][%s] %d, %d, %d, %d, %d, %d", __func__, algo_id, algo_onoff, algo_mode1, algo_mode2, algo_mode3, algo_voice);
 
