@@ -2296,12 +2296,12 @@ void PairingTransferToConnectable(void)
 
     activeCons = app_bt_get_active_cons();
 
-    DEBUG_INFO(1,"%s",__func__);
+    DEBUG_INFO(1,"%s activeCons=%d", __func__, activeCons);
 
     app_bt_connectable_state_set(INITIATE_PAIRING_NONE);
     if(activeCons == 0)
     {
-        DEBUG_INFO(0,"!!!PairingTransferToConnectable  BAM_CONNECTABLE_ONLY\n");
+        DEBUG_INFO(0,"!!! PairingTransferToConnectable  BAM_CONNECTABLE_ONLY\n");
         app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
     }
 }
@@ -3734,6 +3734,7 @@ static void app_bt_profile_reconnect_handler(void const *param)
 static void app_bt_accessmode_timehandler(void const *param)
 {
 #ifndef BLE_ONLY_ENABLED
+	DEBUG_INFO(0,"app_bt_accessmode_timehandler called");
     PairingTransferToConnectable();
 #endif
 }

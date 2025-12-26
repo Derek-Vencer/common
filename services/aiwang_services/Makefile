@@ -68,6 +68,8 @@ subdir-ccflags-y += -Iapps/common \
 				    -Ibthost/service/ble_app_new/inc  \
 				    -Iutils/hsm \
 				    -Ibthost/adapter/inc/ble/aob \
+				    -Iapps/battery/ \
+				    
 				    
 ifeq ($(BESUI_TWS_EN), 1)
 subdir-ccflags-y += -Iapps/besui \

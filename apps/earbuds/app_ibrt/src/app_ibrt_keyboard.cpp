@@ -48,6 +48,7 @@ extern "C" void app_tile_key_handler(APP_KEY_STATUS *status, void *param);
 #endif
 
 extern void app_otaMode_enter(APP_KEY_STATUS *status, void *param);
+extern bool isRightOfTheEarBuds(void);
 
 #ifdef SUPPORT_SIRI
 extern uint8_t voice_assistant_flag;
@@ -212,6 +213,7 @@ void app_ibrt_keyboard_start_perform_a2dp_cis_toggle(void)
     app_ibrt_ui_toggle_a2dp_cis(NULL);
 }
 
+
 #ifdef APP_KEY_ENABLE
 void app_ibrt_handle_longpress_v2(APP_KEY_STATUS *status)
 {
@@ -333,8 +335,13 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
             	EARBUDS_TRACE(0,"DOUBLE_AND_HOLD kill,enter freeman mode");
             	//app_bt_volumeup();
             	//app_bt_volumedown();
-            	bt_adapter_local_volume_up();
-            	//bt_adapter_local_volume_down()
+            	if (isRightOfTheEarBuds()) {
+            	   EARBUDS_TRACE(0,"RightSide volume up+");
+             	   bt_adapter_local_volume_up();
+            	} else {
+            	   EARBUDS_TRACE(0,"LeftSide volume down -");
+            	   bt_adapter_local_volume_down();
+            	}
             	break;
 
             case APP_KEY_EVENT_LONGPRESS:
@@ -424,7 +431,6 @@ int app_ibrt_if_keyboard_notify_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, 
     data.key_status = *status;
     EARBUDS_TRACE(0,"%s code=0x%08x, event=%d", __func__, data.key_status.code, data.key_status.event);
     tws_ctrl_send_cmd(APP_TWS_CMD_KEYBOARD_REQUEST, (uint8_t *)&data, sizeof(struct ibrt_keyboard_notify_v2_t));
-
     return 0;
 }
 #endif
@@ -562,6 +568,7 @@ void app_ibrt_ui_perform_user_action_v2(uint8_t *p_buff, uint16_t length)
 
     curr_device = app_bt_get_device(device_id);
     EARBUDS_TRACE(0,"%s action=0x%02x", __func__, action);
+
     switch (action)
     {
         case IBRT_ACTION_PLAY:

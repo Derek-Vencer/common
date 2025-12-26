@@ -315,10 +315,10 @@ export PROMPT_IN_FLASH ?= 0
 export CALIB_SLOW_TIMER ?= 1
 export BT_DONT_PLAY_MUTE_WHEN_A2DP_STUCK_PATCH ?= 1
 
-export TRACE_BUF_SIZE ?= 8*1024
-export TRACE_BAUD_RATE ?= 10*115200
+export TRACE_BUF_SIZE    ?= 8*1024
+export TRACE_BAUD_RATE   ?= 10*115200
 export BTM_MAX_LINK_NUMS ?= 3
-export BT_DEVICE_NUM ?= 2
+export BT_DEVICE_NUM     ?= 2
 
 init-y :=
 core-y := platform/ utils/cqueue/ utils/list/ multimedia/ utils/intersyshci/ utils/sha256/ utils/stream_mcps/

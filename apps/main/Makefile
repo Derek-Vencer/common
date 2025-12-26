@@ -70,10 +70,13 @@ ccflags-y +=  \
     -Iapps/dsp_m55 \
     -Iplatform/drivers/cp_accel \
     -Iservices/audio_manager \
-	-Ibthost/service/ble_app_new/inc \
-	-Imultimedia/inc \
+    -Ibthost/service/ble_app_new/inc \
+    -Imultimedia/inc \
     -Imultimedia/inc/speech/inc \
-    -Iapps/earbuds/conn
+    -Iapps/earbuds/conn \
+    -Iservices/aiwang_services \
+    
+    
 
 ifeq ($(BISTO_ENABLE),1)
 ccflags-y += \

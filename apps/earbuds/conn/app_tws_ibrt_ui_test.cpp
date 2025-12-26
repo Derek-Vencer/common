@@ -243,6 +243,22 @@ static const ibrt_pairing_info_t g_ibrt_pairing_info[] =
 extern void app_anc_key(APP_KEY_STATUS *status, void *param);
 #endif
 
+bool isRightOfTheEarBuds(void) {
+	struct nvrecord_env_t *nvrecord_env;
+	uint8_t localAddr[BD_ADDR_LEN];
+	nv_record_env_get(&nvrecord_env);
+	factory_section_original_btaddr_get(localAddr);
+	EARBUDS_DUMP8("%02x ", localAddr, BD_ADDR_LEN);
+	if(localAddr[0]&0x01)
+	{
+		return FALSE;
+	}
+	else
+	{
+		return TRUE;
+	}
+}
+
 #if !defined(FREE_TWS_PAIRING_ENABLED) && !defined(FREEMAN_ENABLED_STERO)
 static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
 {

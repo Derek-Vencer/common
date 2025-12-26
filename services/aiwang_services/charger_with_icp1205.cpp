@@ -15,11 +15,13 @@
 #include "plat_addr_map_best1306p.h"
 #include "hal_gpio.h"
 #include "hal_i2c.h"
-
-
 #include "hal_trace.h"
 #include "ICP1205.h"
+#include "charger_ntc.h"
+
 #include "charger_with_icp1205.h"
+
+
 
 //#define EARBUDS_ICP1205_I2C_ADDRESS 0xC2
 #define EARBUDS_ICP1205_I2C_ADDRESS  (0xC2 >> 1)
@@ -45,6 +47,7 @@
 static osThreadId charger_manager_thread_id = NULL;
 static void charger_manager_handler_thread(const void *arg);
 osThreadExDef(charger_manager_handler_thread, osPriorityAboveNormal, 1, 1024*3, "charger_manager_thread", 1U);
+
 
 static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin);
 /*********************************************************************************
@@ -859,9 +862,9 @@ static void charger_manager_handler_thread(const void *arg)
 	}
 }
 
-
 void charger_manager_start(void)
 {
 	DBGPRINT("%s", __func__);
+	aw_ntc_detect_init();
 	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
 }

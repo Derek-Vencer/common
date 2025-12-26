@@ -122,10 +122,10 @@ int app_key_handle_registration(const APP_KEY_HANDLE *key_handle)
     KEY_TRACE(1,"%s",__func__);
     dest_key_handle = app_key_handle_find(&(key_handle->key_status));
 
-    KEY_TRACE(2,"%s dest handle:%p",__func__,dest_key_handle);
+//    KEY_TRACE(2,"%s dest handle:%p",__func__,dest_key_handle);
     if (dest_key_handle == NULL){
         dest_key_handle = (APP_KEY_HANDLE *)osPoolCAlloc (app_key_handle_mempool);
-        KEY_TRACE(2,"%s malloc:%p",__func__,dest_key_handle);
+//        KEY_TRACE(2,"%s malloc:%p",__func__,dest_key_handle);
         list_append(app_key_conifg.key_list, dest_key_handle);
     }
     if (dest_key_handle == NULL)

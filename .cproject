@@ -89,6 +89,12 @@
 									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_VOLUME_DEFAULT=13"/>
 									<listOptionValue builtIn="false" value="SUPPORT_SIRI=1"/>
 									<listOptionValue builtIn="false" value="BT_SERVICE_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="IS_AUTOPOWEROFF_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="APP_10_SECOND_TIMER_EN=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_BT_RECONNECT__=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_AUTOPOWEROFF__=1"/>
+									<listOptionValue builtIn="false" value="__FACTORY_MODE_SUPPORT__=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_PORT=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -156,6 +162,12 @@
 									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_VOLUME_DEFAULT=13"/>
 									<listOptionValue builtIn="false" value="SUPPORT_SIRI=1"/>
 									<listOptionValue builtIn="false" value="BT_SERVICE_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="IS_AUTOPOWEROFF_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="APP_10_SECOND_TIMER_EN=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_BT_RECONNECT__=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_AUTOPOWEROFF__=1"/>
+									<listOptionValue builtIn="false" value="__FACTORY_MODE_SUPPORT__=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_PORT=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

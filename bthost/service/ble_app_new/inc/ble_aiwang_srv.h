@@ -24,8 +24,9 @@ extern "C" {
 #include <string.h>
 #include "bes_dp_api.h"
 
-
+#ifndef BLE_AIWANG_SRV_ENABLED
 #define BLE_AIWANG_SRV_ENABLED
+#endif
 
 
 typedef enum cmds {

@@ -6,6 +6,8 @@
  */
 #ifndef __CHARGER_WITH_ICP1205_H__
 #define __CHARGER_WITH_ICP1205_H__
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,7 +19,6 @@ void charger_manager_start(void);
 
 uint32_t writeDataTo_ICP1205(unsigned char reg, unsigned char *data, unsigned char length);
 uint32_t readDataFrom_ICP1205(unsigned char reg, unsigned char *data, unsigned char length);
-
 
 #ifdef __cplusplus
 }

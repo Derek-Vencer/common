@@ -408,6 +408,10 @@ extern "C" {
 #include "lwh.h"
 #endif
 
+#include "charger_with_icp1205.h"
+extern void sparraw_service_init(void);
+//extern void charger_manager_start(void);
+
 #define APP_SIGNAL_POWERON        0x2
 #define APP_SIGNAL_BT_HOST_READY  0x3
 
@@ -428,7 +432,7 @@ enum APP_POWERON_CASE_T {
     APP_POWERON_CASE_REBOOT,
     APP_POWERON_CASE_ALARM,
     APP_POWERON_CASE_CALIB,
-    APP_POWERON_CASE_BOTHSCAN,
+    APP_POWERON_CASE_BOTHSCAN = 5,
     APP_POWERON_CASE_CHARGING,
     APP_POWERON_CASE_FACTORY,
     APP_POWERON_CASE_TEST,
@@ -446,7 +450,7 @@ extern void app_rbplay_audio_reset_pause_status(void);
 uint8_t  app_poweroff_flag = 0;
 static enum APP_POWERON_CASE_T g_pwron_case = APP_POWERON_CASE_INVALID;
 
-extern void sparraw_service_init(void);
+
 
 #ifndef BESUI_STEREO_EN
 #ifndef APP_TEST_MODE
@@ -531,6 +535,7 @@ APP_10_SECOND_TIMER_STRUCT app_10_second_array[] =
 #else
     INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 12, bes_bt_me_transfer_pairing_to_connectable), // 2min
 #ifdef BESUI_STEREO_EN
+#error BESUI_STEREO_EN
     INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 90, CloseEarphone),
 #else
     INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 30, CloseEarphone), //300s ------ 5 min
@@ -574,6 +579,7 @@ void app_10_second_timer_check(void)
 {
     APP_10_SECOND_TIMER_STRUCT *timer = app_10_second_array;
     unsigned int i;
+
 #ifdef BESUI_TWS_EN
     if(uicom.box_open_bat_det_flag)
     {
@@ -581,11 +587,12 @@ void app_10_second_timer_check(void)
         return;
     }
 #endif
+
     for(i = 0; i < ARRAY_SIZE(app_10_second_array); i++) {
         if (timer->timer_en) {
             timer->timer_count++;
-#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-            BESUI_TRACE(2,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
+#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+            MAIN_TRACE(0,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
 #endif
             if (timer->timer_count >= timer->timer_period) {
                 timer->timer_en = 0;
@@ -606,6 +613,7 @@ void CloseEarphone(void)
 
 #ifdef ANC_APP
     if(app_anc_work_status()) {
+    	MAIN_TRACE(0,"!!!CloseEarphone APP_POWEROFF_TIMER_ID");
         app_set_10_second_timer(APP_POWEROFF_TIMER_ID, 1, 30);
         return;
     }
@@ -617,6 +625,8 @@ void CloseEarphone(void)
 
     activeCons = app_bt_get_active_cons();
     activeSourceCons = btif_me_get_source_activeCons();
+
+    MAIN_TRACE(0,"CloseEarphone activeCons==%d activeSourceCons=%d\n", activeCons, activeSourceCons);
 
     if(activeCons == 0 && activeSourceCons == 0) {
         MAIN_TRACE(0,"!!!CloseEarphone\n");
@@ -640,8 +650,10 @@ static int app_bth_event_callback(const bt_bdaddr_t *bd_addr, BT_EVENT_T event, 
 #ifndef BLE_ONLY_ENABLED
             active_cons = bes_bt_get_active_cons();
 #endif
-            if (active_cons == 0)
+            MAIN_TRACE(2,"app_bth_event_callback active_cons=%d!", active_cons);
+            if (active_cons == 0 )
             {
+
                 app_start_10_second_timer(APP_POWEROFF_TIMER_ID);
             }
             else
@@ -649,7 +661,8 @@ static int app_bth_event_callback(const bt_bdaddr_t *bd_addr, BT_EVENT_T event, 
                 app_stop_10_second_timer(APP_POWEROFF_TIMER_ID);
             }
 #endif
-        } break;
+        }
+        break;
         case BT_EVENT_ACCESS_CHANGE:
         {
             if(param.bt.access_change->access_mode == BT_ACCESS_GENERAL_ACCESSIBLE)
@@ -660,7 +673,8 @@ static int app_bth_event_callback(const bt_bdaddr_t *bd_addr, BT_EVENT_T event, 
             {
                 app_status_indication_set(APP_STATUS_INDICATION_PAGESCAN);
             }
-        } break;
+        }
+        break;
         default:
             break;
     }
@@ -2300,6 +2314,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     stereoui_init();
 #endif
 
+
+    charger_manager_start();
+
     nRet = app_battery_open();
     MAIN_TRACE(1,"BATTERY %d pwron_case=%d", nRet, pwron_case);
     if (pwron_case != APP_POWERON_CASE_TEST){
@@ -2618,6 +2635,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
     if (pwron_case != APP_POWERON_CASE_TEST) {
+
+    	MAIN_TRACE(0,"NOT APP_POWERON_CASE_TEST %d!!", pwron_case);
         app_wait_stack_ready();
 
         osThreadSetPriority(app_thread_id, formerPriority);
@@ -2741,8 +2760,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 #endif
 
-#if defined( APP_10_SECOND_TIMER_EN) && defined(__BTIF_BT_RECONNECT__)
-#error __BTIF_BT_RECONNECT__
+#if defined( APP_10_SECOND_TIMER_EN) && __BTIF_BT_RECONNECT__
 #if defined(FREEMAN_ENABLED_STERO)
         osDelay(100);
 #ifdef BESUI_STEREO_EN
@@ -2751,6 +2769,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
+        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ !!!!!!");
+        app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
     }
@@ -2922,7 +2942,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 #endif //#ifdef BESUI_STEREO_EN
 #ifndef BT_BUILD_WITH_CUSTOMER_HOST
-#if defined(APP_10_SECOND_TIMER_EN) && defined(__BTIF_BT_RECONNECT__) && defined(FREEMAN_ENABLED_STERO)
+#if defined(APP_10_SECOND_TIMER_EN) && __BTIF_BT_RECONNECT__ //&& defined(FREEMAN_ENABLED_STERO)
                     osDelay(100);
 #ifdef BESUI_STEREO_EN
                     stereo_poweron_pairing_timer_on();
@@ -2952,6 +2972,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
             app_battery_start();
 #if defined(APP_10_SECOND_TIMER_EN) && defined(__BTIF_AUTOPOWEROFF__)
 #ifndef BESUI_TWS_EN
+            MAIN_TRACE(1,"power on start APP_POWEROFF_TIMER_ID");
             app_start_10_second_timer(APP_POWEROFF_TIMER_ID);
 #endif
 #endif

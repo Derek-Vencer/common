@@ -215,6 +215,7 @@ static osTimerId app_battery_timer = NULL;
 static struct APP_BATTERY_MEASURE_T app_battery_measure;
 
 
+extern "C" void aw_ntc_detect_process(uint16_t ad_volt);
 
 static int app_battery_charger_handle_process(void);
 
@@ -273,6 +274,7 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 #if (defined(BTUSB_AUDIO_MODE) || defined(BTUSB_AUDIO_MODE))
     if(app_usbaudio_mode_on()) return ;
 #endif
+
     app_battery_measure.voltage[app_battery_measure.index++%APP_BATTERY_STABLE_COUNT] = vbat * app_vbat_volt_div;
     if (app_battery_measure.index > APP_BATTERY_STABLE_COUNT)
     {
@@ -409,6 +411,7 @@ int app_status_battery_report(uint8_t level)
 #else
 int app_status_battery_report(uint8_t level)
 {
+	BATTERY_TRACE(1,"%s level=%d", __func__, level);
 #if defined(APP_10_SECOND_TIMER_EN)
     app_10_second_timer_check();
 #endif
@@ -500,11 +503,12 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #endif
 
 #endif
-            BATTERY_TRACE(0,"previous_level=%d", level);
+            BATTERY_TRACE(0,"%s previous_level=%d", __func__, level);
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-            BATTERY_TRACE(0,"actutal level=%d currvolt=%d", level, app_battery_measure.currvolt);
+            BATTERY_TRACE(0,"%s actutal level=%d currvolt=%d", __func__, level, app_battery_measure.currvolt);
             app_status_battery_report(level);
             break;
+
         case APP_BATTERY_STATUS_PDVOLT:
 #ifndef BT_USB_AUDIO_DUAL_MODE
             BATTERY_TRACE(1,"PDVOLT-->POWEROFF:%d", prams.volt);
@@ -564,7 +568,7 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
             app_status_battery_report(level/*prams.volt*/);
             break;
         case APP_BATTERY_STATUS_CHARGING:
-            BATTERY_TRACE(1,"CHARGING:%d", prams.charger);
+            BATTERY_TRACE(1,"[UIBAT] CHARGING:%d", prams.charger);
             if (prams.charger == APP_BATTERY_CHARGER_PLUGOUT)
             {
 #ifndef BT_USB_AUDIO_DUAL_MODE
@@ -587,6 +591,7 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
             break;
         case APP_BATTERY_STATUS_INVALID:
         default:
+        	BATTERY_TRACE(0,"[UIBAT] APP_BATTERY_STATUS_INVALID");
             break;
     }
 
@@ -628,6 +633,8 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
         generatedSeed ^= (((uint32_t)(bt_global_addr[index])) << (hal_sys_timer_get()&0xF));
     }
     srand(generatedSeed);
+
+    BATTERY_TRACE(1,"app_battery_handle_process:%d %d", status, app_battery_measure.status);
 
     if (status == APP_BATTERY_STATUS_PLUGINOUT){
         app_battery_pluginout_debounce_start();
@@ -1174,7 +1181,9 @@ void ntc_capture_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 #ifdef BESUI_NTC_EN
     app_ntc_detect_process(volt);
 #endif
+    aw_ntc_detect_process(volt);
 }
+
 
 int ntc_capture_open(void)
 {

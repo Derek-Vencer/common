@@ -422,7 +422,8 @@ void sparraw_service_init(void)
 	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
     sparraw_rx_thread_init();
     //start charger_manager_thread
-    charger_manager_start();
+    //previous in apps_init,prior settings ICP1205_ADS
+    //charger_manager_start();
 }
 
 
