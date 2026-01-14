@@ -41,6 +41,8 @@
 #include "app_media_player.h"
 #endif
 
+#include "app_factory.h"
+
 #if defined(IBRT)
 
 #ifdef TILE_DATAPATH
@@ -306,9 +308,11 @@ void app_ibrt_search_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
 #ifdef GFPS_ENABLED
 extern "C" void app_enter_fastpairing_mode(void);
 #endif
+
 void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, void *param)
 {
     uint8_t conn_devices = 0;
+    static uint8_t lastKeyEvent = APP_KEY_EVENT_NONE;
     EARBUDS_TRACE(0,"%s code=0x%02x event=%d", __func__, status->code, status->event);
     if (APP_KEY_CODE_GOOGLE != status->code)
     {
@@ -346,7 +350,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
 
             case APP_KEY_EVENT_LONGPRESS:
                 conn_devices = app_bt_count_connected_device();
-                EARBUDS_TRACE(0,"LONG kill");
+                EARBUDS_TRACE(0,"LONG kick");
                 EARBUDS_TRACE(0,"%s conn_devices %d", __func__, conn_devices);
                 if (conn_devices > 0)
                 {
@@ -361,12 +365,10 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 break;
 
             case APP_KEY_EVENT_TRIPLECLICK:
-            	EARBUDS_TRACE(0,"triple kill,enter freeman mode");
+            	EARBUDS_TRACE(0,"triple kick,enter freeman mode");
 #ifdef TILE_DATAPATH
                 app_tile_key_handler(status,NULL);
 #else
-                //app_ibrt_if_init_open_box_state_for_evb();
-                //app_ibrt_if_enter_pairing_after_tws_connected();
                  conn_devices = app_bt_count_connected_device();
                  EARBUDS_TRACE(0,"%s conn_devices %d", __func__, conn_devices);
                  if (conn_devices > 0) {
@@ -379,30 +381,103 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
 #endif
                 break;
 
-            case HAL_KEY_EVENT_LONGLONGPRESS:
-                EARBUDS_TRACE(0,"long long press");
+            case HAL_KEY_EVENT_LONGLONGPRESS: //5s
+                EARBUDS_TRACE(0,"long long press 5s");
 #ifdef MEDIA_PLAYER_SUPPORT
-                media_PlayAudio(AUD_ID_BT_WARNING, 0);
-                media_PlayAudio(AUD_ID_BT_WARNING, 0);
+                if (!app_bt_ibrt_has_mobile_link_connected() && lastKeyEvent != status->event)
+                {
+                   media_PlayAudio(AUD_ID_BT_PAIRING, 0);
+                }
 #endif
-                app_shutdown();
+                //app_shutdown();
                 break;
+            case APP_KEY_EVENT_LONG_8S_PRESS:
+            	EARBUDS_TRACE(0,"APP_KEY_EVENT_LONG_8S_PRESS");
+#ifdef MEDIA_PLAYER_SUPPORT
+            	if (!app_bt_ibrt_has_mobile_link_connected() && lastKeyEvent != status->event)
+            	{
+            		media_PlayAudio(AUD_ID_BT_WARNING, 0);
+            		osDelay(200);
+            		media_PlayAudio(AUD_ID_BT_WARNING, 0);
+            		osDelay(200);
+            	}
+#endif
+            	break;
 
             case APP_KEY_EVENT_ULTRACLICK:
-                EARBUDS_TRACE(0,"ultra kill");
+                EARBUDS_TRACE(0,"ultra kick");
                 break;
 
             case APP_KEY_EVENT_FIFTH_CLICK:
-            	EARBUDS_TRACE(0,"five kill");
+            	EARBUDS_TRACE(0,"five kick");
             	break;
+
+            case APP_KEY_EVENT_SIXTY_CLICK:
+               {
+            	   EARBUDS_TRACE(0,"six kick");
+                   {
+						if(bts_core_is_freeman_mode())
+						{
+							if (app_bt_ibrt_has_mobile_link_connected())
+							{
+								app_bt_disconnect_all_acl_link();
+							}
+							app_ibrt_if_event_entry(APP_UI_EV_TWS_PAIRING);
+						}
+						else if(bts_core_is_ui_master())
+						{
+							if (app_bt_ibrt_has_mobile_link_connected())
+							{
+								app_bt_disconnect_all_acl_link();
+							}
+							app_ibrt_if_event_entry(APP_UI_EV_TWS_PAIRING);
+						}
+                   }
+                   app_ibrt_search_ui_init(false,APP_UI_EV_NONE);
+            	   app_ibrt_enter_limited_mode();
+                   app_ibrt_if_init_open_box_state_for_evb();
+                   app_start_tws_serching_direactly();
+                   //app_ibrt_if_enter_pairing_after_tws_connected();
+               }
+               break;
 
             case APP_KEY_EVENT_RAMPAGECLICK:
                 EARBUDS_TRACE(0,"rampage kill!you are crazy!");
                 break;
 
             case APP_KEY_EVENT_UP:
+            	if (lastKeyEvent == APP_KEY_EVENT_LONG_8S_PRESS) {
+            		EARBUDS_TRACE(0,"enter factory mode ...");
+            		if (!app_bt_ibrt_has_mobile_link_connected()) {
+            			app_factorymode_enter();
+            		}
+            	} else if(lastKeyEvent == HAL_KEY_EVENT_LONGLONGPRESS && !app_bt_ibrt_has_mobile_link_connected()) {
+            		EARBUDS_TRACE(0,"start tws pairing...");
+					if(bts_core_is_freeman_mode())
+					{
+						if (app_bt_ibrt_has_mobile_link_connected())
+						{
+							app_bt_disconnect_all_acl_link();
+						}
+						app_ibrt_if_event_entry(APP_UI_EV_TWS_PAIRING);
+					}
+					else if(bts_core_is_ui_master())
+					{
+						if (app_bt_ibrt_has_mobile_link_connected())
+						{
+							app_bt_disconnect_all_acl_link();
+						}
+						app_ibrt_if_event_entry(APP_UI_EV_TWS_PAIRING);
+					}
+					app_ibrt_search_ui_init(false,APP_UI_EV_NONE);
+					app_ibrt_enter_limited_mode();
+					app_ibrt_if_init_open_box_state_for_evb();
+					app_start_tws_serching_direactly();
+            	}
                 break;
         }
+
+        lastKeyEvent = status->event;
     }
 
 #ifdef TILE_DATAPATH

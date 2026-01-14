@@ -182,10 +182,11 @@ void app_factorymode_key_init(void)
 #ifdef __IBRT_IBRT_TESTMODE__
         {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt function key",bt_drv_ibrt_test_key_click, NULL},
 #else
-        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt function key",app_factorymode_languageswitch, NULL},
+        //{{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt function key",app_factorymode_languageswitch, NULL},
 #endif
-        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"bt function key",app_factorymode_bt_xtalcalib, NULL},
-        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONGPRESS},"bt function key",app_factorymode_bt_signalingtest, NULL},
+        //{{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"bt function key",app_factorymode_bt_xtalcalib, NULL},
+       // {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONGPRESS},"bt function key",app_factorymode_bt_signalingtest, NULL},
+		{{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"bt function key",app_factorymode_exit, NULL}
 #endif //#ifndef BESUI_TWS_EN
     };
 

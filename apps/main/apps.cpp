@@ -436,7 +436,7 @@ enum APP_POWERON_CASE_T {
     APP_POWERON_CASE_CHARGING,
     APP_POWERON_CASE_FACTORY,
     APP_POWERON_CASE_TEST,
-    APP_POWERON_CASE_INVALID,
+    APP_POWERON_CASE_INVALID =9,
 
     APP_POWERON_CASE_NUM
 };
@@ -772,7 +772,7 @@ static void app_poweron_normal(APP_KEY_STATUS *status, void *param)
 }
 
 #if !defined(BLE_ONLY_ENABLED)
-static void app_poweron_scan(APP_KEY_STATUS *status, void *param)
+__attribute__((unused))  static void app_poweron_scan(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
 #ifdef BESUI_TWS_EN
@@ -790,7 +790,7 @@ static void app_poweron_scan(APP_KEY_STATUS *status, void *param)
 #if !defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN)
 static void app_poweron_factorymode(APP_KEY_STATUS *status, void *param)
 {
-    MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
+    MAIN_TRACE(1,"%s %d,%d",__func__, status->code, status->event);
     hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
     app_factorymode_enter();
 }
@@ -813,7 +813,7 @@ void app_enter_non_signalingtest_mode(void)
 }
 
 static bool g_pwron_finished = false;
-static void app_poweron_finished(APP_KEY_STATUS *status, void *param)
+__attribute__((unused)) static void app_poweron_finished(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
     g_pwron_finished = true;
@@ -836,7 +836,7 @@ const  APP_KEY_HANDLE  pwron_key_handle_cfg[] = {
 const  APP_KEY_HANDLE  pwron_key_handle_cfg[] = {
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITUP},           "power on: normal"     , app_poweron_normal, NULL},
 #if !defined(BLE_ONLY_ENABLED)
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITLONGPRESS},    "power on: both scan"  , app_poweron_scan  , NULL},
+//    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITLONGPRESS},    "power on: both scan"  , app_poweron_scan  , NULL},
 #if !defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN)
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITLONGLONGPRESS},"power on: factory mode", app_poweron_factorymode  , NULL},
 #endif
@@ -2382,6 +2382,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     }
 #endif
 
+    MAIN_TRACE(1,"before app_key_open %d pwron_case=%d", need_check_key, pwron_case);
     if (app_key_open(need_check_key)){
         MAIN_TRACE(0,"PWR KEY DITHER!");
         nRet = -1;
@@ -2390,9 +2391,11 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 
     hal_sw_bootmode_set(HAL_SW_BOOTMODE_REBOOT);
     app_poweron_key_init();
+
 #if defined(_AUTO_TEST_)
     AUTO_TEST_SEND("Power on.");
 #endif
+
 #ifdef USER_APP_BLE_DIS_EN
     app_random_ble_get();
 #endif
@@ -2783,6 +2786,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifndef BESUI_TWS_EN
         app_status_indication_set(APP_STATUS_INDICATION_POWERON);
 #ifdef MEDIA_PLAYER_SUPPORT
+        //media_PlayAudio(AUD_ID_POWER_ON, 0);
+        media_PlayAudio(AUD_ID_BT_WARNING, 0);
+        osDelay(200);
         media_PlayAudio(AUD_ID_POWER_ON, 0);
 #endif
 #endif
@@ -2809,7 +2815,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         }
     }
 #endif
-    else{
+    else {
 #ifdef BESUI_STEREO_EN
         app_system_status_set(APP_STATUS_TYPE_POWER_ON);
 #else
@@ -2965,7 +2971,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                 app_poweron_wait_finished();
 #endif
             }
+
             app_key_init();
+
 #ifdef BESUI_TWS_EN
         uicom.poweron_bat_det_flag = true;
 #endif

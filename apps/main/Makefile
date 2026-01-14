@@ -181,6 +181,7 @@ CFLAGS_apps.o += -DMEDIA_PLAYER_SUPPORT
 endif
 
 ifeq ($(ENGINEER_MODE),1)
+$(warning ENGINEER_MODE)
 CFLAGS_apps.o += -D__ENGINEER_MODE_SUPPORT__
 endif
 

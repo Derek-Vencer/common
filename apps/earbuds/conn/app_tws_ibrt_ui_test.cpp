@@ -2697,12 +2697,15 @@ const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_TRIPLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_ULTRACLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_TRIPLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+
 
     //AiWang added
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_FIFTH_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_SIXTY_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLE_AND_HOLD},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONG_8S_PRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+	{{APP_KEY_CODE_PWR,APP_KEY_EVENT_UP},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+	{{APP_KEY_CODE_PWR,HAL_KEY_EVENT_UP_AFTER_LONGPRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
 
     {{APP_KEY_CODE_FN1,APP_KEY_EVENT_CLICK},"app_ibrt_service_test_key", app_tws_ibrt_test_key_io_event, NULL},
     {{APP_KEY_CODE_FN1,APP_KEY_EVENT_DOUBLECLICK},"app_ibrt_service_test_key", app_tws_ibrt_test_key_io_event, NULL},
@@ -2716,14 +2719,16 @@ const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
 
 void app_tws_ibrt_raw_ui_test_key_init(void)
 {
+
 #ifdef APP_KEY_ENABLE
-    EARBUDS_TRACE(0,"!!app_tws_ibrt_raw_ui_test_key_init!!");
+    EARBUDS_TRACE(0,"!!app_tws_ibrt_raw_ui_test_key_init app_ibrt_ui_v2_test_key_cfg!!");
     app_key_handle_clear();
     for (uint8_t i=0; i<ARRAY_SIZE(app_ibrt_ui_v2_test_key_cfg); i++)
     {
         app_key_handle_registration(&app_ibrt_ui_v2_test_key_cfg[i]);
     }
 #endif
+
 }
 
 #endif

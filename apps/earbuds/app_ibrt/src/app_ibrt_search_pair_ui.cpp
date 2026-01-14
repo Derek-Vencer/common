@@ -31,6 +31,8 @@
 #include "nvrecord_bt.h"
 #include "nvrecord_env.h"
 #include "app_status_ind.h"
+#include "app_media_player.h"
+#include "apps.h"
 
 #ifdef IBRT_UI
 #include "app_ui_evt.h"
@@ -42,7 +44,9 @@
 extern "C" {
 
 }
-#ifdef IBRT_SEARCH_UI
+
+
+#if 1 //def IBRT_SEARCH_UI
 static void app_tws_inquiry_timeout_handler(void const *param);
 osTimerDef (APP_TWS_INQ, app_tws_inquiry_timeout_handler);
 static osTimerId app_tws_timer = NULL;
@@ -54,7 +58,7 @@ static osTimerId app_tws_delay_connect_timer = NULL;
 
 static uint8_t tws_find_process=0;
 static uint8_t tws_inquiry_count=0;
-#define MAX_TWS_INQUIRY_TIMES   3
+#define MAX_TWS_INQUIRY_TIMES   12 //3
 #define IBRT_MAX_SEARCH_TIME    10 /* 12.8s */
 
 uint8_t tws_inq_addr_used;
@@ -66,9 +70,42 @@ typedef struct
 TWS_INQ_ADDR_STRUCT tws_inq_addr[5];
 
 app_ui_evt_t box_event=APP_UI_EV_NONE;
+
 static void app_box_handle_timehandler(void const *param);
 osTimerDef (APP_BOX_HANDLE, app_box_handle_timehandler);
 static osTimerId app_box_handle_timer = NULL;
+
+//goodocom added search timeout
+static void app_tws_searching_timehandler(void const *param);
+osTimerDef(APP_SEARCH_TIMEOUT, app_tws_searching_timehandler);
+static osTimerId app_searchtimeout_handle_timer = NULL;
+
+static void app_tws_pairing_prompt_timehandler(void const *param);
+osTimerDef(APP_SEARCH_PROMPT_TIMEOUT, app_tws_pairing_prompt_timehandler);
+static osTimerId app_tws_pairing_prompt_timer = NULL;
+
+extern int app_shutdown(void);
+static void app_tws_searching_timehandler(void const *param)
+{
+	EARBUDS_TRACE(0,"%s", __func__);
+	if( app_tws_pairing_prompt_timer )  { osTimerStop(app_tws_pairing_prompt_timer); }
+	if( app_tws_delay_connect_timer  )  { osTimerStop(app_tws_delay_connect_timer);  }
+	app_shutdown();
+}
+
+static void app_tws_pairing_prompt_timehandler(void const *param)
+{
+	EARBUDS_TRACE(0,"%s", __func__);
+	if(app_tws_pairing_prompt_timer) osTimerStop(app_tws_pairing_prompt_timer);
+#ifdef MEDIA_PLAYER_SUPPORT
+    if (!app_bt_ibrt_has_mobile_link_connected())
+    {
+       media_PlayAudio(AUD_ID_BT_PAIRING, 0);
+    }
+#endif
+    osTimerStart(app_tws_pairing_prompt_timer,5000);
+}
+
 
 static void app_box_handle_timehandler(void const *param)
 {
@@ -424,7 +461,7 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
             //connect fail start inquiry again
             if(btif_me_get_callback_event_err_code(event) ==4 && tws_find_process == 1)
             {
-                if(tws_inquiry_count>=MAX_TWS_INQUIRY_TIMES)
+                if(tws_inquiry_count >= MAX_TWS_INQUIRY_TIMES)
                 {
                     tws_app_stop_find();
                     return;
@@ -513,13 +550,27 @@ void app_start_tws_serching_direactly()
 {
     btif_accessible_mode_t mode;
     ibrt_ctrl_t *p_ibrt_ctrl = app_ibrt_if_get_bt_ctrl_ctx();
-
     mode = app_bt_get_curr_access_mode();
     EARBUDS_TRACE(1,"ibrt_ui_log:search tws direactly access_mode:%d",mode);
     if ((BTIF_BAM_GENERAL_ACCESSIBLE==mode)||(BTIF_BAM_LIMITED_ACCESSIBLE==mode))
     {
-		if(NULL==app_tws_delay_connect_timer)
-			app_tws_delay_connect_timer=osTimerCreate(osTimer(APP_TWS_DELAY_CONNECT),osTimerOnce,NULL );
+		if(NULL == app_tws_delay_connect_timer)
+		{
+			app_tws_delay_connect_timer = osTimerCreate(osTimer(APP_TWS_DELAY_CONNECT),    osTimerOnce,   NULL );
+		}
+
+		if(NULL == app_searchtimeout_handle_timer)
+		{
+			app_searchtimeout_handle_timer = osTimerCreate(osTimer(APP_SEARCH_TIMEOUT),     osTimerOnce,   NULL );
+			osTimerStart(app_searchtimeout_handle_timer, 120*1000); //2minute
+		}
+
+		if( NULL == app_tws_pairing_prompt_timer )
+		{
+			app_tws_pairing_prompt_timer = osTimerCreate(osTimer(APP_SEARCH_PROMPT_TIMEOUT), osTimerOnce, NULL );
+		    osTimerStart(app_tws_pairing_prompt_timer,5000);
+		}
+
         if (is_find_tws_peer_device_onprocess())
         {
             find_tws_peer_device_stop();
@@ -528,8 +579,7 @@ void app_start_tws_serching_direactly()
         {
             p_ibrt_ctrl->nv_role=IBRT_UNKNOW;
             find_tws_peer_device_start();
-
-             app_status_indication_set(APP_STATUS_INDICATION_CONNECTING);
+            app_status_indication_set(APP_STATUS_INDICATION_CONNECTING);
         }
     }
 }

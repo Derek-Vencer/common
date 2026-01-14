@@ -549,6 +549,7 @@ ifeq ($(FAULT_DUMP),1)
 CFLAGS_hal_trace.o += -DFAULT_DUMP
 endif
 ifeq ($(CRASH_REBOOT),1)
+$(info CRASH_REBOOT)
 CFLAGS_hal_trace.o += -DCRASH_REBOOT
 endif
 ifeq ($(FORCE_TRACE_UART1),1)

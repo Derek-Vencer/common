@@ -99,7 +99,7 @@ void app_ibrt_if_a2dp_lowlatency_scan(uint16_t interval, uint16_t window, uint8_
 void app_ibrt_if_a2dp_restore_scan(void);
 void app_ibrt_if_sco_lowlatency_scan(uint16_t interval, uint16_t window, uint8_t interlanced);
 void app_ibrt_if_sco_restore_scan(void);
-#ifdef IBRT_SEARCH_UI
+#if 1 //def IBRT_SEARCH_UI
 void app_start_tws_serching_direactly();
 void app_bt_manager_ibrt_role_process(const btif_event_t *Event);
 void app_ibrt_search_ui_init(bool boxOperation, app_ui_evt_t box_event);

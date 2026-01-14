@@ -433,6 +433,9 @@ endif
 ###goodocom configure 
 export BLE_BATT     ?= 0
 export CRASH_REBOOT ?= 1
+SOFTWARE_VERSION_INFO := 20
+##uart cmd setting test
+export APP_TRACE_RX_ENABLE := 0
 
 KBUILD_CPPFLAGS += -DSOFTWARE_VERSION_INFO=$(SOFTWARE_VERSION_INFO)
 
