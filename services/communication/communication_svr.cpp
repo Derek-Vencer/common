@@ -28,6 +28,7 @@
 #define UART_DEVICE_UART0
 #endif
 
+void communication_enable_irq(void (* irq_cb)(enum HAL_GPIO_PIN_T pin));
 //======================================================================================================
 
 enum COMMUNICATION_MSG {
@@ -53,7 +54,7 @@ const static uint8_t communication_process_log[8][26] = {
 };
 
 enum COMMUNICATION_MODE {
-    COMMUNICATION_MODE_NULL,
+    COMMUNICATION_MODE_NULL = 0,
     COMMUNICATION_MODE_TX,
     COMMUNICATION_MODE_RX,
     COMMUNICATION_MODE_ENABLE_IRQ,
@@ -115,7 +116,7 @@ static const struct HAL_UART_CFG_T uart_cfg = {
 #ifdef BESUI_1WIRE_EN
  	38400,
 #else
-    921600,
+	38400,//921600,
 #endif
 #endif
     true,
@@ -139,15 +140,20 @@ static void communication_process(COMMUNICATION_MAIL* mail_p);
 int communication_io_mode_switch(enum COMMUNICATION_MODE mode);
 
 extern "C" {
-WEAK void hal_iomux_single_wire_uart_rx(uint32_t uart)
-{
-    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
-}
+//WEAK void hal_iomux_single_wire_uart_rx(uint32_t uart)
+//{
+//    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
+//}
+//
+//WEAK void hal_iomux_single_wire_uart_tx(uint32_t uart)
+//{
+//    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
+//}
+void hal_iomux_single_wire_uart_rx(uint32_t uart);
 
-WEAK void hal_iomux_single_wire_uart_tx(uint32_t uart)
-{
-    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
-}
+
+void hal_iomux_single_wire_uart_tx(uint32_t uart);
+
 }
 
 static void communication_set_tx_mode(void)
@@ -165,7 +171,7 @@ static void uart_rx_dma_stop(void)
     union HAL_UART_IRQ_T mask;
 
     uint32_t lock = int_lock();
-    //COMMUNICATION_TRACE(1,"uart_rx_dma_stop:%d", uart_rx_dma_is_running);
+    COMMUNICATION_TRACE(1,"uart_rx_dma_stop:%d", uart_rx_dma_is_running);
     if (uart_rx_dma_is_running){
         mask.reg = 0;
         hal_uart_irq_set_mask(comm_uart, mask);
@@ -182,7 +188,7 @@ static void uart_rx_dma_start(void)
 
     uint32_t lock = int_lock();
 
-    //COMMUNICATION_TRACE(1,"uart_rx_dma_start:%d", uart_rx_dma_is_running);
+    COMMUNICATION_TRACE(1,"uart_rx_dma_start:%d", uart_rx_dma_is_running);
 
     hal_uart_flush(comm_uart, 0);
     mask.reg = 0;
@@ -211,7 +217,7 @@ static void uart_rx_dma_handler(uint32_t xfer_size, int dma_error, union HAL_UAR
 {
     COMMUNICATION_MAIL msg;
 
-    //COMMUNICATION_TRACE(8,"UART-RX size:%d dma_error=%d, status rt:%d fe:%d pe:%d be:%d oe:%d", xfer_size, dma_error, status.RT, status.FE, status.PE, status.BE, status.OE);
+    COMMUNICATION_TRACE(1,"UART-RX size:%d dma_error=%d, status rt:%d fe:%d pe:%d be:%d oe:%d", xfer_size, dma_error, status.RT, status.FE, status.PE, status.BE, status.OE);
 
     if (status.BE) {
         uart_break_handler();
@@ -246,7 +252,7 @@ static void uart_tx_dma_handler(uint32_t xfer_size, int dma_error)
 
     memset(&msg, 0, sizeof(COMMUNICATION_MAIL));
 
-    //COMMUNICATION_TRACE(2,"UART-TX size:%d dma_error=%d", xfer_size, dma_error);
+    COMMUNICATION_TRACE(1,"UART-TX size:%d dma_error=%d", xfer_size, dma_error);
 
     osSignalSet(communication_tid, COMMAND_TRANSMITTED_SIGNAL);
 
@@ -258,7 +264,7 @@ static void uart_tx_dma_handler(uint32_t xfer_size, int dma_error)
 static void uart_init(void)
 {
     struct HAL_UART_CFG_T comm_uart_cfg;
-
+    COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
     if (!uart_opened) {
         memcpy(&comm_uart_cfg, &uart_cfg, sizeof(comm_uart_cfg));
         hal_uart_open(comm_uart, &comm_uart_cfg);
@@ -271,20 +277,21 @@ static void uart_init(void)
 
 static void uart_deinit(void)
 {
+	COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
     if (uart_opened) {
         hal_uart_close(comm_uart);
         uart_opened = false;
     }
 }
 
-static void uart_rx_idle_timer_start(void)
+POSSIBLY_UNUSED static void uart_rx_idle_timer_start(void)
 {
     uart_rx_idle_counter = 0;
     COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
 
     if (uart_rx_idle_timer_id != NULL) {
         osTimerStop(uart_rx_idle_timer_id);
-        osTimerStart(uart_rx_idle_timer_id, 100);
+        //osTimerStart(uart_rx_idle_timer_id, 100);
     }
 }
 
@@ -303,9 +310,12 @@ static void uart_rx_edge_detect_handler(enum HAL_GPIO_PIN_T pin)
 
 static void uart_rx_idle_handler(void const *param)
 {
+
 #ifdef BESUI_1WIRE_EN
 	return;
 #endif
+	return;
+
     if(uart_rx_idle_counter++ >= 150)//150 * 100 = 15s
     {
         COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
@@ -326,6 +336,7 @@ static void uart_rx_idle_handler(void const *param)
 int communication_io_mode_switch(enum COMMUNICATION_MODE mode)
 {
     //best1400 and best1402 platform
+	COMMUNICATION_TRACE(0,"%s mode=%d", __func__, mode);
     switch (mode)
     {
         case COMMUNICATION_MODE_TX: {
@@ -351,6 +362,7 @@ int communication_io_mode_switch(enum COMMUNICATION_MODE mode)
 
 int communication_io_mode_init(void)
 {
+
 #if defined(CHIP_BEST2300P)
     const struct HAL_IOMUX_PIN_FUNCTION_MAP POSSIBLY_UNUSED pinmux_uart[] = {
         {HAL_IOMUX_PIN_P2_2, HAL_IOMUX_FUNC_GPIO, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
@@ -592,7 +604,11 @@ int communication_receive_register_callback(communication_receive_func_typedef p
 int communication_send_buf(uint8_t * buf, uint8_t len)
 {
     COMMAND_BLOCK *cmd_blk;
-
+    if (!uart_opened) {
+    	COMMUNICATION_TRACE(0,"[%s] not init\n", __func__);
+    	return -1;
+    }
+    COMMUNICATION_TRACE(0,"[%s] %d\n", __func__, len);
     communication_command_block_alloc(&cmd_blk);
     memcpy(cmd_blk->cmd_buf, buf, len);
     cmd_blk->cmd_len = len;
@@ -660,7 +676,7 @@ void communication_enable_irq(void (* irq_cb)(enum HAL_GPIO_PIN_T pin))
     if (ARRAY_SIZE(pinmux_gpio) == 0) {
         return;
     }
-
+    COMMUNICATION_TRACE(1,"%s", __func__);
     hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)pinmux_gpio, ARRAY_SIZE(pinmux_gpio));
     hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)pinmux_gpio[0].pin, HAL_GPIO_DIR_IN, 0);
 

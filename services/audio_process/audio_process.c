@@ -146,6 +146,7 @@ dirac_channel_config_t get_dirac_channel_config() {
 #endif
 
 #if defined(AUDIO_EQ_TUNING)
+//#error AUDIO_EQ_TUNING
 #include "hal_cmd.h"
 
 #if defined(__SW_IIR_EQ_PROCESS__)
@@ -285,6 +286,7 @@ extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ
 #endif
 
 #ifdef __AUDIO_DRC__
+//#error __AUDIO_DRC__
 #ifndef FREEMAN_ENABLED_STERO
 #define AUDIO_DRC_NEEDED_SIZE (1024*15) // TWS
 #else
@@ -2844,7 +2846,6 @@ typedef struct {
     uint8_t sample_rate[20];
     // ANC
     uint32_t anc_mode;
-
     // Add new items in order for compatibility
 } query_eq_info_t;
 
@@ -2873,7 +2874,7 @@ int audio_cmd_callback(uint8_t *buf, uint32_t len)
             getSampleArray(info.sample_rate, &info.sample_rate_num);
 
             // ANC
-#if defined(ANC_APP)
+#if  defined(ANC_APP)
             info.anc_mode = app_anc_get_curr_mode();
 #else
             info.anc_mode = 0;
@@ -3163,6 +3164,7 @@ int audio_process_init(void)
 #endif
 
 #else   // #if defined(USB_EQ_TUNING)
+
 #ifdef AUDIO_EQ_SW_IIR_UPDATE_CFG
     hal_cmd_register("sw_iir_eq", audio_eq_sw_iir_callback);
 #endif
@@ -3223,7 +3225,6 @@ int audio_process_init(void)
 #endif  // #if defined(USB_EQ_TUNING)
 
     hal_cmd_register("anc_switch", audio_anc_switch_callback);
-
     hal_cmd_register("cmd", audio_cmd_callback);
     hal_cmd_register("ping", audio_ping_callback);
 #endif  // #if defined(AUDIO_EQ_TUNING)

@@ -3458,6 +3458,7 @@ endif
 
 NEW_NV_RECORD_ENABLED ?= 1
 ifeq ($(NEW_NV_RECORD_ENABLED),1)
+$(info NEW_NV_RECORD_ENABLED)
 KBUILD_CPPFLAGS += -DNEW_NV_RECORD_ENABLED
 KBUILD_CPPFLAGS += -Iservices/nv_section/userdata_section
 endif
@@ -5540,6 +5541,7 @@ endif
 
 ifeq ($(PC_CMD_UART),1)
 export PC_CMD_UART
+$(warning PC_CMD_UART_For_AUDIO_EQ_TUNING)
 KBUILD_CPPFLAGS += -D__PC_CMD_UART__
 KBUILD_CPPFLAGS += -DAUDIO_EQ_TUNING
 endif

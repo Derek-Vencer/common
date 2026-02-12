@@ -257,6 +257,7 @@ CFLAGS_app_bt_stream.o += -D__SW_IIR_EQ_PROCESS__
 endif
 
 ifeq ($(HW_DAC_IIR_EQ_PROCESS),1)
+$(info enable HW_DAC_IIR_EQ_PROCESS)
 CFLAGS_app_bt_stream.o += -D__HW_DAC_IIR_EQ_PROCESS__
 endif
 

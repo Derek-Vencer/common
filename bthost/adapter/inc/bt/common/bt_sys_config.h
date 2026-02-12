@@ -56,6 +56,7 @@ extern "C" {
 
 /* for debug usage */
 #if !defined(DEBUG)
+#undef  BTHOST_DEBUG
 #define BTHOST_DEBUG 0
 #endif
 

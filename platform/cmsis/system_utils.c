@@ -34,7 +34,8 @@
 #include "mpu_cfg.h"
 #include "tool_msg.h"
 
-#ifdef DEBUG_IRQ_HUNG
+//#ifdef DEBUG_IRQ_HUNG
+#if 1
 BOOT_BSS_LOC
 struct irq_masked_address irq_masked_addr;
 

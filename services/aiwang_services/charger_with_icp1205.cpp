@@ -30,8 +30,8 @@
 
 #define ICP1205_GP0_GPIO             (HAL_GPIO_PIN_P0_4)  //outPut
 #define ICP1205_INT_GPIO             (HAL_GPIO_PIN_P0_5)  //outPut
-#define ICP1205_GP0_IOMUX            (HAL_IOMUX_PIN_P0_4) //outPut
-#define ICP1205_INT_IOMUX            (HAL_IOMUX_PIN_P0_5) //outPut
+#define ICP1205_GP0_IOMUX            (HAL_IOMUX_PIN_P0_4) //(HAL_IOMUX_PIN_LED_NUM) //(HAL_IOMUX_PIN_P0_4) //outPut
+#define ICP1205_INT_IOMUX            (HAL_IOMUX_PIN_P0_5) //(HAL_IOMUX_PIN_LED_NUM) //(HAL_IOMUX_PIN_P0_5) //outPut
 
 #ifndef HAL_I2C_ID_3
 #define HAL_I2C_ID_3                 ((HAL_I2C_ID_T)3)
@@ -142,6 +142,7 @@ static void ICP1205_GPIO_INT_IRQ_Enable(enum HAL_GPIO_PIN_T pin)
 {
 	struct HAL_GPIO_IRQ_CFG_T gpio_cfg;
 	if (IntReqHasEnable) return;
+
     hal_gpio_pin_set_dir(pin, HAL_GPIO_DIR_IN, 0);
     IntReqHasEnable = true;
     gpio_cfg.irq_enable = true;
@@ -190,8 +191,8 @@ void Icp1205SetChrgFunEnable(void)
 {
    uint8_t dat;
    readDataFrom_ICP1205(ICP1205_CHRG_CON1,&dat,1);
-   dat |=0x03;
-   readDataFrom_ICP1205(ICP1205_CHRG_CON1,&dat,1);
+   dat |=0x23;
+   writeDataTo_ICP1205(ICP1205_CHRG_CON1,&dat,1);
 }
 
 /**
@@ -236,7 +237,7 @@ void Icp1205Cmp0P15IntDisable(void)
  ******************************************************************************/
 void Icp1205ClearIntFlag(void)
 {
-	uint8_t u8dat[3]={0xff,0xff,0xff};
+	uint8_t u8dat[3]={0x00,0x00,0x00};
 	writeDataTo_ICP1205(ICP1205_INT_STAT1,u8dat,sizeof(u8dat));
 }
 
@@ -347,6 +348,8 @@ void ICP1205_Init(void)
 
 	DBGPRINT("%s",__func__);
 	ICP1205_BES_I2c_Init();
+//	return;
+
     while (syncRetryCount < 100) {
 	   ret = readDataFrom_ICP1205(ICP1205_CHRG_CON1,&buffer[0],1);
 	   if (ret != 0){
@@ -356,13 +359,14 @@ void ICP1205_Init(void)
            if (0x00 == buffer[0] || 0xFF == buffer[0]){
         	  osDelay(100);
            } else {
-        	   printf("ICP1205 communicat succeed!!");
+        	   printf("ICP1205 communicate succeed!!");
         	   break;
            }
 	   }
 	   syncRetryCount++;
     }
 
+#if 1
 	//deafult_value reg
 	uint8_t initSettingsRegsValue[16] = {0X23,0x99,0x00,0x99,0x00,0x00,0x00,0x00,0xf0,0xf0,0x03,0x07,0x00,0x00,0x00,0x00};
 	//ICP1205_CHRG_CON1  0x00  4.2v re/charge_en 0X23
@@ -386,14 +390,17 @@ void ICP1205_Init(void)
 	REL_TRACE_NOCRLF(0, "initSettingsRegsValue: ");
 	DUMP8("%02x ",&initSettingsRegsValue[0], 16);
 
+
 	//read charge status
 	DBGPRINT("charge status: %02X", initSettingsRegsValue[ICP1205_CHRG_STS2]);
+#endif
 
+#if 1
 	//Reg 1D
-	buffer[0] = 0x11;
-	buffer[1] = 0x10;
-	buffer[2] = 0x00;
-	writeDataTo_ICP1205( ICP1205_REG_1D, buffer, 3);
+	//buffer[0] = 0x11;
+	//buffer[1] = 0x10;
+	//buffer[2] = 0x00;
+	//writeDataTo_ICP1205( ICP1205_REG_1D, buffer, 3);
 
 	//Reg 14 supervise ICP1205_ADS abnormal reset
 	buffer[0] = {0xA5};
@@ -402,9 +409,10 @@ void ICP1205_Init(void)
 	buffer[0] = {0xA5};
 	writeDataTo_ICP1205( ICP1205_REV_DAT2, buffer, 1);
 
-	//Enable SHIP_MODE
+	//reset SHIP_MODE
 	Icp1205ShipReset();
-	Icp1205ShipEnable();
+	//Enable SHIP_MODE
+	//Icp1205ShipEnable();
 
 	//Enable ChargeEnable
 	Icp1205SetChrgFunEnable();
@@ -430,6 +438,10 @@ void ICP1205_Init(void)
 
 	buffer[0] = 0X03;//保留透传、载波错误与成功中断
 	writeDataTo_ICP1205(ICP1205_INT_MASK3, &buffer[0], 1);
+#endif
+	//Reg10 ICP1205_ADS EnterTransparentMode
+	//buffer[0] = 0x03;
+	//writeDataTo_ICP1205( ICP1205_COMM_CON, &buffer[0], 1);
 
 }
 
@@ -512,6 +524,7 @@ static void Icp1205UpdataIntSts(void)
 		if (u8RegTable[0] & INT1_PLGOUT_FLG) {
 			Icp1205SetChrgFunEnable();
 			u8dat1 = INT1_PLGOUT_FLG;
+			printf("Charger In INT1_PLGOUT_FLG");
 			writeDataTo_ICP1205(ICP1205_INT_STAT1, &u8dat1, 1);
 			//hds_status_set_chargemode(false);
 			Icp1205SetChrgFunEnable();
@@ -620,6 +633,7 @@ static void Icp1205UpdataIntSts(void)
 		if(u8RegTable[1]&INT2_NTC_FLG)
 		{
 			osDelay(100);
+			DBGPRINT("always INT2_NTC_FLG!");
 		    u8dat1 = INT2_NTC_FLG;
 		    writeDataTo_ICP1205(ICP1205_INT_STAT2,&u8dat1,1);
 		}

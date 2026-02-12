@@ -91,21 +91,27 @@
 #endif
 #include "app_ai_manager_api.h"
 #include "bts_module_if.h"
+
 #ifdef BESUI_APP_EN
 #include "app_tota_general.h"
 #endif
+
 #ifdef BESUI_KEY_EN
 #include "twsui_key.h"
 #endif
+
 #ifdef BESUI_BTMSG_EN
 #include "twsui_btmsg.h"
 #endif
+
 #ifdef BESUI_TWS_EN
 #include "twsui_comm.h"
 #endif
+
 #ifdef BESUI_1WIRE_EN
 #include "twsui_uart.h"
 #endif
+
 #if defined(BESUI_COMM_EN)
 #include "besui_common.h"
 #endif
@@ -262,10 +268,13 @@ bool isRightOfTheEarBuds(void) {
 #if !defined(FREE_TWS_PAIRING_ENABLED) && !defined(FREEMAN_ENABLED_STERO)
 static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
 {
+	EARBUDS_TRACE(0, "%s", __func__);
+
 #if !defined(BESUI_TWS_EN)
     const ibrt_pairing_info_t *ibrt_pairing_info_lst = g_ibrt_pairing_info;
     uint32_t lst_size = ARRAY_SIZE(g_ibrt_pairing_info);
 #endif
+
     struct nvrecord_env_t *nvrecord_env;
     uint8_t localAddr[BD_ADDR_LEN];
 
@@ -273,6 +282,7 @@ static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
     factory_section_original_btaddr_get(localAddr);
 
     bool isRightMasterSidePolicy = true;
+
 #ifdef IBRT_RIGHT_MASTER
     isRightMasterSidePolicy = true;
 #else
@@ -301,13 +311,13 @@ static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
         if (!memcmp(ibrt_pairing_info_lst[i].master_bdaddr.address, localAddr, BD_ADDR_LEN))
         {
             app_tws_ibrt_reconfig_role(IBRT_MASTER, ibrt_pairing_info_lst[i].master_bdaddr.address,
-                ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
+            ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
             return;
         }
         else if (!memcmp(ibrt_pairing_info_lst[i].slave_bdaddr.address, localAddr, BD_ADDR_LEN))
         {
             app_tws_ibrt_reconfig_role(IBRT_SLAVE, ibrt_pairing_info_lst[i].master_bdaddr.address,
-                            ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
+            ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
             return;
         }
     }
@@ -346,6 +356,7 @@ WEAK void app_ibrt_initialize_nv_role_callback(void *config, void * record_env)
 
 int app_ibrt_ui_v2_test_config_load(void *config)
 {
+
 #if !defined(FREE_TWS_PAIRING_ENABLED) && !defined(FREEMAN_ENABLED_STERO)
     app_ibrt_raw_ui_test_load_from_bt_pair_list();
 #endif
@@ -356,10 +367,11 @@ int app_ibrt_ui_v2_test_config_load(void *config)
     nv_record_env_get(&nvrecord_env);
     factory_section_original_btaddr_get(ibrt_config->local_addr.address);
 
+    EARBUDS_TRACE(1, "%s ibrt_mode.mode=%d", __func__, nvrecord_env->ibrt_mode.mode);
+
 #if !defined(FREE_TWS_PAIRING_ENABLED)
     // nv record content has been updated in app_ibrt_raw_ui_test_load_from_bt_pair_list
     ibrt_config->nv_role = nvrecord_env->ibrt_mode.mode;
-
 #else
     app_ibrt_initialize_nv_role_callback(ibrt_config, nvrecord_env);
 #endif
@@ -457,7 +469,14 @@ int app_ibrt_ui_v2_test_config_load(void *config)
     ch_select = ibrt_config->audio_chnl_sel;
 #endif
     bts_core_set_ui_role(nvrecord_env->ibrt_mode.mode);
-
+    EARBUDS_TRACE(0,"%s ibrt_mode.mode(nv_role)=%d ", __func__, ibrt_config->nv_role);
+    EARBUDS_TRACE(0,"load local_addr: %02x:%02x:%02x:%02x:%02x:%02x",ibrt_config->local_addr.address[0],
+    ibrt_config->local_addr.address[1],ibrt_config->local_addr.address[2],ibrt_config->local_addr.address[3],
+	ibrt_config->local_addr.address[4],ibrt_config->local_addr.address[5]);
+    EARBUDS_TRACE(0,"load peer_addr: %02x:%02x:%02x:%02x:%02x:%02x", ibrt_config->peer_addr.address[0],
+    ibrt_config->peer_addr.address[1], ibrt_config->peer_addr.address[2], ibrt_config->peer_addr.address[3],
+	ibrt_config->peer_addr.address[4], ibrt_config->peer_addr.address[5]);
+    EARBUDS_TRACE(0,"%s over", __func__);
     return 0;
 }
 
@@ -2703,7 +2722,7 @@ const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_FIFTH_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_SIXTY_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLE_AND_HOLD},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONG_8S_PRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+//    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONG_8S_PRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
 	{{APP_KEY_CODE_PWR,APP_KEY_EVENT_UP},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
 	{{APP_KEY_CODE_PWR,HAL_KEY_EVENT_UP_AFTER_LONGPRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
 

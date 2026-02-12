@@ -121,7 +121,7 @@ static void bt_error_check_timer_handler(void const *param)
         }
         pmu_reboot();
     }
-#if 1 || defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     dut_poweroff_cnt ++;
     FACTORY_TRACE(2,"%s dut_poweroff_cnt:%d", __func__, dut_poweroff_cnt);
     if(dut_poweroff_cnt >= POWEROFF_TIMEOUT)
@@ -734,10 +734,11 @@ void app_factorymode_bt_xtalcalib(APP_KEY_STATUS *status, void *param)
 void app_factorymode_exit(APP_KEY_STATUS *status, void *param)
 {
     FACTORY_TRACE(1,"%s",__func__);
-    hal_sw_bootmode_set(HAL_SW_BOOTMODE_REBOOT);
+    //hal_sw_bootmode_set(HAL_SW_BOOTMODE_REBOOT);
     nv_record_flash_flush();
     osDelay(500);
-    pmu_reboot();
+    //pmu_reboot();
+    app_shutdown();
 }
 
 #ifdef APP_TRACE_RX_ENABLE

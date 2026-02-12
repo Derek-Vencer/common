@@ -97,6 +97,14 @@
 									<listOptionValue builtIn="false" value="__ENGINEER_MODE_SUPPORT__=1"/>
 									<listOptionValue builtIn="false" value="CRASH_REBOOT=1"/>
 									<listOptionValue builtIn="false" value="APP_TRACE_RX_ENABLE=0"/>
+									<listOptionValue builtIn="false" value="__PC_CMD_UART__=0"/>
+									<listOptionValue builtIn="false" value="AUDIO_SECTION_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__HW_DAC_IIR_EQ_PROCESS__=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_EQ_TUNING=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DRC__=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DYNAMIC_EQ__=1"/>
+									<listOptionValue builtIn="false" value="NEW_NV_RECORD_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -172,6 +180,14 @@
 									<listOptionValue builtIn="false" value="__ENGINEER_MODE_SUPPORT__=1"/>
 									<listOptionValue builtIn="false" value="CRASH_REBOOT=1"/>
 									<listOptionValue builtIn="false" value="APP_TRACE_RX_ENABLE=0"/>
+									<listOptionValue builtIn="false" value="__PC_CMD_UART__=0"/>
+									<listOptionValue builtIn="false" value="AUDIO_SECTION_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__HW_DAC_IIR_EQ_PROCESS__=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_EQ_TUNING=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DRC__=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DYNAMIC_EQ__=1"/>
+									<listOptionValue builtIn="false" value="NEW_NV_RECORD_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

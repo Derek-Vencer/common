@@ -137,6 +137,7 @@ ccflags-y += -DFIR_HIGHSPEED
 endif
 
 ifeq ($(PC_CMD_UART),1)
+$(warning PC_CMD_UART )
 CFLAGS_audio_process.o += -D__PC_CMD_UART__
 CFLAGS_audio_process.o += -DAUDIO_EQ_TUNING
 endif
@@ -199,6 +200,7 @@ endif
 endif
 
 ifeq ($(AUDIO_DYNAMIC_EQ),1)
+$(info AUDIO_DYNAMIC_EQ)
 CFLAGS_audio_process.o += -D__AUDIO_DYNAMIC_EQ__
 endif
 

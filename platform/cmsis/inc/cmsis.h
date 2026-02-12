@@ -44,7 +44,7 @@ __extension__ \
  })
 #endif
 
-#ifdef DEBUG_IRQ_HUNG
+#if 1 //def DEBUG_IRQ_HUNG
 struct irq_masked_address {
     uint32_t pc;
     uint32_t lr;

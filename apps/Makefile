@@ -7,6 +7,7 @@ endif
 endif
 
 ifeq ($(BESUI_COMM_EN),1)
+$(info BESUI_COMM_EN...)
 obj-y += besui/
 subdir-ccflags-y += -Iapps/besui
 endif

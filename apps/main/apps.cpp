@@ -1028,6 +1028,11 @@ void app_start_ota_language_reset(void)
 void app_bt_key_shutdown(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
+#ifdef MEDIA_PLAYER_SUPPORT
+    media_PlayAudio(AUD_ID_POWER_OFF, 0);
+    osDelay(200);
+#endif
+
 #ifdef __POWERKEY_CTRL_ONOFF_ONLY__
     hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
     app_reset();
@@ -1515,6 +1520,7 @@ int app_deinit(int deinit_case)
 #ifdef __PC_CMD_UART__
     app_cmd_close();
 #endif
+
 #if (defined(BTUSB_AUDIO_MODE) || defined(BT_USB_AUDIO_DUAL_MODE))
     if(app_usbaudio_mode_on())
     {
@@ -2315,11 +2321,10 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
 
-    charger_manager_start();
-
     nRet = app_battery_open();
     MAIN_TRACE(1,"BATTERY %d pwron_case=%d", nRet, pwron_case);
     if (pwron_case != APP_POWERON_CASE_TEST){
+        charger_manager_start();
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
                 nRet = 0;
@@ -2452,6 +2457,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     }
 
     audio_process_init();
+
 #ifdef __PC_CMD_UART__
     app_cmd_open();
 #endif
