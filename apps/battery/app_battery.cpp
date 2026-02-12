@@ -528,8 +528,9 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #else
+                app_shutdown();
 #if CHARGER_PLUGINOUT_RESET
-                app_reset();
+                //app_reset();
 #else
                 app_battery_measure.status = APP_BATTERY_STATUS_CHARGING;
 #endif
@@ -575,7 +576,8 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
 #if CHARGER_PLUGINOUT_RESET
                 BATTERY_TRACE(0,"CHARGING-->RESET");
                 osTimerStop(app_battery_timer);
-                app_shutdown();
+                //app_shutdown();
+                app_reset();
 #else
                 app_battery_measure.status = APP_BATTERY_STATUS_NORMAL;
 #endif
@@ -587,6 +589,9 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #endif
+                BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
+                osTimerStop(app_battery_timer);
+                app_shutdown();
             }
             break;
         case APP_BATTERY_STATUS_INVALID:

@@ -46,19 +46,46 @@ typedef enum sub_cmds {
 	PLAY_TEST_TONE     = 0x02,
 	LED_CONTROL        = 0x03,
 	BUTTON_EVENT       = 0x04,
-	GET_FW_VERSION     = 0x01,
+	_GET_FW_VERSION     = 0x01,
 	GET_BATTERY_INFO   = 0x02,
 	READ_SN            = 0x03,
 	WRTIE_SN           = 0x04,
 	OTA_CMD            = 0x01
 } AI_WANG_SETS_SUB_CMDS;
 
+typedef enum  {
+    GET_BATTERY_LEVEL = 0x30,
+	GET_DEVICE_NAME   = 0x34,
+	SET_DEVICE_NAME   = 0x38,
+	GET_KEY_MAPPING   = 0x3c,
+	SET_KEY_MAPPING   = 0x40,
+	GET_EQ_PRESET     = 0x44,
+	SET_EQ_PRESET     = 0x48,
+	GET_FW_VERSION    = 0x4c,
+	FACTORY_COMMAND_SYS      = 0xA0,
+	FACTORY_COMMAND_AUDIO_IO = 0xB0,
+	FACTORY_COMMAND_INFO     = 0xC0,
+	GET_LOCAL_BT_ADDR  = 0x60,
+	SET_PEER_BT_ADDR   = 0x70
+} AI_WANG_CMDS_TYPE_SETS;
+
+typedef enum  {
+    RSP_GET_BATTERY_LEVEL = 0x32,
+	RSP_GET_DEVICE_NAME   = 0x36,
+	RSP_SET_DEVICE_NAME   = 0x3a,
+	RSP_GET_KEY_MAPPING   = 0x3e,
+	RSP_SET_KEY_MAPPING   = 0x42,
+	RSP_GET_EQ_PRESET     = 0x46,
+	RSP_SET_EQ_PRESET     = 0x4a,
+	RSP_GET_FW_VERSION    = 0x4e,
+} AI_WANG_RSP_TYPE;
+
 typedef enum {
 	REQUEST_CMD   = 0,
 	INDICATOR_CMD = 1,
 	RESPONSE_WITHOUT_ERROR = 2,
 	RESPONSE_WITH_ERROR    = 3,
-}COMMAND_CODE_TYPE_T;
+} COMMAND_CODE_TYPE_T;
 
 typedef struct {
 	uint8_t cmd_type;

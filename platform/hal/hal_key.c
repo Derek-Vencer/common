@@ -1090,8 +1090,7 @@ static void hal_key_debounce_handler(void *param)
         if (map & (1 << index)) {
             map &= ~(1 << index);
             send_key_event((1 << index), HAL_KEY_EVENT_UP);
-            if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGLONGPRESS)
-            {
+            if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
                 send_key_event((1 << index), HAL_KEY_EVENT_UP_AFTER_LONGPRESS);
             }
             if (key_status.event == HAL_KEY_EVENT_DOUBLE_AND_HOLD)
@@ -1111,13 +1110,6 @@ static void hal_key_debounce_handler(void *param)
         	TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD release 2***");
         } else if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
             // LongPress is finished when all of the LongPress keys are released
-        	send_key_event(key_status.code_ready, key_status.event);
-        	TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_LONGPRESS %d ***", key_status.event);
-            if ((code_down & key_status.code_ready) == 0) {
-                key_status.event = HAL_KEY_EVENT_NONE;
-            }
-        } else if(HAL_KEY_EVENT_LONGLONGLONGPRESS == key_status.event) {
-        	TR_WARN(0, "*** WARNING: HAL_KEY_EVENT_LONGLONGLONGPRESS ***");
             if ((code_down & key_status.code_ready) == 0) {
                 key_status.event = HAL_KEY_EVENT_NONE;
             }
@@ -1202,7 +1194,7 @@ static void hal_key_debounce_handler(void *param)
         	if (time - key_status.time_updown >= KEY_LONGPRESS_THRESHOLD) {
                 key_status.cnt_repeat = 0;
                 key_status.event = HAL_KEY_EVENT_LONGPRESS;
-                //send_key_event(key_status.code_ready, key_status.event);
+                send_key_event(key_status.code_ready, key_status.event);
             }
 
         } else if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
@@ -1210,16 +1202,12 @@ static void hal_key_debounce_handler(void *param)
             key_status.cnt_has_click_up = 0;
             if (key_status.cnt_repeat == KEY_LONGPRESS_REPEAT_THRESHOLD / KEY_CHECKER_INTERVAL) {
                 key_status.cnt_repeat = 0;
-                //send_key_event(key_status.code_ready, HAL_KEY_EVENT_REPEAT);
+                send_key_event(key_status.code_ready, HAL_KEY_EVENT_REPEAT);
             }
-            if (key_status.event == HAL_KEY_EVENT_LONGPRESS || HAL_KEY_EVENT_LONGLONGPRESS == key_status.event) {
-            	if (time - key_status.time_updown >= KEY_INIT_LONGLONGPRESS_THRESHOLD) {
-            	      key_status.event = HAL_KEY_EVENT_LONGLONGLONGPRESS; //8s enter dut mode
-            	      HAL_TRACE(0, "*** WARNING: TRIG HAL_KEY_EVENT_LONGLONGLONGPRESS ***");
-            	      send_key_event(key_status.code_ready, key_status.event);
-            	} else if (time - key_status.time_updown >= KEY_LONGLONGPRESS_THRESHOLD) {
-                      key_status.event = HAL_KEY_EVENT_LONGLONGPRESS;
-                      send_key_event(key_status.code_ready, key_status.event);
+            if (key_status.event == HAL_KEY_EVENT_LONGPRESS) {
+                if (time - key_status.time_updown >= KEY_LONGLONGPRESS_THRESHOLD) {
+                    key_status.event = HAL_KEY_EVENT_LONGLONGPRESS;
+                    send_key_event(key_status.code_ready, key_status.event);
                 }
             }
         }

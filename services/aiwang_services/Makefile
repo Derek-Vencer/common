@@ -69,6 +69,11 @@ subdir-ccflags-y += -Iapps/common \
 				    -Iutils/hsm \
 				    -Ibthost/adapter/inc/ble/aob \
 				    -Iapps/battery/ \
+				    -Iapps/factory/ \
+				    -Iservices/nv_section/factory_section \
+				    
+				    
+				    
 				    
 				    
 ifeq ($(BESUI_TWS_EN), 1)

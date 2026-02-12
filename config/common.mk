@@ -2569,6 +2569,7 @@ endif
 # IBRT_RIGHT_MASTER==1 means right bud is master, otherwise left bud is master
 export IBRT_RIGHT_MASTER ?= 1
 ifeq ($(IBRT_RIGHT_MASTER),1)
+$(warning IBRT_RIGHT_MASTER)
 KBUILD_CPPFLAGS += -DIBRT_RIGHT_MASTER
 endif
 

@@ -2584,7 +2584,9 @@ static void NORETURN USED hal_trace_assert_dump_internal(ASSERT_DUMP_ARGS)
         hal_trace_flush_buffer();
         hal_sys_timer_delay(MS_TO_TICKS(5));
 
-#ifdef CORE_DUMP
+//#ifdef CORE_DUMP
+        //fixed remove it ,to directly reboot
+#if 0
         {
             static CrashCatcherAssertRegisters regs;
 

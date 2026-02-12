@@ -104,6 +104,10 @@ typedef uint8_t UINT8;
 typedef uint16_t UINT16;
 typedef uint32_t UINT32;
 
+#ifndef SLT_AUTO_TEST
+#define SLT_AUTO_TEST
+#endif
+
 #ifndef NULL
 #define NULL 0
 #endif
@@ -502,6 +506,8 @@ int colist_is_list_empty(struct list_node *head);
          &pos->member != (head); \
          (pos = n), (n = colist_structure(n->member.next, type, member)), ITER_CHK(__list__node__iter__cnt))
 
+
+
 static inline void ITERM_ASSERT(uintptr_t count)
 {
     ASSERT(0, "list too much loop %d", count);
@@ -651,6 +657,7 @@ typedef enum {
 #if BLE_AUDIO_ENABLED
     AUD_ID_LE_AUD_INCOMING_CALL = 0x2C,
 #endif
+
 #ifdef SLT_AUTO_TEST
     AUD_ID_TONE_1K = 0x2D,
 #endif

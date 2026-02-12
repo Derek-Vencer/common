@@ -63,7 +63,7 @@ enum COMMUNICATION_MODE {
 
 
 #define COMMAND_BLOCK_MAX (5)
-#define COMMAND_LEN_MAX (128)
+#define COMMAND_LEN_MAX   (64) //(128)
 #define COMMAND_TRANSMITTED_SIGNAL (1<<0)
 
 typedef struct {
@@ -575,15 +575,16 @@ void communication_init(void)
         communication_mailbox = osMailCreate(osMailQ(communication_mailbox), NULL);
     }
 
-    if (communication_tid == NULL){
-        communication_tid = osThreadCreate(osThread(communication_thread), NULL);
-    }
-
     if (rx_command_block_p == NULL){
         communication_command_block_alloc(&rx_command_block_p);
         memset(rx_command_block_p->cmd_buf, 0, COMMAND_LEN_MAX);
         rx_command_block_p->cmd_len = 0;
     }
+
+    if (communication_tid == NULL){
+        communication_tid = osThreadCreate(osThread(communication_thread), NULL);
+    }
+
 
     msg.message = COMMUNICATION_MSG_INIT;
     communication_mailbox_put(&msg);

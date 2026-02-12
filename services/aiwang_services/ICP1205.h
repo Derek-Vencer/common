@@ -329,10 +329,10 @@ typedef struct stc_icp1205_chrg_cfg
     en_icp1205_ntcfun_t        			NtcFun;      			///< 充电NTC保护功能
     en_icp1205_iterm_div_t    			ItermDiv;    			///< 充电截止电流比例设置
     en_icp1205_chrg_cv_sel_t   			CvSel;       			///< 恒压充电电压设置
-	  en_icp1205_normal_cc_sel_t 			NorCcSel;    			///< 正常恒流电流设置
-	  en_icp1205_fast_cc_sel_t   			FastCcSel;   			///< 快充恒流电流设置
-	  en_icp1205_chrg_dly_sel_t  			ChrgDlySel;  			///< 充电延时截止设置
-	  en_icp1205_chrg_overtime_sel_t  ChrtOverTimeSel;  ///<充电超时设置
+	en_icp1205_normal_cc_sel_t 			NorCcSel;    			///< 正常恒流电流设置
+	en_icp1205_fast_cc_sel_t   			FastCcSel;   			///< 快充恒流电流设置
+	en_icp1205_chrg_dly_sel_t  			ChrgDlySel;  			///< 充电延时截止设置
+	en_icp1205_chrg_overtime_sel_t  ChrtOverTimeSel;  ///<充电超时设置
 	
 } stc_icp1205_chrg_cfg_t;
 
@@ -429,16 +429,24 @@ typedef enum en_icp1205_trcom_mod_sel
 /******************************************************************************
  * Global variable declarations ('extern', definition in C source)
  *****************************************************************************/
-extern void Icp1205SetChrgFunEnable(void);
-extern void Icp1205SetChrgFunDisable(void);
-extern void Icp1205WdtFun(en_icp1205_wdt_fun_en_t Icp1205_Wdt_fun);
-extern void Icp1205WdtWeek(void);
-extern void Icp1205ShipEnable(void);
-extern void Icp1205ShipMaskTimSel(en_icp1205_ship_msktim_sel_t icp1106_ship_tim_sel);
-extern void Icp1205DefInit(void);
-extern void Icp1205ClearIntFlag(void);
-extern void Icp1205IntEnable(void);
-extern void Icp1205IntDisable(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void Icp1205SetChrgFunEnable(void);
+void Icp1205SetChrgFunDisable(void);
+void Icp1205WdtFun(en_icp1205_wdt_fun_en_t Icp1205_Wdt_fun);
+void Icp1205WdtWeek(void);
+void Icp1205ShipEnable(void);
+void Icp1205ShipMaskTimSel(en_icp1205_ship_msktim_sel_t icp1106_ship_tim_sel);
+void Icp1205DefInit(void);
+void Icp1205ClearIntFlag(void);
+void Icp1205IntEnable(void);
+void Icp1205IntDisable(void);
+
+#ifdef __cplusplus
+}
+#endif
 /******************************************************************************
  * Global function prototypes (definition in C source)
  *****************************************************************************/

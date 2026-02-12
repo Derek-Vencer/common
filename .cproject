@@ -105,6 +105,7 @@
 									<listOptionValue builtIn="false" value="__AUDIO_DYNAMIC_EQ__=1"/>
 									<listOptionValue builtIn="false" value="NEW_NV_RECORD_ENABLED=1"/>
 									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
+									<listOptionValue builtIn="false" value="IBRT_RIGHT_MASTER=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -188,6 +189,7 @@
 									<listOptionValue builtIn="false" value="__AUDIO_DYNAMIC_EQ__=1"/>
 									<listOptionValue builtIn="false" value="NEW_NV_RECORD_ENABLED=1"/>
 									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
+									<listOptionValue builtIn="false" value="IBRT_RIGHT_MASTER=1"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

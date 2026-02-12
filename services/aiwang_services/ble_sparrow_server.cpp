@@ -21,18 +21,29 @@
 #include "bts_core_if.h"
 #endif
 
+#include "app_factory.h"
+#include "factory_section.h"
+#include "app_battery.h"
+#include "apps.h"
+#include "app_media_player.h"
+#include "bt_common_define.h"
+
 #if defined(USER_TOTA_SPP_SYNC_KEY_EN) || defined(BESUI_COMM_EN)
 #include "besui_common.h"
 #endif
 
 #include "charger_with_icp1205.h"
+#include "ICP1205.h"
+#include "nvrecord_bt.h"
+#include "nvrecord_env.h"
+
 
 #ifndef TRACE
 #define TRACE(attr, str, ...)   TR_DEBUG(attr, str, ##__VA_ARGS__)
 #endif
 
-#define MAX_PACKET_SIZE            (512)
-#define SPARRAW_EVENT_MAX_MAILBOX   (5)
+#define MAX_PACKET_SIZE             (512)
+#define SPARRAW_EVENT_MAX_MAILBOX   (10)
 #define SPARRAW_EVENT_BUF_SIZE      (MAX_PACKET_SIZE*SPARRAW_EVENT_MAX_MAILBOX)
 #define SPARRAW_BUFF_SIZE           (4096)
 
@@ -40,7 +51,7 @@ typedef struct {
     uint8_t     devId;
     uint8_t     event;
     uint16_t    len;
-    uint8_t     data[512];
+    uint8_t     data[256];
 } SPARRAW_MESSAGE_BLOCK;
 
 typedef struct
@@ -61,8 +72,8 @@ typedef struct
 } SPARRAW_EVENT_T;
 
 static SPARRAW_ENV_T app_sparraw_env;
-static uint8_t sparraw_tx_buf[SPARRAW_EVENT_BUF_SIZE] = {0};
-static CQueue  sparraw_rx_cqueue;
+//static uint8_t sparraw_tx_buf[SPARRAW_EVENT_BUF_SIZE] = {0};
+//static CQueue  sparraw_rx_cqueue;
 static uint8_t mailbox_cnt = 0;
 
 typedef enum {
@@ -76,7 +87,7 @@ typedef enum {
 
 static REQUEST_DATA_STRUCT   rxDataStruct;
 static SPARRAW_RX_STATE sparraw_rx_state = RX_IDLE;
-static uint8_t   payload_buffer[2048];
+static uint8_t   payload_buffer[1024];
 static uint16_t  rx_param_len = 0;
 
 static osThreadId sparrow_thread_id = NULL;
@@ -88,6 +99,219 @@ osMutexDef(app_sparraw_buf_lock);
 static osMailQId sparraw_event_mailbox_id = NULL;
 osMailQDef(sparraw_event_mailbox_id, SPARRAW_EVENT_MAX_MAILBOX, SPARRAW_MESSAGE_BLOCK);
 
+int app_reset(void);
+
+static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
+static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
+
+
+extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *fw_rev_2, uint8_t *fw_rev_3);
+
+void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+    uint8_t batflag; //left, right, box
+
+    batflag = app_battery_current_level();
+    if(batflag > 9)
+    {
+        batflag = 9;
+    }
+
+	uint8_t batteryArray[3] = {0, 0, 0};
+	batteryArray[0] = batflag;
+	batteryArray[1] = batflag;
+
+	sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
+
+}
+
+void handleGetDeviceName(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	uint8_t* localname =  factory_section_get_bt_name();
+    if(localname)
+    {
+    	sparraw_tx_msg(RSP_GET_DEVICE_NAME, (const uint8_t*)localname, strlen((const char *)localname));
+    }
+}
+
+
+void handleSetDeviceName(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	if( factory_section_set_bt_name((const char *)&data[1], len -1))
+	{
+		TRACE(0,"%s error", __func__);
+	}
+	sparraw_tx_msg(RSP_SET_DEVICE_NAME, (const uint8_t*)"", 0);
+}
+
+void handleGetKeyMapping(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	const uint8_t keyMaps[2] = {0x00,0x14};
+	sparraw_tx_msg(RSP_GET_KEY_MAPPING, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
+}
+
+void handleSetKeyMapping(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	sparraw_tx_msg(RSP_SET_KEY_MAPPING, (const uint8_t*)"", 0);
+}
+
+void handleGetEqPresent(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	sparraw_tx_msg(RSP_GET_EQ_PRESET, 0, 1);
+}
+
+void handleSetEqPresent(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	sparraw_tx_msg(RSP_GET_EQ_PRESET, (const uint8_t*)"", 0);
+}
+
+void handleGetFwVersion(const uint8_t *data, uint16_t len)
+{
+	TRACE(0,"%s.", __func__);
+	uint8_t verSion[8] = {'0','1','0','6'};
+	system_get_info(&verSion[0], &verSion[1], &verSion[2], &verSion[4]);
+	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)verSion, 4);
+}
+
+void handleFactoryCmdSys(const uint8_t *data, uint16_t len)
+{
+	  TRACE(0,"%s.", __func__);
+	  sparraw_tx_cmd_data_rsp_ack(data[0], data[1]);
+	  if (ENTER_FACTORY_MODE == data[1]) {
+		  TRACE(0, "ENTER_FACTORY_MODE");
+		  app_factorymode_enter();
+	  } else if (EXIT_AND_REBOOT == data[1]) {
+		  TRACE(0, "EXIT_AND_REBOOT");
+		  (void)app_reset();
+	  } else if (ENTER_SHIP_MODE == data[1]) {
+		  TRACE(0, "ENTER_SHIP_MODE");
+		  Icp1205ShipEnable();
+	  } else if (FACTORY_RESET == data[1]) {
+		  TRACE(0, "FACTORY_RESET");
+		  nv_record_ddbrec_clear();
+	  }
+}
+
+void handleFactoryCmdAudio(const uint8_t *data, uint16_t len)
+{
+	  TRACE(0,"%s.", __func__);
+	  sparraw_tx_cmd_data_rsp_ack(data[0], data[1]);
+	  if (AUDIO_LOOPBACK == payload_buffer[1]) {
+		  TRACE(0, "AUDIO_LOOPBACK");
+	  } else if (PLAY_TEST_TONE == payload_buffer[1]) {
+		  TRACE(0, "PLAY_TEST_TONE");
+		  int stop = payload_buffer[2];
+		  if('1' == stop)
+		  {
+		      media_PlayAudio_continuous_end(AUD_ID_TONE_1K, 0);
+		  }
+		  else
+		  {
+		      media_PlayAudio_continuous_start(AUD_ID_TONE_1K, 0);
+		  }
+	  } else if (LED_CONTROL == payload_buffer[1]) {
+		  TRACE(0, "LED_CONTROL");
+	  } else if (BUTTON_EVENT == payload_buffer[1]) {
+		  TRACE(0, "BUTTON_EVENT");
+	  }
+}
+
+static uint8_t tempSn[64];
+void handleFactoryCmdInfo(const uint8_t *data, uint16_t len)
+{
+	  TRACE(0,"%s.", __func__);
+	  if (READ_SN == data[1]) {
+		  TRACE(0, "READ_SN");
+		  if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(tempSn, strlen((const char*)tempSn));
+	  } else if (WRTIE_SN == data[1]) {
+		  TRACE(0, "WRTIE_SN");
+		  memset(tempSn,0,sizeof(tempSn)/sizeof(tempSn[0]));
+		  memcpy(tempSn, data, len);
+		  if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(tempSn, len);
+	  } else  {
+		  TRACE(0, "unknown ...");
+	  }
+}
+
+void handleGetLocalBtAddress(const uint8_t *data, uint16_t len)
+{
+	  TRACE(0,"%s.", __func__);
+	  uint8_t *bt_local_addr = NULL;
+	  uint8_t buff[8] = {0};
+	  buff[0] = data[0];
+	  buff[1] = 6;
+	  bt_local_addr = (uint8_t *)bt_get_local_address();
+	  memcpy(&buff[2], bt_local_addr, 6);
+	  if(app_sparraw_env.notifyEnable)
+	  {
+		  ble_aiwang_srv_send_data_via_notification(buff, 8);
+	  }
+	  REL_TRACE_NOCRLF(0, "GetLocalBtAddress: ");
+	  DUMP8("%02X ", bt_local_addr, 6);
+}
+
+extern void app_tws_ibrt_update_info(ibrt_role_e ibrtRole,bt_bdaddr_t *ibrtPeerAddr);
+void handleSetPeerBtAddress(const uint8_t *data, uint16_t len)
+{
+	  TRACE(0,"%s.", __func__);
+	  uint8_t *bt_local_addr = NULL;
+	  bt_bdaddr_t peerAddress;
+	  bool ret = false;
+	  bt_local_addr = (uint8_t *)bt_get_local_address();
+	  if ( len >= 6 ) {
+		  REL_TRACE_NOCRLF(0, "localAddress: ");
+		  DUMP8("%02X ", bt_local_addr, 6);
+		  REL_TRACE_NOCRLF(0, "setPeerAddress: ");
+		  DUMP8("%02X ", &data[1], 6);
+		  if ( memcmp(&data[1],bt_local_addr,6))
+		  //if(bt_local_addr[5] == data[5] && bt_local_addr[4] == data[4] && bt_local_addr[3] == data[3])
+		  {
+			  memcpy(&peerAddress.address[0], &data[1], 6);
+			  //app_tws_ibrt_update_info(IBRT_MASTER, &peerAddress);
+		      nv_record_update_ibrt_info(data[1]&0x01?IBRT_SLAVE:IBRT_MASTER, &peerAddress);
+			  ret = true;
+			  osDelay(200);
+			  (void)app_reset();
+		  }
+
+	  }
+	  if(app_sparraw_env.notifyEnable)
+	  {
+		  ble_aiwang_srv_send_data_via_notification((uint8_t*)(ret?"OK":"NG"), 2);
+	  }
+
+}
+
+typedef struct {
+	uint8_t cmd;
+	void (*handleFunc)(const uint8_t *data, uint16_t len);
+} CMD_HANDLE_TABLE;
+
+static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
+	    {GET_BATTERY_LEVEL,   handleGetBatteryLevel},
+		{GET_DEVICE_NAME,     handleGetDeviceName},
+		{SET_DEVICE_NAME,     handleSetDeviceName},
+		{GET_KEY_MAPPING,     handleGetKeyMapping},
+		{SET_KEY_MAPPING,	  handleSetKeyMapping},
+		{GET_EQ_PRESET,		  handleGetEqPresent},
+		{SET_EQ_PRESET,       handleSetEqPresent},
+		{GET_FW_VERSION,      handleGetFwVersion},
+		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},
+		{FACTORY_COMMAND_AUDIO_IO,handleFactoryCmdAudio},
+		{FACTORY_COMMAND_INFO,    handleFactoryCmdInfo},
+		{GET_LOCAL_BT_ADDR,       handleGetLocalBtAddress},
+		{SET_PEER_BT_ADDR,        handleSetPeerBtAddress},
+};
+
+static const uint8_t aiWangCmdTypesCount =
+    sizeof(aiWangCmdTypes) / sizeof(aiWangCmdTypes[0]);
 
 static void sparraw_ble_init(void)
 {
@@ -121,8 +345,7 @@ int sparraw_event_mailbox_free_all(void)
 	SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
     int status = osOK;
     osEvent evt;
-
-    for (uint8_t i=0; i< mailbox_cnt; i++)
+    for (uint8_t i = 0; i< mailbox_cnt; i++)
     {
         evt = osMailGet(sparraw_event_mailbox_id, 500);
         if (evt.status == osEventMail)
@@ -157,6 +380,7 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
     SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
     if (mailbox_cnt > SPARRAW_EVENT_MAX_MAILBOX) {
     	TRACE(0, "%s mail overflow mailbox_cnt=%d", __func__, mailbox_cnt);
+    	return -1;
     }
 
     msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
@@ -164,13 +388,13 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
     {
     	sparraw_event_mailbox_free_all();
         msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
-        ASSERT(msg_p, "osMailAlloc error");
+        ASSERT(msg_p, "sparraw_mailbox_put osMailAlloc error\r\n");
     }
 
     msg_p->devId = devId;
     msg_p->event = event;
-    msg_p->len = (len >512?512:len);
-    if (param && len)
+    msg_p->len   = (len >256?256:len);
+    if (param && len > 0)
     {
         memcpy((uint8_t *)&msg_p->data[0], param, msg_p->len);
     }
@@ -206,13 +430,25 @@ static void sparraw_tx_cmd_data_rsp_neg(uint8_t error_code, uint8_t cmd_type, ui
 	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, 6);
 }
 
+static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len) {
+	uint8_t  rsp_buffer[64];
+	rsp_buffer[0] = rsp_type;
+	if (NULL != data && len > 0)
+	{
+		memcpy(&rsp_buffer[1], data, len);
+	}
+	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, len + 1);
+}
+
+
+
 static void sparraw_rx_cmd_init(void){
 	sparraw_rx_state = RX_IDLE;
 	rx_param_len = 0;
 	memset(&rxDataStruct, 0, sizeof(REQUEST_DATA_STRUCT));
 }
 
-static void sparraw_rx_cmd_handler(void){
+POSSIBLY_UNUSED static void sparraw_rx_cmd_handler(void){
 	  TRACE(0, "%s cmd_type=0x%02x sub_cmd=0x%02x", __func__, rxDataStruct.cmd_type, payload_buffer[1]);
       sparraw_tx_cmd_data_rsp_ack(rxDataStruct.cmd_type, payload_buffer[1]);
       switch(rxDataStruct.cmd_type) {
@@ -261,7 +497,7 @@ static void sparraw_rx_cmd_handler(void){
     }
 }
 
-static void sparraw_rx_cmd_parse(const uint8_t *data, uint16_t len) {
+POSSIBLY_UNUSED static void sparraw_rx_cmd_parse(const uint8_t *data, uint16_t len) {
   uint16_t i = 0;
   for (; i < len; i++) {
 	  //A0 00 01 01
@@ -324,22 +560,51 @@ static void sparraw_rx_cmd_parse(const uint8_t *data, uint16_t len) {
    }
 }
 
+static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len) {
+   uint16_t i ;
+   for (i = 0; i < aiWangCmdTypesCount/*sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0])*/; i++)
+   {
+	   TRACE(0,"%s data[0] = %02x %02x", __func__, data[0], aiWangCmdTypes[i].cmd);
+	   if ( data[0] == aiWangCmdTypes[i].cmd ) {
+		   if(aiWangCmdTypes[i].handleFunc) aiWangCmdTypes[i].handleFunc( data,  len);
+		   break;
+	   }
+   }
+}
+
+
 static void sparraw_event_handler_thread(void const *argument)
 {
+	int len = 0;
+	SPARRAW_MESSAGE_BLOCK* rx_event = NULL;
+	uint8_t     event;
     while (true)
     {
-    	SPARRAW_MESSAGE_BLOCK* rx_event = NULL;
         if (sparraw_event_mailbox_get(&rx_event))
+        {
             return;
+        }
         //TRACE(2, "%s ", __func__);
         osMutexWait(app_sparraw_buf_lock, osWaitForever);
-		REL_TRACE_NOCRLF(0, "SPARRAW_SRV_RX: %d ", rx_event->event);
+		REL_TRACE_NOCRLF(0, "NTII_SRV_RX[%d %d]: ", rx_event->event, rx_event->len);
 		DUMP8("%02X ", &rx_event->data[0], rx_event->len);
-        if (BLE_AIWANG_SRV_RX == rx_event->event) {
-            sparraw_rx_cmd_parse(&rx_event->data[0], rx_event->len);
-        }
+		event = rx_event->event;
+		len = rx_event->len > sizeof(payload_buffer)?sizeof(payload_buffer):rx_event->len;
+        memcpy(&payload_buffer[0], &rx_event->data[0],len);
         sparraw_event_mailbox_free(rx_event);
         osMutexRelease(app_sparraw_buf_lock);
+#if 0
+        if (BLE_AIWANG_SRV_RX == event)
+        {
+            sparraw_rx_cmd_parse(&rx_event->data[0], rx_event->len);
+        }
+#else
+        if (BLE_AIWANG_SRV_RX == event)
+        {
+           sparraw_rx_cmd_parse_v2(&payload_buffer[0], len);
+        }
+#endif
+
     }
 }
 
@@ -403,24 +668,25 @@ void sparraw_event_handle(ble_aiwang_param_u *param)
 
 void sparraw_rx_thread_init(void)
 {
-    TRACE(0,"[%s]",__func__);
-
-    InitCQueue(&sparraw_rx_cqueue, SPARRAW_EVENT_BUF_SIZE, ( CQItemType * )sparraw_tx_buf);
+    TRACE(0,"[%s] %d ",__func__, sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0]));
+    //InitCQueue(&sparraw_rx_cqueue, SPARRAW_EVENT_BUF_SIZE, ( CQItemType * )sparraw_tx_buf);
     sparraw_event_mailbox_init();
-    sparrow_thread_id = osThreadCreate(osThread(sparraw_event_handler_thread), NULL);
     app_sparraw_buf_lock = osMutexCreate(osMutex(app_sparraw_buf_lock));
     if (app_sparraw_buf_lock == NULL) {
         TRACE(1, "Failed to Create ota buf lock\n");
         return;
     }
+    sparrow_thread_id = osThreadCreate(osThread(sparraw_event_handler_thread), NULL);
+
 }
 
 void sparraw_service_init(void)
 {
 	TRACE(0,"[%s]",__func__);
 	// ble_aiwang_srv_init();
-	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
     sparraw_rx_thread_init();
+	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
+
     //start charger_manager_thread
     //previous in apps_init,prior settings ICP1205_ADS
     //charger_manager_start();

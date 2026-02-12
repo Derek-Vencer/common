@@ -1835,6 +1835,7 @@ void app_ibrt_init(void)
 #if defined(IBRT) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
         ibrt_config_t config = {0};
         app_tws_ibrt_init();
+
 #if defined(IBRT_UI)
 #ifdef IBRT_SEARCH_UI
         app_ibrt_search_ui_config_load(&config);
@@ -1886,6 +1887,15 @@ void app_ibrt_init(void)
         {
         #if defined(IBRT_UI)
         	MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
+            if(memcmp(&config.peer_addr.address[0],"\xFF\xFF\xFF\xFF\xFF\xFF",6)
+               && memcmp(&config.peer_addr.address[0],"\x00\x00\x00\x00\x00\x00",6))
+            {
+                //app_ibrt_start_power_on_tws_pairing();
+            }
+            else
+            {
+            	MAIN_TRACE(0, "Not TWS Peers!!!");
+            }
             app_ibrt_start_power_on_tws_pairing();
         #endif
         }
