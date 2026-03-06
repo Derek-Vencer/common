@@ -299,10 +299,8 @@ static void uart_rx_edge_detect_handler(enum HAL_GPIO_PIN_T pin)
 {
     COMMUNICATION_MAIL msg = {0};
     COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
-
     //disable led2 pin external interrupt mode...
     communication_io_mode_switch(COMMUNICATION_MODE_DISABLE_IRQ);
-
     //post uart rx request...
     msg.message = COMMUNICATION_MSG_RX_REQ;
     communication_mailbox_put(&msg);

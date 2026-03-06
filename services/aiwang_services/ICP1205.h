@@ -144,7 +144,8 @@ typedef unsigned          char boolean_t;
 #define INT3_KEYUP_FLG       	(0x1u<<1)       
 #define INT3_CRRXCMD_FLG       	(0x1u<<2)       
 #define INT3_CRRXERR_FLG       	(0x1u<<3)       
-#define INT3_TRCOM_FLG      	(0x1u<<4)       
+#define INT3_TRCOM_FLG      	(0x1u<<4)
+#define C0MMON_BUSY_FLAG     	(0x1u<<4)
 
 
 #define INT1_PLGIN_MSK       	(0x1u<<0)      

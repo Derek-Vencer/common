@@ -71,6 +71,8 @@ subdir-ccflags-y += -Iapps/common \
 				    -Iapps/battery/ \
 				    -Iapps/factory/ \
 				    -Iservices/nv_section/factory_section \
+				    -Iservices/communication \
+				    
 				    
 				    
 				    

@@ -473,6 +473,7 @@ typedef void (*APP_10_SECOND_TIMER_CB_T)(void);
 void app_pair_timerout(void);
 void app_poweroff_timerout(void);
 void CloseEarphone(void);
+void wired_uart_communication_modual_init(void);
 
 typedef struct
 {
@@ -916,8 +917,12 @@ void pmu_rtc_alarm_handler_dummy(uint32_t seconds)
 int app_shutdown(void)
 {
 #ifndef IGNORE_APP_SHUTDOWN
-    system_shutdown();
+    //system_shutdown();
 #endif
+
+    hal_sw_bootmode_set(HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT);
+    pmu_reboot();
+
 #ifdef SPOT_ENABLED
 #if defined(RTC_ENABLE)
     if(nv_record_fp_get_spot_adv_enable_value())
@@ -2304,6 +2309,14 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         MAIN_TRACE(0,"To enter test mode!!!");
     }
 
+    if(hal_sw_bootmode_get() & HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT)
+    {
+        hal_sw_bootmode_clear(HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT);
+        pwron_case = APP_POWERON_CASE_TEST;
+        need_check_key = true;
+        MAIN_TRACE(0,"To enter fake power off mode!!!");
+    }
+
 #ifdef TOTA_FACTORY_USED
     if (hal_sw_bootmode_get() & HAL_SW_BOOTMODE_TOTA_REBOOT) {
         hal_sw_bootmode_clear(HAL_SW_BOOTMODE_TOTA_REBOOT);
@@ -2319,7 +2332,11 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
 #ifdef SUPPORT_SINGLE_WIRE_COM
-    communication_init();
+    //communication_init();
+    if(!(hal_sw_bootmode_get() & HAL_SW_BOOTMODE_TEST_SIGNALINGMODE))
+    {
+       wired_uart_communication_modual_init();
+    }
 #endif
 
 #ifdef APP_CHIP_BRIDGE_MODULE
@@ -2803,8 +2820,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         app_status_indication_set(APP_STATUS_INDICATION_POWERON);
 #ifdef MEDIA_PLAYER_SUPPORT
         //media_PlayAudio(AUD_ID_POWER_ON, 0);
-        media_PlayAudio(AUD_ID_BT_WARNING, 0);
-        osDelay(200);
+        //media_PlayAudio(AUD_ID_BT_WARNING, 0);
+        //osDelay(200);
         media_PlayAudio(AUD_ID_POWER_ON, 0);
 #endif
 #endif

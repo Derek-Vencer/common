@@ -110,6 +110,8 @@ enum APP_MODULE_ID_T {
     APP_MODUAL_UI,
     APP_MODUAL_UI_CHARG,
 #endif
+
+	APP_MODUAL_AIWANG_WIRED_UART,
 //-------------------------------------------------------------------------------------------------------
     APP_MODULE_NUM
 };

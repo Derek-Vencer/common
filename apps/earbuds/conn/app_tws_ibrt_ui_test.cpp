@@ -248,7 +248,11 @@ static const ibrt_pairing_info_t g_ibrt_pairing_info[] =
 #if defined( __BT_ANC_KEY__)&&defined(ANC_APP)
 extern void app_anc_key(APP_KEY_STATUS *status, void *param);
 #endif
-
+/***
+ *
+ * even left  earbuds
+ * odd  right earbuds
+ */
 bool isRightOfTheEarBuds(void) {
 	struct nvrecord_env_t *nvrecord_env;
 	uint8_t localAddr[BD_ADDR_LEN];
@@ -257,11 +261,11 @@ bool isRightOfTheEarBuds(void) {
 	EARBUDS_DUMP8("%02x ", localAddr, BD_ADDR_LEN);
 	if(localAddr[0]&0x01)
 	{
-		return FALSE;
+		return TRUE;
 	}
 	else
 	{
-		return TRUE;
+		return FALSE;
 	}
 }
 

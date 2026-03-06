@@ -398,6 +398,7 @@ void ota_basic_env_init(void)
 #if defined(BES_OTA) && !defined(OTA_OVER_TOTA_ENABLED)
     app_ota_spp_init();
 #ifdef __IAG_BLE_INCLUDE__
+//#error __IAG_BLE_INCLUDE__
     ota_ble_init();
 #endif
 #endif

@@ -366,6 +366,12 @@ void ICP1205_Init(void)
 	   syncRetryCount++;
     }
 
+    buffer[0] = 0X03;//保留透传、载波错误与成功中断
+	DBGPRINT("Write Icp1205_Reg10 0x%02x",buffer[0]);
+	writeDataTo_ICP1205(ICP1205_COMM_CON,&buffer[0],1);
+	readDataFrom_ICP1205(ICP1205_COMM_CON,&buffer[0],1);
+	DBGPRINT("Read Icp1205_Reg10 0x%02x",buffer[0]);
+
 #if 1
 	//deafult_value reg
 	uint8_t initSettingsRegsValue[16] = {0X23,0x99,0x00,0x99,0x00,0x00,0x00,0x00,0xf0,0xf0,0x03,0x07,0x00,0x00,0x00,0x00};
@@ -481,6 +487,16 @@ static void Icp1205UpdataIntSts(void)
 		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
 		Icp1205IntEnable();
 		return;
+	}
+
+	//Reg10 ICP1205_ADS EnterTransparentMode
+	readDataFrom_ICP1205( ICP1205_COMM_CON, &u8tmp, 1);
+	DBGPRINT("Read Icp1205_Reg10 %02x",u8tmp);
+	if(u8tmp & C0MMON_BUSY_FLAG)
+	{
+		u8tmp = 0X03;//保留透传、载波错误与成功中断
+		DBGPRINT("Write Icp1205_Reg10 %02x",u8tmp);
+		writeDataTo_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
 	}
 
 	do {
@@ -869,8 +885,8 @@ static void charger_manager_handler_thread(const void *arg)
 	Icp1205IntEnable();
 	while(true)
 	{
-		//osSignalWait(0x02,2000);
-		osSignalWait(0x02,osWaitForever);
+		osSignalWait(0x02,1600);
+	    //osSignalWait(0x02,osWaitForever);
 		Icp1205UpdataIntSts();
 		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
 	}

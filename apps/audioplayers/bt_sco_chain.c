@@ -2100,7 +2100,7 @@ int32_t _speech_tx_process_(void *pcm_buf, void *ref_buf, int32_t *_pcm_len)
         .vad = true,
     };
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN) || defined(USER_FACTORY_TRACE_RX_EN)
-#if (SPEECH_CODEC_CAPTURE_CHANNEL_NUM >= 2)
+#if 1 //(SPEECH_CODEC_CAPTURE_CHANNEL_NUM >= 2)
 	short *pcm_buf1 = (short *)pcm_buf;
 #endif
     if(app_get_mic_hfp_enc_onoff())
