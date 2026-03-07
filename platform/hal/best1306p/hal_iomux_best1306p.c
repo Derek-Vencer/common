@@ -1683,13 +1683,13 @@ void hal_iomux_single_wire_pmu_uart_tx(uint32_t uart)
 
 void hal_iomux_single_wire_uart_rx(uint32_t uart)
 {
-	TRACE(0, "%s", __func__);
+	//TRACE(0, "%s", __func__);
     hal_iomux_single_wire_pmu_uart_rx(uart);
 }
 
 void hal_iomux_single_wire_uart_tx(uint32_t uart)
 {
-	TRACE(0, "%s", __func__);
+	//TRACE(0, "%s", __func__);
     hal_iomux_single_wire_pmu_uart_tx(uart);
 }
 

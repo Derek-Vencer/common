@@ -21,8 +21,12 @@
 #undef printf
 #undef DBGPRINT
 
-#define printf(fmt,...)     hal_trace_printf(2, fmt, ##__VA_ARGS__)
-#define DBGPRINT(fmt,...)   hal_trace_printf(0, fmt, ##__VA_ARGS__)
+#undef printf
+#define printf(fmt, ...) \
+    hal_trace_printf(0, "[goc-ntc] " fmt, ##__VA_ARGS__)
+#undef DBGPRINT
+#define DBGPRINT(fmt,...)  \
+	hal_trace_printf(2, "[goc-ntc] " fmt, ##__VA_ARGS__)
 
 #define NTC_SHAKE_CNT               5
 #define NTC_TYPE_CHARGER_STOP       1
@@ -119,7 +123,7 @@ void aw_ntc_detect_process(uint16_t ad_volt)
 			   shake_buf = 0;
 			   ntc_type = ntc_current_type;
 			   ntc_start_process = true;
-			   DBGPRINT("%s, ntc_type = %d", __func__, ntc_type);
+			   DBGPRINT("%s ntc_type = %d", __func__, ntc_type);
 		   }
 	   }
    }
@@ -128,7 +132,7 @@ void aw_ntc_detect_process(uint16_t ad_volt)
         ntc_start_process = false;
         if(ntc_type == NTC_TEMPERATURE_45 || ntc_type == NTC_TEMPERATURE_00)
         {
-            printf("%s, temp too high/low, poweroff!!!", __func__);
+            printf("%s temp too high/low, poweroff!!!", __func__);
             app_shutdown();
         }
     }

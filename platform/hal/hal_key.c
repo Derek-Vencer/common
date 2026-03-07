@@ -73,7 +73,7 @@ typedef uint32_t                            GPIO_MAP_T[GPIO_MAP_WORD_CNT];
 #define CFG_SW_KEY_INIT_LLPRESS_THRESH_MS   (8000) //10000
 #endif
 #ifndef CFG_SW_KEY_CHECK_INTERVAL_MS
-#define CFG_SW_KEY_CHECK_INTERVAL_MS        40
+#define CFG_SW_KEY_CHECK_INTERVAL_MS        20 //40
 #endif
 
 //common key define

@@ -107,6 +107,8 @@
 									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
 									<listOptionValue builtIn="false" value="IBRT_RIGHT_MASTER=1"/>
 									<listOptionValue builtIn="false" value="USE_BASIC_THREADS=1"/>
+									<listOptionValue builtIn="false" value="A2DP_CP_ACCEL=1"/>
+									<listOptionValue builtIn="false" value="A2DP_DECODER_VER=2"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -192,6 +194,8 @@
 									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
 									<listOptionValue builtIn="false" value="IBRT_RIGHT_MASTER=1"/>
 									<listOptionValue builtIn="false" value="USE_BASIC_THREADS=1"/>
+									<listOptionValue builtIn="false" value="A2DP_CP_ACCEL=1"/>
+									<listOptionValue builtIn="false" value="A2DP_DECODER_VER=2"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

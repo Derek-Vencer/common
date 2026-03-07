@@ -171,7 +171,7 @@ static void uart_rx_dma_stop(void)
     union HAL_UART_IRQ_T mask;
 
     uint32_t lock = int_lock();
-    COMMUNICATION_TRACE(1,"uart_rx_dma_stop:%d", uart_rx_dma_is_running);
+    //COMMUNICATION_TRACE(1,"uart_rx_dma_stop:%d", uart_rx_dma_is_running);
     if (uart_rx_dma_is_running){
         mask.reg = 0;
         hal_uart_irq_set_mask(comm_uart, mask);
@@ -188,7 +188,7 @@ static void uart_rx_dma_start(void)
 
     uint32_t lock = int_lock();
 
-    COMMUNICATION_TRACE(1,"uart_rx_dma_start:%d", uart_rx_dma_is_running);
+    //COMMUNICATION_TRACE(1,"uart_rx_dma_start:%d", uart_rx_dma_is_running);
 
     hal_uart_flush(comm_uart, 0);
     mask.reg = 0;
@@ -264,7 +264,7 @@ static void uart_tx_dma_handler(uint32_t xfer_size, int dma_error)
 static void uart_init(void)
 {
     struct HAL_UART_CFG_T comm_uart_cfg;
-    COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
+    //COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
     if (!uart_opened) {
         memcpy(&comm_uart_cfg, &uart_cfg, sizeof(comm_uart_cfg));
         hal_uart_open(comm_uart, &comm_uart_cfg);
@@ -277,7 +277,7 @@ static void uart_init(void)
 
 static void uart_deinit(void)
 {
-	COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
+	//COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
     if (uart_opened) {
         hal_uart_close(comm_uart);
         uart_opened = false;
@@ -287,7 +287,7 @@ static void uart_deinit(void)
 POSSIBLY_UNUSED static void uart_rx_idle_timer_start(void)
 {
     uart_rx_idle_counter = 0;
-    COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+    //COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
 
     if (uart_rx_idle_timer_id != NULL) {
         osTimerStop(uart_rx_idle_timer_id);
@@ -298,7 +298,7 @@ POSSIBLY_UNUSED static void uart_rx_idle_timer_start(void)
 static void uart_rx_edge_detect_handler(enum HAL_GPIO_PIN_T pin)
 {
     COMMUNICATION_MAIL msg = {0};
-    COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+    //COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
     //disable led2 pin external interrupt mode...
     communication_io_mode_switch(COMMUNICATION_MODE_DISABLE_IRQ);
     //post uart rx request...
@@ -316,7 +316,7 @@ static void uart_rx_idle_handler(void const *param)
 
     if(uart_rx_idle_counter++ >= 150)//150 * 100 = 15s
     {
-        COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+        //COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
 
         uart_rx_idle_counter = 0;
 
@@ -391,7 +391,7 @@ inline int communication_mailbox_put(COMMUNICATION_MAIL* msg_src)
     mail_p = (COMMUNICATION_MAIL*)osMailAlloc(communication_mailbox, 0);
     if (!mail_p){
         osEvent evt;
-        COMMUNICATION_TRACE(0,"communication_mailbox");
+        //COMMUNICATION_TRACE(0,"communication_mailbox");
         for (uint8_t i=0; i<COMMUNICATION_MAILBOX_MAX; i++){
             evt = osMailGet(communication_mailbox, 0);
             if (evt.status == osEventMail) {

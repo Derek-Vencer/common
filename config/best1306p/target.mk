@@ -443,6 +443,9 @@ export AUDIO_DYNAMIC_EQ    := 0
 export BESUI_1WIRE_EN      := 0
 export SUPPORT_SINGLE_WIRE_COM    := 1
 
+## os timer is not enough!
+export OS_TIMER_NUM        := 10
+
 
 KBUILD_CPPFLAGS += -DSOFTWARE_VERSION_INFO=$(SOFTWARE_VERSION_INFO)
 

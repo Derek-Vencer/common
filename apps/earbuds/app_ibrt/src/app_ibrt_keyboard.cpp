@@ -348,11 +348,18 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
             	//app_bt_volumedown();
             	if (isRightOfTheEarBuds()) {
             	   EARBUDS_TRACE(0,"RightSide volume up+");
-             	   bt_adapter_local_volume_up();
+             	   //bt_adapter_local_volume_up();
+            	   app_bt_local_volume_up(app_ibrt_keyboard_sync_volume_info_v2);
             	} else {
             	   EARBUDS_TRACE(0,"LeftSide volume down -");
-            	   bt_adapter_local_volume_down();
+            	   //bt_adapter_local_volume_down();
+            	   app_bt_local_volume_down(app_ibrt_keyboard_sync_volume_info_v2);
             	}
+            	break;
+            case APP_KEY_EVENT_DOUBLE_AND_HOLD_LEFT:
+            	EARBUDS_TRACE(0,"DOUBLE_AND_HOLD LEFT volume down");
+            	//bt_adapter_local_volume_down();
+            	app_bt_local_volume_down(app_ibrt_keyboard_sync_volume_info_v2);
             	break;
 
             case APP_KEY_EVENT_LONGPRESS:
@@ -557,6 +564,13 @@ struct ibrt_keyboard_notify_v2_t
     APP_KEY_STATUS key_status;
 };
 
+/***
+ *
+ * even left  earbuds
+ * odd  right earbuds
+ */
+extern bool isRightOfTheEarBuds(void);
+
 int app_ibrt_if_keyboard_notify_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, void *param)
 {
     struct ibrt_keyboard_notify_v2_t data;
@@ -568,6 +582,13 @@ int app_ibrt_if_keyboard_notify_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, 
     }
 
     data.key_status = *status;
+
+    if (!isRightOfTheEarBuds() && APP_KEY_EVENT_DOUBLE_AND_HOLD == data.key_status.event)
+    {
+    	EARBUDS_TRACE(0, "identify the volum down from the LeftEarBuds");
+    	data.key_status.event = APP_KEY_EVENT_DOUBLE_AND_HOLD_LEFT;
+    }
+
     EARBUDS_TRACE(0,"%s code=0x%08x, event=%d", __func__, data.key_status.code, data.key_status.event);
     tws_ctrl_send_cmd(APP_TWS_CMD_KEYBOARD_REQUEST, (uint8_t *)&data, sizeof(struct ibrt_keyboard_notify_v2_t));
     return 0;
@@ -623,6 +644,7 @@ void app_ibrt_if_start_user_action_v2(uint8_t device_id, uint8_t action, uint32_
 
     if (curr_device == NULL)
     {
+    	EARBUDS_TRACE(0,"%s no connected device", __func__);
         return;
     }
 
@@ -690,6 +712,7 @@ void app_ibrt_keyboard_sync_volume_info_v2(uint8_t device_id)
         tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_VOLUME_INFO, (uint8_t*)&volume_info, sizeof(volume_info));
     }
 }
+
 
 void app_ibrt_ui_perform_user_action_v2(uint8_t *p_buff, uint16_t length)
 {

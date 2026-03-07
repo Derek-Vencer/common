@@ -129,7 +129,10 @@ int app_key_handle_registration(const APP_KEY_HANDLE *key_handle)
         list_append(app_key_conifg.key_list, dest_key_handle);
     }
     if (dest_key_handle == NULL)
+    {
+//    	KEY_TRACE(0,"%s not key_handle",__func__);
         return -1;
+    }
     KEY_TRACE(5,"%s set handle:%p code:%d event:%d function:%p",__func__,dest_key_handle, key_handle->key_status.code, key_handle->key_status.event, key_handle->function);
     dest_key_handle->key_status.code = key_handle->key_status.code;
     dest_key_handle->key_status.event = key_handle->key_status.event;

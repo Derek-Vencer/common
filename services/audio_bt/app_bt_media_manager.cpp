@@ -1914,6 +1914,7 @@ int app_audio_manager_ctrl_volume_handle(APP_AUDIO_MESSAGE_BODY *msg_body)
 #endif
 {
 #if defined(BT_BUILD_WITH_CUSTOMER_HOST) || defined(BLE_ONLY_ENABLED)
+#error "BT_BUILD_WITH_CUSTOMER_HOST or BLE_ONLY_ENABLED"
 #else // bes classic bt is disabled
     enum APP_AUDIO_MANAGER_VOLUME_CTRL_T volume_ctrl;
     uint8_t local_volume_changed_device_id = BT_DEVICE_INVALID_ID;
@@ -1921,6 +1922,8 @@ int app_audio_manager_ctrl_volume_handle(APP_AUDIO_MESSAGE_BODY *msg_body)
 
     volume_ctrl  = (enum APP_AUDIO_MANAGER_VOLUME_CTRL_T)msg_body->message_ptr;
     volume_level = (uint16_t)msg_body->message_Param0;
+
+    AUDIO_BT_TRACE(2, "%s volume_ctrl=%d volume_level=%d", __func__, volume_ctrl, volume_level);
 
     switch (volume_ctrl) {
         case APP_AUDIO_MANAGER_VOLUME_CTRL_SET:
@@ -2299,7 +2302,7 @@ static int app_audio_manager_handle_process(APP_AUDIO_MESSAGE_BODY *msg_body)
     APP_AUDIO_MANAGER_GET_CALLBACK(msg_body->message_Param1, callback_fn);
     APP_AUDIO_MANAGER_GET_CALLBACK_PARAM(msg_body->message_Param2, callback_param);
 
-    AUDIO_BT_TRACE(7, "%s %d%s %x%s d%x aud %x", __func__,
+    AUDIO_BT_TRACE(0, "%s %d%s %x%s d%x aud %x", __func__,
           aud_manager_msg.id, handleId2str(aud_manager_msg.id),
           aud_manager_msg.stream_type, aud_manager_msg.stream_type ? strmtype2str(aud_manager_msg.stream_type) : "[N/A]",
           aud_manager_msg.device_id, aud_manager_msg.aud_id);

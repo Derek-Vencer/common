@@ -435,7 +435,7 @@ enum APP_POWERON_CASE_T {
     APP_POWERON_CASE_BOTHSCAN = 5,
     APP_POWERON_CASE_CHARGING,
     APP_POWERON_CASE_FACTORY,
-    APP_POWERON_CASE_TEST,
+    APP_POWERON_CASE_TEST = 8,
     APP_POWERON_CASE_INVALID =9,
 
     APP_POWERON_CASE_NUM
@@ -917,11 +917,11 @@ void pmu_rtc_alarm_handler_dummy(uint32_t seconds)
 int app_shutdown(void)
 {
 #ifndef IGNORE_APP_SHUTDOWN
-    //system_shutdown();
+    system_shutdown();
 #endif
 
-    hal_sw_bootmode_set(HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT);
-    pmu_reboot();
+   // hal_sw_bootmode_set(HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT);
+   // pmu_reboot();
 
 #ifdef SPOT_ENABLED
 #if defined(RTC_ENABLE)
@@ -2150,8 +2150,9 @@ int app_init(void)
     MAIN_TRACE(0,"IGNORE_POWER_ON_KEY_DURING_BOOT_UP ........");
     bool need_check_key = false;
 #else
-    MAIN_TRACE(0,"POWER_ON_KEY_DURING_BOOT_UP ........");
-    bool need_check_key = true;
+    //MAIN_TRACE(0,"POWER_ON_KEY_DURING_BOOT_UP ........");
+    //bool need_check_key = true;
+    bool need_check_key = false;
 #endif
     uint8_t pwron_case = APP_POWERON_CASE_INVALID;
 #ifdef BT_USB_AUDIO_DUAL_MODE
@@ -2383,9 +2384,12 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #if defined(BT_USB_AUDIO_DUAL_MODE)
                 usb_plugin = 1;
 #endif
-                //need_check_key = false;
-                need_check_key = true;
-                nRet = 0;
+                  need_check_key = false;
+                //need_check_key = true;
+                MAIN_TRACE(0,"test keep poweroff!");
+                //nRet = 0;
+                //goto  exit;
+
 #ifdef BESUI_CHARGE_EN
                 besui_bat_charge_sta_set(true);
 #endif

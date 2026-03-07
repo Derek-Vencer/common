@@ -38,7 +38,13 @@
 #include "app_thread.h"
 #include "communication_svr.h"
 #include "earbud_ux_duplicate_api.h"
-
+#include "bts_tws_if.h"
+#include "app_ui_api.h"
+#include "app_ui_param_config.h"
+#include "app_bt.h"
+#include "bts_bt_conn.h"
+#include "ota_spp.h"
+#include "hal_bootmode.h"
 
 #undef printf
 #define printf(fmt, ...) \
@@ -73,6 +79,7 @@
 #define         CMD_SET_EARBUD_ENTER_PAIR               0x0E
 #define         CMD_SEND_BOX_BATTERY_LEVEL              0x0F
 #define         CMD_SEND_DUT_MODE                       0x10
+#define         CMD_SEND_EAR_PUTIN                      0x11
 
 
 typedef enum {
@@ -177,7 +184,7 @@ static void wired_uart_get_ear_addr_handle(void)
    communication_send_buf(buff, 9);
 }
 
-static void wired_uart_send_set_peer_addr_ok(void)
+static void wired_uart_send_cmd_ack_ok(void)
 {
    DBGPRINT("%s.", __func__);
    uint8_t buff[5] = {0};
@@ -207,7 +214,7 @@ static void wired_uart_set_peer_address(uint8_t *data ,uint8_t len)
 			  memcpy(&peerAddress.address[0], &data[0], 6);
 			  //app_tws_ibrt_update_info(IBRT_MASTER, &peerAddress);
 			  nv_record_update_ibrt_info(data[0]&0x01?IBRT_SLAVE:IBRT_MASTER, &peerAddress);
-			  wired_uart_send_set_peer_addr_ok();
+			  wired_uart_send_cmd_ack_ok();
 			  osDelay(100);
 			  (void)app_reset();
 		  }
@@ -248,7 +255,7 @@ static void wired_uart_remove_all_phone_paired_list(void)
 
 static void wired_uart_get_box_battery(uint8_t *data ,uint8_t len)
 {
-	DBGPRINT("%s boxChargerBattery=0x%02x boxChargerBattery=0x%02x rightEarBudsBattery=0x%02x",
+	DBGPRINT("%s boxChargerBattery=0x%02x leftEarBudsBattery=0x%02x rightEarBudsBattery=0x%02x",
 			__func__,
 			data[0],
 			data[1],
@@ -257,6 +264,127 @@ static void wired_uart_get_box_battery(uint8_t *data ,uint8_t len)
 	boxChargerStatus.boxChargerBattery   = data[0];
 	boxChargerStatus.leftEarBudsBattery  = data[1];
 	boxChargerStatus.rightEarBudsBattery = data[2];
+}
+
+uint8_t aiWang_get_profile_conn_num(void)
+{
+    uint8_t conn_cnt = 0;
+    if(app_bt_get_device(BT_DEVICE_ID_1)->profile_mgr.profile_connected)
+        conn_cnt ++;
+    if(app_bt_get_device(BT_DEVICE_ID_2)->profile_mgr.profile_connected)
+        conn_cnt ++;
+    DBGPRINT("%s, conn_cnt = %d", __func__, conn_cnt);
+
+    return conn_cnt;
+}
+
+void wired_uart_enter_pairmode(void)
+{
+	DBGPRINT("%s tws connect %d", __func__, bts_tws_if_is_tws_link_connected());
+    if(bts_tws_if_is_tws_link_connected())
+    {
+        if(TWS_UI_MASTER == app_ibrt_if_get_ui_role())
+        {
+            app_ibrt_if_enter_pairing_after_tws_connected();
+        }
+    }
+    else
+    {
+        app_ui_enter_pairing_mode(IBRT_UI_DISABLE_BT_SCAN_TIMEOUT, false);
+    }
+}
+
+void disconnected_device(bool all_device_flag, uint8_t device_id)
+{
+	DBGPRINT("%s, %d, %d", __func__, all_device_flag, device_id);
+    struct BT_DEVICE_T *curr_device = NULL;
+    if(all_device_flag)
+    {
+        for (int i = 0; i < BT_DEVICE_NUM; ++i)
+        {
+            curr_device = app_bt_get_device(i);
+            if (curr_device->acl_is_connected)
+            {
+                bts_bt_sink_conn_disconnect_connection(app_bt_get_remote_dev_by_handle(curr_device->acl_conn_hdl));
+            }
+        }
+    }
+    else
+    {
+        curr_device = app_bt_get_device(device_id);
+        if (curr_device->acl_is_connected)
+        {
+            bts_bt_sink_conn_disconnect_connection(app_bt_get_remote_dev_by_handle(curr_device->acl_conn_hdl));
+        }
+    }
+}
+
+void aiWang_disconnet_phone_enter_pairmode(void)
+{
+    uint8_t conn_devices = aiWang_get_profile_conn_num();
+    DBGPRINT("%s, %d", __func__, conn_devices);
+    if(conn_devices > 0)
+    {
+        if(bts_tws_if_is_tws_link_connected())
+        {
+            if(TWS_UI_MASTER == app_ibrt_if_get_ui_role())
+            {
+            	disconnected_device(true, BT_DEVICE_NUM);
+            }
+        }
+        else
+        {
+        	disconnected_device(true, BT_DEVICE_NUM);
+        }
+    }
+    else
+    {
+        if(app_bt_get_curr_access_mode() != BTIF_BAM_GENERAL_ACCESSIBLE)
+        {
+        	wired_uart_enter_pairmode();
+        }
+    }
+}
+
+
+extern bt_status_t LinkDisconnectDirectly(bool PowerOffFlag);
+void aiWang_remove_all_paired_list(void)
+{
+    bt_status_t            retStatus;
+    btif_device_record_t   record;
+    ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+    int                    paired_dev_count = nv_record_get_paired_dev_count();
+
+    DBGPRINT("%s", __func__);
+    DBGPRINT("Master addr:");
+    DUMP8("%02x ",p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE);
+    DBGPRINT("Slave addr:");
+    DUMP8("%02x ",p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE);
+
+    ota_disconnect();
+    bes_ble_gap_disconnect_all();
+
+    LinkDisconnectDirectly(true);
+
+    for (int32_t index = paired_dev_count - 1; index >= 0; index--)
+    {
+        retStatus = nv_record_enum_dev_records(index, &record);
+        if (BT_STS_SUCCESS == retStatus)
+        {
+        	DBGPRINT("The index %d of nv records:", index);
+            DUMP8("%02x ", record.bdAddr.address, BTIF_BD_ADDR_SIZE);
+            //if (memcmp(record.bdAddr.address, p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE) &&
+            //    memcmp(record.bdAddr.address, p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE)&&
+            //    memcmp(record.bdAddr.address, address_compare, BTIF_BD_ADDR_SIZE))
+            {
+            	nv_record_ddbrec_delete(&record.bdAddr);
+            }
+        }
+    }
+    app_ibrt_if_config_keeper_clear();
+    memset(p_ibrt_ctrl->local_addr.address, 0, BTIF_BD_ADDR_SIZE);
+    memset(p_ibrt_ctrl->peer_addr.address, 0, BTIF_BD_ADDR_SIZE);
+    nv_record_flash_flush();
 }
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
@@ -279,7 +407,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         //DBGPRINT("%s crc dat 0x%04x %s", __func__, crc_dat, isRightEarbuds?"Right":"Left");
         if(crc_dat == crc8(uart_cmd_dat, uart_dat_len-1))
         {
-        	DBGPRINT("%s crc8 OK %s", __func__, isRightEarbuds?"Right":"Left");
+        	//DBGPRINT("%s crc8 OK %s", __func__, isRightEarbuds?"Right":"Left");
         }
         else
         {
@@ -336,7 +464,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	break;
     case CMD_OPEN_CASE:
         {
+        	printf("CMD_OPEN_CASE!!!");
         	wired_uart_get_battery_level();
+        	osDelay(30);
+        	app_reset();
         }
     	break;
     case CMD_CLOSE_CASE:
@@ -347,14 +478,17 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             app_shutdown();
         }
     	break;
-    case CMD_EAR_RESET:
+    case CMD_EAR_RESET: //fatory
         {
+        	aiWang_remove_all_paired_list();
         	wired_uart_remove_all_phone_paired_list();
+        	app_reset();
         }
     	break;
     case CMD_SET_MAC:
         {
-        	if (operateLeftOrRight == isRightEarbuds) {
+        	if (operateLeftOrRight == isRightEarbuds)
+        	{
         		wired_uart_set_peer_address(&uart_cmd_dat[5], 6);
         	}
         }
@@ -373,6 +507,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
        {
     	  DBGPRINT("CMD_SET_EARBUD_SHIP_MOD!!!");
     	  Icp1205ShipEnable();
+    	  app_shutdown();
     	  break;
        }
     case  CMD_SET_EARBUD_ENTER_PAIR:
@@ -380,6 +515,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	  if (operateLeftOrRight == isRightEarbuds)
     	  {
     		   DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!", isRightEarbuds);
+#if 1
+    		   aiWang_disconnet_phone_enter_pairmode();
+#else
+    		   wired_uart_enter_pairmode();
                if( 1 == isRightEarbuds) //Enter PairMode
                {
             	   app_ibrt_if_init_open_box_state_for_evb();
@@ -390,6 +529,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 	                app_ibrt_if_init_open_box_state_for_evb();
 	                app_ibrt_internal_enter_freeman_pairing();
                }
+#endif
+
     	  }
     	  break;
       }
@@ -406,13 +547,20 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 		   if (operateLeftOrRight == isRightEarbuds)
 		   {
 			   DBGPRINT("CMD_SEND_DUT_MODE");
-			   wired_uart_send_set_peer_addr_ok();
+			   wired_uart_send_cmd_ack_ok();
 			   osDelay(100);
+			   hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
 			   app_factorymode_enter();
 		   }
       }
       break;
-
+    case CMD_SEND_EAR_PUTIN:
+	  {
+		  DBGPRINT("CMD_SEND_EAR_PUTIN");
+		  wired_uart_send_cmd_ack_ok();
+		  disconnected_device(true, BT_DEVICE_ID_1);
+	  }
+      break;
     default:
        break;
     }
@@ -421,7 +569,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 static void wired_uart_communication_post_msg(uint8_t *uart_data, uint8_t len)
 {
     APP_MESSAGE_BLOCK msg;
-    DBGPRINT("%s", __func__);
+    //DBGPRINT("%s", __func__);
     msg.mod_id = APP_MODUAL_AIWANG_WIRED_UART;
     msg.msg_body.message_Param2 = len;
     app_mailbox_put(&msg);
@@ -438,8 +586,9 @@ static void wired_uart_communication_rx_data_pre(uint8_t *data_buf, uint8_t data
 static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_body)
 {
     uint8_t data_len = 0;
-    DBGPRINT("%s", __func__);
+    //DBGPRINT("%s", __func__);
     data_len = (uint8_t)msg_body->message_Param2;
+    DBGPRINT("wired_uart_communication_rx: ");
     DUMP8("%02x ", wiredUartReceiveData, data_len);
     wired_uart_communication_cmd_handle_process(wiredUartReceiveData, data_len);
     return 0;

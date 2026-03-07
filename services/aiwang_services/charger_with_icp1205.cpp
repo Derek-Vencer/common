@@ -40,8 +40,14 @@
 #undef printf
 #undef DBGPRINT
 
-#define printf(fmt,...)     hal_trace_printf(2, fmt, ##__VA_ARGS__)
-#define DBGPRINT(fmt,...)   hal_trace_printf(0, fmt, ##__VA_ARGS__)
+//#define printf(fmt,...)     hal_trace_printf(2, fmt, ##__VA_ARGS__)
+//#define DBGPRINT(fmt,...)   hal_trace_printf(0, fmt, ##__VA_ARGS__)
+#undef printf
+#define printf(fmt, ...) \
+    hal_trace_printf(0, "[goc-1205] " fmt, ##__VA_ARGS__)
+#undef DBGPRINT
+#define DBGPRINT(fmt,...)  \
+	hal_trace_printf(2, "[goc-1205] " fmt, ##__VA_ARGS__)
 
 
 static osThreadId charger_manager_thread_id = NULL;
@@ -156,7 +162,7 @@ static void ICP1205_GPIO_INT_IRQ_Enable(enum HAL_GPIO_PIN_T pin)
 static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin)
 {
 	ICP1205_GPIO_INT_IRQ_Disable(pin);
-	DBGPRINT("hal_gpio_pin_get_val(pin) %d",hal_gpio_pin_get_val(pin));
+	//DBGPRINT("hal_gpio_pin_get_val(pin) %d",hal_gpio_pin_get_val(pin));
 	if(hal_gpio_pin_get_val(pin) == 0) {
 		osSignalSet(charger_manager_thread_id, 0x02);
 	}
@@ -849,11 +855,11 @@ static void Icp1205UpdataIntSts(void)
 		writeDataTo_ICP1205(ICP1205_INT_STAT3,&u8tmp,1);
 
 		readDataFrom_ICP1205(ICP1205_INT_STAT1,&u8tmp,1);
-		DBGPRINT("ICP1205_INT_STAT1= %x",u8tmp);
+		//DBGPRINT("ICP1205_INT_STAT1= %x",u8tmp);
 		readDataFrom_ICP1205(ICP1205_INT_STAT2,&u8tmp,1);
-		DBGPRINT("ICP1205_INT_STAT2= %x",u8tmp);
+		//DBGPRINT("ICP1205_INT_STAT2= %x",u8tmp);
 		readDataFrom_ICP1205(ICP1205_INT_STAT3,&u8tmp,1);
-		DBGPRINT("ICP1205_INT_STAT3= %x",u8tmp);
+		//DBGPRINT("ICP1205_INT_STAT3= %x",u8tmp);
 
 		} while (0);
  }
@@ -885,8 +891,8 @@ static void charger_manager_handler_thread(const void *arg)
 	Icp1205IntEnable();
 	while(true)
 	{
-		osSignalWait(0x02,1600);
-	    //osSignalWait(0x02,osWaitForever);
+		//osSignalWait(0x02,1600);
+	    osSignalWait(0x02,osWaitForever);
 		Icp1205UpdataIntSts();
 		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
 	}
@@ -895,6 +901,6 @@ static void charger_manager_handler_thread(const void *arg)
 void charger_manager_start(void)
 {
 	DBGPRINT("%s", __func__);
-	aw_ntc_detect_init();
+	//aw_ntc_detect_init();
 	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
 }
