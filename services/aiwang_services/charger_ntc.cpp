@@ -40,12 +40,12 @@
 
 #define NTC_IOMUX_GPIO_15             (HAL_IOMUX_PIN_P1_5)  //outPut
 
-//Charge Box
+//Charge Box unit:mv
 const uint16_t ntc_temp_tab[]={
 	  400,//439,//400,  //45°
 	  620,  //41°
 	  1040, //4°
-	  1050,//1000//,1080  //1100  //0°
+	  1100,//1050,//1000//,1080  //1100  //0°
 };
 
 osTimerId aw_ntc_open_process_timer = NULL;

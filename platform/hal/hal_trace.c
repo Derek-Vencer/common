@@ -3216,8 +3216,8 @@ void hal_trace_fault_dump(const uint32_t *regs, const uint32_t *extra, uint32_t 
                           ((CRASH_DUMP_STACK_NUM_BYTES)/2));
         }
 #endif
-
-#ifdef CORE_DUMP
+//fixed no wait
+#if 0 //def CORE_DUMP
         {
             static CrashCatcherExceptionRegisters eregs;
 

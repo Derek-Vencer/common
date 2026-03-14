@@ -74,6 +74,8 @@ subdir-ccflags-y += -Iapps/common \
 				    -Iservices/communication \
 				    -Iservices/ota/ \
 				    -Iservices/ota/bes_ota/inc \
+				    -Iapps/factory/\
+				    
 				    
 				    
 				    

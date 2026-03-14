@@ -32,6 +32,20 @@
 #include "bts_core_if.h"
 #endif
 
+#if defined(IBRT)
+#include "app_ibrt_internal.h"
+#include "app_ibrt_customif_ui.h"
+#include "app_ibrt_voice_report.h"
+#include "bts_core_if.h"
+#include "bts_tws_if.h"
+#if defined(IBRT_UI)
+#include "earbud_ux_api.h"
+#include "app_tws_ibrt_ui_test.h"
+#include "app_ibrt_tws_ext_cmd.h"
+#include "app_ibrt_auto_test.h"
+#endif
+#endif
+
 #include "nvrecord_bt.h"
 #include "nvrecord_env.h"
 #include "ICP1205.h"
@@ -45,6 +59,11 @@
 #include "bts_bt_conn.h"
 #include "ota_spp.h"
 #include "hal_bootmode.h"
+#include "pmu.h"
+
+#ifdef IBRT
+#include "app_ibrt_customif_cmd.h"
+#endif
 
 #undef printf
 #define printf(fmt, ...) \
@@ -93,10 +112,13 @@ typedef enum {
 //static enum PARSE_STATE parSeState = PARSE_IDLE;
 
 typedef struct {
+	uint8_t getBatteryOK;
 	uint8_t leftEarBudsBattery;
 	uint8_t rightEarBudsBattery;
 	uint8_t boxChargerBattery;
 	uint8_t boxLidsStates;
+	uint8_t boxSoftVersion[12];
+	uint8_t boxIsOpen;
 } BOX_STATUS;
 
 extern void app_tws_ibrt_update_info(ibrt_role_e ibrtRole,bt_bdaddr_t *ibrtPeerAddr);
@@ -215,7 +237,9 @@ static void wired_uart_set_peer_address(uint8_t *data ,uint8_t len)
 			  //app_tws_ibrt_update_info(IBRT_MASTER, &peerAddress);
 			  nv_record_update_ibrt_info(data[0]&0x01?IBRT_SLAVE:IBRT_MASTER, &peerAddress);
 			  wired_uart_send_cmd_ack_ok();
-			  osDelay(100);
+			  osDelay(30);
+			  communication_stop();
+			  osDelay(30);
 			  (void)app_reset();
 		  }
 	}
@@ -253,6 +277,18 @@ static void wired_uart_remove_all_phone_paired_list(void)
     nv_record_flash_flush();
 }
 
+uint8_t getBoxChargerBattery(void)
+{
+	if(!boxChargerStatus.getBatteryOK) return 0xff;
+	return boxChargerStatus.boxChargerBattery ;
+}
+
+uint8_t getPeerBattery(void)
+{
+	if(!boxChargerStatus.getBatteryOK) return 0xff;
+	return boxChargerStatus.leftEarBudsBattery;
+}
+
 static void wired_uart_get_box_battery(uint8_t *data ,uint8_t len)
 {
 	DBGPRINT("%s boxChargerBattery=0x%02x leftEarBudsBattery=0x%02x rightEarBudsBattery=0x%02x",
@@ -261,6 +297,7 @@ static void wired_uart_get_box_battery(uint8_t *data ,uint8_t len)
 			data[1],
 			data[2]
 			);
+	boxChargerStatus.getBatteryOK        = true;
 	boxChargerStatus.boxChargerBattery   = data[0];
 	boxChargerStatus.leftEarBudsBattery  = data[1];
 	boxChargerStatus.rightEarBudsBattery = data[2];
@@ -387,6 +424,11 @@ void aiWang_remove_all_paired_list(void)
     nv_record_flash_flush();
 }
 
+bool aiWangBoxIsUsed(void)
+{
+	return boxChargerStatus.boxIsOpen;
+}
+
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
     uint8_t cmd_event = 0xff;
@@ -421,8 +463,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         return;
     }
 
-    DBGPRINT("%s, cmd_event=0x%02X", __func__, cmd_event);
-
+    DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
+    boxChargerStatus.boxIsOpen = true;
     switch(cmd_event)
     {
     case CMD_CASE_STATE:
@@ -441,6 +483,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
          {
              if (operateLeftOrRight == isRightEarbuds)
              {
+            	 DBGPRINT("CMD_GET_MAC!!!");
             	 wired_uart_get_ear_addr_handle();
              }
         	 break;
@@ -449,6 +492,9 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
          {
         	 if (operateLeftOrRight == isRightEarbuds)
         	 {
+        		 memset(&boxChargerStatus.boxSoftVersion[0], 0, 12);
+        		 memcpy(&boxChargerStatus.boxSoftVersion[0],&uart_cmd_dat[4],11);
+        		 DBGPRINT("CMD_GET_EAR_POWER include boxVersion:%s!!!", boxChargerStatus.boxSoftVersion);
         		 wired_uart_get_battery_level();
         	 }
        	     break;
@@ -459,6 +505,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         }
     case CMD_POWER_OFF:	         //Headphones enter shipping
         {
+        	boxChargerStatus.boxIsOpen = false;
             app_shutdown();
         }
     	break;
@@ -467,13 +514,40 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         	printf("CMD_OPEN_CASE!!!");
         	wired_uart_get_battery_level();
         	osDelay(30);
+            //hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
+            //hal_sw_bootmode_set(HAL_SW_BOOTMODE_SINGLE_LINE_DOWNLOAD);
+            //pmu_reboot();
         	app_reset();
         }
     	break;
     case CMD_CLOSE_CASE:
         {
-            printf("CMD_CLOSE_CASE poweroff!!!");
-            wired_uart_get_battery_level();
+          printf("CMD_CLOSE_CASE poweroff!!!");
+          boxChargerStatus.boxIsOpen = false;
+          wired_uart_get_battery_level();
+          if( app_is_stack_ready())
+          {
+#ifndef BLE_ONLY_ENABLED
+			int activeCons = 0, active_phone_cons;
+			int activeSourceCons = 0;
+			//fixed only count the phone count,except tws
+			activeCons = app_bt_get_active_cons();
+			active_phone_cons = app_bt_count_mobile_link();
+			activeSourceCons = btif_me_get_source_activeCons();
+			DBGPRINT("CMD_CLOSE_CASE activeCons==%d activeSourceCons=%d active_phone_cons=%d\n", activeCons, activeSourceCons, active_phone_cons);
+#ifdef IBRT
+			if (bts_tws_if_is_tws_link_connected())
+			{
+				//app_ibrt_customif_cmd_sync_poweroff_shutdown(true);
+				uint8_t cmd_sync_poweroff_shutdown[1];
+				cmd_sync_poweroff_shutdown[0] = 1;
+				DBGPRINT("%s poweroff_flag true",__func__);
+				tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_poweroff_shutdown, 1);
+				osDelay(60);
+		   }
+#endif //IBRT
+#endif //BLE_ONLY_ENABLED
+          }
             osDelay(30);
             app_shutdown();
         }
@@ -548,7 +622,9 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 		   {
 			   DBGPRINT("CMD_SEND_DUT_MODE");
 			   wired_uart_send_cmd_ack_ok();
-			   osDelay(100);
+			   osDelay(20);
+			   communication_stop();
+			   osDelay(10);
 			   hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
 			   app_factorymode_enter();
 		   }
@@ -605,9 +681,3 @@ void wired_uart_communication_modual_init(void)
         wiredUartInitFlag = true;
     }
 }
-
-
-
-
-
-

@@ -46,10 +46,11 @@ typedef enum sub_cmds {
 	PLAY_TEST_TONE     = 0x02,
 	LED_CONTROL        = 0x03,
 	BUTTON_EVENT       = 0x04,
-	_GET_FW_VERSION     = 0x01,
+	_GET_FW_VERSION    = 0x01,
 	GET_BATTERY_INFO   = 0x02,
 	READ_SN            = 0x03,
 	WRTIE_SN           = 0x04,
+	SET_BUDS_COLOR     = 0x05,
 	OTA_CMD            = 0x01
 } AI_WANG_SETS_SUB_CMDS;
 
@@ -146,6 +147,21 @@ enum BLE_AIWANG_EVENT_TYPE_E
     BLE_AIWANG_SRV_EVENT_NUM,
 };
 
+
+typedef enum {
+	KEY_NONE  = 0x00,
+	KEY_CLICK = 0x01,
+	KEY_DOUBLE_CLICK,
+	KEY_TRIPLE_CLICK,
+	KEY_FORTH_CLICK,
+	KEY_FIVE_CLICK,
+	KEY_SIX_CLICK,
+	KEY_HOLD_CLICK,
+	KEY_DOUBLE_HOLD_CLICK,
+	KEY_LONGLONG_CLICK,
+	KEY_UP
+} KEY_CLICK_TYPE;
+
 typedef void(*ble_aiwang_event_cb)(ble_aiwang_param_u *para_p);
 typedef void(*ble_aiwang_server_mtuexchanged_done_t)(uint8_t conidx, uint16_t mtu);
 
@@ -153,7 +169,7 @@ void ble_aiwang_srv_init(void);
 void ble_aiwang_srv_register_event_cb(ble_aiwang_event_cb callback);
 uint8_t ble_aiwang_srv_send_data_via_notification(uint8_t* data, uint32_t len);
 uint8_t ble_aiwang_srv_send_data_via_indication(uint8_t* data, uint32_t len);
-
+void sparraw_tx_key_click_notify_msg(uint8_t kick_type);
 
 #endif
 

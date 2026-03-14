@@ -166,8 +166,9 @@ extern "C"
 #include "bes_gap_api.h"
 #endif
 
-#ifdef CUSTOM_BITRATE
+#if 1 //def CUSTOM_BITRATE
 #include "app_ibrt_customif_ui.h"
+#include "app_ibrt_customif_cmd.h"
 #endif
 
 #include "audio_player_adapter.h"
@@ -198,12 +199,45 @@ osTimerDef (BT_ACCESSMODE_TIMER, app_bt_accessmode_timehandler);
 osTimerId accessmode_timer_id = NULL;
 
 osTimerDef (BT_PROFILE_CONNECT_TIMER0, app_bt_profile_reconnect_timehandler);
+
 #if BT_DEVICE_NUM > 1
 osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 #endif
+
 #if BT_DEVICE_NUM > 2
 osTimerDef (BT_PROFILE_CONNECT_TIMER2, app_bt_profile_reconnect_timehandler);
 #endif
+
+//fixed added disconnected keep alive 5 min
+//20260308
+static void app_bt_disconnected_keepAlinve_timeouthandler(void const *param)
+{
+    int activeCons = 0;
+    int activeSourceCons = 0;
+    activeCons = app_bt_get_active_cons();
+    uint8_t active_cons_phone = app_bt_count_mobile_link();
+    activeSourceCons = btif_me_get_source_activeCons();
+    DEBUG_INFO(0,"%s activeCons==%d activeSourceCons=%d %d\n", __func__, activeCons, activeSourceCons, active_cons_phone);
+
+    if(active_cons_phone == 0 && activeSourceCons == 0) {
+    	DEBUG_INFO(0,"!!!bt_disconnected_keep_alive_timer CloseEarphone\n");
+#ifdef IBRT
+		if (bts_tws_if_is_tws_link_connected())
+		{
+			//app_ibrt_customif_cmd_sync_poweroff_shutdown(true);
+			uint8_t cmd_sync_poweroff_shutdown[1];
+			cmd_sync_poweroff_shutdown[0] = 1;
+			DEBUG_INFO(2, "[UITWS]%s poweroff_flag %d",__func__, 1);
+			tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_poweroff_shutdown, 1);
+			osDelay(100);
+		}
+#endif
+        app_shutdown();
+    }
+}
+
+osTimerDef (BT_DISCONNECTED_KEEP_ALIVE_TIMER, app_bt_disconnected_keepAlinve_timeouthandler);
+osTimerId bt_disconnected_keep_alive_timer_id = NULL;
 
 void app_bt_device_reconnect_timehandler(void const *param);
 osTimerDef (BT_DEVICE_CONNECT_TIMER0, app_bt_device_reconnect_timehandler);
@@ -458,6 +492,12 @@ void app_bt_manager_init(void)
     if (!accessmode_timer_id)
     {
         DEBUG_INFO(2, "accessmode_timer_id=%p", accessmode_timer_id);
+    }
+
+    bt_disconnected_keep_alive_timer_id = osTimerCreate(osTimer(BT_DISCONNECTED_KEEP_ALIVE_TIMER), osTimerOnce, NULL);
+    if(!bt_disconnected_keep_alive_timer_id)
+    {
+    	DEBUG_INFO(2, "bt_disconnected_timer_id=%p", bt_disconnected_keep_alive_timer_id);
     }
 
     initialize_list_head(&app_bt_manager.poweron_reconnect_list);
@@ -4003,6 +4043,9 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #endif
         }
 
+        //Only connect last devices,so comment it
+        //fixed 20250308
+#if 1
 #ifdef BT_SOURCE
         if(ret > 1 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1)
 #else
@@ -4015,6 +4058,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
             app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record2.bdAddr, false);
 #endif
         }
+#endif
 
         app_bt_start_poweron_reconnect();
 #endif
@@ -4023,12 +4067,14 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     {
         DEBUG_INFO(0,"!!!go to pairing\n");
 #ifdef FREEMAN_ENABLED_STERO
+#error FREEMAN_ENABLED_STERO
         app_ibrt_internal_enter_freeman_pairing();
 #ifdef GFPS_ENABLED
         app_enter_fastpairing_mode();
 #endif
 #else
 #ifdef __EARPHONE_STAY_BOTH_SCAN__
+#error __EARPHONE_STAY_BOTH_SCAN__
         app_bt_accessmode_set_req(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR);
 #else
         app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
@@ -4220,6 +4266,13 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
                 break;
             case BTIF_HF_EVENT_SERVICE_CONNECTED:
                 DEBUG_INFO(1,"%s HF_EVENT_SERVICE_CONNECTED",__func__);
+
+                //fixed keep alive 5min
+                if(bt_disconnected_keep_alive_timer_id) {
+                   DEBUG_INFO(2,"%s bt_disconnected_keep_alive_timer_id stop!",__func__);
+                   osTimerStop(bt_disconnected_keep_alive_timer_id);
+                }
+
                 nv_record_btdevicerecord_set_hfp_profile_active_state(btdevice_plf_p, true);
 #ifndef FPGA
                 nv_record_touch_cause_flush();
@@ -4283,6 +4336,16 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
                 break;
             case BTIF_HF_EVENT_SERVICE_DISCONNECTED:
                 DEBUG_INFO(3,"%s HF_EVENT_SERVICE_DISCONNECTED discReason:%d/%d",__func__, ctx->disc_reason, ctx->disc_reason_saved);
+
+                //fixed keep alive 5min
+                if((bt_profile_connect_status_success == profile_mgr->hfp_connect && bt_profile_connect_status_success != profile_mgr->a2dp_connect)
+                		&& bt_disconnected_keep_alive_timer_id)
+                {
+                   DEBUG_INFO(2,"%s bt_disconnected_keep_alive_timer_id start hfp disconnected",__func__);
+                   osTimerStop(bt_disconnected_keep_alive_timer_id);
+                   osTimerStart(bt_disconnected_keep_alive_timer_id, 5*60*1000);
+                }
+
                 profile_mgr->hfp_connect = bt_profile_connect_status_failure;
                 if (profile_mgr->reconnect_mode == bt_profile_reconnect_openreconnecting)
                 {
@@ -4531,6 +4594,14 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
                     DEBUG_INFO(0,"!!!a2dp has opened   force return ");
                     return;
                 }
+
+                //fixed keep alive 5min
+                if(bt_profile_connect_status_success != profile_mgr->a2dp_connect && bt_disconnected_keep_alive_timer_id)
+                {
+                   DEBUG_INFO(0,"%s bt_disconnected_keep_alive_timer_id stop",__func__);
+                   osTimerStop(bt_disconnected_keep_alive_timer_id);
+                }
+
                 profile_mgr->a2dp_connect = bt_profile_connect_status_success;
                 profile_mgr->reconnect_cnt = 0;
 
@@ -4582,6 +4653,15 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
                     btif_remote_device_t *rmt_dev = btif_a2dp_get_remote_device(Stream);
                     if(rmt_dev)
                         DEBUG_INFO(2,"%s A2DP_EVENT_STREAM_CLOSED discReason2:%d",__func__,btif_me_get_remote_device_disc_reason_saved(rmt_dev));
+                }
+
+                //fixed keep alive 5min
+                if((bt_profile_connect_status_success != profile_mgr->hfp_connect && bt_profile_connect_status_success == profile_mgr->a2dp_connect)
+                		&& bt_disconnected_keep_alive_timer_id)
+                {
+                   DEBUG_INFO(2,"%s bt_disconnected_keep_alive_timer_id start a2dp",__func__);
+                   osTimerStop(bt_disconnected_keep_alive_timer_id);
+                   osTimerStart(bt_disconnected_keep_alive_timer_id, (2*60*1000)); //ms
                 }
 
                 profile_mgr->a2dp_connect = bt_profile_connect_status_failure;

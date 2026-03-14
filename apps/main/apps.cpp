@@ -410,7 +410,12 @@ extern "C" {
 
 #include "charger_with_icp1205.h"
 extern void sparraw_service_init(void);
+extern bool aiWangBoxIsUsed(void);
 //extern void charger_manager_start(void);
+
+#ifdef IBRT
+#include "app_ibrt_customif_cmd.h"
+#endif
 
 #define APP_SIGNAL_POWERON        0x2
 #define APP_SIGNAL_BT_HOST_READY  0x3
@@ -614,22 +619,46 @@ void CloseEarphone(void)
 
 #ifdef ANC_APP
     if(app_anc_work_status()) {
-    	MAIN_TRACE(0,"!!!CloseEarphone APP_POWEROFF_TIMER_ID");
+    	MAIN_TRACE(0,"!!!CloseEarphone APP_POWEROFF_TIMER_ID ANC_APP");
         app_set_10_second_timer(APP_POWEROFF_TIMER_ID, 1, 30);
         return;
     }
 #endif /* ANC_APP */
 
+    if(aiWangBoxIsUsed()) {
+    	MAIN_TRACE(0,"!!!CloseEarphone BOX has stop earbuds to power off!!");
+        app_set_10_second_timer(APP_POWEROFF_TIMER_ID, 1, 30);
+        return;
+    }
+
 #ifndef BLE_ONLY_ENABLED
-    int activeCons = 0;
+    int activeCons = 0, active_phone_cons;
     int activeSourceCons = 0;
-
+    //fixed only count the phone count,except tws
     activeCons = app_bt_get_active_cons();
+    active_phone_cons = app_bt_count_mobile_link();
     activeSourceCons = btif_me_get_source_activeCons();
+    bool hasBleConnect = app_ble_is_any_connection_exist();
+    MAIN_TRACE(0,"CloseEarphone activeCons==%d activeSourceCons=%d active_phone_cons=%d hasBleConnect=%d\n", activeCons, activeSourceCons, active_phone_cons, hasBleConnect);
 
-    MAIN_TRACE(0,"CloseEarphone activeCons==%d activeSourceCons=%d\n", activeCons, activeSourceCons);
+    if(hasBleConnect > 0) {
+    	MAIN_TRACE(0, "ignore closePhone as BLE connect!!");
+    	return;
+    }
 
-    if(activeCons == 0 && activeSourceCons == 0) {
+#ifdef IBRT
+	if (bts_tws_if_is_tws_link_connected())
+	{
+			//app_ibrt_customif_cmd_sync_poweroff_shutdown(true);
+			uint8_t cmd_sync_poweroff_shutdown[1];
+			cmd_sync_poweroff_shutdown[0] = 1;
+			DEBUG_INFO(2, "[UITWS]%s poweroff_flag %d",__func__, 1);
+			tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_poweroff_shutdown, 1);
+			osDelay(100);
+	}
+#endif
+
+    if(active_phone_cons == 0 && activeSourceCons == 0) {
         MAIN_TRACE(0,"!!!CloseEarphone\n");
         app_shutdown();
     }
@@ -1094,6 +1123,7 @@ extern "C" void sys_otaMode_enter()
     app_otaMode_enter(NULL,NULL);
 }
 
+
 #ifdef __USB_COMM__
 void app_usb_cdc_comm_key_handler(APP_KEY_STATUS *status, void *param)
 {
@@ -1144,6 +1174,7 @@ void app_ota_key_handler(APP_KEY_STATUS *status, void *param)
 
     time = hal_sys_timer_get();
 }
+
 extern "C" void app_bt_key(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
@@ -2211,6 +2242,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef APP_TRACE_RX_ENABLE
     app_trace_rx_open();
 #endif
+
 #ifdef VOICE_DEV
     voice_dev_init();
 #endif
@@ -2355,6 +2387,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         charger_manager_start();
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
+            	MAIN_TRACE(0,"NORMAL POWERON!");
                 nRet = 0;
                 break;
             case APP_BATTERY_OPEN_MODE_CHARGING:
@@ -2386,7 +2419,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
                   need_check_key = false;
                 //need_check_key = true;
-                MAIN_TRACE(0,"test keep poweroff!");
+                //MAIN_TRACE(0,"test keep poweroff!");
                 //nRet = 0;
                 //goto  exit;
 
@@ -2722,7 +2755,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
     app_application_ready_to_start_callback();
-    if (pwron_case == APP_POWERON_CASE_REBOOT){
+    if (pwron_case == APP_POWERON_CASE_REBOOT) {
+    	 MAIN_TRACE_IMM(0,"APP_POWERON_CASE_REBOOT!!!");
 #ifdef BESUI_STEREO_EN
         app_system_status_set(APP_STATUS_TYPE_POWER_ON);
 #else
@@ -2750,6 +2784,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 
 #if defined(IBRT)
 #ifdef IBRT_SEARCH_UI
+#error IBRT_SEARCH_UI
         if(is_charging_poweron==false)
         {
             if(IBRT_UNKNOW == nvrecord_env->ibrt_mode.mode)
@@ -2765,6 +2800,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         }
 #endif
 #else
+#error !IBRT
+        MAIN_TRACE(1,"Caution BTIF_BAM_NOT_ACCESSIBLE!!!");
         bes_bt_me_write_access_mode(BTIF_BAM_NOT_ACCESSIBLE,1);
 #endif
 #endif
@@ -2853,6 +2890,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     }
 #endif
     else {
+
 #ifdef BESUI_STEREO_EN
         app_system_status_set(APP_STATUS_TYPE_POWER_ON);
 #else
@@ -2871,7 +2909,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
             pwron_case = APP_POWERON_CASE_NORMAL;
         }
         if (pwron_case != APP_POWERON_CASE_INVALID && pwron_case != APP_POWERON_CASE_DITHERING){
-            MAIN_TRACE(1,"power on case:%d\n", pwron_case);
+            MAIN_TRACE(1,"power on case:%d!!\n", pwron_case);
             nRet = 0;
 #ifndef __POWERKEY_CTRL_ONOFF_ONLY__
 #if (!defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN))
@@ -2927,21 +2965,22 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                         app_ibrt_enter_limited_mode();
 #endif
 #else
+                    MAIN_TRACE(1,"power on case:%d BT_DEFAULT_ACCESS_MODE_PAIR!!\n", pwron_case);
                     bes_bt_me_write_access_mode(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR,1);
-#endif
+#endif //IBRT
 #ifdef GFPS_ENABLED
                     app_enter_fastpairing_mode();
 #endif
 #if defined(__BTIF_AUTOPOWEROFF__)
                     app_start_10_second_timer(APP_PAIR_TIMER_ID);
 #endif
-#endif
+#endif //APP_10_SECOND_TIMER_EN
 #ifdef __THIRDPARTY
 #if defined(__AI_VOICE__)
                     app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO2,THIRDPARTY_BT_DISCOVERABLE, AI_SPEC_INIT);
 #endif
 #endif
-#endif
+#endif //BT_BUILD_WITH_CUSTOMER_HOST
 #endif //#ifdef BESUI_TWS_EN
                     break;
                 case APP_POWERON_CASE_NORMAL:

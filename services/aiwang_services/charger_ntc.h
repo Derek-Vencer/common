@@ -15,7 +15,6 @@ extern "C" {
 void aw_ntc_detect_init(void);
 void aw_ntc_detect_process(uint16_t ad_volt);
 
-
 #ifdef __cplusplus
 }
 #endif

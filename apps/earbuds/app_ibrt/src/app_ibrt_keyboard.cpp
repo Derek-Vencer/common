@@ -43,6 +43,7 @@
 
 #include "app_factory.h"
 #include "communication_svr.h"
+#include "ble_aiwang_srv.h"
 
 #if defined(IBRT)
 
@@ -328,14 +329,16 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 //app_ibrt_middleware_handle_click();
                 //uint8_t testData[] = {0x55,0xaa,0xbb,0xcc,0xdd,0xee,0xff};
                 //communication_send_buf(testData, 7);
+                sparraw_tx_key_click_notify_msg(KEY_CLICK);
                 bt_key_handle_bt_func_click();
             }
-                break;
+            break;
 
             case APP_KEY_EVENT_DOUBLECLICK:
                 EARBUDS_TRACE(0,"double kill,enter freeman mode");
                 //app_ibrt_if_init_open_box_state_for_evb();
                 //app_ibrt_internal_enter_freeman_pairing();
+                sparraw_tx_key_click_notify_msg(KEY_DOUBLE_CLICK);
                 bt_key_handle_func_doubleclick();
 #ifdef GFPS_ENABLED
                 app_enter_fastpairing_mode();
@@ -346,6 +349,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
             	EARBUDS_TRACE(0,"DOUBLE_AND_HOLD kill,enter freeman mode");
             	//app_bt_volumeup();
             	//app_bt_volumedown();
+            	sparraw_tx_key_click_notify_msg(KEY_DOUBLE_HOLD_CLICK);
             	if (isRightOfTheEarBuds()) {
             	   EARBUDS_TRACE(0,"RightSide volume up+");
              	   //bt_adapter_local_volume_up();
@@ -359,6 +363,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
             case APP_KEY_EVENT_DOUBLE_AND_HOLD_LEFT:
             	EARBUDS_TRACE(0,"DOUBLE_AND_HOLD LEFT volume down");
             	//bt_adapter_local_volume_down();
+            	sparraw_tx_key_click_notify_msg(KEY_DOUBLE_HOLD_CLICK);
             	app_bt_local_volume_down(app_ibrt_keyboard_sync_volume_info_v2);
             	break;
 
@@ -366,7 +371,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 conn_devices = app_bt_count_connected_device();
                 EARBUDS_TRACE(0,"LONG kick!!");
                 EARBUDS_TRACE(0,"%s conn_devices %d", __func__, conn_devices);
-
+                sparraw_tx_key_click_notify_msg(KEY_HOLD_CLICK);
                 if(isEnterTwsPairingMode)
                 {
                 	EARBUDS_TRACE(0,"Exit EnterTwsPairingMode");
@@ -415,6 +420,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                     media_PlayAudio(AUD_ID_BT_PAIRING, 0);
                 }*/
 #endif
+                sparraw_tx_key_click_notify_msg(KEY_LONGLONG_CLICK);
                 media_PlayAudio(AUD_ID_BT_WARNING, 0);
                 app_shutdown();
                 break;

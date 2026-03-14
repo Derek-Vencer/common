@@ -58,6 +58,8 @@
 #include "stereoui.h"
 #endif
 
+#include "app_ble.h"
+
 #if (defined(BTUSB_AUDIO_MODE) || defined(BTUSB_AUDIO_MODE))
 extern "C" bool app_usbaudio_mode_on(void);
 #endif
@@ -426,6 +428,16 @@ int app_status_battery_report(uint8_t level)
         if (curr_device->hf_conn_flag)
         {
             app_hfp_set_battery_level(level);
+        }
+        else
+        {
+#if defined(BLE_BATT_ENABLE)
+        DEBUG_WARNING(0, "%s app_ble_report_battery_level", __func__);
+        for(int i=0; i<BT_DEVICE_NUM; i++)
+        {
+          app_ble_report_battery_level(i,level);
+        }
+#endif
         }
 #elif defined(BT_HFP_SUPPORT)
         app_hfp_set_battery_level(level);

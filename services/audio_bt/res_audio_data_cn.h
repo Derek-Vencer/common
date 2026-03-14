@@ -160,5 +160,9 @@ const uint8_t CN_BT_MUTE[] = {
 #include "res/SOUND_MUTE.txt"
 };
 
+const uint8_t EN_BT_1K_TONE[] = {
+#include "res/1K_0dB_Tone_100ms_16000.txt"
+};
+
 #endif
 

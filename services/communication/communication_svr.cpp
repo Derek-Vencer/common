@@ -40,9 +40,10 @@ enum COMMUNICATION_MSG {
     COMMUNICATION_MSG_REINIT   = 5,
     COMMUNICATION_MSG_RESET    = 6,
     COMMUNICATION_MSG_BREAK    = 7,
+    COMMUNICATION_MSG_STOP    = 8,
 };
 
-const static uint8_t communication_process_log[8][26] = {
+const static uint8_t communication_process_log[9][26] = {
     "COMMUNICATION_MSG_TX_REQ",
     "COMMUNICATION_MSG_TX_DONE",
     "COMMUNICATION_MSG_RX_REQ",
@@ -51,6 +52,7 @@ const static uint8_t communication_process_log[8][26] = {
     "COMMUNICATION_MSG_REINIT",
     "COMMUNICATION_MSG_RESET",
     "COMMUNICATION_MSG_BREAK",
+	"COMMUNICATION_MSG_STOP",
 };
 
 enum COMMUNICATION_MODE {
@@ -86,7 +88,7 @@ typedef struct {
 osMailQDef (communication_mailbox, COMMUNICATION_MAILBOX_MAX, COMMUNICATION_MAIL);
 static osMailQId communication_mailbox = NULL;
 static uint8_t communication_mailbox_cnt = 0;
-
+static bool    communication_init_ok  = false;
 
 static osThreadId communication_tid = NULL;
 static void communication_thread(void const *argument);
@@ -331,6 +333,18 @@ static void uart_rx_idle_handler(void const *param)
     }
 }
 
+void communication_stop(void){
+    if (uart_rx_idle_timer_id != NULL) {
+        osTimerStop(uart_rx_idle_timer_id);
+    }
+    if (communication_init_ok)
+    {
+        COMMUNICATION_MAIL msg;
+        msg.message = COMMUNICATION_MSG_STOP;
+        communication_mailbox_put(&msg);
+        communication_init_ok = false;
+    }
+}
 int communication_io_mode_switch(enum COMMUNICATION_MODE mode)
 {
     //best1400 and best1402 platform
@@ -551,7 +565,14 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             int_unlock(lock);
             uart_rx_idle_timer_start();
             break;
-
+        case COMMUNICATION_MSG_STOP:
+            lock = int_lock();
+            uart_rx_dma_stop();
+            hal_uart_flush(comm_uart, 0);
+            uart_error_detected = 0;
+            int_unlock(lock);
+            osThreadYield();
+            break;
         default:
             break;
     }
@@ -583,7 +604,7 @@ void communication_init(void)
         communication_tid = osThreadCreate(osThread(communication_thread), NULL);
     }
 
-
+    communication_init_ok = true;
     msg.message = COMMUNICATION_MSG_INIT;
     communication_mailbox_put(&msg);
 }

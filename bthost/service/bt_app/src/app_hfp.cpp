@@ -399,8 +399,16 @@ int app_hfp_battery_report(uint8_t level)
         }
         else
         {
-             app_bt_get_device(i)->battery_level = 0xff;
-             nRet = -1;
+
+#if defined(BLE_BATT_ENABLE)
+           DEBUG_WARNING(0, "BLE_BATT_ENABLE app_ble_report_battery_level=%d",level);
+		   app_ble_report_battery_level(i,level);
+#endif
+#ifdef GFPS_ENABLED
+		   gfps_send_battery_levels(SET_BT_ID(i));
+#endif
+           app_bt_get_device(i)->battery_level = 0xff;
+           nRet = -1;
         }
     }
 #if defined(BT_HFP_AG_ROLE)

@@ -331,8 +331,10 @@ static bool app_ble_batt_client_callback(gatt_prf_t *prf, gatt_profile_event_t e
             gatt_profile_recv_notify_t *p = (gatt_profile_recv_notify_t *)param.notify;
             if (p->service->service_uuid != GATT_UUID_BAT_SERVICE || p->value_len == 0)
             {
+            	DEBUG_INFO(0, "GATT_PROF_EVENT_NOTIFY invalid");
                 break;
             }
+            DEBUG_INFO(0, "GATT_PROF_EVENT_NOTIFY ok");
             for (; i < conn->service_count; i += 1)
             {
                 s = conn->peer_service + i;

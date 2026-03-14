@@ -87,6 +87,7 @@ uint32_t factory_section_get_version(void);
 uint8_t* factory_section_get_default_peer_bt_address(void);
 uint8_t factory_section_get_default_bt_nv_role(void);
 void factory_section_original_bleaddr_get(uint8_t *bleAddr);
+uint8_t* factory_section_get_bt_address(void);
 
 #ifdef __cplusplus
 }

@@ -47,7 +47,7 @@
 #include "app_bt_stream.h"
 #endif
 
-#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 #include "apps.h"
 #include "besui_common.h"
 #endif
@@ -57,6 +57,7 @@
 #endif
 #include "bts_tws_if.h"
 #include "bts_core_if.h"
+#include "app_hfp.h"
 
 #if defined(IBRT)
 
@@ -72,7 +73,7 @@ static void app_ibrt_customif_test2_cmd_send_rsp_timeout_handler(uint16_t rsp_se
 static void app_ibrt_customif_test2_cmd_send_rsp_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, uint16_t rsp_seq, uint8_t *ptrParam, uint16_t paramLen);
 
-#ifdef BESUI_TWS_EN
+#if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
 static void app_ibrt_sync_tota_battery_level(uint8_t *p_buff, uint16_t length)
 {
@@ -269,10 +270,13 @@ static void app_ibrt_customif_sync_something(uint8_t *p_buff, uint16_t length)
 	app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_SOMETHING, p_buff, length);
 }
 
+
 static void app_ibrt_customif_sync_something_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
 {
 	EARBUDS_TRACE(3, "[UITWS][%s]rsp_seq = %d length = %d", __func__, rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
+
+#ifdef  BESUI_TWS_EN
     if(p_buff[0] == USER_TWS_CMD_ENTER_PAIRMODE)
     {
         besui_bt_msg_put(SLAVE_ENTER_PAIRMODE_EVENT, 0xff, BT_DEVICE_NUM);
@@ -281,6 +285,8 @@ static void app_ibrt_customif_sync_something_handler(uint16_t rsp_seq, uint8_t *
     {
         besui_bt_msg_put(SLAVE_LINKLOSS_EVENT, 0xff, BT_DEVICE_NUM);
     }
+#endif
+
 #ifdef USER_APP_BLE_DIS_EN    
     else if(p_buff[0] == USER_TWS_CMD_RANDOM)
     {
@@ -347,7 +353,10 @@ static void app_ibrt_customif_sync_poweroff_shutdown_send_handler(uint16_t rsp_s
 
     if(p_buff[0])
     {
+
+#ifdef  BESUI_TWS_EN
         uictl.shutdown_type = SHUTDOWN_SYNC_PEER;
+#endif
         app_shutdown();
     }
 }
@@ -370,13 +379,63 @@ static void app_ibrt_customif_sync_battery_level_send(uint8_t *p_buff, uint16_t 
 	app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_BATTERY_LEVEL_SYNC, p_buff, length);
 }
 
+uint8_t earbuds_get_profile_conn_num(void)
+{
+    uint8_t conn_cnt = 0;
+    if(app_bt_get_device(BT_DEVICE_ID_1)->profile_mgr.profile_connected)
+        conn_cnt ++;
+    if(app_bt_get_device(BT_DEVICE_ID_2)->profile_mgr.profile_connected)
+        conn_cnt ++;
+    EARBUDS_TRACE(0,"%s, conn_cnt = %d", __func__, conn_cnt);
+
+    return conn_cnt;
+}
+
+void app_tws_battery_update(bool tws_connect_flag)
+{
+    uint8_t conn_devices = earbuds_get_profile_conn_num();
+    EARBUDS_TRACE(1,"%s tws_connect_flag %d %d ", __func__, tws_connect_flag, conn_devices);
+
+
+    app_hfp_battery_report_reset(BT_DEVICE_ID_1);
+#if (BT_DEVICE_NUM > 1)
+    app_hfp_battery_report_reset(BT_DEVICE_ID_2);
+#endif
+
+#ifdef  BESUI_TWS_EN
+    uint8_t level = 0;
+    if(tws_connect_flag)
+    {
+        if((bts_tws_if_is_tws_link_connected())&&(TWS_UI_MASTER == app_ibrt_if_get_ui_role())&&(conn_devices > 0))
+        {
+            level = app_battery_level_compare();
+            app_hfp_set_battery_level(level);
+        }
+    }
+    else
+    {
+        if(conn_devices > 0)
+        {
+            level = twsui_get_bat_level();
+            app_hfp_set_battery_level(level);
+        }
+    }
+#else
+    EARBUDS_TRACE(1,"%s not impletement!!! ", __func__);
+#endif
+
+}
+
 static void app_ibrt_customif_sync_battery_level_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
 {
 	EARBUDS_TRACE(1, "[UITWS]%s", __func__);
 	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
 
+#ifdef  BESUI_TWS_EN
     app_battery_set_other_battery_level(p_buff[0]);
+#endif
+
     app_tws_battery_update(true);
 }
 
@@ -438,7 +497,10 @@ static void app_ibrt_customif_sync_led_mode_send_handler(uint16_t rsp_seq, uint8
 	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
 
+#ifdef  BESUI_TWS_EN
     app_tws_set_ledsta_call_slave_process(p_buff[0], p_buff[1]);
+#endif
+
 }
 
 void app_ibrt_customif_cmd_sync_btaddr(uint8_t *cur_btaddr)
@@ -472,7 +534,10 @@ static void app_ibrt_customif_sync_btaddr_send_handler(uint16_t rsp_seq, uint8_t
 	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
 
+#ifdef  BESUI_TWS_EN
     app_common_store_twsaddrto_nv_flash(p_buff);
+#endif
+
 }
 
 
@@ -500,7 +565,11 @@ static void app_ibrt_customif_sync_clear_pairlist_send_handler(uint16_t rsp_seq,
 	EARBUDS_TRACE(1, "[UITWS]%s", __func__);
 	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
+
+#ifdef  BESUI_TWS_EN
     app_common_clear_pairlist_process(p_buff[0], p_buff[1], true, false);
+#endif
+
 }
 
 void app_ibrt_customif_cmd_sync_space_audio_status(bool switch_flag, uint8_t current_status)
@@ -553,7 +622,11 @@ static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rs
 	EARBUDS_TRACE(1, "[UITWS]%s", __func__);
 	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
+
+#ifdef  BESUI_TWS_EN
     app_bt_mobile_set_openreconnect_info(p_buff[0], p_buff[1], false);
+#endif
+
 }
 
 #if defined(USER_IMU_SENSORHUB_EN)
@@ -602,7 +675,7 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         APP_TWS_CMD_PRIO_0
     },
 //-------------------------------------------------------------------------------------------------------
-#ifdef BESUI_TWS_EN
+#if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
     {
         APP_TWS_CMD_SEND_TOTA_BATTERY_LEVEL_CMD,            "SYNC_TOTA_BATTERY_LEVEL",

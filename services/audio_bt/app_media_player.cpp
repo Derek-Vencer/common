@@ -323,6 +323,8 @@ enum sound_id {
 
     LANGUAGE_SWITCH,
     BT_MUTE,
+	BT_1K_TONE,
+
 #ifdef __BT_WARNING_TONE_MERGE_INTO_STREAM_SBC__
     RES_AUD_RING_SAMPRATE_16000,
 #endif
@@ -465,6 +467,7 @@ static const media_sound_map_t media_sound_map_en[] =
 
     SOUND_ITEM_DEF(EN_, LANGUAGE_SWITCH),
     SOUND_ITEM_DEF(EN_, BT_MUTE),
+    SOUND_ITEM_DEF(EN_, BT_1K_TONE),
 #ifdef __BT_WARNING_TONE_MERGE_INTO_STREAM_SBC__
     SOUND_ITEM_DEF(EN_, RES_AUD_RING_SAMPRATE_16000),
 #endif
@@ -1806,6 +1809,9 @@ void media_runtime_audio_prompt_update(uint16_t id, uint8_t** ptr, uint32_t* len
 #endif //#ifdef BESUI_TWS_EN
 //----------------------------------------------------------------------------------------
 
+    case AUD_ID_TONE_1K:
+    	get_sound_id_info(BT_1K_TONE, &sound_data, &length);
+    	break;
 
     default:
         g_app_audio_length = 0;

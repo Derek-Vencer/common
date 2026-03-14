@@ -103,6 +103,8 @@ extern uint32_t ble_datapath_save_ctx(uint8_t conidx, uint8_t *buf, uint32_t buf
 extern uint32_t ble_datapath_restore_ctx(uint8_t conidx, uint8_t *buf, uint32_t buf_len);
 #endif /* CFG_APP_DATAPATH_SERVER */
 
+extern uint8_t aiWangGetEarBudsColor(void);
+
 static void app_ble_impl_refresh_adv(void);
 static void app_ble_check_load_server_cache(const gap_conn_item_t *conn);
 static void app_ble_check_load_client_cache(const gap_conn_item_t *conn);
@@ -3407,11 +3409,18 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 {
     DEBUG_INFO(0, "%s", __func__);
     bool adv_enable = false;
-
     BLE_ADV_PARAM_T *ble_adv = (BLE_ADV_PARAM_T*)param;
-    const char* ble_name = (const char*)factory_section_get_ble_name();
+    //char bt_name[63+1] = {0};
+    char* ble_name = NULL;
     const uint8_t aiWangPrimaryService[16] = { 0xCD, 0x4B, 0xEF, 0xBA, 0x10, 0xDA, 0xFA, 0x9D, 0x65, 0x43, 0x20, 0x6D, 0x76, 0x4F, 0xAE, 0xCA};
 
+    //const char* ble_name = (const char*)factory_section_get_ble_name();
+    //factory_section_get_bt_name();
+    ble_name = (char*)factory_section_get_ble_name();
+    if('\0' == ble_name[0])
+    {
+    	ble_name = (char*)factory_section_get_bt_name();
+    }
     memset(ble_adv->advData,0,sizeof(ble_adv->advData));
 	ble_adv->advDataLen = 0;
 	ble_adv->advData[ble_adv->advDataLen++] = 17;
@@ -3425,9 +3434,19 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     ble_adv->scanRspData[1]  = 0xFF; //manufactory tag
     ble_adv->scanRspData[2]  = 0x9B;
     ble_adv->scanRspData[3]  = 0x0C;
-    factory_section_original_bleaddr_get(&ble_adv->scanRspData[4]); //6Bytes
+    // factory_section_original_bleaddr_get(&ble_adv->scanRspData[4]); //6Bytes
+    //factory_section_get_bt_address(&ble_adv->scanRspData[4]);
+    factory_section_original_btaddr_get(&ble_adv->scanRspData[4]);
     memcpy(&ble_adv->scanRspData[10], "MBE003", 6);
-    ble_adv->scanRspData[16] = 0x42; //Black 0x42 Gold 0x47 //color code
+    uint8_t earBudsColor = aiWangGetEarBudsColor();
+    if (0 == earBudsColor || 0xFF == earBudsColor)
+    {
+        ble_adv->scanRspData[16] = 0x42; //Black 0x42 Gold 0x47 //color code
+    }
+    else
+    {
+    	ble_adv->scanRspData[16] = earBudsColor;
+    }
     DEBUG_INFO(0, "%s BleName=%s", __func__, ble_name);
     uint32_t scan_rsp_nameLen = (strlen(ble_name) >=12)?12:strlen(ble_name);
     ble_adv->scanRspData[ble_adv->scanRspDataLen++] = scan_rsp_nameLen + 1;
@@ -3474,7 +3493,7 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 
 void app_ble_stub_user_init(void)
 {
-    DEBUG_INFO(0, "%s", __func__);
+    DEBUG_INFO(0, "%s BLE_ADV!!", __func__);
     app_ble_register_data_fill_handle(USER_STUB, (BLE_DATA_FILL_FUNC_T)app_ble_stub_user_data_fill_handler, false);
     ble_core_enable_stub_adv();
 }

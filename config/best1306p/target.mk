@@ -446,6 +446,16 @@ export SUPPORT_SINGLE_WIRE_COM    := 1
 ## os timer is not enough!
 export OS_TIMER_NUM        := 10
 
+# besui_common.h
+export BESUI_COMM_EN := 1
+
+# added for SPP TUNING EQ 
+export SPP_EQ_TUNING := 1
+
+##enable will crash when play music
+export SW_IIR_EQ_PROCESS := 0
+export TOTA_v2           := 1
+
 
 KBUILD_CPPFLAGS += -DSOFTWARE_VERSION_INFO=$(SOFTWARE_VERSION_INFO)
 

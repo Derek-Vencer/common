@@ -305,7 +305,7 @@ struct nvrecord_env_t {
 #endif //#ifdef BESUI_APP_EN
 //----------------------------------------------------------------------------------------------
 
-#ifdef BESUI_TWS_EN
+#if 1 //def BESUI_TWS_EN
 #ifdef BESUI_GAME_EN
 #ifdef BESUI_GAME_NV_EN
     uint8_t remember_game_mode;

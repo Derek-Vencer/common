@@ -36,6 +36,9 @@
 #include "ICP1205.h"
 #include "nvrecord_bt.h"
 #include "nvrecord_env.h"
+#include "nvrecord_extension.h"
+#include "app_factory_audio.h"
+#include "charger_ntc.h"
 
 
 #ifndef TRACE
@@ -89,6 +92,7 @@ static REQUEST_DATA_STRUCT   rxDataStruct;
 static SPARRAW_RX_STATE sparraw_rx_state = RX_IDLE;
 static uint8_t   payload_buffer[1024];
 static uint16_t  rx_param_len = 0;
+static uint8_t   enterKeyClickTestMode = FALSE;
 
 static osThreadId sparrow_thread_id = NULL;
 static void sparraw_event_handler_thread(const void *arg);
@@ -100,6 +104,8 @@ static osMailQId sparraw_event_mailbox_id = NULL;
 osMailQDef(sparraw_event_mailbox_id, SPARRAW_EVENT_MAX_MAILBOX, SPARRAW_MESSAGE_BLOCK);
 
 int app_reset(void);
+uint8_t getBoxChargerBattery(void);
+uint8_t getPeerBattery(void);
 
 static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
 static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
@@ -109,19 +115,30 @@ extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *f
 
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
-	TRACE(0,"%s.", __func__);
-    uint8_t batflag; //left, right, box
 
+    uint8_t batflag; //left, right, box
     batflag = app_battery_current_level();
+    TRACE(0,"%s batflag=%d", __func__, batflag);
     if(batflag > 9)
     {
         batflag = 9;
     }
 
 	uint8_t batteryArray[3] = {0, 0, 0};
-	batteryArray[0] = batflag;
-	batteryArray[1] = batflag;
-
+	batteryArray[0]  = batflag;
+	if( 0xFF == getPeerBattery())
+	{
+		batteryArray[1]  = batflag;
+	}
+	else
+	{
+		batteryArray[1]  = getPeerBattery();
+	    if(batteryArray[1] > 9)
+	    {
+	    	batteryArray[1] = 9;
+	    }
+	}
+	batteryArray[2] = getBoxChargerBattery();
 	sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
 
 }
@@ -132,17 +149,23 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
 	uint8_t* localname =  factory_section_get_bt_name();
     if(localname)
     {
-    	sparraw_tx_msg(RSP_GET_DEVICE_NAME, (const uint8_t*)localname, strlen((const char *)localname));
+    	sparraw_tx_msg(RSP_GET_DEVICE_NAME, (const uint8_t*)localname, strlen((const char *)localname)+1);
     }
 }
-
 
 void handleSetDeviceName(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
-	if( factory_section_set_bt_name((const char *)&data[1], len -1))
+	//if( factory_section_set_bt_name((const char *)&data[1], len -1))
+	char nameBuffer[248+1] = {0};
+	len = (len - 1) > 248?248:(len -1);
+	if (len > 0)
 	{
-		TRACE(0,"%s error", __func__);
+		memcpy(nameBuffer, &data[1], len);
+		if( factory_section_set_bt_name(nameBuffer, len+1))
+		{
+			TRACE(0,"%s error", __func__);
+		}
 	}
 	sparraw_tx_msg(RSP_SET_DEVICE_NAME, (const uint8_t*)"", 0);
 }
@@ -172,12 +195,14 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 	sparraw_tx_msg(RSP_GET_EQ_PRESET, (const uint8_t*)"", 0);
 }
 
+//MM.NN.RR.AA
 void handleGetFwVersion(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
-	uint8_t verSion[8] = {'0','1','0','6'};
-	system_get_info(&verSion[0], &verSion[1], &verSion[2], &verSion[4]);
-	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)verSion, 4);
+	//uint8_t version[12] = {'0','1','0','6'};
+	//system_get_info(&version[0], &version[1], &version[2], &version[4]);
+	const uint8_t *version = (const uint8_t *)"01.01.00.02";
+	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)version, 4);
 }
 
 void handleFactoryCmdSys(const uint8_t *data, uint16_t len)
@@ -194,9 +219,28 @@ void handleFactoryCmdSys(const uint8_t *data, uint16_t len)
 		  TRACE(0, "ENTER_SHIP_MODE");
 		  Icp1205ShipEnable();
 	  } else if (FACTORY_RESET == data[1]) {
-		  TRACE(0, "FACTORY_RESET");
-		  nv_record_ddbrec_clear();
+		  TRACE(0, "FACTORY_RESET exit keyClickTestMode");
+		  enterKeyClickTestMode = FALSE;
+		  //nv_record_ddbrec_clear();
+		  //app_ibrt_customif_cmd_sync_clear_pairlist(false, false);
 	  }
+}
+
+
+extern "C" uint8_t aiWangGetEarBudsColor(void) {
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+    return nvrecord_env->color_data;
+}
+
+void aiWangSetEarBudsColor(uint8_t color){
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+    if (nvrecord_env->color_data != color)
+    {
+		nvrecord_env->color_data = color;
+		nv_record_env_set(nvrecord_env);
+    }
 }
 
 void handleFactoryCmdAudio(const uint8_t *data, uint16_t len)
@@ -205,6 +249,7 @@ void handleFactoryCmdAudio(const uint8_t *data, uint16_t len)
 	  sparraw_tx_cmd_data_rsp_ack(data[0], data[1]);
 	  if (AUDIO_LOOPBACK == payload_buffer[1]) {
 		  TRACE(0, "AUDIO_LOOPBACK");
+		  app_factorymode_audioloop(true, APP_SYSFREQ_104M);
 	  } else if (PLAY_TEST_TONE == payload_buffer[1]) {
 		  TRACE(0, "PLAY_TEST_TONE");
 		  int stop = payload_buffer[2];
@@ -218,23 +263,49 @@ void handleFactoryCmdAudio(const uint8_t *data, uint16_t len)
 		  }
 	  } else if (LED_CONTROL == payload_buffer[1]) {
 		  TRACE(0, "LED_CONTROL");
-	  } else if (BUTTON_EVENT == payload_buffer[1]) {
+	  }  else if (BUTTON_EVENT == payload_buffer[1]) {
 		  TRACE(0, "BUTTON_EVENT");
+		  enterKeyClickTestMode = TRUE;
 	  }
 }
 
-static uint8_t tempSn[64];
+
+void aiWangSetSn(uint8_t *data, uint8_t len){
+
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+    nvrecord_env->sn_len = len;
+    for(int i = 0; i < len; i++)
+    {
+        nvrecord_env->sn_data[i] = data[i];
+    }
+    nv_record_env_set(nvrecord_env);
+}
+
+void aiWangGetSn( uint8_t *data, uint8_t len) {
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+    len  = nvrecord_env->sn_len >12?12:nvrecord_env->sn_len;
+    memcpy(data, &nvrecord_env->sn_data[0], 12);
+}
+
+
 void handleFactoryCmdInfo(const uint8_t *data, uint16_t len)
 {
 	  TRACE(0,"%s.", __func__);
+	  uint8_t  tempSn[12+1] = {0};
 	  if (READ_SN == data[1]) {
-		  TRACE(0, "READ_SN");
-		  if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(tempSn, strlen((const char*)tempSn));
+		  aiWangGetSn(tempSn, 12);
+		  TRACE(0, "READ_SN:%s", tempSn);
+		  if(app_sparraw_env.notifyEnable) { ble_aiwang_srv_send_data_via_notification(tempSn, strlen((const char*)tempSn)); }
 	  } else if (WRTIE_SN == data[1]) {
-		  TRACE(0, "WRTIE_SN");
-		  memset(tempSn,0,sizeof(tempSn)/sizeof(tempSn[0]));
-		  memcpy(tempSn, data, len);
+		  memcpy(tempSn, &data[2], (len-2) > 12 ? 12 :(len-2));
+		  TRACE(0, "WRTIE_SN:%s", tempSn);
+		  aiWangSetSn(tempSn, (len-2) > 12 ? 12 :(len-2));
 		  if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(tempSn, len);
+	  } else if (SET_BUDS_COLOR == payload_buffer[1]) {
+		  aiWangSetEarBudsColor(payload_buffer[2]);
+		  sparraw_tx_cmd_data_rsp_ack(data[0], data[1]);
 	  } else  {
 		  TRACE(0, "unknown ...");
 	  }
@@ -428,6 +499,19 @@ static void sparraw_tx_cmd_data_rsp_neg(uint8_t error_code, uint8_t cmd_type, ui
 	rsp_buffer[4] = sub_cmd;
 	rsp_buffer[5] = error_code;
 	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, 6);
+}
+
+void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
+{
+	uint8_t  keyEventNotify[3];
+	keyEventNotify[0] = 0xB0;
+	keyEventNotify[1] = 0x04;
+	keyEventNotify[2] = kick_type;
+	TRACE(0, "%s kick_type=%d enterKeyClickTestMode=%d",  __func__, kick_type, enterKeyClickTestMode);
+	if( enterKeyClickTestMode && app_sparraw_env.notifyEnable)
+	{
+		ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
+	}
 }
 
 static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len) {
