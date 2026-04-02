@@ -4,7 +4,6 @@
  *  Created on: 2026年3月5日
  *      Author: liugenlin
  */
-
 #include <stdint.h>
 #include <stddef.h>
 #include "tgt_hardware.h"
@@ -117,12 +116,13 @@ typedef struct {
 	uint8_t rightEarBudsBattery;
 	uint8_t boxChargerBattery;
 	uint8_t boxLidsStates;
-	uint8_t boxSoftVersion[12];
+	uint8_t boxSoftVersion[16+1];
 	uint8_t boxIsOpen;
 } BOX_STATUS;
 
 extern void app_tws_ibrt_update_info(ibrt_role_e ibrtRole,bt_bdaddr_t *ibrtPeerAddr);
 
+extern void aiWangSetBoxVersion(uint8_t *data, uint8_t len);
 
 #define LEFT_BUDS  0
 #define RIGHT_BUDS 1
@@ -492,9 +492,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
          {
         	 if (operateLeftOrRight == isRightEarbuds)
         	 {
-        		 memset(&boxChargerStatus.boxSoftVersion[0], 0, 12);
+        		 memset(&boxChargerStatus.boxSoftVersion[0], 0, 16+1);
         		 memcpy(&boxChargerStatus.boxSoftVersion[0],&uart_cmd_dat[4],11);
         		 DBGPRINT("CMD_GET_EAR_POWER include boxVersion:%s!!!", boxChargerStatus.boxSoftVersion);
+                 aiWangSetBoxVersion(&boxChargerStatus.boxSoftVersion[0], 11);
         		 wired_uart_get_battery_level();
         	 }
        	     break;
@@ -554,8 +555,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	break;
     case CMD_EAR_RESET: //fatory
         {
-        	aiWang_remove_all_paired_list();
-        	wired_uart_remove_all_phone_paired_list();
+        	//aiWang_remove_all_paired_list();  // Removed: deletes ALL pairings including TWS
+            bes_ble_gap_disconnect_all();
+            LinkDisconnectDirectly(true);
+        	wired_uart_remove_all_phone_paired_list();  // Keep: only deletes phone pairings, preserves TWS
         	app_reset();
         }
     	break;

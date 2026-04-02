@@ -437,64 +437,93 @@ CFLAGS_hal_sec_eng.o += -DSEC_ENG_UNALIGNED_OUTPUT
 endif
 
 ifeq ($(NO_SLEEP),1)
+$(info NO_SLEEP)
 CFLAGS_hal_sleep.o += -DNO_SLEEP
 endif
+
 ifeq ($(NO_LIGHT_SLEEP),1)
+$(info NO_LIGHT_SLEEP)
 CFLAGS_hal_sleep.o += -DNO_LIGHT_SLEEP
 endif
+
 ifeq ($(SLEEP_SYS_FREQ_52M),1)
+$(info SLEEP_SYS_FREQ_52M)
 CFLAGS_hal_sleep.o += -DSLEEP_SYS_FREQ_52M
 endif
 
 SLEEP_STATS_TRACE ?= 1
 ifeq ($(SLEEP_STATS_TRACE),1)
+$(info SLEEP_STATS_TRACE)
 CFLAGS_hal_sleep.o += -DSLEEP_STATS_TRACE
 endif
+
+DEBUG_SLEEP_USER ?=1
 ifeq ($(DEBUG_SLEEP_USER),1)
+$(info DEBUG_SLEEP_USER)
 CFLAGS_hal_sleep.o += -DDEBUG_SLEEP_USER
 endif
+
+WAKEUP_SRC_STATS ?= 1
 ifeq ($(WAKEUP_SRC_STATS),1)
+$(info WAKEUP_SRC_STATS)
 CFLAGS_hal_sleep.o += -DWAKEUP_SRC_STATS
 endif
+
+CACHE_STATS ?= 1
 ifeq ($(CACHE_STATS),1)
+$(info CACHE_STATS)
 CFLAGS_hal_sleep.o += -DCACHE_STATS
 endif
+
+SYSFREQ_STATS ?= 1
 ifeq ($(SYSFREQ_STATS),1)
+$(info SYSFREQ_STATS)
 CFLAGS_hal_sleep.o += -DSYSFREQ_STATS
 CFLAGS_hal_sysfreq.o += -DSYSFREQ_STATS
 endif
+
 
 ifeq ($(FAST_TIMER_COMPENSATE),1)
 CFLAGS_hal_sleep.o += -DFAST_TIMER_COMPENSATE
 CFLAGS_hal_timer.o += -DFAST_TIMER_COMPENSATE
 endif
 
+
 ifneq ($(HAL_CMU_FREQ_MAX),)
+$(info HAL_CMU_FREQ_MAX=$(HAL_CMU_FREQ_MAX))
 CFLAGS_hal_sysfreq.o += -DHAL_CMU_FREQ_MAX=$(HAL_CMU_FREQ_MAX)
 endif
 
 ifneq ($(HAL_CMU_FREQ_FIXED),)
+$(info HAL_CMU_FREQ_FIXED=$(HAL_CMU_FREQ_FIXED))
 CFLAGS_hal_sysfreq.o += -DHAL_CMU_FREQ_FIXED=$(HAL_CMU_FREQ_FIXED)
 endif
 
 CFLAGS_hal_spi.o += -DCHIP_SPI_VER=$(CHIP_SPI_VER)
 
 ifeq ($(SPI_ROM_ONLY),1)
+$(info SPI_ROM_ONLY=$(SPI_ROM_ONLY))
 CFLAGS_hal_spi.o += -DSPI_ROM_ONLY
 endif
+
 ifeq ($(SPI_SLAVE_ENABLE),1)
 CFLAGS_hal_spi.o += -DSPI_SLAVE_ENABLE
 endif
+
 ifeq ($(CHIP_HAS_SPI),1)
+$(info CHIP_HAS_SPI=$(CHIP_HAS_SPI))
 CFLAGS_hal_spi.o += -DCHIP_HAS_SPI
 endif
+
 ifeq ($(CHIP_HAS_SPILCD),1)
 CFLAGS_hal_spi.o += -DCHIP_HAS_SPILCD
 endif
+
 ifeq ($(CHIP_HAS_SPIPHY),1)
 CFLAGS_hal_phyif.o += -DCHIP_HAS_SPIPHY
 CFLAGS_hal_spi.o += -DCHIP_HAS_SPIPHY
 endif
+
 ifeq ($(CHIP_HAS_SPIDPD),1)
 CFLAGS_hal_spi.o += -DCHIP_HAS_SPIDPD
 endif
@@ -514,80 +543,110 @@ endif
 endif
 
 ifneq ($(TRACE_BAUD_RATE),)
+$(info TRACE_BAUD_RATE=$(TRACE_BAUD_RATE))
 CFLAGS_hal_trace.o += -DTRACE_BAUD_RATE=$(TRACE_BAUD_RATE)
 CFLAGS_hal_uart.o += -DTRACE_BAUD_RATE=$(TRACE_BAUD_RATE)
 endif
+
 ifneq ($(TRACE_PRINTF_LEN),)
+$(info TRACE_PRINTF_LEN=$(TRACE_PRINTF_LEN))
 CFLAGS_hal_trace.o += -DTRACE_PRINTF_LEN=$(TRACE_PRINTF_LEN)
 CFLAGS_hal_uart.o += -DTRACE_PRINTF_LEN=$(TRACE_PRINTF_LEN)
 endif
+
 ifneq ($(TRACE_DUMP_LEN),)
 CFLAGS_hal_trace.o += -DTRACE_DUMP_LEN=$(TRACE_DUMP_LEN)
 endif
+
 ifneq ($(TRACE_BUF_SIZE),)
 CFLAGS_hal_trace.o += -DTRACE_BUF_SIZE=$(TRACE_BUF_SIZE)
 endif
+
 ifneq ($(TRACE_STACK_DUMP_PREV_WORD),)
 CFLAGS_hal_trace.o += -DTRACE_STACK_DUMP_PREV_WORD=$(TRACE_STACK_DUMP_PREV_WORD)
 endif
+
 ifneq ($(TRACE_STACK_DUMP_WORD),)
 CFLAGS_hal_trace.o += -DTRACE_STACK_DUMP_WORD=$(TRACE_STACK_DUMP_WORD)
 endif
+
 ifneq ($(TRACE_BACKTRACE_NUM),)
 CFLAGS_hal_trace.o += -DTRACE_BACKTRACE_NUM=$(TRACE_BACKTRACE_NUM)
 endif
+
 ifneq ($(TRACE_BACKTRACE_SEARCH_WORD),)
 CFLAGS_hal_trace.o += -DTRACE_BACKTRACE_SEARCH_WORD=$(TRACE_BACKTRACE_SEARCH_WORD)
 endif
+
 ifeq ($(USE_TRACE_ID),1)
 CFLAGS_hal_trace.o += -DUSE_TRACE_ID
 endif
+
 ifeq ($(DUMP_LOG_ENABLE),1)
 CFLAGS_hal_trace.o += -DDUMP_LOG_ENABLE
 endif
+
 ifeq ($(FAULT_DUMP),1)
 CFLAGS_hal_trace.o += -DFAULT_DUMP
 endif
+
 ifeq ($(CRASH_REBOOT),1)
 $(info CRASH_REBOOT)
 CFLAGS_hal_trace.o += -DCRASH_REBOOT
 endif
+
 ifeq ($(FORCE_TRACE_UART1),1)
 CFLAGS_hal_trace.o += -DFORCE_TRACE_UART1
 endif
+
 ifeq ($(NO_TRACE_TIME_STAMP),1)
 CFLAGS_hal_trace.o += -DNO_TRACE_TIME_STAMP
 endif
+
 ifeq ($(TRACE_GLOBAL_TAG),1)
 CFLAGS_hal_trace.o += -DTRACE_GLOBAL_TAG
 ifneq ($(TRACE_MAX_TAG_CB),)
 CFLAGS_hal_trace.o += -DTRACE_MAX_TAG_CB=$(TRACE_MAX_TAG_CB)
 endif
 endif
+
 ifeq ($(CORE_DUMP),1)
+$(info CORE_DUMP=$(CORE_DUMP))
 CFLAGS_hal_trace.o += -Iutils/crash_catcher/include -DCORE_DUMP
 endif
+
 ifeq ($(TRACE_CRLF),1)
+$(info TRACE_CRLF=$(TRACE_CRLF))
 CFLAGS_hal_trace.o += -DTRACE_CRLF
 CFLAGS_hal_uart.o += -DTRACE_CRLF
 endif
+
 ifeq ($(DUMP_SECURE_STACK),1)
+$(info DUMP_SECURE_STACK=$(DUMP_SECURE_STACK))
 CFLAGS_hal_trace.o += -DDUMP_SECURE_STACK
 endif
+
 ifeq ($(TRACE_CPU_IDLE_OUTPUT),1)
+$(info TRACE_CPU_IDLE_OUTPUT=$(TRACE_CPU_IDLE_OUTPUT))
 CFLAGS_hal_trace.o += -DTRACE_CPU_IDLE_OUTPUT
 endif
+
 ifeq ($(TRACE_CPU_IMM_OUTPUT),1)
+$(info $(TRACE_CPU_IMM_OUTPUT))
 CFLAGS_hal_trace.o += -DTRACE_CPU_IMM_OUTPUT
 endif
+
 ifeq ($(NO_MPU_DEFAULT_MAP),1)
 CFLAGS_hal_trace.o += -DNO_MPU_DEFAULT_MAP
 endif
 
 ifneq ($(UART_CLK_DIV),)
+$(info UART_CLK_DIV=$(UART_CLK_DIV))
 CFLAGS_hal_uart.o += -DUART_CLK_DIV=$(UART_CLK_DIV)
 endif
+
 ifneq ($(DEBUG_PORT),)
+$(info DEBUG_PORT=$(DEBUG_PORT))
 CFLAGS_hal_uart.o += -DDEBUG_PORT=$(DEBUG_PORT)
 endif
 

@@ -1174,6 +1174,7 @@ bool app_bt_a2dp_report_current_volume(int device_id)
         device_id = active_device->device_id;
     }
 #ifdef ONLY_REPORT_VOLUME_WHEN_STREAMING
+#error "ONLY_REPORT_VOLUME_WHEN_STREAMING is only for ibrt, please check if this macro is defined in non-ibrt project by mistake"
     if(device_id == app_bt_audio_get_curr_playing_a2dp())
     {
         return app_bt_a2dp_send_volume_change(device_id);

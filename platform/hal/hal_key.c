@@ -1095,6 +1095,7 @@ static void hal_key_debounce_handler(void *param)
             }
             if (key_status.event == HAL_KEY_EVENT_DOUBLE_AND_HOLD)
             {
+                key_status.cnt_has_click_up = 0;
             	TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD release***");
             }
             key_status.time_updown = time;
@@ -1107,6 +1108,7 @@ static void hal_key_debounce_handler(void *param)
         	key_status.event      = HAL_KEY_EVENT_NONE;
         	key_status.code_click = HAL_KEY_CODE_NONE;
         	key_status.cnt_has_click_up = 0;
+            key_status.cnt_click = 0;
         	TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD release 2***");
         } else if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {
             // LongPress is finished when all of the LongPress keys are released
@@ -1182,19 +1184,26 @@ static void hal_key_debounce_handler(void *param)
 
     // LongPress should be stopped if any key is released
     if ((code_down & key_status.code_ready) == key_status.code_ready) {
-        if (HAL_KEY_EVENT_DOWN == key_status.event) {
-        	if ( ((time - key_status.time_updown) >= KEY_HOLD_THRESHOLD) && (0 <  key_status.cnt_has_click_up))
+        if ((key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) &&
+            ((time - key_status.time_updown) >= KEY_HOLD_THRESHOLD) && (0 < key_status.cnt_has_click_up)) {
+            key_status.event = HAL_KEY_EVENT_DOUBLE_AND_HOLD;
+            send_key_event(key_status.code_ready, key_status.event);
+            HAL_TRACE(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD from LONGPRESS ***");
+        } else if (HAL_KEY_EVENT_DOWN == key_status.event) {
+           // TR_WARN(0, "*** WARNING:HAL_KEY_EVENT_CLICK and HOLD %d %d***", key_status.cnt_click, key_status.cnt_has_click_up);
+        	if (((time - key_status.time_updown) >= KEY_HOLD_THRESHOLD) && (0 <  key_status.cnt_has_click_up))
         	{
                 key_status.event = HAL_KEY_EVENT_DOUBLE_AND_HOLD;
                 send_key_event(key_status.code_ready, key_status.event);
                 HAL_TRACE(0, "*** WARNING:HAL_KEY_EVENT_DOUBLE_AND_HOLD ***");
         	}
-        	else
-
-        	if (time - key_status.time_updown >= KEY_LONGPRESS_THRESHOLD) {
-                key_status.cnt_repeat = 0;
-                key_status.event = HAL_KEY_EVENT_LONGPRESS;
-                send_key_event(key_status.code_ready, key_status.event);
+        	else if(key_status.event != HAL_KEY_EVENT_DOUBLE_AND_HOLD)
+        	{
+                if (time - key_status.time_updown >= KEY_LONGPRESS_THRESHOLD) {
+                    key_status.cnt_repeat = 0;
+                    key_status.event = HAL_KEY_EVENT_LONGPRESS;
+                    send_key_event(key_status.code_ready, key_status.event);
+                }
             }
 
         } else if (key_status.event == HAL_KEY_EVENT_LONGPRESS || key_status.event == HAL_KEY_EVENT_LONGLONGPRESS) {

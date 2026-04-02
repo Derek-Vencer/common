@@ -110,4 +110,8 @@ ccflags-y += \
 	-Iutils/string \
 	-Iservices/ai_voice/protocol/bixbyvoice \
 	-Iservices/ai_voice/protocol/bixbyvoice/bixbyvoice_manager \
-	-Iservices/bt_watch_service/inc
+	-Iservices/bt_watch_service/inc \
+	-Ibthost/adapter/inc \
+	-Ibthost/adapter/inc/ble/common/ \
+	
+	

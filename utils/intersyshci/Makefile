@@ -22,8 +22,9 @@ endif
 
 CFLAGS_intersyshci.o += -DBESLIB_INFO=$(BESLIB_INFO)
 root_dir := $(abspath $(dir $(realpath $(firstword $(MAKEFILE_LIST))))/..)
-include $(root_dir)/config/lib.mk
-
+#include $(root_dir)/config/lib.mk
+$(info root_dir $(root_dir))
+include config/lib.mk
 $(GEN_LIB_NAME)-y := $(src_obj)
 obj-y += $(GEN_LIB_NAME).a
 ccflags-y := \

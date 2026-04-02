@@ -6571,6 +6571,11 @@ KBUILD_CPPFLAGS += -DAOS_FS_ENABLE -Iservices/fs
 core-y += services/fs/
 endif
 
+ifneq ($(CHIP_SIMULATOR), 1)
+$(warning CHIP_SIMULATOR)
+#core-y +=utils/hwtimer_list/
+endif
+
 $(info ----------common.mk in flash---------------------)
 $(info FLASH_REMAP: $(FLASH_REMAP))
 $(info NEW_IMAGE_FLASH_OFFSET: $(NEW_IMAGE_FLASH_OFFSET))

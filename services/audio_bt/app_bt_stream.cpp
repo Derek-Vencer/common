@@ -8205,8 +8205,13 @@ static uint8_t app_bt_stream_volumeup_generic(bool isToUpdateLocalVolumeLevel)
             }
         }
     }
+//fixed default adjust a2dp volume
+#if 0
     else if ((app_bt_stream_isrun(APP_BT_STREAM_A2DP_SBC)) ||
         (app_bt_stream_isrun(APP_BT_STREAM_INVALID)))
+#else
+    else
+#endif
     {
         AUD_ID_ENUM prompt_id = AUD_ID_INVALID;
         uint8_t a2dp_local_vol = 0;
@@ -8216,7 +8221,20 @@ static uint8_t app_bt_stream_volumeup_generic(bool isToUpdateLocalVolumeLevel)
         if (!curr_device)
         {
             AUDIO_BT_TRACE(2, "%s invalid sbc id %x", __func__, bt_media_current_music_get());
-            return BT_DEVICE_INVALID_ID;
+            int i;
+            for ( i= 0; i < BT_DEVICE_NUM; i++)
+            {
+            	if(app_bt_is_a2dp_connected(i))
+            	{
+            		curr_device = app_bt_get_device(i);
+            		break;
+            	}
+            }
+            if( i >= BT_DEVICE_NUM || !curr_device)
+            {
+            	AUDIO_BT_TRACE(2, "%s invalid sbc id more a2dp connected %x", __func__, bt_media_current_music_get());
+                return BT_DEVICE_INVALID_ID;
+            }
         }
 
         AUDIO_BT_TRACE(1, "%s set a2dp volume", __func__);

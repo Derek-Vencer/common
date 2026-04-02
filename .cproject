@@ -20,7 +20,7 @@
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.955122743" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix"/>
 							<option id="cdt.managedbuild.option.gnu.cross.path.235014868" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.1910604322" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
-							<builder id="cdt.managedbuild.builder.gnu.cross.824059733" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.builder.gnu.cross">
+							<builder arguments="V=1" cleanBuildTarget="T=best1306p clean" id="cdt.managedbuild.builder.gnu.cross.824059733" incrementalBuildTarget="T=best1306p all lst" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.builder.gnu.cross">
 								<outputEntries>
 									<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="outputPath" name=""/>
 								</outputEntries>
@@ -117,6 +117,17 @@
 									<listOptionValue builtIn="false" value="SPEECH_TX_AEC_CODEC_REF=1"/>
 									<listOptionValue builtIn="false" value="SPP_EQ_TUNING=1"/>
 									<listOptionValue builtIn="false" value="BT_SPP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="FORCE_SIGNALINGMODE=0"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_MULTI_VOLUME_TABLE=1"/>
+									<listOptionValue builtIn="false" value="__HOST_GEN_ECDH_KEY__=1"/>
+									<listOptionValue builtIn="false" value="SYSFREQ_STATS=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_SLEEP_USER=1"/>
+									<listOptionValue builtIn="false" value="WAKEUP_SRC_STATS=1"/>
+									<listOptionValue builtIn="false" value="CACHE_STATS=1"/>
+									<listOptionValue builtIn="false" value="BT_DONT_PLAY_MUTE_WHEN_A2DP_STUCK_PATCH=1"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.179547202" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;D:\BES2700\Tools\GCC\gcc-arm-none-eabi-9-2019-q4-major-win32\arm-none-eabi\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -212,6 +223,18 @@
 									<listOptionValue builtIn="false" value="SPEECH_TX_AEC_CODEC_REF=1"/>
 									<listOptionValue builtIn="false" value="SPP_EQ_TUNING=1"/>
 									<listOptionValue builtIn="false" value="BT_SPP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="FORCE_SIGNALINGMODE=0"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_MULTI_VOLUME_TABLE=1"/>
+									<listOptionValue builtIn="false" value="__HOST_GEN_ECDH_KEY__=1"/>
+									<listOptionValue builtIn="false" value="SYSFREQ_STATS=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_SLEEP_USER=1"/>
+									<listOptionValue builtIn="false" value="WAKEUP_SRC_STATS=1"/>
+									<listOptionValue builtIn="false" value="CACHE_STATS=1"/>
+									<listOptionValue builtIn="false" value="A2DP_AAC_ON=1"/>
+									<listOptionValue builtIn="false" value="BT_DONT_PLAY_MUTE_WHEN_A2DP_STUCK_PATCH=1"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.include.paths.112373007" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;D:\BES2700\Tools\GCC\gcc-arm-none-eabi-9-2019-q4-major-win32\arm-none-eabi\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -224,6 +247,9 @@
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cross.archiver.196584908" name="Cross GCC Archiver" superClass="cdt.managedbuild.tool.gnu.cross.archiver"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.assembler.1562989966" name="Cross GCC Assembler" superClass="cdt.managedbuild.tool.gnu.cross.assembler">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.both.asm.option.include.paths.1172469953" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;D:\BES2700\Tools\GCC\gcc-arm-none-eabi-9-2019-q4-major-win32\arm-none-eabi\include&quot;"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.892755794" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
 						</toolChain>

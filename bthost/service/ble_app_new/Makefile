@@ -101,6 +101,9 @@ subdir-ccflags-y += \
     -Imesh/stack \
     -Iplatform/drivers/ana/best1700 \
     -Iservices/nv_section/factory_section \
+    -Ibthost/adapter/inc/ble/common \
+    
+    
     
 
 ifeq ($(CONFIG_BT_MESH_USES_EXTERNAL_PSA),1)

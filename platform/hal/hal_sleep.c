@@ -587,8 +587,11 @@ enum HAL_SLEEP_STATUS_T SRAM_TEXT_LOC NOINLINE USED hal_sleep_proc(int light_sle
         if (hal_sleep_exec_sleep_hook()) {
             goto _exit_sleep;
         }
+        
+        dma_busy = hal_dma_busy();
+        (void)dma_busy;
 
-        if (sys_wake_lock_map || hal_sysfreq_busy() || (dma_busy = hal_dma_busy())) {
+        if (sys_wake_lock_map || hal_sysfreq_busy() || dma_busy) {
             // Light sleep
 
             if (stats_started) {
@@ -698,6 +701,7 @@ _exit_sleep:
                 uictl.usage_ap = 100 - (light_sleep_ratio + sys_deep_sleep_ratio + chip_deep_sleep_ratio);
 #endif
 #ifdef DEBUG_SLEEP_USER
+//#error "DEBUG_SLEEP_USER is only for debug, please check if this macro is defined in release build by mistake"
                 HAL_TRACE(0, "SLEEP USER: cpu=0x%X sys=0x%X chip=0x%X irq=0x%08X_%08X",
                     cpu_wake_lock_map, sys_wake_lock_map, chip_wake_lock_map,
                     (NVIC->ICPR[1] & NVIC->ISER[1]), (NVIC->ICPR[0] & NVIC->ISER[0]));
@@ -786,6 +790,7 @@ enum HAL_SLEEP_STATUS_T SRAM_TEXT_LOC hal_sleep_light_sleep(void)
     ret = HAL_SLEEP_STATUS_LIGHT;
 
 #ifdef NO_SLEEP
+#warning NO_SLEEP
     return ret;
 #endif
 

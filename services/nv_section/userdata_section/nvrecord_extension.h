@@ -351,6 +351,8 @@ struct nvrecord_env_t {
     uint8_t peer_bleaddr_flag;
     uint8_t peer_bleaddr[6];
 #endif
+    //fixed storage for box version
+    uint8_t chargerBoxVersion[16+1];
 //----------------------------------------------------------------------------------------------
 };
 

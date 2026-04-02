@@ -113,6 +113,10 @@ static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
 
 extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *fw_rev_2, uint8_t *fw_rev_3);
 
+
+// #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
+#define  DISPLAY_EARBUDS_VERSION    "01.01.00.04"
+
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
 
@@ -164,8 +168,12 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 		memcpy(nameBuffer, &data[1], len);
 		if( factory_section_set_bt_name(nameBuffer, len+1))
 		{
-			TRACE(0,"%s error", __func__);
+			TRACE(0,"%s set bt name error", __func__);
 		}
+		// if( factory_section_set_ble_name((const char*)nameBuffer,len+1))
+		// {
+		// 	TRACE(0,"%s set ble name error", __func__);
+		// }
 	}
 	sparraw_tx_msg(RSP_SET_DEVICE_NAME, (const uint8_t*)"", 0);
 }
@@ -195,14 +203,39 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 	sparraw_tx_msg(RSP_GET_EQ_PRESET, (const uint8_t*)"", 0);
 }
 
-//MM.NN.RR.AA
+void aiWangSetBoxVersion(uint8_t *data, uint8_t len)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+    len  = len >16?16:len;
+    if(memcmp(nvrecord_env->chargerBoxVersion, data, len))
+    {
+		memset(&nvrecord_env->chargerBoxVersion[0], 0, 16+1);
+	 	memcpy(&nvrecord_env->chargerBoxVersion[0], data, len);
+		TRACE(0, "set box version:%s", nvrecord_env->chargerBoxVersion);
+		nv_record_env_set(nvrecord_env);
+    }
+}
+
+void aiWangGetChargerBoxVersion(uint8_t *data)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+    memcpy(data, &nvrecord_env->chargerBoxVersion[0], 16);
+}
+
+//MM.NN.RR.AA Earbuds version format, MM: major version, NN: minor version, RR: revision version, AA: additional info
+//MM.NN.RR.AA     Box version format, MM: major version, NN: minor version, RR: revision version, AA: additional info
+
 void handleGetFwVersion(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
-	//uint8_t version[12] = {'0','1','0','6'};
+	uint8_t version[11+11+1] = {0};
 	//system_get_info(&version[0], &version[1], &version[2], &version[4]);
-	const uint8_t *version = (const uint8_t *)"01.01.00.02";
-	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)version, 4);
+	//const uint8_t *version = (const uint8_t *)"01.01.00.03";
+	memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
+	aiWangGetChargerBoxVersion(&version[11]);
+	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)version, 23);
 }
 
 void handleFactoryCmdSys(const uint8_t *data, uint16_t len)

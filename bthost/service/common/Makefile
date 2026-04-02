@@ -274,43 +274,53 @@ CFLAGS_app_bt_stream.o += -DMUSIC_DELAY_CONTROL
 endif
 
 ifeq ($(A2DP_EQ_24BIT),1)
+$(info A2DP_EQ_24BIT)
 CFLAGS_app_bt_stream.o += -DA2DP_EQ_24BIT
 CFLAGS_app_ring_merge.o += -DA2DP_EQ_24BIT
 endif
 
 ifeq ($(APP_MUSIC_26M),1)
+$(info APP_MUSIC_26M)
 CFLAGS_app_bt_stream.o += -DAPP_MUSIC_26M
 endif
 
 ifeq ($(AUDIO_DRC),1)
+$(warning AUDIO_DRC)
 ccflags-y += -D__AUDIO_DRC__
 endif
 
 ifeq ($(AUDIO_LIMITER),1)
+$(info AUDIO_LIMITER)
 ccflags-y += -D__AUDIO_LIMITER__
 endif
 
 ifeq ($(SPEECH_TX_AEC_CODEC_REF),1)
+$(info SPEECH_TX_AEC_CODEC_REF)
 CFLAGS_app_bt_stream.o += -DSPEECH_TX_AEC_CODEC_REF
 endif
 
 ifeq ($(SPEECH_RX_24BIT),1)
+$(info SPEECH_RX_24BIT)
 CFLAGS_app_bt_stream.o += -DSPEECH_RX_24BIT
 endif
 
 ifeq ($(ANC_NOISE_TRACKER),1)
+$(info ANC_NOISE_TRACKER)
 CFLAGS_app_bt_stream.o += -DANC_NOISE_TRACKER
 endif
 
 ifeq ($(HFP_DISABLE_NREC),1)
+$(info HFP_DISABLE_NREC)
 CFLAGS_app_hfp.o += -DHFP_DISABLE_NREC
 endif
 
 ifeq ($(MEDIA_PLAY_24BIT),1)
+$(info MEDIA_PLAY_24BIT)
 CFLAGS_app_media_player.o += -DMEDIA_PLAY_24BIT
 endif
 
 ifeq ($(BT_TEST_CURRENT_KEY),1)
+$(info BT_TEST_CURRENT_KEY)
 CFLAGS_app_keyhandle.o += -DBT_TEST_CURRENT_KEY
 endif
 

@@ -1992,6 +1992,28 @@ void app_default_mode_init()
     }
 }
 
+/**
+ * @brief Initialize the Bluetooth application based on the configured application mode.
+ * 
+ * This function initializes various Bluetooth-related modules and services based on the
+ * device's application mode (retrieved from non-volatile memory). It performs the following:
+ * 
+ * - Retrieves the current application mode from NV record
+ * - Handles mode override for specific product configurations (DONGLE, WIRELESS_MIC)
+ * - Initializes Bluetooth service with the determined mode
+ * - Initializes mode-specific modules (e.g., Walkie Talkie for NV_APP_WALKIE_TALKIE mode)
+ * - Initializes optional features (BIS self-scan, wireless microphone, etc.) if enabled
+ * - Sets system frequency to 32KHz for the APP_SYSFREQ_USER_APP_4 domain
+ * 
+ * @return int Returns 0 on successful initialization.
+ * 
+ * @note This function should be called during application startup to configure
+ *       all Bluetooth-related functionality.
+ * 
+ * @see nv_record_appmode_get()
+ * @see bt_service_init()
+ * @see hal_sysfreq_req()
+ */
 int app_bluetooth_application_init()
 {
     nvrec_appmode_e mode = nv_record_appmode_get();
@@ -2177,7 +2199,7 @@ int app_init(void)
 
     int nRet = 0;
     struct nvrecord_env_t *nvrecord_env;
-#if defined(IGNORE_POWER_ON_KEY_DURING_BOOT_UP) || defined(BESUI_TWS_EN)
+#if defined(IGNORE_POWER_ON_KEY_DURING_BOOT_UP) || defined(BESUI_TWS_EN) || defined(FORCE_NOSIGNALINGMODE) || defined(FORCE_NOSIGNALINGMODE)
     MAIN_TRACE(0,"IGNORE_POWER_ON_KEY_DURING_BOOT_UP ........");
     bool need_check_key = false;
 #else

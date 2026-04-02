@@ -331,6 +331,14 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 //communication_send_buf(testData, 7);
                 sparraw_tx_key_click_notify_msg(KEY_CLICK);
                 bt_key_handle_bt_func_click();
+                
+                //fixed added one click connect mode, only for test, need to confirm if this mode is needed in the future
+                conn_devices = app_bt_count_connected_device();
+                if (conn_devices <= 0)
+                {
+                   app_bt_profile_connect_manager_opening_reconnect();   
+                }
+         
             }
             break;
 

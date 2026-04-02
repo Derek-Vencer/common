@@ -150,6 +150,7 @@ const struct CODEC_DAC_VOL_T codec_dac_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, 0}, // 0dBm
 };
 
+#if 0
 const struct CODEC_DAC_VOL_T codec_dac_a2dp_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, -99},
     {TX_PA_GAIN, 0x03, -45},
@@ -169,6 +170,30 @@ const struct CODEC_DAC_VOL_T codec_dac_a2dp_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, -3},
     {TX_PA_GAIN, 0x03, 0}, // 0dBm
 };
+#else
+//added for decrease 2Db
+//20260319
+const struct CODEC_DAC_VOL_T codec_dac_a2dp_vol[TGT_VOLUME_LEVEL_QTY] = {
+	{TX_PA_GAIN, 0x03, -99},
+    {TX_PA_GAIN, 0x03, -47},
+    {TX_PA_GAIN, 0x03, -44},
+    {TX_PA_GAIN, 0x03, -41},
+    {TX_PA_GAIN, 0x03, -38},
+    {TX_PA_GAIN, 0x03, -35},
+    {TX_PA_GAIN, 0x03, -32},
+    {TX_PA_GAIN, 0x03, -29},
+    {TX_PA_GAIN, 0x03, -26},
+    {TX_PA_GAIN, 0x03, -23},
+    {TX_PA_GAIN, 0x03, -20},
+    {TX_PA_GAIN, 0x03, -17},
+    {TX_PA_GAIN, 0x03, -14},
+    {TX_PA_GAIN, 0x03, -11},
+    {TX_PA_GAIN, 0x03, -8},
+    {TX_PA_GAIN, 0x03, -5},
+    {TX_PA_GAIN, 0x03, -2},
+};
+
+#endif
 
 const struct CODEC_DAC_VOL_T codec_dac_hfp_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, -99},

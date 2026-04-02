@@ -215,6 +215,7 @@ static void app_bt_disconnected_keepAlinve_timeouthandler(void const *param)
     int activeCons = 0;
     int activeSourceCons = 0;
     activeCons = app_bt_get_active_cons();
+    (void)activeCons;
     uint8_t active_cons_phone = app_bt_count_mobile_link();
     activeSourceCons = btif_me_get_source_activeCons();
     DEBUG_INFO(0,"%s activeCons==%d activeSourceCons=%d %d\n", __func__, activeCons, activeSourceCons, active_cons_phone);
@@ -706,7 +707,7 @@ uint8_t app_bt_a2dp_adjust_volume(uint8_t device_id, bool up, bool adjust_local_
 {
     AUD_ID_ENUM prompt_id = AUD_ID_INVALID;
     uint8_t a2dp_local_vol = a2dp_volume_local_get(device_id);
-
+    DEBUG_INFO(3, "%s %d %d up=%d %d",  __func__, device_id, a2dp_local_vol, up, adjust_local_vol_level);
     if (up)
     {
         if(adjust_local_vol_level)
@@ -4045,7 +4046,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
         //Only connect last devices,so comment it
         //fixed 20250308
-#if 1
+#if 0
 #ifdef BT_SOURCE
         if(ret > 1 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1)
 #else
@@ -4059,7 +4060,6 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #endif
         }
 #endif
-
         app_bt_start_poweron_reconnect();
 #endif
     }

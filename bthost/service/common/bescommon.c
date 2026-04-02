@@ -116,7 +116,7 @@ void bt_generate_ecdh_key_pair(void)
 {
 #if defined(__HOST_GEN_ECDH_KEY__)
     POSSIBLY_UNUSED uint32_t time_start = hal_sys_timer_get();
-
+//#error bt_generate_ecdh_key_pair __HOST_GEN_FULL_ECDH_KEY__
     btif_ecc_gen_new_secret_key_192((uint8_t *)lm_priv_key_192);
     btif_ecc_gen_new_public_key_192((uint8_t *)lm_priv_key_192,(uint8_t *)lm_pub_key_192);
     bt_drv_reg_op_write_private_public_key((uint8_t *)lm_priv_key_192,(uint8_t *)lm_pub_key_192);

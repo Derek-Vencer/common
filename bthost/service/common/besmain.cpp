@@ -815,6 +815,7 @@ void bt_host_ready(uint8_t ready_flag)
 #endif
 
 #ifdef __HOST_GEN_FULL_ECDH_KEY__
+#error __HOST_GEN_FULL_ECDH_KEY__
     bt_generate_full_ecdh_key_pair();
     bt_apply_full_ecdh_key_pair();
 #else
