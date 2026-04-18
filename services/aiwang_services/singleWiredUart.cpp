@@ -118,11 +118,14 @@ typedef struct {
 	uint8_t boxLidsStates;
 	uint8_t boxSoftVersion[16+1];
 	uint8_t boxIsOpen;
+    bool    needOpenEarbuds;
 } BOX_STATUS;
 
 extern void app_tws_ibrt_update_info(ibrt_role_e ibrtRole,bt_bdaddr_t *ibrtPeerAddr);
 
 extern void aiWangSetBoxVersion(uint8_t *data, uint8_t len);
+
+extern void earBudsCloseOff_PogonIn_StartTimer(void);
 
 #define LEFT_BUDS  0
 #define RIGHT_BUDS 1
@@ -180,6 +183,7 @@ uint8_t crc8(const uint8_t *data, uint32_t length)
     return crc;
 }
 
+
 static void wired_uart_get_battery_level(void)
 {
     uint8_t buff[4] = {0};
@@ -189,6 +193,7 @@ static void wired_uart_get_battery_level(void)
     buff[3] = crc8(buff,3);
     communication_send_buf(buff, 4);
 }
+
 
 static void wired_uart_get_ear_addr_handle(void)
 {
@@ -281,6 +286,11 @@ uint8_t getBoxChargerBattery(void)
 {
 	if(!boxChargerStatus.getBatteryOK) return 0xff;
 	return boxChargerStatus.boxChargerBattery ;
+}
+
+bool  aiWangIsNeedOpenEarBuds(void)
+{
+    return boxChargerStatus.needOpenEarbuds;
 }
 
 uint8_t getPeerBattery(void)
@@ -507,18 +517,21 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_POWER_OFF:	         //Headphones enter shipping
         {
         	boxChargerStatus.boxIsOpen = false;
+            boxChargerStatus.needOpenEarbuds = false;
             app_shutdown();
         }
     	break;
     case CMD_OPEN_CASE:
         {
         	printf("CMD_OPEN_CASE!!!");
+            boxChargerStatus.boxIsOpen = true;
+            boxChargerStatus.needOpenEarbuds = true;
         	wired_uart_get_battery_level();
-        	osDelay(30);
+        	osDelay(10);
             //hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
             //hal_sw_bootmode_set(HAL_SW_BOOTMODE_SINGLE_LINE_DOWNLOAD);
-            //pmu_reboot();
-        	app_reset();
+            pmu_reboot();
+        	//app_reset();
         }
     	break;
     case CMD_CLOSE_CASE:
@@ -549,16 +562,29 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 #endif //IBRT
 #endif //BLE_ONLY_ENABLED
           }
-            osDelay(30);
-            app_shutdown();
+          osDelay(30);
+          
+          boxChargerStatus.needOpenEarbuds = false;
+          earBudsCloseOff_PogonIn_StartTimer();
+          //app_shutdown();
         }
     	break;
     case CMD_EAR_RESET: //fatory
         {
         	//aiWang_remove_all_paired_list();  // Removed: deletes ALL pairings including TWS
-            bes_ble_gap_disconnect_all();
+        	printf("CMD_EAR_RESET factory resett!!!");
             LinkDisconnectDirectly(true);
         	wired_uart_remove_all_phone_paired_list();  // Keep: only deletes phone pairings, preserves TWS
+        	if (bts_tws_if_is_tws_link_connected())
+        	{
+        		uint8_t cmd_sync_clear_pairlist[2];
+        	    cmd_sync_clear_pairlist[0] = 0;
+        	    cmd_sync_clear_pairlist[1] = 1;
+        		tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_clear_pairlist, 2);
+        	}
+            bes_ble_gap_disconnect_all();
+            bes_ble_gap_clear_white_list_for_mobile();
+            osDelay(10);
         	app_reset();
         }
     	break;
@@ -636,6 +662,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_SEND_EAR_PUTIN:
 	  {
 		  DBGPRINT("CMD_SEND_EAR_PUTIN");
+          boxChargerStatus.needOpenEarbuds = true;
 		  wired_uart_send_cmd_ack_ok();
 		  disconnected_device(true, BT_DEVICE_ID_1);
 	  }

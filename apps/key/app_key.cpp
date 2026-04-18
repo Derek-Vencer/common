@@ -133,7 +133,7 @@ int app_key_handle_registration(const APP_KEY_HANDLE *key_handle)
 //    	KEY_TRACE(0,"%s not key_handle",__func__);
         return -1;
     }
-    KEY_TRACE(5,"%s set handle:%p code:%d event:%d function:%p",__func__,dest_key_handle, key_handle->key_status.code, key_handle->key_status.event, key_handle->function);
+//    KEY_TRACE(5,"%s set handle:%p code:%d event:%d function:%p",__func__,dest_key_handle, key_handle->key_status.code, key_handle->key_status.event, key_handle->function);
     dest_key_handle->key_status.code = key_handle->key_status.code;
     dest_key_handle->key_status.event = key_handle->key_status.event;
     dest_key_handle->string = key_handle->string;

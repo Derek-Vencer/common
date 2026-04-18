@@ -103,7 +103,7 @@ typedef struct
 
 static FIRMWARE_REV_INFO_T fwRevInfoInFlash __attribute((section(".fw_rev"))) = {0, SOFT_H, SOFT_M, SOFT_L};
 #else
-static FIRMWARE_REV_INFO_T fwRevInfoInFlash __attribute((section(".fw_rev"))) = {'0', '3', '3', '0'};
+static FIRMWARE_REV_INFO_T fwRevInfoInFlash __attribute((section(".fw_rev"))) = {'0', '4', '0', '3'};
 #endif
 FIRMWARE_REV_INFO_T fwRevInfoInRam;
 

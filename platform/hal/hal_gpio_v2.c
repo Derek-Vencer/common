@@ -870,7 +870,7 @@ uint32_t hal_gpio_setup_irq(enum HAL_GPIO_PIN_T pin, const struct HAL_GPIO_IRQ_C
 #endif
 
     if (cfg->irq_enable) {
-        FS_TRACE_IMM(0,"irq_polarity:%d,HAL_GPIO_IRQ_POLARITY_EDGE_BOTH:%d",cfg->irq_polarity,HAL_GPIO_IRQ_POLARITY_EDGE_BOTH);
+        FS_TRACE_IMM(0,"irq_polarity:%d,HAL_GPIO_IRQ_POLARITY_EDGE_BOTH:%d pin:%d",cfg->irq_polarity,HAL_GPIO_IRQ_POLARITY_EDGE_BOTH, pin);
 #ifndef GPIO_BOTH_EDGE_IRQ
         ASSERT(cfg->irq_polarity != HAL_GPIO_IRQ_POLARITY_EDGE_BOTH,\
             "%s: Not support edge both: pin=%u", __func__, pin);

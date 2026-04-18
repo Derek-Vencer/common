@@ -454,6 +454,9 @@ export SPP_EQ_TUNING := 1
 
 ##enable will crash when play music
 export SW_IIR_EQ_PROCESS := 0
+
+export  TRACE_CRLF       := 1
+
 export TOTA_v2           := 1
 
 

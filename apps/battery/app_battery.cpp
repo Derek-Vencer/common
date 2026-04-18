@@ -216,6 +216,34 @@ osTimerDef (APP_BATTERY, app_battery_timer_handler);
 static osTimerId app_battery_timer = NULL;
 static struct APP_BATTERY_MEASURE_T app_battery_measure;
 
+//fixed wrong close the earBuds,when charger open
+static void earBudsCloseOff_PogonIn_handler(void const *param);
+osTimerDef (POGONIN_CLOSE_TIMER, earBudsCloseOff_PogonIn_handler);
+static osTimerId pogonPinCloseTimer = NULL;
+extern bool  aiWangIsNeedOpenEarBuds(void);
+
+static void earBudsCloseOff_PogonIn_handler(void const *param)
+{
+    (void)param;
+    bool isNeedOpen;
+    isNeedOpen = aiWangIsNeedOpenEarBuds();
+    BATTERY_TRACE(2,"%s power off as pogonPin In isNeedOpen=%d", __func__, isNeedOpen);
+    if(!isNeedOpen) {
+        app_shutdown();
+    }
+}
+
+void earBudsCloseOff_PogonIn_StartTimer(void)
+{
+    if (NULL == pogonPinCloseTimer)
+    {
+        pogonPinCloseTimer = osTimerCreate (osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
+    }
+    osTimerStop(pogonPinCloseTimer);
+    osTimerStart(pogonPinCloseTimer, 1600);
+}
+//-------------------------------------------------------------------------------------------
+
 
 extern "C" void aw_ntc_detect_process(uint16_t ad_volt);
 
@@ -540,7 +568,10 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #else
-                app_shutdown();
+                //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
+                //20260402
+                //app_shutdown();
+                earBudsCloseOff_PogonIn_StartTimer();
 #if CHARGER_PLUGINOUT_RESET
                 //app_reset();
 #else
@@ -603,7 +634,10 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
 #endif
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 osTimerStop(app_battery_timer);
-                app_shutdown();
+                //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
+                //20260402
+                //app_shutdown();
+                earBudsCloseOff_PogonIn_StartTimer();
             }
             break;
         case APP_BATTERY_STATUS_INVALID:
