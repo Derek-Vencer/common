@@ -135,6 +135,7 @@ static uint8_t  wiredUartInitFlag  = FALSE;
 static uint8_t  wiredUartReceiveData[MAX_RX_SIZE];
 static BOX_STATUS  boxChargerStatus  ;
 
+
 static const uint8_t crc8_table[256] =
 {
 	0x00,0x07,0x0E,0x09,0x1C,0x1B,0x12,0x15,

@@ -42,20 +42,25 @@
 
 //Charge Box unit:mv
 const uint16_t ntc_temp_tab[]={
-	  400,//439,//400,  //45°
+	  919,//400,//439,//400,  //45°
 	  620,  //41°
 	  1040, //4°
-	  1100,//1050,//1000//,1080  //1100  //0°
+	  1067 //1100,//1050,//1000//,1080  //1100  //0°
 };
 
 osTimerId aw_ntc_open_process_timer = NULL;
 static void aw_ntc_detect_timehandler(void const *param);
+static bool ntc_init_start = false;
 
 osTimerDef (AW_NTC_TIMER_NAME, (void (*)(void const *))aw_ntc_detect_timehandler);
 
-static void aw_ntc_detect_volt_timer_onoff(bool timer_en)
+void aw_ntc_detect_volt_timer_onoff(bool timer_en)
 {
 	DBGPRINT("%s timer_en %d ", __func__, timer_en);
+    if(ntc_init_start == false)
+	{
+		return;
+	}
 
 	if(aw_ntc_open_process_timer == NULL)
 	{
@@ -87,6 +92,7 @@ void aw_ntc_detect_init(void)
     };
     hal_iomux_init(pinmux_ntc, ARRAY_SIZE(pinmux_ntc));
     ntc_capture_open();
+	ntc_init_start = true;
     aw_ntc_detect_volt_timer_onoff(true);
 }
 
@@ -102,9 +108,9 @@ void aw_ntc_detect_process(uint16_t ad_volt)
     static bool ntc_start_process = false;
 
    if (ad_volt <= ntc_temp_tab[0]) {
-	   ntc_current_type = NTC_TEMPERATURE_45;
-   } else if (ad_volt >= ntc_temp_tab[3]) {
 	   ntc_current_type = NTC_TEMPERATURE_00;
+   } else if (ad_volt >= ntc_temp_tab[3]) {
+	   ntc_current_type = NTC_TEMPERATURE_45;
    } else {
 	   ntc_current_type = NTC_TEMPERATURE_VALID;
    }

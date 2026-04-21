@@ -14,7 +14,7 @@ extern "C" {
 
 void aw_ntc_detect_init(void);
 void aw_ntc_detect_process(uint16_t ad_volt);
-
+void aw_ntc_detect_volt_timer_onoff(bool timer_en);
 #ifdef __cplusplus
 }
 #endif

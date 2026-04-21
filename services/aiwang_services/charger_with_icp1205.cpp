@@ -52,7 +52,7 @@
 
 static osThreadId charger_manager_thread_id = NULL;
 static void charger_manager_handler_thread(const void *arg);
-osThreadExDef(charger_manager_handler_thread, osPriorityAboveNormal, 1, 1024*3, "charger_manager_thread", 1U);
+osThreadExDef(charger_manager_handler_thread, osPriorityNormal, 1, 1024*3, "charger_manager_thread", 1U);
 
 
 static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin);
@@ -901,6 +901,6 @@ static void charger_manager_handler_thread(const void *arg)
 void charger_manager_start(void)
 {
 	DBGPRINT("%s", __func__);
-	aw_ntc_detect_init();
+//	aw_ntc_detect_init();
 	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
 }

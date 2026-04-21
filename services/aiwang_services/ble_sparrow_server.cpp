@@ -77,7 +77,7 @@ typedef struct
 static SPARRAW_ENV_T app_sparraw_env;
 //static uint8_t sparraw_tx_buf[SPARRAW_EVENT_BUF_SIZE] = {0};
 //static CQueue  sparraw_rx_cqueue;
-static uint8_t mailbox_cnt = 0;
+static uint8_t ble_sparrow_task_init = false;
 
 typedef enum {
 	RX_IDLE     = 0,
@@ -307,8 +307,8 @@ void aiWangSetSn(uint8_t *data, uint8_t len){
 
     struct nvrecord_env_t *nvrecord_env;
     nv_record_env_get(&nvrecord_env);
-    nvrecord_env->sn_len = len;
-    for(int i = 0; i < len; i++)
+    nvrecord_env->sn_len = (len > 12?12:len);
+    for(int i = 0; i < nvrecord_env->sn_len ; i++)
     {
         nvrecord_env->sn_data[i] = data[i];
     }
@@ -421,7 +421,6 @@ static void sparraw_ble_init(void)
 {
     memset((uint8_t *)&app_sparraw_env, 0, sizeof(app_sparraw_env));
     app_sparraw_env.conidx = 0xff;
-    mailbox_cnt = 0;
     app_sparraw_env.notifyEnable = false;
 }
 
@@ -429,7 +428,7 @@ static int32_t sparraw_event_mailbox_init(void)
 {
     sparraw_event_mailbox_id = osMailCreate(osMailQ(sparraw_event_mailbox_id), NULL);
     if (sparraw_event_mailbox_id == NULL) {
-        OTA_TRACE(0, "Failed to Create app_ota_event_mailbox");
+        OTA_TRACE(0, "Failed to Create sparraw event mailbox");
         return -1;
     }
     return 0;
@@ -438,32 +437,35 @@ static int32_t sparraw_event_mailbox_init(void)
 static osStatus sparraw_event_mailbox_free(SPARRAW_MESSAGE_BLOCK* rx_event)
 {
     osStatus status;
+    if (sparraw_event_mailbox_id == NULL || rx_event == NULL) {
+        return osErrorParameter;
+    }
     status = osMailFree(sparraw_event_mailbox_id, rx_event);
     ASSERT(osOK == status, "Free sparraw rx event mailbox failed!");
-    if(mailbox_cnt > 0) mailbox_cnt--;
     return status;
 }
 
 int sparraw_event_mailbox_free_all(void)
 {
-	SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
+    SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
     int status = osOK;
     osEvent evt;
-    for (uint8_t i = 0; i< mailbox_cnt; i++)
-    {
+
+    if (sparraw_event_mailbox_id == NULL) {
+        return osErrorParameter;
+    }
+
+    while (osMailGetCount(sparraw_event_mailbox_id) > 0) {
         evt = osMailGet(sparraw_event_mailbox_id, 500);
-        if (evt.status == osEventMail)
-        {
+        if (evt.status == osEventMail) {
             msg_p = (SPARRAW_MESSAGE_BLOCK *)evt.value.p;
             status = sparraw_event_mailbox_free(msg_p);
-        }
-        else
-        {
+        } else {
             GFPS_TRACE(1, "%s get mailbox timeout!!!", __func__);
-            continue;
+            break;
         }
-   }
-   return status;
+    }
+    return status;
 }
 
 static int32_t sparraw_event_mailbox_get(SPARRAW_MESSAGE_BLOCK** rx_event)
@@ -472,27 +474,25 @@ static int32_t sparraw_event_mailbox_get(SPARRAW_MESSAGE_BLOCK** rx_event)
     evt = osMailGet(sparraw_event_mailbox_id, osWaitForever);
     if (evt.status == osEventMail) {
         *rx_event = (SPARRAW_MESSAGE_BLOCK *)evt.value.p;
-        // OTA_TRACE(0, "flag %d len %d", (*rx_event)->flag,(*rx_event)->len);
+        TRACE(0, "len %d", (*rx_event)->len);
         return 0;
     }
     return -1;
 }
 
-static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len) ;
-
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
 {
     osStatus status = osOK;
-    //SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
-    if (mailbox_cnt > SPARRAW_EVENT_MAX_MAILBOX) {
-    	TRACE(0, "%s mail overflow mailbox_cnt=%d", __func__, mailbox_cnt);
-    	return -1;
+    SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
+
+    if (sparraw_event_mailbox_id == NULL) {
+        return -1;
     }
-#if 0
+
     msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
     if (msg_p == NULL)
     {
-    	sparraw_event_mailbox_free_all();
+        sparraw_event_mailbox_free_all();
         msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
         ASSERT(msg_p, "sparraw_mailbox_put osMailAlloc error\r\n");
     }
@@ -508,13 +508,10 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
     status = osMailPut(sparraw_event_mailbox_id, msg_p);
     if (osOK != status)
     {
-        GFPS_TRACE(2,"%s error status 0x%02x", __func__, status);
+        TRACE(0,"%s error status 0x%02x", __func__, status);
+        osMailFree(sparraw_event_mailbox_id, msg_p);
         return (int)status;
     }
-    mailbox_cnt++;
-	#else
-	sparraw_rx_cmd_parse_v2(param, len);
-	#endif
     return (int)status;
 }
 
@@ -704,7 +701,7 @@ static void sparraw_event_handler_thread(void const *argument)
     {
         if (sparraw_event_mailbox_get(&rx_event))
         {
-            return;
+            continue;
         }
         //TRACE(2, "%s ", __func__);
         osMutexWait(app_sparraw_buf_lock, osWaitForever);
@@ -736,6 +733,7 @@ void sparraw_connected(uint8_t conidx, bool enableNotify)
     TRACE(0,"%s.", __func__);
     app_sparraw_env.conidx = conidx;
     app_sparraw_env.notifyEnable = enableNotify;
+	aw_ntc_detect_volt_timer_onoff(false);
 }
 
 void sparraw_disconnected(void)
@@ -744,6 +742,7 @@ void sparraw_disconnected(void)
 	sparraw_ble_init();
 	sparraw_event_mailbox_free_all();
 	sparraw_rx_cmd_init();
+	aw_ntc_detect_volt_timer_onoff(true);
 }
 
 void sparraw_mtu(uint16_t mtu)
@@ -754,7 +753,8 @@ void sparraw_mtu(uint16_t mtu)
 
 void sparraw_event_handle(ble_aiwang_param_u *param)
 {
-    ASSERT(param,"sparraw data is null.");
+    ASSERT(param,"sparraw data is null. ble_sparrow_task_init=%d", ble_sparrow_task_init);
+    TRACE(0,"[%s] ble_sparrow_task_init:%d",__func__, ble_sparrow_task_init);
     switch(param->event)
     {
 		case BLE_AIWANG_SRV_CONN:{
@@ -792,23 +792,29 @@ void sparraw_rx_thread_init(void)
 {
     TRACE(0,"[%s] %d ",__func__, sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0]));
     //InitCQueue(&sparraw_rx_cqueue, SPARRAW_EVENT_BUF_SIZE, ( CQItemType * )sparraw_tx_buf);
-    sparraw_event_mailbox_init();
+    if (sparraw_event_mailbox_init() != 0) {
+        TRACE(1, "Failed to initialize sparraw event mailbox\n");
+        return;
+    }
     app_sparraw_buf_lock = osMutexCreate(osMutex(app_sparraw_buf_lock));
     if (app_sparraw_buf_lock == NULL) {
-        TRACE(1, "Failed to Create ota buf lock\n");
+        TRACE(1, "Failed to Create app_sparraw_buf_lock\n");
         return;
     }
     sparrow_thread_id = osThreadCreate(osThread(sparraw_event_handler_thread), NULL);
-
 }
 
 void sparraw_service_init(void)
 {
 	TRACE(0,"[%s]",__func__);
 	// ble_aiwang_srv_init();
+	if (ble_sparrow_task_init) {
+		TRACE(0,"[%s] has init done!!\n",__func__);
+		return;
+	}
     sparraw_rx_thread_init();
 	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
-
+	ble_sparrow_task_init = true;
     //start charger_manager_thread
     //previous in apps_init,prior settings ICP1205_ADS
     //charger_manager_start();
