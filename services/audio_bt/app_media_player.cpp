@@ -1071,6 +1071,8 @@ void media_PlayAudio_single_play(AUD_ID_ENUM id,uint8_t device_id)
 
 void media_PlayAudio(AUD_ID_ENUM id,uint8_t device_id)
 {
+
+	 AUDIO_BT_TRACE(1,"[UIAPP]%s,id:%d,dev_id:%d",__func__,id,device_id);
 #ifdef BESUI_COMM_EN
     if(uictl.poweroff_start_flag)
     {

@@ -605,7 +605,7 @@ void app_ibrt_customif_tws_on_paring_state_changed(ibrt_conn_pairing_state state
 #ifndef BESUI_TWS_EN
             if (app_ibrt_if_is_ui_slave() && (bes_bt_tws_besaud_is_connected()))
             {
-                media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
+                //media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
             }
 #endif
 #endif

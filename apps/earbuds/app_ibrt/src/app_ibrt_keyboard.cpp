@@ -428,6 +428,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                     media_PlayAudio(AUD_ID_BT_PAIRING, 0);
                 }*/
 #endif
+				app_ibrt_set_key_power_status(1);
                 sparraw_tx_key_click_notify_msg(KEY_LONGLONG_CLICK);
                 media_PlayAudio(AUD_ID_BT_WARNING, 0);
                 app_shutdown();

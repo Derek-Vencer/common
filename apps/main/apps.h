@@ -104,6 +104,8 @@ void app_enter_fastpairing_mode(void);
 
 void app_exit_fastpairing_mode(void);
 
+void app_ibrt_set_key_power_status(int status);
+
 
 ////////////////////
 #if defined(DOLBY_AUDIO_ENABLE)

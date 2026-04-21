@@ -1006,7 +1006,9 @@ void app_key_longpress_handle_bt_func(void)
 #endif
 
 #ifndef FPGA
-    media_PlayAudio(AUD_ID_BT_WARNING, 0);
+    //media_PlayAudio(AUD_ID_BT_WARNING, 0);
+    media_PlayAudio(AUDIO_ID_BT_ALEXA_START, 0);
+    
 #endif
 
     BTAPP_TRACE(0,"goc %s hfcall_machine=%d", __func__, hfcall_machine);

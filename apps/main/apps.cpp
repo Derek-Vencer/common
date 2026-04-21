@@ -1530,6 +1530,12 @@ bool app_is_power_off_in_progress(void)
     return app_poweroff_flag?TRUE:FALSE;
 }
 
+int button_power_status = 0;
+void app_ibrt_set_key_power_status(int status)
+{
+	button_power_status = status;
+}
+
 int app_deinit(int deinit_case)
 {
     int nRet = 0;
@@ -1630,7 +1636,12 @@ int app_deinit(int deinit_case)
 #endif
 #ifndef BESUI_STEREO_EN
 #ifdef MEDIA_PLAYER_SUPPORT
-        media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
+		if(button_power_status == 1)
+        	media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
+		else{
+			media_PlayAudio_standalone_locally(AUDIO_ID_FIND_MY_BUDS, 0);
+		}
+		button_power_status = 0;
 #endif
 #endif
 

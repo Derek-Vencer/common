@@ -485,7 +485,7 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
 #ifdef MEDIA_PLAYER_SUPPORT
 				if (!app_bt_ibrt_has_mobile_link_connected())
 				{
-				   media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
+				   //media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
 				}
 #endif
             }

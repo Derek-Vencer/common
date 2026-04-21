@@ -479,9 +479,11 @@ static int32_t sparraw_event_mailbox_get(SPARRAW_MESSAGE_BLOCK** rx_event)
     }
     return -1;
 }
+static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len);
 
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
 {
+#if 0
     osStatus status = osOK;
     SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
 
@@ -512,6 +514,14 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
         osMailFree(sparraw_event_mailbox_id, msg_p);
         return (int)status;
     }
+#else
+	osStatus status = osOK;
+	
+	if (sparraw_event_mailbox_id == NULL) {
+			return -1;
+		}
+	sparraw_rx_cmd_parse_v2(param, len);
+#endif
     return (int)status;
 }
 
