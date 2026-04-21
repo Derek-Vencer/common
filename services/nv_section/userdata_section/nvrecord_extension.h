@@ -325,8 +325,10 @@ struct nvrecord_env_t {
     bool sync_anc_adapt;
 #endif
 
-    uint8_t sn_data[30];
+    //uint8_t sn_data[30];
+    uint8_t sn_data[12+1];
     uint8_t sn_len;
+	uint8_t chargerBoxVersion[16+1];
     uint8_t color_data; 
 #endif //#ifdef BESUI_TWS_EN
 
@@ -352,7 +354,7 @@ struct nvrecord_env_t {
     uint8_t peer_bleaddr[6];
 #endif
     //fixed storage for box version
-    uint8_t chargerBoxVersion[16+1];
+    //uint8_t chargerBoxVersion[16+1];
 //----------------------------------------------------------------------------------------------
 };
 

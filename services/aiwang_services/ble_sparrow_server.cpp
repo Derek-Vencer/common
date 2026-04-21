@@ -478,15 +478,17 @@ static int32_t sparraw_event_mailbox_get(SPARRAW_MESSAGE_BLOCK** rx_event)
     return -1;
 }
 
+static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len) ;
+
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
 {
     osStatus status = osOK;
-    SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
+    //SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
     if (mailbox_cnt > SPARRAW_EVENT_MAX_MAILBOX) {
     	TRACE(0, "%s mail overflow mailbox_cnt=%d", __func__, mailbox_cnt);
     	return -1;
     }
-
+#if 0
     msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
     if (msg_p == NULL)
     {
@@ -510,6 +512,9 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
         return (int)status;
     }
     mailbox_cnt++;
+	#else
+	sparraw_rx_cmd_parse_v2(param, len);
+	#endif
     return (int)status;
 }
 
