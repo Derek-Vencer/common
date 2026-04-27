@@ -221,7 +221,8 @@ void aiWangGetChargerBoxVersion(uint8_t *data)
 {
     struct nvrecord_env_t *nvrecord_env;
     nv_record_env_get(&nvrecord_env);
-    memcpy(data, &nvrecord_env->chargerBoxVersion[0], 16);
+    //memcpy(data, &nvrecord_env->chargerBoxVersion[0], 16);
+	memcpy(data, &nvrecord_env->chargerBoxVersion[0], 11);
 }
 
 //MM.NN.RR.AA Earbuds version format, MM: major version, NN: minor version, RR: revision version, AA: additional info
@@ -431,6 +432,10 @@ static int32_t sparraw_event_mailbox_init(void)
         OTA_TRACE(0, "Failed to Create sparraw event mailbox");
         return -1;
     }
+	else
+		{
+		OTA_TRACE(0, "Success to Create sparraw event mailbox");
+	}
     return 0;
 }
 
@@ -483,7 +488,7 @@ static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len);
 
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
 {
-#if 0
+#if 1
     osStatus status = osOK;
     SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
 
