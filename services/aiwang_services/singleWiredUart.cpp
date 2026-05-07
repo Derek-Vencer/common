@@ -191,6 +191,10 @@ static void wired_uart_get_battery_level(void)
     buff[0] = 0x55;
     buff[1] = 0xAA;
     buff[2] = app_battery_current_level()%9;
+	if(app_battery_current_level()>=9)
+	{
+		buff[2] = 9;
+	}
     buff[3] = crc8(buff,3);
     communication_send_buf(buff, 4);
 }
