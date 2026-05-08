@@ -197,9 +197,64 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
 	sparraw_tx_msg(RSP_GET_EQ_PRESET, 0, 1);
 }
 
+#include "hw_codec_iir_process.h"
+#include "audio_process.h"
+//extern int audio_eq_hw_dac_iir_callback(uint8_t *buf, uint32_t  len);
+extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
+//#include "hw_codec_iir_process.h"
+//IIR_CFG_T hw_dac_iir_cfg;
+#if 0
+const IIR_CFG_T audio_eq_iir_cfg = {
+    .gain0 = 0.0,
+    .gain1 = 0.0,
+    .num = 6,
+    .param = {
+        {IIR_TYPE_PEAK, 0, 500, 0.7},
+        {IIR_TYPE_PEAK, 0, 1000, 0.7},
+        {IIR_TYPE_PEAK, 0, 2000, 0.7},
+        {IIR_TYPE_PEAK, -23.5, 4983, 0.7},
+        {IIR_TYPE_PEAK, 12.3, 4806, 0.7},
+        {IIR_TYPE_PEAK, -20.3, 10837, 0.7},
+    }
+};
+#endif
 void handleSetEqPresent(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
+	uint16 presetId = 0;
+	if(len >= 3)
+	{
+		presetId = data[3];
+		if(presetId >= 15)
+		{
+			TRACE(0,"%s.", "ERROR_ID");
+		}
+		else{
+			TRACE(0,"%s[%d].", __func__,presetId);
+			//audio_eq_hw_dac_iir_callback((uint8_t*)"1",1);
+			//audio_eq_set_cfg(NULL, &audio_eq_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR); 
+			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[presetId], AUDIO_EQ_TYPE_HW_DAC_IIR); //AUDIO_EQ_TYPE_SW_IIR
+#if 0
+				HW_CODEC_IIR_CFG_T *hw_iir_cfg_dac = NULL;
+				enum AUD_SAMPRATE_T sample_rate_hw_dac_iir;
+
+				memset(&hw_dac_iir_cfg, 0, sizeof(IIR_CFG_T));
+				
+						hw_iir_cfg_dac = hw_codec_iir_get_cfg(sample_rate_hw_dac_iir,&hw_dac_iir_cfg);
+			        ASSERT(hw_iir_cfg_dac != NULL, "[%s] %d codec IIR parameter error!", __func__, (uint32_t)hw_iir_cfg_dac);
+
+			        // hal_codec_iir_dump(hw_iir_cfg_dac);
+
+			        hw_codec_iir_set_cfg(hw_iir_cfg_dac, sample_rate_hw_dac_iir, HW_CODEC_IIR_DAC);
+
+#ifdef __AUDIO_DYNAMIC_BOOST__
+#ifdef DYNAMIC_BOOST_USE_HW_EQ
+			        audio_dynamic_boost_set_new_customer_iir_eq(&audio_process.hw_dac_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR);
+#endif
+#endif
+#endif
+		}
+	}
 	sparraw_tx_msg(RSP_GET_EQ_PRESET, (const uint8_t*)"", 0);
 }
 

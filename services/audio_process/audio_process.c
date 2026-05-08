@@ -2560,12 +2560,16 @@ int audio_eq_hw_dac_iir_callback(uint8_t *buf, uint32_t  len)
 #endif
     {
 #if defined(TEST_AUDIO_CUSTOM_EQ)
+		AUDIO_PROCESS_TRACE(0,"@@@@@@audio_eq_hw_dac_iir_callback");
+
         audio_eq_merge_custom_eq(&audio_process.hw_dac_iir_cfg, (IIR_CFG_T *)buf, audio_eq_hw_dac_iir_cfg_list[0]);
 #else
         memcpy(&audio_process.hw_dac_iir_cfg, buf, sizeof(IIR_CFG_T));
+	AUDIO_PROCESS_TRACE(0,"@@@@@@2 audio_eq_hw_dac_iir_callback");
+
 #endif
 
-        AUDIO_PROCESS_TRACE(0, "LCHNL num: %d, gain0: %d, gain1: %d",
+        AUDIO_PROCESS_TRACE(0, "@@LCHNL num: %d, gain0: %d, gain1: %d",
                                                     (int32_t)audio_process.hw_dac_iir_cfg.num,
                                                     (int32_t)(audio_process.hw_dac_iir_cfg.gain0*10),
                                                     (int32_t)(audio_process.hw_dac_iir_cfg.gain1*10));

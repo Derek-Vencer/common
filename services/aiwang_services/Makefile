@@ -75,8 +75,15 @@ subdir-ccflags-y += -Iapps/common \
 				    -Iservices/ota/ \
 				    -Iservices/ota/bes_ota/inc \
 				    -Iapps/factory/\
-				    
-				    
+				    -Iservices/audio_process \
+				    -Imultimedia/inc/audio/process/filters/include \
+					-Imultimedia/inc/audio/process/common/include \
+					-Imultimedia/inc/audio/process/drc/include \
+					-Imultimedia/inc/audio/process/limiter/include \
+					-Imultimedia/inc/audio/process/reverb/include \
+					-Imultimedia/inc/audio/process/dynamic_eq/include \
+					-Imultimedia/inc/audio/process/bass_enhancer/include \
+					-Imultimedia/inc/audio/process/virtual_surround_process/include \
 				    
 				    
 				    
