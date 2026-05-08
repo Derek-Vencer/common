@@ -728,6 +728,16 @@ void app_bt_audio_state_checker(void)
     AUDIO_BT_TRACE(1, "audio_state: %s", app_bt_get_active_media_state());
 }
 
+#if 0
+#include "hw_codec_iir_process.h"
+#include "audio_process.h"
+#include "nvrecord_bt.h"
+#include "nvrecord_env.h"
+#include "nvrecord_extension.h"
+
+extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
+#endif
+
 //only used in iamain thread ,can't used in other thread or interrupt
 void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
 {
@@ -746,7 +756,25 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
           media_id);
 
     AUDIO_BT_TRACE(1, "bt_media_start %s\n", app_bt_get_active_media_state());
+#if 0
+	if(BT_STREAM_MUSIC == stream_type){
+		struct nvrecord_env_t *nvrecord_env;
+	    nv_record_env_get(&nvrecord_env);
+		uint8_t eq_index = nvrecord_env->eq_index_data;
+		if((eq_index >=0) && (eq_index <= 5))
+		{
+			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
 
+		}
+		else
+		{
+			eq_index = 0;
+			nvrecord_env->eq_index_data = eq_index;
+			nv_record_env_set(nvrecord_env);
+			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+		}
+	}
+#endif
     switch(stream_type)
     {
 #ifdef RB_CODEC

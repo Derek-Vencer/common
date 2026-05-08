@@ -222,6 +222,17 @@ uint8_t dolby_role = -1;
 #include "nvrecord_env.h"
 #endif
 
+
+#if 1
+#include "hw_codec_iir_process.h"
+#include "audio_process.h"
+#include "nvrecord_bt.h"
+#include "nvrecord_env.h"
+#include "nvrecord_extension.h"
+extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
+
+#endif
+
 void(*app_bt_stream_ext_sco_playback)(uint8_t *buf, uint32_t len) = NULL;
 uint32_t (*app_bt_stream_ext_sco_capture)(uint8_t *buf, uint32_t len) = NULL;
 void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32_t len),
@@ -4424,6 +4435,28 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
     a2dp_is_run = (on != PLAYER_OPER_STOP);
     a2dp_audio_status_updated_callback(a2dp_is_run);
 #endif
+
+#if 1
+		//if(BT_STREAM_MUSIC == stream_type)
+		{
+			struct nvrecord_env_t *nvrecord_env;
+			nv_record_env_get(&nvrecord_env);
+			uint8_t eq_index = nvrecord_env->eq_index_data;
+			if((eq_index >=0) && (eq_index <= 5))
+			{
+				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+	
+			}
+			else
+			{
+				eq_index = 0;
+				nvrecord_env->eq_index_data = eq_index;
+				nv_record_env_set(nvrecord_env);
+				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+			}
+		}
+#endif
+
     return 0;
 }
 

@@ -939,6 +939,8 @@ int audio_eq_set_cfg(const FIR_CFG_T *fir_cfg,const IIR_CFG_T *iir_cfg,const IIR
 int audio_eq_set_cfg(const FIR_CFG_T *fir_cfg,const IIR_CFG_T *iir_cfg,AUDIO_EQ_TYPE_T audio_eq_type)
 #endif
 {
+	AUDIO_PROCESS_TRACE(3,"@@@@@@@@@audio_eq_set_cfg:%d.", audio_eq_type);
+
 #if defined(__SW_IIR_EQ_PROCESS__) || defined(__HW_FIR_EQ_PROCESS__)|| defined(__HW_DAC_IIR_EQ_PROCESS__)|| defined(__HW_IIR_EQ_PROCESS__)
     switch (audio_eq_type)
     {

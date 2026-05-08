@@ -191,10 +191,31 @@ void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 	sparraw_tx_msg(RSP_SET_KEY_MAPPING, (const uint8_t*)"", 0);
 }
 
+void handleSetEqIndex(uint8_t index)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+
+	nvrecord_env->eq_index_data = index;
+
+	nv_record_env_set(nvrecord_env);
+
+}
+
+void handleGetEqIndex(uint8_t *index)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+	*index = nvrecord_env->eq_index_data;
+}
+
 void handleGetEqPresent(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
-	sparraw_tx_msg(RSP_GET_EQ_PRESET, 0, 1);
+	//sparraw_tx_msg(RSP_GET_EQ_PRESET, 0, 1);
+	uint8_t index = 0;
+	handleGetEqIndex(&index);
+	sparraw_tx_msg(RSP_GET_EQ_PRESET, &index, 1);
 }
 
 #include "hw_codec_iir_process.h"
@@ -221,11 +242,11 @@ const IIR_CFG_T audio_eq_iir_cfg = {
 void handleSetEqPresent(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
-	uint16 presetId = 0;
+	uint8_t presetId = 0;
 	if(len >= 3)
 	{
 		presetId = data[3];
-		if(presetId >= 15)
+		if(presetId >= 6)
 		{
 			TRACE(0,"%s.", "ERROR_ID");
 		}
@@ -233,7 +254,16 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 			TRACE(0,"%s[%d].", __func__,presetId);
 			//audio_eq_hw_dac_iir_callback((uint8_t*)"1",1);
 			//audio_eq_set_cfg(NULL, &audio_eq_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR); 
+			
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[presetId], AUDIO_EQ_TYPE_HW_DAC_IIR); //AUDIO_EQ_TYPE_SW_IIR
+
+			#ifdef __AUDIO_DYNAMIC_BOOST__
+#ifdef DYNAMIC_BOOST_USE_HW_EQ
+        audio_dynamic_boost_set_new_customer_iir_eq(&audio_process.hw_dac_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR);
+#endif
+#endif
+
+			handleSetEqIndex(presetId);
 #if 0
 				HW_CODEC_IIR_CFG_T *hw_iir_cfg_dac = NULL;
 				enum AUD_SAMPRATE_T sample_rate_hw_dac_iir;
@@ -265,7 +295,7 @@ void aiWangSetBoxVersion(uint8_t *data, uint8_t len)
     len  = len >16?16:len;
     if(memcmp(nvrecord_env->chargerBoxVersion, data, len))
     {
-		memset(&nvrecord_env->chargerBoxVersion[0], 0, 16+1);
+		memset(&nvrecord_env->chargerBoxVersion[0], 0, 15+1); //16+1
 	 	memcpy(&nvrecord_env->chargerBoxVersion[0], data, len);
 		TRACE(0, "set box version:%s", nvrecord_env->chargerBoxVersion);
 		nv_record_env_set(nvrecord_env);
@@ -276,7 +306,7 @@ void aiWangGetChargerBoxVersion(uint8_t *data)
 {
     struct nvrecord_env_t *nvrecord_env;
     nv_record_env_get(&nvrecord_env);
-    //memcpy(data, &nvrecord_env->chargerBoxVersion[0], 16);
+    //memcpy(data, &nvrecord_env->chargerBoxVersion[0], 15); //16
 	memcpy(data, &nvrecord_env->chargerBoxVersion[0], 11);
 }
 
