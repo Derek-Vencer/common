@@ -386,7 +386,7 @@ const SpeechConfig WEAK speech_cfg_default = {
  *     None
 ****************************************************************************************************/
     .tx_1mic_ns = {
-        .bypass             = 0,
+        .bypass             = 1,
         .nn_gain_db         = 5,
         .wdrc_enable        = 1,
 #if defined(SPEECH_NS10L)
