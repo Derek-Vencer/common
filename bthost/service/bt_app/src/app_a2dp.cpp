@@ -2496,6 +2496,7 @@ void a2dp_callback(uint8_t device_id, a2dp_stream_t *Stream, const a2dp_callback
         case BTIF_A2DP_EVENT_AVDTP_CONNECT:
             DEBUG_INFO(3,"(d%x) ::A2DP_EVENT_AVDTP_CONNECT %d st = %p", device_id, Info->event, Stream);
 
+			set_pair_status(1);
 #ifdef BT_USB_AUDIO_DUAL_MODE
             if(!btusb_is_bt_mode())
             {

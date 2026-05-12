@@ -725,7 +725,7 @@ void app_bt_phone_connected_event_process(void)
 
     nv_record_all_ddbrec_print();
     BESUI_TRACE(0,"[UIBT]PHONE_CONNECTED");
-
+	
 #if BT_DEVICE_NUM > 1
     uicom.phone_pair_cnt ++;
 #endif

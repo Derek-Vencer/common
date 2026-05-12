@@ -185,6 +185,8 @@ uint8_t crc8(const uint8_t *data, uint32_t length)
 }
 
 static uint8_t enter_pair = 0;
+static uint8_t enter_pair_count = 0;
+
 static uint8_t pair_status = 0;
 static void wired_uart_get_battery_level(void)
 {
@@ -208,14 +210,26 @@ static void wired_uart_get_battery_level(void)
 	{
 		buff[2] = 9;
 	}
-	if(enter_pair == 1)
+	if(1)//(enter_pair == 1)
 	{
 		pair_status = get_pair_status();
 		buff[3] = pair_status;
-		pair_status = 0;
-		enter_pair = 0;
+		//pair_status = 0;
+		if(enter_pair_count > 5)
+		{
+			enter_pair = 0;
+			set_pair_status(0);
+			enter_pair_count = 0;
+		}
+		enter_pair_count ++;
+		//set_pair_status(0);
 	}
-	buff[3] = 0;
+	else{
+		buff[3] = 0;
+		enter_pair_count = 0;
+	}
+	//set_pair_status(0);
+	//buff[3] = 0;
     buff[4] = crc8(buff,4);
     communication_send_buf(buff, 5);
 #endif

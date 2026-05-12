@@ -4799,7 +4799,7 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
 
         profile_mgr->profile_connected = true;
         DEBUG_INFO(0,"BT connected!!!");
-
+		//set_pair_status(1);
 #ifndef IBRT
         app_bt_get_remote_device_name(&curr_device->remote);
 #endif

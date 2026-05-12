@@ -100,6 +100,11 @@ uint8_t get_pair_status(void)
 	return pair_status;
 }
 
+void set_pair_status(uint8_t status)
+{
+	pair_status = status;
+}
+
 int bt_pairing_init(void)
 {
     btif_pairing_register_callback(pair_handler_func);

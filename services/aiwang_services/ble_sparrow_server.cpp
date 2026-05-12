@@ -681,6 +681,15 @@ static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len) 
 	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, len + 1);
 }
 
+static void sparraw_read_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token, const uint8_t* data, uint16_t len) {
+	uint8_t  rsp_buffer[64];
+	rsp_buffer[0] = rsp_type;
+	if (NULL != data && len > 0)
+	{
+		memcpy(&rsp_buffer[1], data, len);
+	}
+	gatts_send_read_rsp(aw_connhdl, aw_token, 0, rsp_buffer, len + 1);
+}
 
 
 static void sparraw_rx_cmd_init(void){
@@ -914,13 +923,91 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 {
     switch(aiwan_read_data)
     {
-		case BLE_AIWANG_SRV_CONN:{
+		case GET_BATTERY_LEVEL:{
+			uint8_t batflag; //left, right, box
+		    batflag = app_battery_current_level();
+		    TRACE(0,"%s batflag=%d", __func__, batflag);
+		    if(batflag > 9)
+		    {
+		        batflag = 9;
+		    }
 
+			uint8_t batteryArray[3] = {0, 0, 0};
+			batteryArray[0]  = batflag;
+			if( 0xFF == getPeerBattery())
+			{
+				batteryArray[1]  = batflag;
+			}
+			else
+			{
+				batteryArray[1]  = getPeerBattery();
+			    if(batteryArray[1] > 9)
+			    {
+			    	batteryArray[1] = 9;
+			    }
+			}
+			batteryArray[2] = getBoxChargerBattery();
+			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
 			break;
 		}
-
+		case GET_DEVICE_NAME:{
+			uint8_t* localname =  factory_section_get_bt_name();
+		    if(localname)
+		    {
+		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
+		    }
+		
+			break;
+		}
+		case SET_DEVICE_NAME:{
+			sparraw_read_rsp_msg(RSP_SET_DEVICE_NAME,param->aw_connhdl,param->aw_token, (const uint8_t*)"", 0);
+			break;
+		}
+		case GET_KEY_MAPPING:{
+			const uint8_t keyMaps[2] = {0x00,0x14};
+			//sparraw_tx_msg(RSP_GET_KEY_MAPPING, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
+			sparraw_read_rsp_msg(RSP_GET_KEY_MAPPING,param->aw_connhdl,param->aw_token, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
+			break;
+		}
+		case SET_KEY_MAPPING:{
+			//const uint8_t keyMaps[2] = {0x00,0x14};
+			sparraw_read_rsp_msg(RSP_SET_KEY_MAPPING,param->aw_connhdl,param->aw_token, (const uint8_t*)"", 0);
+			
+			break;
+		}
+		case GET_EQ_PRESET:{
+			uint8_t index = 0;
+			handleGetEqIndex(&index);
+			sparraw_read_rsp_msg(RSP_GET_EQ_PRESET,param->aw_connhdl,param->aw_token, &index, 1);
+			
+			break;
+		}
+		case SET_EQ_PRESET:{
+			sparraw_read_rsp_msg(0x4A, param->aw_connhdl,param->aw_token,(const uint8_t*)"", 0);			
+			break;
+		}
+		case GET_FW_VERSION:{
+			uint8_t version[11+11+1] = {0};
+			memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
+			aiWangGetChargerBoxVersion(&version[11]);
+			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,(const uint8_t*)version, 23);		
+			break;
+		}
+		case FACTORY_COMMAND_SYS:{
+			sparraw_read_rsp_msg(0x00, param->aw_connhdl,param->aw_token,(const uint8_t*)"", 0);			
+			break;
+		}
+		case FACTORY_COMMAND_AUDIO_IO:{
+			sparraw_read_rsp_msg(0x00, param->aw_connhdl,param->aw_token,(const uint8_t*)"", 0);			
+			break;
+		}
+		case FACTORY_COMMAND_INFO:{
+			uint8_t  tempSn[12+1] = {0};
+			aiWangGetSn(tempSn, 12);
+			sparraw_read_rsp_msg(0x00, param->aw_connhdl,param->aw_token,tempSn, strlen((const char*)tempSn));			
+			break;
+		}
 		default:
-
 			break;
     }
 }
