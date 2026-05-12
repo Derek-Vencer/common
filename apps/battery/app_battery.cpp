@@ -59,6 +59,7 @@
 #endif
 
 #include "app_ble.h"
+#include "communication_svr.h"
 
 #if (defined(BTUSB_AUDIO_MODE) || defined(BTUSB_AUDIO_MODE))
 extern "C" bool app_usbaudio_mode_on(void);
@@ -571,6 +572,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
                 //20260402
                 //app_shutdown();
+                //wired_uart_communication_modual_init();
                 earBudsCloseOff_PogonIn_StartTimer();
 #if CHARGER_PLUGINOUT_RESET
                 //app_reset();
@@ -1062,6 +1064,17 @@ static void app_battery_pluginout_debounce_handler(void const *param)
 #endif
 #endif
 
+	if(status_charger == APP_BATTERY_CHARGER_PLUGOUT)
+	{
+		communication_stop();
+		BATTERY_TRACE(2,"@@communication_stop");
+	}
+	else
+	{
+		communication_init();
+		BATTERY_TRACE(2,"@@communication_init");
+	}
+
     if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT){
         BATTERY_TRACE(2,"%s %s", __func__, status_charger == APP_BATTERY_CHARGER_PLUGOUT ? "PLUGOUT" : "PLUGIN");
         if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
@@ -1346,6 +1359,9 @@ static void app_battery_pluginout_event_callback(enum APP_BATTERY_CHARGER_T even
 static void app_battery_pluginout_debounce_handler(void const *param)
 {
     enum APP_BATTERY_CHARGER_T status_charger = app_battery_charger_forcegetstatus();
+
+	BATTERY_TRACE(1,"@@@app_battery_pluginout_debounce_handler");
+	
 #ifdef BESUI_TWS_EN
     bool factory_flag = false;
 #endif

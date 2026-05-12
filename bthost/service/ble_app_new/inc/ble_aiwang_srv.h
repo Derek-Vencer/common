@@ -137,6 +137,12 @@ typedef struct {
     uint16_t len;
 } __attribute__((packed)) ble_aiwang_param_u;
 
+typedef struct {
+    uint16_t aw_connhdl;
+    uint32_t aw_token;
+} __attribute__((packed)) ble_aiwang_read_param_u;
+
+
 enum BLE_AIWANG_EVENT_TYPE_E
 {
     BLE_AIWANG_SRV_CONN = 1,
@@ -163,10 +169,14 @@ typedef enum {
 } KEY_CLICK_TYPE;
 
 typedef void(*ble_aiwang_event_cb)(ble_aiwang_param_u *para_p);
+typedef void(*ble_aiwang_read_event_cb)(ble_aiwang_read_param_u *para_p);
+
 typedef void(*ble_aiwang_server_mtuexchanged_done_t)(uint8_t conidx, uint16_t mtu);
 
 void ble_aiwang_srv_init(void);
 void ble_aiwang_srv_register_event_cb(ble_aiwang_event_cb callback);
+void ble_aiwang_srv_set_read_data_cb(ble_aiwang_read_event_cb callback);
+
 uint8_t ble_aiwang_srv_send_data_via_notification(uint8_t* data, uint32_t len);
 uint8_t ble_aiwang_srv_send_data_via_indication(uint8_t* data, uint32_t len);
 void sparraw_tx_key_click_notify_msg(uint8_t kick_type);

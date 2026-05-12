@@ -567,11 +567,13 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             break;
         case COMMUNICATION_MSG_STOP:
             lock = int_lock();
+			uart_deinit();
             uart_rx_dma_stop();
             hal_uart_flush(comm_uart, 0);
             uart_error_detected = 0;
             int_unlock(lock);
             osThreadYield();
+			
             break;
         default:
             break;
@@ -603,10 +605,11 @@ void communication_init(void)
     if (communication_tid == NULL){
         communication_tid = osThreadCreate(osThread(communication_thread), NULL);
     }
-
-    communication_init_ok = true;
-    msg.message = COMMUNICATION_MSG_INIT;
-    communication_mailbox_put(&msg);
+	if (communication_init_ok == false){
+	    communication_init_ok = true;
+	    msg.message = COMMUNICATION_MSG_INIT;
+	    communication_mailbox_put(&msg);
+	}
 }
 
 int communication_receive_register_callback(communication_receive_func_typedef p)

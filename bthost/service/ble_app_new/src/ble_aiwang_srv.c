@@ -40,7 +40,7 @@ GATT_DECL_CUDD_DESCRIPTOR(g_ble_tx_cudd,
 
 GATT_DECL_128_LE_CHAR(g_ble_rx_character,
 	BLE_COMMUNICATE_PRIMARY_SERVICE_RX,
-    GATT_WR_REQ|GATT_WR_CMD,
+    GATT_WR_REQ|GATT_WR_CMD|GATT_RD_REQ,
     ATT_SEC_NONE);
 
 GATT_DECL_CUDD_DESCRIPTOR(g_ble_rx_cudd,
@@ -64,6 +64,11 @@ static ble_aiwang_server_mtuexchanged_done_t  mtuexchanged_done_callback = NULL;
 static const char tx_desc[] = "AiWang BLE_TX";
 static const char rx_desc[] = "AiWang BLE_RX";
 
+uint16_t aw_connhdl = 0;
+uint32_t aw_token;
+
+static ble_aiwang_read_event_cb bw_read_event_callback = NULL;
+
 uint8_t ble_aiwang_srv_send_data_via_notification(uint8_t* data, uint32_t len)
 {
     uint8_t conidx = ble_aiwang_server_env.connectionIndex;
@@ -78,6 +83,8 @@ uint8_t ble_aiwang_srv_send_data_via_notification(uint8_t* data, uint32_t len)
         .character = g_ble_tx_character,
         .service = g_ble_primary_service,
     };
+
+	gatts_send_read_rsp(aw_connhdl, aw_token, 0, (uint8_t *)"@@ADB", 5);
 
     return gatts_send_value_notification(gap_conn_bf(gap_zero_based_conidx_to_ble_conidx(conidx)), &val_ntf, data, len);
 }
@@ -304,6 +311,24 @@ static bool ble_aiwang_srv_callback(gatt_svc_t *svc, gatt_server_event_t event, 
             return true;
             break;
         }
+		case GATT_SERV_EVENT_CHAR_READ:
+		{
+			gatt_server_char_read_t *p = param.char_read;
+			DEBUG_INFO(0, "%s :%d,%d\n", __func__, p->conn->connhdl,p->token);
+            //gatts_send_read_rsp(p->conn->connhdl, p->token, 0, (uint8_t *)"ADB", 3);
+			//gatts_send_read_rsp(p->conn->connhdl, p->token, 0, (uint8_t *)"@@ADB", 5);
+			aw_connhdl = p->conn->connhdl;
+			aw_token = p->token;
+			if(bw_read_event_callback)
+			{
+				ble_aiwang_read_param_u param = {
+		            .aw_connhdl  = aw_connhdl,
+		            .aw_token = aw_token,
+		        };
+		        bw_read_event_callback(&param);
+			}
+			break;
+		}
         default:
         {
             break;
@@ -332,5 +357,9 @@ void ble_aiwang_srv_init(void)
 }
 
 
+void ble_aiwang_srv_set_read_data_cb(ble_aiwang_read_event_cb callback)
+{
+    bw_read_event_callback = callback;
+}
 
 

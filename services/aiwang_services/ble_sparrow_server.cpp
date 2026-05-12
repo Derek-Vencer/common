@@ -571,6 +571,22 @@ static int32_t sparraw_event_mailbox_get(SPARRAW_MESSAGE_BLOCK** rx_event)
 }
 static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len);
 
+static uint8_t neet_notify_send_flash = 0;
+static uint8_t aiwan_read_data = 0;
+
+static void need_notify_send(uint8_t *param, uint16_t len)
+{
+	aiwan_read_data = param[0];
+	switch(param[0])
+	{
+		case GET_BATTERY_LEVEL:		
+		{
+			neet_notify_send_flash = 1;
+		}break;
+		
+		default:neet_notify_send_flash = 0;break;
+	}
+}
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
 {
 #if 1
@@ -581,6 +597,12 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
         return -1;
     }
 
+	need_notify_send(param,len);
+	if(neet_notify_send_flash == 0)
+	{
+		return 0;
+	}
+
     msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
     if (msg_p == NULL)
     {
@@ -588,7 +610,7 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
         msg_p = (SPARRAW_MESSAGE_BLOCK*)osMailAlloc(sparraw_event_mailbox_id, 0);
         ASSERT(msg_p, "sparraw_mailbox_put osMailAlloc error\r\n");
     }
-
+	
     msg_p->devId = devId;
     msg_p->event = event;
     msg_p->len   = (len >256?256:len);
@@ -888,6 +910,22 @@ void sparraw_event_handle(ble_aiwang_param_u *param)
     }
 }
 
+void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
+{
+    switch(aiwan_read_data)
+    {
+		case BLE_AIWANG_SRV_CONN:{
+
+			break;
+		}
+
+		default:
+
+			break;
+    }
+}
+
+
 void sparraw_rx_thread_init(void)
 {
     TRACE(0,"[%s] %d ",__func__, sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0]));
@@ -914,6 +952,7 @@ void sparraw_service_init(void)
 	}
     sparraw_rx_thread_init();
 	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
+	ble_aiwang_srv_set_read_data_cb(sparraw_event_read_handle);
 	ble_sparrow_task_init = true;
     //start charger_manager_thread
     //previous in apps_init,prior settings ICP1205_ADS

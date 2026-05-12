@@ -666,7 +666,7 @@
 
 
 #ifdef COMMUNICATION_TRACE_ENABLE
-#define COMMUNICATION_TRACE(attr, str, ...)   //TR_INFO(attr, str, ##__VA_ARGS__)
+#define COMMUNICATION_TRACE(attr, str, ...)   TR_INFO(attr, str, ##__VA_ARGS__)
 #define COMMUNICATION_TRACE_IMM(attr, str, ...)   TR_INFO((attr) | TR_ATTR_IMM, str, ##__VA_ARGS__)
 #define COMMUNICATION_DUMP8(str, buf, cnt)     //DUMP8(str, buf, cnt)
 #define COMMUNICATION_DUMP16(str, buf, cnt)    DUMP16(str, buf, cnt) 

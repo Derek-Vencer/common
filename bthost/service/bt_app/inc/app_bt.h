@@ -538,6 +538,7 @@ void app_bt_pair_state_callback_deregister(void);
 bt_pair_state_change_cb_t app_bt_get_pair_state_callback(void);
 
 int bt_pairing_init(void);
+uint8_t get_pair_status(void);
 
 #ifdef NV_RECORD_DEV_NAME
 uint8_t *app_get_current_remote_device_name(void);

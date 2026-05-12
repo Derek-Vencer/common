@@ -279,7 +279,8 @@ export DUMP_LOG_ENABLE ?= 0
 
 export DUMP_CRASH_LOG ?= 0
 
-export CPU_PC_DUMP ?= LR
+#export CPU_PC_DUMP ?= LR
+export CPU_PC_DUMP ?=
 
 SUPPORT_BATTERY_REPORT ?= 1
 

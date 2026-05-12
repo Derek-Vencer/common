@@ -27,6 +27,7 @@
 #include "app_media_player.h"
 #include "audio_player_adapter.h"
 
+uint8_t pair_status = 0;
 static void app_pair_handler_func(enum pair_event evt, const btif_event_t *event)
 {
     switch(evt) {
@@ -88,10 +89,15 @@ static void pair_handler_func(enum pair_event event, void *data)
     }
 
     _event.errCode = err_code;
-
+	pair_status = 1;
     app_pair_handler_func(app_pair_evt, (btif_event_t*)&_event);
 
     return;
+}
+
+uint8_t get_pair_status(void)
+{
+	return pair_status;
 }
 
 int bt_pairing_init(void)

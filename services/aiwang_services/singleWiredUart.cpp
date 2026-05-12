@@ -184,9 +184,11 @@ uint8_t crc8(const uint8_t *data, uint32_t length)
     return crc;
 }
 
-
+static uint8_t enter_pair = 0;
+static uint8_t pair_status = 0;
 static void wired_uart_get_battery_level(void)
 {
+#if 0
     uint8_t buff[4] = {0};
     buff[0] = 0x55;
     buff[1] = 0xAA;
@@ -197,6 +199,26 @@ static void wired_uart_get_battery_level(void)
 	}
     buff[3] = crc8(buff,3);
     communication_send_buf(buff, 4);
+#else
+	uint8_t buff[5] = {0};
+    buff[0] = 0x55;
+    buff[1] = 0xAA;
+    buff[2] = app_battery_current_level()%9;
+	if(app_battery_current_level()>=9)
+	{
+		buff[2] = 9;
+	}
+	if(enter_pair == 1)
+	{
+		pair_status = get_pair_status();
+		buff[3] = pair_status;
+		pair_status = 0;
+		enter_pair = 0;
+	}
+	buff[3] = 0;
+    buff[4] = crc8(buff,4);
+    communication_send_buf(buff, 5);
+#endif
 }
 
 
@@ -624,6 +646,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	  {
     		   DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!", isRightEarbuds);
 #if 1
+			   enter_pair = 1;
+
     		   aiWang_disconnet_phone_enter_pairmode();
 #else
     		   wired_uart_enter_pairmode();
@@ -714,5 +738,7 @@ void wired_uart_communication_modual_init(void)
         communication_init();
         communication_receive_register_callback(wired_uart_communication_rx_data_pre);
         wiredUartInitFlag = true;
+		//osDelay(200);
+		//communication_stop();
     }
 }
