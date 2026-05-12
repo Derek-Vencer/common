@@ -461,6 +461,11 @@ static void communication_thread(void const *argument)
         if (!communication_mailbox_get(&mail_p)){
             communication_process(mail_p);
             communication_mailbox_free(mail_p);
+			if(mail_p->message == COMMUNICATION_MSG_STOP)
+			{
+				communication_tid = NULL;
+				break;
+			}
         }
     }
 }
