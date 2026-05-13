@@ -272,7 +272,7 @@ static void audio_test_optimal_tf_switch(const char *cmd)
     APP_TEST_TRACE(0,"[%s] mode: %d", __func__, mode);
     ASSERT(mode < APP_ANC_MODE_QTY, "[%s] mode is invalid: %d", __func__, mode);
 
-    app_voice_assist_optimal_tf_anc_open(mode);
+    //app_voice_assist_optimal_tf_anc_open(mode);
 #endif
 
 }

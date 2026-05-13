@@ -2418,7 +2418,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     MAIN_TRACE(1,"BATTERY %d pwron_case=%d", nRet, pwron_case);
     if (pwron_case != APP_POWERON_CASE_TEST){
         charger_manager_start();
-		sparraw_service_init();
+		//sparraw_service_init();
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
             	MAIN_TRACE(0,"NORMAL POWERON!");

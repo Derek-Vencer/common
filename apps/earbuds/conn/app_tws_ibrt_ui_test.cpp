@@ -2476,8 +2476,10 @@ const static app_ibrt_test_cmd_table_t app_ibrt_test_cmd_table[]=
     {"hearing_aid_stop", app_hearing_aid_stop},
 #endif
 
-#if SLT_AUTO_TEST
+#ifdef GPIO_WAKEUP_ENABL
+#ifdef SLT_AUTO_TEST
     {"gpio_out",                    app_trigger_gpio_out_operation},
+#endif
 #endif
 #ifdef GPIO_WAKEUP_ENABLE
     {"gpio_wakeup_enable",	app_trigger_gpio_irq_wakeup_enable_test},
@@ -2522,7 +2524,7 @@ const static app_ibrt_test_cmd_table_t app_ibrt_test_cmd_table[]=
 
 #ifdef SLT_AUTO_TEST
     {"tone_1k_prompt",              app_prompt_1k_tone_test},
-    {"gpio_pull_down",              app_trigger_gpio_irq_pull_down},
+    /*{"gpio_pull_down",              app_trigger_gpio_irq_pull_down},*/
 #endif
 #ifdef SPA_AUDIO_SEC
     {"tz_demo_func_enable_disable",app_tz_audio_process_demo_func_enable_disable},
