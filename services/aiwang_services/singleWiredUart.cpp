@@ -135,6 +135,177 @@ static uint8_t  wiredUartInitFlag  = FALSE;
 static uint8_t  wiredUartReceiveData[MAX_RX_SIZE];
 static BOX_STATUS  boxChargerStatus  ;
 
+static uint8_t uart_rx_handle_data_count = 0;
+/************************************************/
+/************************************************/
+
+// Pogo Pin 状态
+typedef enum {
+    POGO_PIN_STATE_UNKNOWN = 0,
+    POGO_PIN_STATE_INSERTED,
+    POGO_PIN_STATE_REMOVED
+} pogo_pin_state_t;
+
+// 全局状态变量
+static pogo_pin_state_t current_pogo_state = POGO_PIN_STATE_UNKNOWN;
+static osThreadId pogo_monitor_thread_id = NULL;
+static bool pogo_monitor_running = false;
+
+/**
+ * @brief 初始化 Pogo Pin 检测引脚
+ * @return true - 初始化成功，false - 初始化失败
+ */
+bool pogo_pin_init(void)
+{
+    // 检查配置是否有效
+    if (app_battery_ext_charger_detecter_cfg.pin == HAL_IOMUX_PIN_NUM) {
+        DBGPRINT("[POGO] Pogo Pin detection not configured");
+        return false;
+    }
+    
+    // 初始化引脚功能
+    hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)&app_battery_ext_charger_detecter_cfg, 1);
+    
+    // 设置为输入模式
+    hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_IN, 1);
+    
+    DBGPRINT("[POGO] Pogo Pin detection initialized successfully");
+    return true;
+}
+
+/**
+ * @brief 获取 Pogo Pin 状态（带去抖）
+ * @param debounce_ms 去抖时间（毫秒）
+ * @return POGO_PIN_STATE_INSERTED - Pogo Pin 插入
+ *         POGO_PIN_STATE_REMOVED - Pogo Pin 未插入
+ *         POGO_PIN_STATE_UNKNOWN - 状态未知
+ */
+pogo_pin_state_t get_pogo_pin_state(uint32_t debounce_ms)
+{
+    if (app_battery_ext_charger_detecter_cfg.pin == HAL_IOMUX_PIN_NUM) {
+        return POGO_PIN_STATE_UNKNOWN;
+    }
+    
+    // 第一次读取
+    uint8_t first_state = hal_gpio_pin_get_val((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin);
+    
+    // 延时去抖
+    osDelay(debounce_ms);
+    
+    // 第二次读取
+    uint8_t second_state = hal_gpio_pin_get_val((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin);
+    
+    // 两次状态一致才确认
+    if (first_state == second_state) {
+        // 根据硬件设计调整逻辑，这里假设低电平表示插入
+        return (first_state == 0) ? POGO_PIN_STATE_INSERTED : POGO_PIN_STATE_REMOVED;
+    }
+    
+    return POGO_PIN_STATE_UNKNOWN;
+}
+
+/**
+ * @brief Pogo Pin 状态监控线程
+ * @param argument 线程参数（未使用）
+ */
+static void pogo_pin_monitor_thread(void const *argument)
+{
+    DBGPRINT("[POGO] Pogo Pin monitor thread started");
+    pogo_monitor_running = true;
+    
+    while (pogo_monitor_running) {
+        // 每500毫秒检测一次
+        osDelay(500);
+#if 0        
+        // 获取 Pogo Pin 状态（10ms 去抖）
+        pogo_pin_state_t new_state = get_pogo_pin_state(10);
+        
+        // 状态变化时输出日志
+        if (new_state != current_pogo_state) {
+            current_pogo_state = new_state;
+            
+            switch (current_pogo_state) {
+                case POGO_PIN_STATE_INSERTED:
+                    DBGPRINT("[POGO] Pogo Pin inserted - Earbud in case");
+                    // 执行插入时的操作
+                    // 例如：启动充电、进入低功耗模式等
+                    break;
+                    
+                case POGO_PIN_STATE_REMOVED:
+                    DBGPRINT("[POGO] Pogo Pin removed - Earbud out of case");
+                    // 执行移除时的操作
+                    // 例如：停止充电、开始蓝牙广播等
+                    break;
+                    
+                case POGO_PIN_STATE_UNKNOWN:
+                    DBGPRINT("[POGO] Pogo Pin state unknown");
+                    break;
+            }
+        }
+#else
+		if(POGO_PIN_STATE_INSERTED != current_pogo_state) {
+            current_pogo_state = POGO_PIN_STATE_INSERTED;
+		}
+		uart_rx_handle_data_count ++;
+		if(uart_rx_handle_data_count >= 10)
+		{
+			DBGPRINT("@@@@@@@@@pogo out");
+			printf("@@@@@@@@printf ");
+			//communication_stop();
+			uart_rx_handle_data_count = 0;
+		}
+#endif
+    }
+    
+    DBGPRINT("[POGO] Pogo Pin monitor thread exited");
+}
+
+// 线程定义
+osThreadDef(pogo_pin_monitor_thread, osPriorityNormal, 1, 1024, "pogo_monitor");
+
+/**
+ * @brief 启动 Pogo Pin 监控
+ * @return true - 启动成功，false - 启动失败
+ */
+bool start_pogo_pin_monitor(void)
+{
+    // 初始化 Pogo Pin 检测
+    if(0){
+	    if (!pogo_pin_init()) {
+	        return false;
+	    }
+	}
+    
+    // 创建监控线程
+    pogo_monitor_thread_id = osThreadCreate(osThread(pogo_pin_monitor_thread), NULL);
+    if (pogo_monitor_thread_id == NULL) {
+        DBGPRINT("[POGO] Failed to create Pogo Pin monitor thread");
+        return false;
+    }
+    
+    DBGPRINT("[POGO] Pogo Pin monitor started");
+    return true;
+}
+
+/**
+ * @brief 停止 Pogo Pin 监控
+ */
+void stop_pogo_pin_monitor(void)
+{
+    if (pogo_monitor_running) {
+        pogo_monitor_running = false;
+        
+        if (pogo_monitor_thread_id != NULL) {
+            osThreadTerminate(pogo_monitor_thread_id);
+            pogo_monitor_thread_id = NULL;
+        }
+        
+        DBGPRINT("[POGO] Pogo Pin monitor stopped");
+    }
+}
+
+/************************************************/
+
 
 static const uint8_t crc8_table[256] =
 {
@@ -515,6 +686,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     }
 
     DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
+	uart_rx_handle_data_count = 0;
+	
     boxChargerStatus.boxIsOpen = true;
     switch(cmd_event)
     {
@@ -754,5 +927,9 @@ void wired_uart_communication_modual_init(void)
         wiredUartInitFlag = true;
 		//osDelay(200);
 		//communication_stop();
+		
+		// 启动 Pogo Pin 监控
+    	start_pogo_pin_monitor();
+		
     }
 }

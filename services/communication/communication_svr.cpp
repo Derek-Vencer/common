@@ -226,6 +226,7 @@ static void uart_rx_dma_handler(uint32_t xfer_size, int dma_error, union HAL_UAR
         return;
     }
 
+printf("@@@@@@@@uart_rx_dma_handler");
     memset(&msg, 0, sizeof(COMMUNICATION_MAIL));
     msg.message = COMMUNICATION_MSG_RX_DONE;
 
@@ -571,6 +572,7 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             uart_rx_idle_timer_start();
             break;
         case COMMUNICATION_MSG_STOP:
+			#if 1
             lock = int_lock();
 			uart_deinit();
             uart_rx_dma_stop();
@@ -578,7 +580,16 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             uart_error_detected = 0;
             int_unlock(lock);
             osThreadYield();
-			
+			#else
+			lock = int_lock();
+            uart_rx_dma_stop();
+            communication_io_mode_switch(COMMUNICATION_MODE_RX);
+            hal_uart_flush(comm_uart, 0);
+            uart_rx_dma_start();
+            uart_error_detected = 0;
+            int_unlock(lock);
+            uart_rx_idle_timer_start();
+		#endif	
             break;
         default:
             break;

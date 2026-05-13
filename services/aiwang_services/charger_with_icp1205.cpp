@@ -901,6 +901,6 @@ static void charger_manager_handler_thread(const void *arg)
 void charger_manager_start(void)
 {
 	DBGPRINT("%s", __func__);
-	//aw_ntc_detect_init();
+	aw_ntc_detect_init();
 	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
 }

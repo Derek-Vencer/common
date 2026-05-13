@@ -201,7 +201,7 @@ const IIR_CFG_T audio_eq_hw_iir_cfg = {
 const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_hw_iir_cfg_list[EQ_HW_IIR_LIST_NUM]={
     &audio_eq_hw_iir_cfg,
 };
-
+#if 0
 const DrcConfig audio_drc_cfg = {
      .knee = 3,
      .filter_type = {1000, -1},
@@ -212,7 +212,18 @@ const DrcConfig audio_drc_cfg = {
          {-20, 0, 2, 3, 3000, 1},
      }
  };
-
+#else
+const DrcConfig audio_drc_cfg = {
+    .knee = 0,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings= {
+        {-20 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+#endif
 const LimiterConfig audio_limiter_cfg = {
     .knee = 2,
     .look_ahead_time = 10,

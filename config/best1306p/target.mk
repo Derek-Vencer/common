@@ -32,11 +32,11 @@ FLASH_CHIP	?= ALL
 # GD25Q32C
 # ALL
 
-export AUDIO_DEBUG ?= 1
-export APP_TRACE_RX_ENABLE ?= 1
+#export AUDIO_DEBUG ?= 1
+#export APP_TRACE_RX_ENABLE ?= 1
 
-export APP_RX_API_ENABLE ?= 1
-export APP_TRACE_RX_ENABLE ?= 1
+#export APP_RX_API_ENABLE ?= 1
+#export APP_TRACE_RX_ENABLE ?= 1
 
 export I2C_FORCE_RECOVERY ?= 1
 

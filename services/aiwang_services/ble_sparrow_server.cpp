@@ -108,8 +108,9 @@ uint8_t getBoxChargerBattery(void);
 uint8_t getPeerBattery(void);
 
 static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
+//#if need_send_data_by_notify
 static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
-
+//#endif
 
 extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *fw_rev_2, uint8_t *fw_rev_3);
 
@@ -117,6 +118,7 @@ extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *f
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
 #define  DISPLAY_EARBUDS_VERSION    "01.01.00.04"
 
+#define need_send_data_by_notify 0
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
 
@@ -143,8 +145,9 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 	    }
 	}
 	batteryArray[2] = getBoxChargerBattery();
+//#if need_send_data_by_notify
 	sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
-
+//#endif
 }
 
 void handleGetDeviceName(const uint8_t *data, uint16_t len)
@@ -153,7 +156,9 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
 	uint8_t* localname =  factory_section_get_bt_name();
     if(localname)
     {
+#if need_send_data_by_notify
     	sparraw_tx_msg(RSP_GET_DEVICE_NAME, (const uint8_t*)localname, strlen((const char *)localname)+1);
+#endif
     }
 }
 
@@ -175,20 +180,27 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 		// 	TRACE(0,"%s set ble name error", __func__);
 		// }
 	}
+#if need_send_data_by_notify
 	sparraw_tx_msg(RSP_SET_DEVICE_NAME, (const uint8_t*)"", 0);
+#endif
 }
 
 void handleGetKeyMapping(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
+#if need_send_data_by_notify
 	const uint8_t keyMaps[2] = {0x00,0x14};
+
 	sparraw_tx_msg(RSP_GET_KEY_MAPPING, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
+#endif
 }
 
 void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
+#if need_send_data_by_notify
 	sparraw_tx_msg(RSP_SET_KEY_MAPPING, (const uint8_t*)"", 0);
+#endif
 }
 
 void handleSetEqIndex(uint8_t index)
@@ -215,7 +227,9 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
 	//sparraw_tx_msg(RSP_GET_EQ_PRESET, 0, 1);
 	uint8_t index = 0;
 	handleGetEqIndex(&index);
+#if need_send_data_by_notify
 	sparraw_tx_msg(RSP_GET_EQ_PRESET, &index, 1);
+#endif
 }
 
 #include "hw_codec_iir_process.h"
@@ -285,7 +299,9 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 #endif
 		}
 	}
-	sparraw_tx_msg(RSP_GET_EQ_PRESET, (const uint8_t*)"", 0);
+#if need_send_data_by_notify
+	sparraw_tx_msg(RSP_SET_EQ_PRESET, (const uint8_t*)"", 0);
+#endif
 }
 
 void aiWangSetBoxVersion(uint8_t *data, uint8_t len)
@@ -321,7 +337,9 @@ void handleGetFwVersion(const uint8_t *data, uint16_t len)
 	//const uint8_t *version = (const uint8_t *)"01.01.00.03";
 	memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
 	aiWangGetChargerBoxVersion(&version[11]);
+#if 0
 	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)version, 23);
+#endif
 }
 
 void handleFactoryCmdSys(const uint8_t *data, uint16_t len)
@@ -416,12 +434,16 @@ void handleFactoryCmdInfo(const uint8_t *data, uint16_t len)
 	  if (READ_SN == data[1]) {
 		  aiWangGetSn(tempSn, 12);
 		  TRACE(0, "READ_SN:%s", tempSn);
+#if need_send_data_by_notify
 		  if(app_sparraw_env.notifyEnable) { ble_aiwang_srv_send_data_via_notification(tempSn, strlen((const char*)tempSn)); }
+#endif
 	  } else if (WRTIE_SN == data[1]) {
 		  memcpy(tempSn, &data[2], (len-2) > 12 ? 12 :(len-2));
 		  TRACE(0, "WRTIE_SN:%s", tempSn);
 		  aiWangSetSn(tempSn, (len-2) > 12 ? 12 :(len-2));
+#if need_send_data_by_notify		  
 		  if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(tempSn, len);
+#endif		  
 	  } else if (SET_BUDS_COLOR == payload_buffer[1]) {
 		  aiWangSetEarBudsColor(payload_buffer[2]);
 		  sparraw_tx_cmd_data_rsp_ack(data[0], data[1]);
@@ -441,7 +463,9 @@ void handleGetLocalBtAddress(const uint8_t *data, uint16_t len)
 	  memcpy(&buff[2], bt_local_addr, 6);
 	  if(app_sparraw_env.notifyEnable)
 	  {
+#if need_send_data_by_notify
 		  ble_aiwang_srv_send_data_via_notification(buff, 8);
+#endif
 	  }
 	  REL_TRACE_NOCRLF(0, "GetLocalBtAddress: ");
 	  DUMP8("%02X ", bt_local_addr, 6);
@@ -474,7 +498,11 @@ void handleSetPeerBtAddress(const uint8_t *data, uint16_t len)
 	  }
 	  if(app_sparraw_env.notifyEnable)
 	  {
+#if need_send_data_by_notify
 		  ble_aiwang_srv_send_data_via_notification((uint8_t*)(ret?"OK":"NG"), 2);
+#else
+	if(ret){}
+#endif
 	  }
 
 }
@@ -584,7 +612,7 @@ static void need_notify_send(uint8_t *param, uint16_t len)
 			neet_notify_send_flash = 1;
 		}break;
 		
-		default:neet_notify_send_flash = 0;break;
+		default:neet_notify_send_flash = 1;break;
 	}
 }
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
@@ -671,6 +699,7 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 	}
 }
 
+//#if need_send_data_by_notify
 static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len) {
 	uint8_t  rsp_buffer[64];
 	rsp_buffer[0] = rsp_type;
@@ -680,7 +709,7 @@ static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len) 
 	}
 	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, len + 1);
 }
-
+//#endif
 static void sparraw_read_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token, const uint8_t* data, uint16_t len) {
 	uint8_t  rsp_buffer[64];
 	rsp_buffer[0] = rsp_type;
@@ -983,7 +1012,7 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			break;
 		}
 		case SET_EQ_PRESET:{
-			sparraw_read_rsp_msg(0x4A, param->aw_connhdl,param->aw_token,(const uint8_t*)"", 0);			
+			sparraw_read_rsp_msg(RSP_SET_EQ_PRESET, param->aw_connhdl,param->aw_token,(const uint8_t*)"", 0);			
 			break;
 		}
 		case GET_FW_VERSION:{
