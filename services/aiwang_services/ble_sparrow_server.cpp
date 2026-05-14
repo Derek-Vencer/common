@@ -950,6 +950,8 @@ void sparraw_event_handle(ble_aiwang_param_u *param)
 
 void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 {
+	uint8_t read_send_data[20] = {0};
+	memset(read_send_data,0,sizeof(read_send_data));
     switch(aiwan_read_data)
     {
 		case GET_BATTERY_LEVEL:{
@@ -976,13 +978,19 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			    }
 			}
 			batteryArray[2] = getBoxChargerBattery();
-			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
+			read_send_data[2] = 3;
+			memcpy(&read_send_data[3],batteryArray,2);
+			//sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
+			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, read_send_data, 3+2);
 			break;
 		}
 		case GET_DEVICE_NAME:{
 			uint8_t* localname =  factory_section_get_bt_name();
 		    if(localname)
 		    {
+		    	read_send_data[2] = strlen((const char *)localname);
+				memcpy(&read_send_data[3],localname,strlen((const char *)localname));
+		    	//sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
 		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
 		    }
 		

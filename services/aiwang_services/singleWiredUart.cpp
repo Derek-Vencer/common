@@ -249,10 +249,12 @@ static void pogo_pin_monitor_thread(void const *argument)
 		uart_rx_handle_data_count ++;
 		if(uart_rx_handle_data_count >= 10)
 		{
-			DBGPRINT("@@@@@@@@@pogo out");
-			printf("@@@@@@@@printf ");
-			//communication_stop();
+			DBGPRINT("@@@@@@@@@pogo out stop");
+			
+			communication_stop();
 			uart_rx_handle_data_count = 0;
+			break;
+			
 		}
 #endif
     }
@@ -929,7 +931,7 @@ void wired_uart_communication_modual_init(void)
 		//communication_stop();
 		
 		// 启动 Pogo Pin 监控
-    	start_pogo_pin_monitor();
+    	//start_pogo_pin_monitor();
 		
     }
 }
