@@ -116,9 +116,15 @@ extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *f
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION    "01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.1.1" //"01.01.00.04"
 
+typedef struct{
+	uint8_t set_name_status;
+}bleCmdSetStatus;
 #define need_send_data_by_notify 0
+
+bleCmdSetStatus bleCmdSet_status;
+
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
 
@@ -167,6 +173,11 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 	TRACE(0,"%s.", __func__);
 	//if( factory_section_set_bt_name((const char *)&data[1], len -1))
 	char nameBuffer[248+1] = {0};
+	if(len > 248)
+	{
+		bleCmdSet_status.set_name_status = 0x3B;
+		return;
+	}
 	len = (len - 1) > 248?248:(len -1);
 	if (len > 0)
 	{
@@ -174,6 +185,11 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 		if( factory_section_set_bt_name(nameBuffer, len+1))
 		{
 			TRACE(0,"%s set bt name error", __func__);
+			bleCmdSet_status.set_name_status = 0x3B;
+		}
+		else
+		{
+			bleCmdSet_status.set_name_status = 0x3A;
 		}
 		// if( factory_section_set_ble_name((const char*)nameBuffer,len+1))
 		// {
@@ -991,7 +1007,7 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 		    	read_send_data[2] = strlen((const char *)localname);
 				memcpy(&read_send_data[3],localname,strlen((const char *)localname));
 		    	//sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
-		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
+		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)read_send_data, strlen((const char *)localname)+1+2);
 		    }
 		
 			break;

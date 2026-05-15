@@ -258,7 +258,26 @@ static void pogo_pin_monitor_thread(void const *argument)
 		}
 #endif
     }
-    
+	osDelay(200);
+	//app_bt_ME_ControlSleepMode(1);
+#if 1
+	// 重置蓝牙连接参数，确保进入低功耗模式
+        struct BT_DEVICE_T *device = app_bt_get_device(BT_DEVICE_ID_1);
+        if (device && device->acl_is_connected) {
+            // 先禁用所有策略
+            app_bt_Me_SetLinkPolicy(device->acl_conn_hdl, BTIF_BLP_DISABLE_ALL);
+            osDelay(50);
+            // 再启用Sniff模式
+            app_bt_Me_SetLinkPolicy(device->acl_conn_hdl, BTIF_BLP_SNIFF_MODE);
+        }
+
+#else
+	app_bt_ME_ControlSleepMode(0);
+	osDelay(200);
+	app_bt_ME_ControlSleepMode(1);
+
+#endif
+	
     DBGPRINT("[POGO] Pogo Pin monitor thread exited");
 }
 
@@ -931,7 +950,7 @@ void wired_uart_communication_modual_init(void)
 		//communication_stop();
 		
 		// 启动 Pogo Pin 监控
-    	//start_pogo_pin_monitor();
+    	start_pogo_pin_monitor();
 		
     }
 }

@@ -581,6 +581,11 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             uart_error_detected = 0;
             int_unlock(lock);
             osThreadYield();
+
+			osDelay(200);
+			uart_init();
+			osDelay(200);
+			uart_deinit(); 
 			#else
 			lock = int_lock();
             uart_rx_dma_stop();
