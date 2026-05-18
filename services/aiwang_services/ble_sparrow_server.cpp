@@ -114,6 +114,9 @@ static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
 
 extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *fw_rev_2, uint8_t *fw_rev_3);
 
+void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func);
+void handleSetKeyMapNumber(uint8_t index);
+
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
 #define  DISPLAY_EARBUDS_VERSION   "V0.1.1" //"01.01.00.04"
@@ -131,11 +134,12 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     uint8_t batflag; //left, right, box
     batflag = app_battery_current_level();
     TRACE(0,"%s batflag=%d", __func__, batflag);
+#if 0
     if(batflag > 9)
     {
         batflag = 9;
     }
-
+#endif
 	uint8_t batteryArray[3] = {0, 0, 0};
 	batteryArray[0]  = batflag;
 	if( 0xFF == getPeerBattery())
@@ -145,15 +149,23 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 	else
 	{
 		batteryArray[1]  = getPeerBattery();
+		#if 0
 	    if(batteryArray[1] > 9)
 	    {
 	    	batteryArray[1] = 9;
 	    }
+		#endif
 	}
 	batteryArray[2] = getBoxChargerBattery();
 //#if need_send_data_by_notify
-	sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
+	//sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
 //#endif
+	batteryArray[2] = getBoxChargerBattery();
+	uint8_t read_send_data[20] = {0};
+	read_send_data[1] = 3;
+	memcpy(&read_send_data[2],batteryArray,2);
+	//sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
+	sparraw_tx_msg(0x31, read_send_data, 3+2);
 
 
 }
@@ -216,6 +228,42 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
 void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
+	const uint8_t *data_buf = data + 1;
+	if(len > 2){
+		uint16_t data_len = data_buf[0] << 8 | (data_buf[1]);
+		uint16_t key_count = ((data_len - 1) >> 1);
+		if(key_count != data_buf[2])
+		{
+			//error data
+		}
+		else{
+			uint16_t key_map_len = key_count * 2;
+			if((key_map_len + 4) != len){
+				//error data
+			}
+			else{
+				const uint8_t *key_map = &data_buf[3];
+				uint8_t local_er_count = 0;
+				//uint8_t *bt_local_addr = NULL;
+				//bt_local_addr = (uint8_t *)bt_get_local_address();
+				//uint8_t LocalLeftEarbuds = bt_local_addr[0]&0x01?0:1;
+				for(int i = 0; i < key_count; i++){
+					//uint8_t  isLeftEarbuds = key_map[0+i*2]&0x01;
+					uint8_t key_actions = key_map[0+i*2];
+					uint8_t key_func = key_map[1+i*2];
+					handleSetKeyMapActionAndFunc(local_er_count,key_actions,key_func);
+					local_er_count ++;					
+					
+				}
+				handleSetKeyMapNumber(local_er_count);
+			}
+		}
+	}
+	else
+	{
+		
+	}
+	
 #if need_send_data_by_notify
 	sparraw_tx_msg(RSP_SET_KEY_MAPPING, (const uint8_t*)"", 0);
 #endif
@@ -1013,11 +1061,12 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			uint8_t batflag; //left, right, box
 		    batflag = app_battery_current_level();
 		    TRACE(0,"%s batflag=%d", __func__, batflag);
+#if 0
 		    if(batflag > 9)
 		    {
 		        batflag = 9;
 		    }
-
+#endif
 			uint8_t batteryArray[3] = {0, 0, 0};
 			batteryArray[0]  = batflag;
 			if( 0xFF == getPeerBattery())
@@ -1027,14 +1076,16 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			else
 			{
 				batteryArray[1]  = getPeerBattery();
+				#if 0
 			    if(batteryArray[1] > 9)
 			    {
 			    	batteryArray[1] = 9;
 			    }
+				#endif
 			}
 			batteryArray[2] = getBoxChargerBattery();
-			read_send_data[2] = 3;
-			memcpy(&read_send_data[3],batteryArray,2);
+			read_send_data[1] = 3;
+			memcpy(&read_send_data[2],batteryArray,2);
 			//sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
 			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, read_send_data, 3+2);
 			break;
@@ -1043,8 +1094,8 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			uint8_t* localname =  factory_section_get_bt_name();
 		    if(localname)
 		    {
-		    	read_send_data[2] = strlen((const char *)localname);
-				memcpy(&read_send_data[3],localname,strlen((const char *)localname));
+		    	read_send_data[1] = strlen((const char *)localname);
+				memcpy(&read_send_data[2],localname,strlen((const char *)localname));
 		    	//sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
 		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)read_send_data, strlen((const char *)localname)+1+2);
 		    }
@@ -1052,14 +1103,14 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			break;
 		}
 		case SET_DEVICE_NAME:{
-			read_send_data[2] = 0;
+			read_send_data[1] = 0;
 			sparraw_read_rsp_msg(RSP_SET_DEVICE_NAME,param->aw_connhdl,param->aw_token, read_send_data, 0+2);
 			break;
 		}
 		case GET_KEY_MAPPING:{
 			const uint8_t keyMaps[2] = {0x00,0x14};
-			read_send_data[2] = sizeof(keyMaps)/keyMaps[0];
-			memcpy(&read_send_data[3],keyMaps,sizeof(keyMaps)/keyMaps[0]);
+			read_send_data[1] = sizeof(keyMaps)/keyMaps[0];
+			memcpy(&read_send_data[2],keyMaps,sizeof(keyMaps)/keyMaps[0]);
 			//sparraw_tx_msg(RSP_GET_KEY_MAPPING, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
 			sparraw_read_rsp_msg(RSP_GET_KEY_MAPPING,param->aw_connhdl,param->aw_token, read_send_data, (sizeof(keyMaps)/keyMaps[0])+2);
 			break;
@@ -1073,8 +1124,8 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 		case GET_EQ_PRESET:{
 			uint8_t index = 0;
 			handleGetEqIndex(&index);
-			read_send_data[2] = 1;
-			read_send_data[3] = index;
+			read_send_data[1] = 1;
+			read_send_data[2] = index;
 			sparraw_read_rsp_msg(RSP_GET_EQ_PRESET,param->aw_connhdl,param->aw_token, read_send_data, 1+2);
 			
 			break;
@@ -1088,9 +1139,9 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			uint8_t version[11+11+1] = {0};
 			memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
 			aiWangGetChargerBoxVersion(&version[strlen(DISPLAY_EARBUDS_VERSION)]);
-			read_send_data[2] = strlen((char*)version);
-			memcpy(&read_send_data[3],version,strlen((char*)version));
-			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,(const uint8_t*)version, strlen((char*)version)+2);		
+			read_send_data[1] = strlen((char*)version);
+			memcpy(&read_send_data[2],version,strlen((char*)version));
+			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,read_send_data, strlen((char*)version)+2);		
 			break;
 		}
 		case FACTORY_COMMAND_SYS:{

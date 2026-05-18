@@ -943,10 +943,10 @@ void handle_key_event(click_type_t click)
 	}
 	uint8_t *bt_local_addr = NULL;
 	bt_local_addr = (uint8_t *)bt_get_local_address();
-    isRightEarbuds = bt_local_addr[0]&0x01?RIGHT_BUDS:LEFT_BUDS;	
+    uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?LEFT_BUDS:RIGHT_BUDS;	
    
     printf("Key event: action=0x%02X, click=0x%02X\n", action, click);
-    function_t func = keymap_lookup(action, click,isRightEarbuds);
+    function_t func = keymap_lookup(action, click,isLeftEarbuds);
     printf("  -> function code: 0x%02X\n", func);
     key_function_execute(func);
 }

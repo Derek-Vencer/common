@@ -76,20 +76,22 @@ static void pair_handler_func(enum pair_event event, void *data)
         {
             cb((bt_bdaddr_t *)data, APP_BT_PAIRED);
         }
-
+		pair_status = 1;
         break;
     case PAIRING_TIMEOUT:
+		pair_status = 1;
         break;
     case PAIRING_FAILED:
         err_code = 1;
         app_pair_evt = PAIR_EVENT_COMPLETE;
+		pair_status = 1;
         break;
     default:
         break;
     }
 
     _event.errCode = err_code;
-	pair_status = 1;
+	
     app_pair_handler_func(app_pair_evt, (btif_event_t*)&_event);
 
     return;
