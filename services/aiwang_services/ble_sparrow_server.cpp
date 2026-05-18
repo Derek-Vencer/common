@@ -154,6 +154,8 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 //#if need_send_data_by_notify
 	sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
 //#endif
+
+
 }
 
 void handleGetDeviceName(const uint8_t *data, uint16_t len)

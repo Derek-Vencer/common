@@ -84,7 +84,7 @@ subdir-ccflags-y += -Iapps/common \
 					-Imultimedia/inc/audio/process/dynamic_eq/include \
 					-Imultimedia/inc/audio/process/bass_enhancer/include \
 					-Imultimedia/inc/audio/process/virtual_surround_process/include \
-				    
+				    -Ibthost/adapter/inc/hfp \
 				    
 				    
 				    

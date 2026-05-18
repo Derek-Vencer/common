@@ -65,6 +65,7 @@
 #endif
 
 #include "hal_sleep.h"
+#include "bes_hfp_api.h"
 
 #undef printf
 #define printf(fmt, ...) \
@@ -410,13 +411,14 @@ static void wired_uart_get_battery_level(void)
 		pair_status = get_pair_status();
 		buff[3] = pair_status;
 		//pair_status = 0;
-		if(enter_pair_count > 5)
+		if(enter_pair_count > 1)
 		{
 			enter_pair = 0;
 			set_pair_status(0);
 			enter_pair_count = 0;
 		}
-		enter_pair_count ++;
+		else
+			enter_pair_count ++;
 		//set_pair_status(0);
 	}
 	else{
@@ -805,12 +807,13 @@ void keymap_set_entry(action_type_t action, click_type_t click, function_t func)
 /*==============================================================================
  * 3. 按键查找函数（基于保存的映射表）
  *----------------------------------------------------------------------------*/
-function_t keymap_lookup(action_type_t action, click_type_t click)
+function_t keymap_lookup(action_type_t action, click_type_t click ,uint8_t isREarbuds)
 {
     uint8_t target = action | click;
     for (int i = 0; i < s_key_map_count; i++) {
         if (s_key_map[i].actions == target) {
-            return (function_t)s_key_map[i].function;
+			if(isREarbuds == ((s_key_map[i].function >> 4)& 0x01))
+            	return (function_t)s_key_map[i].function;
         }
     }
     return FUNC_NOT_ASSIGNED;
@@ -819,27 +822,93 @@ function_t keymap_lookup(action_type_t action, click_type_t click)
 /*==============================================================================
  * 4. 功能执行函数（具体动作实现）
  *----------------------------------------------------------------------------*/
+ #if 0
+static uint8_t check_call_status(void)
+{
+    if (bes_bt_hfp_has_call_active()) {
+        return BT_HFP_CALL_ACTIVE;
+    } else if (bes_bt_hfp_has_call_setup() == BT_HFP_CALL_SETUP_IN) {
+        return BT_HFP_CALL_SETUP_IN;
+    } else if (bes_bt_hfp_has_call_setup() == BT_HFP_CALL_SETUP_OUT) {
+        return BT_HFP_CALL_SETUP_OUT;
+    }else {
+        return BT_HFP_CALL_NONE;
+    }
+}
+#endif
 static void on_accept_call(void)    {
 	printf(">>> Accept call\n"); 
+#if 0
+	uint8_t call_status = check_call_status();
+	if((call_status == BT_HFP_CALL_SETUP_IN) || (call_status == BT_HFP_CALL_SETUP_OUT))
+		bes_bt_hfp_call_action(BT_DEVICE_ID_1, BT_HFP_ANSWER_CALL);
+#else
+	CALL_STATE_E call_state = app_bt_get_call_state();
+    if ((call_state == CALL_STATE_INCOMING) || (call_state == CALL_STATE_THREE_WAY_INCOMING))
+    {
+       bt_key_handle_call(call_state);
+    }
+    
+#endif
+	
 }
 static void on_reject_call(void)    {
 	printf(">>> Reject/end call\n"); 
+#if 0
+	bes_bt_hfp_call_action(BT_DEVICE_ID_1, BT_HFP_HANGUP_CALL);
+#else
+	CALL_STATE_E call_state = app_bt_get_call_state();
+    if ((call_state == CALL_STATE_OUTGOING) || (call_state == CALL_STATE_ACTIVE) || (call_state == CALL_STATE_TRREE_WAY_HOLD_CALLING))
+    {
+       bt_key_handle_call(call_state);
+    }
+#endif	
 }
 static void on_play_pause(void)     {
-	printf(">>> Play/Pause\n"); }
-static void on_next_song(void)      { printf(">>> Next song\n"); 
+	printf(">>> Play/Pause\n"); 
+#if 1
+	uint8_t play_status = app_bt_get_music_playback_status();
+	if(play_status == PLAYING)
+	{
+		app_audio_control_media_pause();
+	}
+	else
+	{
+		app_audio_control_media_play();
+	}
+#else
+	uint8_t play_status = app_bt_get_music_playback_status();
+	if(play_status == PLAYING)
+	{
+		app_audio_control_media_pause();
+		TRACE(0,"%s PAUSE music", __func__);
+	}
+	else
+	{
+		app_audio_control_media_play();
+		TRACE(0,"%s PLAYING music", __func__);
+	}
+#endif
+}
+static void on_next_song(void)      {
+	printf(">>> Next song\n"); 
+	app_audio_control_media_forward();
 }
 static void on_prev_song(void)      {
 	printf(">>> Previous song\n"); 
+	app_audio_control_media_backward();
 }
 static void on_volume_up(void)      {
 	printf(">>> Volume up\n"); 
+	app_audio_control_streaming_volume_up();
 }
 static void on_volume_down(void)    {
 	printf(">>> Volume down\n"); 
+	app_audio_control_streaming_volume_down();
 }
 static void on_voice_assist(void)   {
 	printf(">>> Voice assistant\n"); 
+	app_audio_control_open_voice_assistant();
 }
 
 void key_function_execute(function_t func)
@@ -859,10 +928,25 @@ void key_function_execute(function_t func)
 /*==============================================================================
  * 5. 按键事件处理：判断并调用相关函数
  *----------------------------------------------------------------------------*/
-void handle_key_event(action_type_t action, click_type_t click)
+void handle_key_event(click_type_t click)
 {
+	action_type_t action;
+	CALL_STATE_E call_state = app_bt_get_call_state();
+    if (call_state == CALL_STATE_IDLE)
+    {
+       //bt_key_handle_music_playback();
+       action = ACTION_IDLE_MUSIC;
+    }
+	else
+	{
+		action = ACTION_CALL;
+	}
+	uint8_t *bt_local_addr = NULL;
+	bt_local_addr = (uint8_t *)bt_get_local_address();
+    isRightEarbuds = bt_local_addr[0]&0x01?RIGHT_BUDS:LEFT_BUDS;	
+   
     printf("Key event: action=0x%02X, click=0x%02X\n", action, click);
-    function_t func = keymap_lookup(action, click);
+    function_t func = keymap_lookup(action, click,isRightEarbuds);
     printf("  -> function code: 0x%02X\n", func);
     key_function_execute(func);
 }
@@ -1054,7 +1138,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     		   DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!", isRightEarbuds);
 #if 1
 			   enter_pair = 1;
-
+				enter_pair_count = 0;
     		   aiWang_disconnet_phone_enter_pairmode();
 #else
     		   wired_uart_enter_pairmode();
