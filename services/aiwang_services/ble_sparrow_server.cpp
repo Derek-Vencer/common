@@ -230,6 +230,43 @@ void handleSetEqIndex(uint8_t index)
 
 }
 
+void handleGetKeyMapNumber(uint8_t *index)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+	*index = nvrecord_env->key_map_number;
+}
+
+void handleSetKeyMapNumber(uint8_t index)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+
+	nvrecord_env->key_map_number = index;
+
+	nv_record_env_set(nvrecord_env);
+
+}
+void handleGetKeyMapActionAndFunc(uint8_t index,uint8_t *action,uint8_t *func)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+	*action = nvrecord_env->key_map_action[index];
+	*func = nvrecord_env->key_map_func[index];
+}
+
+void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
+{
+    struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+
+	nvrecord_env->key_map_action[index] = action;
+	nvrecord_env->key_map_func[index] = func;
+
+	nv_record_env_set(nvrecord_env);
+
+}
+
 void handleGetEqIndex(uint8_t *index)
 {
     struct nvrecord_env_t *nvrecord_env;
@@ -1013,37 +1050,45 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			break;
 		}
 		case SET_DEVICE_NAME:{
-			sparraw_read_rsp_msg(RSP_SET_DEVICE_NAME,param->aw_connhdl,param->aw_token, (const uint8_t*)"", 0);
+			read_send_data[2] = 0;
+			sparraw_read_rsp_msg(RSP_SET_DEVICE_NAME,param->aw_connhdl,param->aw_token, read_send_data, 0+2);
 			break;
 		}
 		case GET_KEY_MAPPING:{
 			const uint8_t keyMaps[2] = {0x00,0x14};
+			read_send_data[2] = sizeof(keyMaps)/keyMaps[0];
+			memcpy(&read_send_data[3],keyMaps,sizeof(keyMaps)/keyMaps[0]);
 			//sparraw_tx_msg(RSP_GET_KEY_MAPPING, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
-			sparraw_read_rsp_msg(RSP_GET_KEY_MAPPING,param->aw_connhdl,param->aw_token, (const uint8_t*)&keyMaps[0], (sizeof(keyMaps)/keyMaps[0]));
+			sparraw_read_rsp_msg(RSP_GET_KEY_MAPPING,param->aw_connhdl,param->aw_token, read_send_data, (sizeof(keyMaps)/keyMaps[0])+2);
 			break;
 		}
 		case SET_KEY_MAPPING:{
 			//const uint8_t keyMaps[2] = {0x00,0x14};
-			sparraw_read_rsp_msg(RSP_SET_KEY_MAPPING,param->aw_connhdl,param->aw_token, (const uint8_t*)"", 0);
+			sparraw_read_rsp_msg(RSP_SET_KEY_MAPPING,param->aw_connhdl,param->aw_token, read_send_data, 0+2);
 			
 			break;
 		}
 		case GET_EQ_PRESET:{
 			uint8_t index = 0;
 			handleGetEqIndex(&index);
-			sparraw_read_rsp_msg(RSP_GET_EQ_PRESET,param->aw_connhdl,param->aw_token, &index, 1);
+			read_send_data[2] = 1;
+			read_send_data[3] = index;
+			sparraw_read_rsp_msg(RSP_GET_EQ_PRESET,param->aw_connhdl,param->aw_token, read_send_data, 1+2);
 			
 			break;
 		}
 		case SET_EQ_PRESET:{
-			sparraw_read_rsp_msg(RSP_SET_EQ_PRESET, param->aw_connhdl,param->aw_token,(const uint8_t*)"", 0);			
+			
+			sparraw_read_rsp_msg(RSP_SET_EQ_PRESET, param->aw_connhdl,param->aw_token,read_send_data, 0+2);			
 			break;
 		}
 		case GET_FW_VERSION:{
 			uint8_t version[11+11+1] = {0};
 			memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
-			aiWangGetChargerBoxVersion(&version[11]);
-			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,(const uint8_t*)version, 23);		
+			aiWangGetChargerBoxVersion(&version[strlen(DISPLAY_EARBUDS_VERSION)]);
+			read_send_data[2] = strlen((char*)version);
+			memcpy(&read_send_data[3],version,strlen((char*)version));
+			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,(const uint8_t*)version, strlen((char*)version)+2);		
 			break;
 		}
 		case FACTORY_COMMAND_SYS:{

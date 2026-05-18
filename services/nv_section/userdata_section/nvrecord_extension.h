@@ -330,7 +330,10 @@ struct nvrecord_env_t {
     uint8_t sn_len;
 	uint8_t chargerBoxVersion[15+1];
 	uint8_t eq_index_data; 
-    uint8_t color_data; 
+    uint8_t color_data;
+	uint8_t key_map_number;
+	uint8_t key_map_action[1]; 
+	uint8_t key_map_func[1];
 #endif //#ifdef BESUI_TWS_EN
 
 #ifdef BESUI_CAPSENSOR_FACTORY_EN

@@ -64,6 +64,8 @@
 #include "app_ibrt_customif_cmd.h"
 #endif
 
+#include "hal_sleep.h"
+
 #undef printf
 #define printf(fmt, ...) \
     hal_trace_printf(0, "[goc-uart] " fmt, ##__VA_ARGS__)
@@ -252,6 +254,7 @@ static void pogo_pin_monitor_thread(void const *argument)
 			DBGPRINT("@@@@@@@@@pogo out stop");
 			
 			communication_stop();
+			hal_sleep_start_stats(10000, 10000);
 			uart_rx_handle_data_count = 0;
 			break;
 			
@@ -672,6 +675,202 @@ bool aiWangBoxIsUsed(void)
 	return boxChargerStatus.boxIsOpen;
 }
 
+extern void handleGetKeyMapNumber(uint8_t *index);
+extern void handleGetKeyMapActionAndFunc(uint8_t index,uint8_t *action,uint8_t *func);
+
+//button function
+/***********************************************/
+/***********************************************/
+// 操作类型（高4位）
+typedef enum {
+    ACTION_IDLE_MUSIC = 0x00,   // 空闲/音乐播放
+    ACTION_CALL       = 0x10,   // 通话
+    ACTION_LEFT       = 0x20,   // 左
+    ACTION_RIGHT      = 0x30    // 右
+} action_type_t;
+
+// 点击类型（低4位）
+typedef enum {
+    CLICK_SINGLE       = 0x00,  // 单击
+    CLICK_DOUBLE       = 0x01,  // 双击
+    CLICK_TRIPLE       = 0x02,  // 三击
+    CLICK_DOUBLE_HOLD  = 0x03,  // 双击并按住
+    CLICK_HOLD_2S      = 0x04   // 按住2秒
+} click_type_t;
+
+// 功能码
+typedef enum {
+    FUNC_NOT_ASSIGNED   = 0x00,
+    FUNC_ACCEPT_CALL    = 0x01,
+    FUNC_REJECT_CALL    = 0x02,
+    FUNC_PLAY_PAUSE     = 0x03,
+    FUNC_NEXT_SONG      = 0x04,
+    FUNC_PREV_SONG      = 0x05,
+    FUNC_VOLUME_UP      = 0x06,
+    FUNC_VOLUME_DOWN    = 0x07,
+    FUNC_VOICE_ASSIST   = 0x08
+} function_t;
+
+// 单个映射条目
+typedef struct {
+    uint8_t actions;    // 高4位操作类型 + 低4位点击类型
+    uint8_t function;   // 对应的功能
+} key_map_entry_t;
+// 整个映射块头部（偏移1~3）
+typedef struct {
+    uint16_t length;    // 总长度 = 2 * key_count + 1
+    uint8_t  key_count; // 映射条目数量
+    // 后面紧跟 key_count 个 key_map_entry_t
+} key_map_header_t;
+
+/* 功能函数类型：无参数、无返回值（可根据需要扩展） */
+typedef void (*function_handler_t)(void);
+
+/*==============================================================================
+ * 2. 保存映射值的全局表（可修改，支持运行时保存/更新）
+ *----------------------------------------------------------------------------*/
+#define MAX_KEY_MAP_ENTRIES  16
+static key_map_entry_t s_key_map[MAX_KEY_MAP_ENTRIES];
+static uint8_t s_key_map_count = 0;
+
+// 初始化默认映射
+static void keymap_init_default(void)
+{
+#if 0
+    s_key_map_count = 0;
+    // 音乐模式
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_SINGLE),      .function = FUNC_PLAY_PAUSE };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_DOUBLE),      .function = FUNC_NEXT_SONG };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_TRIPLE),      .function = FUNC_PREV_SONG };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_HOLD_2S),     .function = FUNC_VOICE_ASSIST };
+    // 通话模式
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_SINGLE),            .function = FUNC_ACCEPT_CALL };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_DOUBLE),            .function = FUNC_REJECT_CALL };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_HOLD_2S),           .function = FUNC_VOICE_ASSIST };
+    // 左右方向
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_LEFT | CLICK_SINGLE),            .function = FUNC_VOLUME_DOWN };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_LEFT | CLICK_HOLD_2S),           .function = FUNC_PREV_SONG };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_RIGHT | CLICK_SINGLE),           .function = FUNC_VOLUME_UP };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_RIGHT | CLICK_HOLD_2S),          .function = FUNC_NEXT_SONG };
+#endif
+	uint8_t key_number = 0;
+	handleGetKeyMapNumber(&key_number);
+	
+	for(int i = 0;i<key_number;i++)
+	{
+		uint8_t key_action = 0;
+		uint8_t key_func = 0;
+		handleGetKeyMapActionAndFunc(i,&key_action,&key_func);
+		
+		s_key_map[i] = (key_map_entry_t){ .actions = key_action,      .function = key_func };
+	}
+}
+
+// 保存整个映射表（例如写入 Flash / EEPROM）
+void keymap_save_config(void)
+{
+    // 实际项目中可调用存储驱动，将 s_key_map 和 s_key_map_count 保存到非易失介质
+    printf("[KeyMap] Saved %d entries\n", s_key_map_count);
+}
+
+// 加载之前保存的映射表
+void keymap_load_config(void)
+{
+    // 实际项目：从非易失介质读取并恢复 s_key_map 和 s_key_map_count
+    // 若无保存数据，则调用默认初始化
+    keymap_init_default();
+    printf("[KeyMap] Loaded %d entries\n", s_key_map_count);
+}
+
+// 动态修改/保存单个映射条目（覆盖已有的 actions，或新增）
+void keymap_set_entry(action_type_t action, click_type_t click, function_t func)
+{
+    uint8_t target_actions = action | click;
+    for (int i = 0; i < s_key_map_count; i++) {
+        if (s_key_map[i].actions == target_actions) {
+            s_key_map[i].function = func;
+            printf("[KeyMap] Updated entry 0x%02X -> func 0x%02X\n", target_actions, func);
+            return;
+        }
+    }
+    // 未找到则新增
+    if (s_key_map_count < MAX_KEY_MAP_ENTRIES) {
+        s_key_map[s_key_map_count++] = (key_map_entry_t){ target_actions, func };
+        printf("[KeyMap] Added entry 0x%02X -> func 0x%02X\n", target_actions, func);
+    } else {
+        printf("[KeyMap] Error: table full\n");
+    }
+}
+
+/*==============================================================================
+ * 3. 按键查找函数（基于保存的映射表）
+ *----------------------------------------------------------------------------*/
+function_t keymap_lookup(action_type_t action, click_type_t click)
+{
+    uint8_t target = action | click;
+    for (int i = 0; i < s_key_map_count; i++) {
+        if (s_key_map[i].actions == target) {
+            return (function_t)s_key_map[i].function;
+        }
+    }
+    return FUNC_NOT_ASSIGNED;
+}
+
+/*==============================================================================
+ * 4. 功能执行函数（具体动作实现）
+ *----------------------------------------------------------------------------*/
+static void on_accept_call(void)    {
+	printf(">>> Accept call\n"); 
+}
+static void on_reject_call(void)    {
+	printf(">>> Reject/end call\n"); 
+}
+static void on_play_pause(void)     {
+	printf(">>> Play/Pause\n"); }
+static void on_next_song(void)      { printf(">>> Next song\n"); 
+}
+static void on_prev_song(void)      {
+	printf(">>> Previous song\n"); 
+}
+static void on_volume_up(void)      {
+	printf(">>> Volume up\n"); 
+}
+static void on_volume_down(void)    {
+	printf(">>> Volume down\n"); 
+}
+static void on_voice_assist(void)   {
+	printf(">>> Voice assistant\n"); 
+}
+
+void key_function_execute(function_t func)
+{
+	switch (func) {
+		case FUNC_ACCEPT_CALL:	on_accept_call(); break;
+		case FUNC_REJECT_CALL:	on_reject_call(); break;
+		case FUNC_PLAY_PAUSE:	on_play_pause(); break;
+		case FUNC_NEXT_SONG:	on_next_song(); break;
+		case FUNC_PREV_SONG:	on_prev_song(); break;
+		case FUNC_VOLUME_UP:	on_volume_up(); break;
+		case FUNC_VOLUME_DOWN:	on_volume_down(); break;
+		case FUNC_VOICE_ASSIST: on_voice_assist(); break;
+		default: printf(">>> No function assigned\n"); break;
+	}
+}
+/*==============================================================================
+ * 5. 按键事件处理：判断并调用相关函数
+ *----------------------------------------------------------------------------*/
+void handle_key_event(action_type_t action, click_type_t click)
+{
+    printf("Key event: action=0x%02X, click=0x%02X\n", action, click);
+    function_t func = keymap_lookup(action, click);
+    printf("  -> function code: 0x%02X\n", func);
+    key_function_execute(func);
+}
+
+
+/***********************************************/
+
+
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
     uint8_t cmd_event = 0xff;
@@ -916,6 +1115,7 @@ static void wired_uart_communication_post_msg(uint8_t *uart_data, uint8_t len)
     msg.mod_id = APP_MODUAL_AIWANG_WIRED_UART;
     msg.msg_body.message_Param2 = len;
     app_mailbox_put(&msg);
+	//handle_key_event(ACTION_IDLE_MUSIC,CLICK_SINGLE);
 }
 
 static void wired_uart_communication_rx_data_pre(uint8_t *data_buf, uint8_t data_len)
