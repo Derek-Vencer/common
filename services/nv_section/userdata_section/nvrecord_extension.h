@@ -26,7 +26,7 @@
 #endif
 
 // increase by 1 if the nvrecord's whole data structure is changed and the content needs to be rebuilt
-#define NV_EXTENSION_MAJOR_VERSION 18
+#define NV_EXTENSION_MAJOR_VERSION 19 //18
 // increase by 1 if the new items are appended to the tail of the former nvrecord's data structure
 #define NV_EXTENSION_MINOR_VERSION 1
 
@@ -328,13 +328,15 @@ struct nvrecord_env_t {
     //uint8_t sn_data[30];
     uint8_t sn_data[12+1];
     uint8_t sn_len;
-	//uint8_t chargerBoxVersion[15+1];
-	uint8_t chargerBoxVersion[7+1];
+	uint8_t chargerBoxVersion[15+1];
+	//uint8_t chargerBoxVersion[7+1];
 	uint8_t eq_index_data; 
     uint8_t color_data;
 	uint8_t key_map_number;
-	uint8_t key_map_action[4]; 
-	uint8_t key_map_func[4];
+	//uint8_t key_map_action[4]; 
+	//uint8_t key_map_func[4];
+	uint8_t key_map_action[21+1]; 
+	uint8_t key_map_func[21+1];
 #endif //#ifdef BESUI_TWS_EN
 
 #ifdef BESUI_CAPSENSOR_FACTORY_EN
