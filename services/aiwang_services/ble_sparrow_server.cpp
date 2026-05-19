@@ -908,7 +908,7 @@ static void keymap_init_default(void)
 void keymap_save_config(void)
 {
     // 实际项目中可调用存储驱动，将 s_key_map 和 s_key_map_count 保存到非易失介质
-    printf("[KeyMap] Saved %d entries\n", s_key_map_count);
+    //printf("[KeyMap] Saved %d entries\n", s_key_map_count);
 }
 
 // 加载之前保存的映射表
@@ -917,7 +917,7 @@ void keymap_load_config(void)
     // 实际项目：从非易失介质读取并恢复 s_key_map 和 s_key_map_count
     // 若无保存数据，则调用默认初始化
     keymap_init_default();
-    printf("[KeyMap] Loaded %d entries\n", s_key_map_count);
+    //printf("[KeyMap] Loaded %d entries\n", s_key_map_count);
 }
 
 // 动态修改/保存单个映射条目（覆盖已有的 actions，或新增）
@@ -934,9 +934,9 @@ void keymap_set_entry(action_type_t action, click_type_t click, function_t func)
     // 未找到则新增
     if (s_key_map_count < MAX_KEY_MAP_ENTRIES) {
         s_key_map[s_key_map_count++] = (key_map_entry_t){ target_actions, func };
-        printf("[KeyMap] Added entry 0x%02X -> func 0x%02X\n", target_actions, func);
+        //printf("[KeyMap] Added entry 0x%02X -> func 0x%02X\n", target_actions, func);
     } else {
-        printf("[KeyMap] Error: table full\n");
+        //printf("[KeyMap] Error: table full\n");
     }
 }
 
@@ -974,7 +974,7 @@ static uint8_t check_call_status(void)
 }
 #endif
 static void on_accept_call(void)    {
-	printf(">>> Accept call\n"); 
+	//printf(">>> Accept call\n"); 
 #if 0
 	uint8_t call_status = check_call_status();
 	if((call_status == BT_HFP_CALL_SETUP_IN) || (call_status == BT_HFP_CALL_SETUP_OUT))
@@ -990,7 +990,7 @@ static void on_accept_call(void)    {
 	
 }
 static void on_reject_call(void)    {
-	printf(">>> Reject/end call\n"); 
+	//printf(">>> Reject/end call\n"); 
 #if 0
 	bes_bt_hfp_call_action(BT_DEVICE_ID_1, BT_HFP_HANGUP_CALL);
 #else
@@ -1002,7 +1002,7 @@ static void on_reject_call(void)    {
 #endif	
 }
 static void on_play_pause(void)     {
-	printf(">>> Play/Pause\n"); 
+	//printf(">>> Play/Pause\n"); 
 #if 1
 	uint8_t play_status = app_bt_get_music_playback_status();
 	if(play_status == PLAYING)
@@ -1028,23 +1028,23 @@ static void on_play_pause(void)     {
 #endif
 }
 static void on_next_song(void)      {
-	printf(">>> Next song\n"); 
+	//printf(">>> Next song\n"); 
 	app_audio_control_media_forward();
 }
 static void on_prev_song(void)      {
-	printf(">>> Previous song\n"); 
+	//printf(">>> Previous song\n"); 
 	app_audio_control_media_backward();
 }
 static void on_volume_up(void)      {
-	printf(">>> Volume up\n"); 
+	//printf(">>> Volume up\n"); 
 	app_audio_control_streaming_volume_up();
 }
 static void on_volume_down(void)    {
-	printf(">>> Volume down\n"); 
+	//printf(">>> Volume down\n"); 
 	app_audio_control_streaming_volume_down();
 }
 static void on_voice_assist(void)   {
-	printf(">>> Voice assistant\n"); 
+	//printf(">>> Voice assistant\n"); 
 	app_audio_control_open_voice_assistant();
 }
 
@@ -1083,9 +1083,9 @@ void handle_key_event(click_type_t click)
     uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?0x02:0x01;	
    uint8_t action_er = (action * 4)  | isLeftEarbuds;
    //action_er = action_er << 2;
-    printf("Key event: action=0x%02X, click=0x%02X\n", action_er, click);
+    //printf("Key event: action=0x%02X, click=0x%02X\n", action_er, click);
     function_t func = keymap_lookup(action_er, click,isLeftEarbuds);
-    printf("  -> function code: 0x%02X\n", func);
+    //printf("  -> function code: 0x%02X\n", func);
     key_function_execute(func);
 }
 

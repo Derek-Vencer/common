@@ -65,7 +65,6 @@
 #endif
 
 #include "hal_sleep.h"
-#include "bes_hfp_api.h"
 
 #undef printf
 #define printf(fmt, ...) \
@@ -959,7 +958,7 @@ void wired_uart_communication_modual_init(void)
 		//communication_stop();
 		
 		// 启动 Pogo Pin 监控
-    	start_pogo_pin_monitor();
+    	//start_pogo_pin_monitor();
 		
     }
 }
