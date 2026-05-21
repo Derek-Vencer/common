@@ -1066,13 +1066,13 @@ static void app_battery_pluginout_debounce_handler(void const *param)
 
 	if(status_charger == APP_BATTERY_CHARGER_PLUGOUT)
 	{
-		communication_stop();
-		BATTERY_TRACE(2,"@@communication_stop");
+		//communication_stop();
+		BATTERY_TRACE(2,"@communication_stop");
 	}
 	else
 	{
-		communication_init();
-		BATTERY_TRACE(2,"@@communication_init");
+		//communication_init();
+		BATTERY_TRACE(2,"@communication_init");
 	}
 
     if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT){

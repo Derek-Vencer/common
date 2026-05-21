@@ -164,8 +164,11 @@ static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin)
 	ICP1205_GPIO_INT_IRQ_Disable(pin);
 	//DBGPRINT("hal_gpio_pin_get_val(pin) %d",hal_gpio_pin_get_val(pin));
 	if(hal_gpio_pin_get_val(pin) == 0) {
-		//osSignalSet(charger_manager_thread_id, 0x02);
+#if 1
+		osSignalSet(charger_manager_thread_id, 0x02);
+#else
 		communication_batter1205();
+#endif
 	}
 	//ICP1205_GPIO_INT_IRQ_Enable(pin);
 }
@@ -908,10 +911,13 @@ void charger_manager_start(void)
 {
 	DBGPRINT("%s", __func__);
 	aw_ntc_detect_init();
-	//charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
+#if 1
+	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
+#else
 	if(charger_manager_thread_id)
 		;
 	ICP1205_Init();
 	ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
 	Icp1205IntEnable();
+#endif
 }
