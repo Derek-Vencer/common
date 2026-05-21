@@ -20,7 +20,7 @@
 #include "charger_ntc.h"
 
 #include "charger_with_icp1205.h"
-
+#include "communication_svr.h"
 
 
 //#define EARBUDS_ICP1205_I2C_ADDRESS 0xC2
@@ -164,7 +164,8 @@ static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin)
 	ICP1205_GPIO_INT_IRQ_Disable(pin);
 	//DBGPRINT("hal_gpio_pin_get_val(pin) %d",hal_gpio_pin_get_val(pin));
 	if(hal_gpio_pin_get_val(pin) == 0) {
-		osSignalSet(charger_manager_thread_id, 0x02);
+		//osSignalSet(charger_manager_thread_id, 0x02);
+		communication_batter1205();
 	}
 	//ICP1205_GPIO_INT_IRQ_Enable(pin);
 }
@@ -898,9 +899,19 @@ static void charger_manager_handler_thread(const void *arg)
 	}
 }
 
+void handle_batter_1205(void)
+{
+	Icp1205UpdataIntSts();
+	ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
+}
 void charger_manager_start(void)
 {
 	DBGPRINT("%s", __func__);
 	aw_ntc_detect_init();
-	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
+	//charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
+	if(charger_manager_thread_id)
+		;
+	ICP1205_Init();
+	ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
+	Icp1205IntEnable();
 }

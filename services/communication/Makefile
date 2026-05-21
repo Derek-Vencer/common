@@ -17,7 +17,10 @@ ccflags-y += \
 	-Iservices/communication/comminication_knowles \
 	-Ithirdparty/knowles_uart_lib \
 	-Iutils/crc \
-	-Iservices/app_ai/inc
+	-Iservices/app_ai/inc \
+	-Iservices/aiwang_services \
+	
+	
 
 ifeq ($(SINGLE_UART_IO_INSTEAD_ACON_INTR),1)
 CFLAGS_communication_svr.o += -DSINGLE_UART_IO_INSTEAD_ACON_INTR

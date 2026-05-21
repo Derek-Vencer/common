@@ -22,6 +22,8 @@
 #include "twsui_uart.h"
 #endif
 
+#include "charger_with_icp1205.h"
+
 #if defined(CHIP_BEST2300P) || defined(CHIP_BEST2300A) || (defined(CHIP_BEST1501) && defined(SINGLE_WIRE_UART_PMU_1803))
 #define UART_DEVICE_UART2
 #elif defined(CHIP_BEST1600) && defined(SINGLE_WIRE_UART_PMU_1803)
@@ -41,9 +43,10 @@ enum COMMUNICATION_MSG {
     COMMUNICATION_MSG_RESET    = 6,
     COMMUNICATION_MSG_BREAK    = 7,
     COMMUNICATION_MSG_STOP    = 8,
+    COMMUNICATION_MSG_CHARGER1205 = 9,
 };
 
-const static uint8_t communication_process_log[9][26] = {
+const static uint8_t communication_process_log[10][26] = {
     "COMMUNICATION_MSG_TX_REQ",
     "COMMUNICATION_MSG_TX_DONE",
     "COMMUNICATION_MSG_RX_REQ",
@@ -597,6 +600,9 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             uart_rx_idle_timer_start();
 		#endif	
             break;
+		case COMMUNICATION_MSG_CHARGER1205:
+			handle_batter_1205();
+			break;
         default:
             break;
     }
@@ -632,6 +638,14 @@ void communication_init(void)
 	    msg.message = COMMUNICATION_MSG_INIT;
 	    communication_mailbox_put(&msg);
 	}
+}
+
+void communication_batter1205(void)
+{
+    COMMUNICATION_MAIL msg;
+	memset(&msg, 0, sizeof(COMMUNICATION_MAIL));
+	msg.message = COMMUNICATION_MSG_CHARGER1205;
+    communication_mailbox_put(&msg);
 }
 
 int communication_receive_register_callback(communication_receive_func_typedef p)

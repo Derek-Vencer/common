@@ -16,6 +16,7 @@ extern "C" {
 
 void ICP1205_Init(void);
 void charger_manager_start(void);
+void handle_batter_1205(void);
 
 uint32_t writeDataTo_ICP1205(unsigned char reg, unsigned char *data, unsigned char length);
 uint32_t readDataFrom_ICP1205(unsigned char reg, unsigned char *data, unsigned char length);
