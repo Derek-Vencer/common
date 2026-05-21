@@ -188,11 +188,51 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 	TRACE(0,"%s.", __func__);
 	//if( factory_section_set_bt_name((const char *)&data[1], len -1))
 	char nameBuffer[248+1] = {0};
-	if(len > 248)
+	if((len - 3) > 248)
 	{
 		bleCmdSet_status.set_name_status = 0x3B;
 		return;
 	}
+
+	char name_len_buf[3] = {0};
+	name_len_buf[0] = data[1];
+	name_len_buf[1] = data[2];
+	name_len_buf[2] = 0;
+
+	uint16_t name_len = 0;
+	if((name_len_buf[0] == 0x00) && (name_len_buf[1] < 248))
+	{
+		name_len = name_len_buf[1];
+	}
+	else{
+		bleCmdSet_status.set_name_status = 0x3B;
+		return;
+	}
+	if((name_len + 3) < len)
+	{
+		bleCmdSet_status.set_name_status = 0x3B;
+		return;
+	}
+#if 1
+	name_len = name_len > 248?248:name_len;
+	if (name_len > 0)
+	{
+		memcpy(nameBuffer, &data[3], name_len);
+		if( factory_section_set_bt_name(nameBuffer, name_len+1))
+		{
+			TRACE(0,"%s set bt name error", __func__);
+			bleCmdSet_status.set_name_status = 0x3B;
+		}
+		else
+		{
+			bleCmdSet_status.set_name_status = 0x3A;
+		}
+		// if( factory_section_set_ble_name((const char*)nameBuffer,len+1))
+		// {
+		// 	TRACE(0,"%s set ble name error", __func__);
+		// }
+	}
+#else
 	len = (len - 1) > 248?248:(len -1);
 	if (len > 0)
 	{
@@ -211,6 +251,7 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 		// 	TRACE(0,"%s set ble name error", __func__);
 		// }
 	}
+#endif
 #if need_send_data_by_notify
 	sparraw_tx_msg(RSP_SET_DEVICE_NAME, (const uint8_t*)"", 0);
 #endif
@@ -1422,10 +1463,18 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			uint8_t* localname =  factory_section_get_bt_name();
 		    if(localname)
 		    {
+#if 1
+		    	char nameBuffer[60+1] = {0};
+				nameBuffer[1] = strlen((const char *)localname);
+				uint16_t name_len = nameBuffer[1] > 60?60:nameBuffer[1];
+				memcpy(&nameBuffer[2],localname,name_len);
+				sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)nameBuffer, name_len+2);
+#else
 		    	read_send_data[1] = strlen((const char *)localname);
 				memcpy(&read_send_data[2],localname,strlen((const char *)localname));
 		    	//sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
 		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)read_send_data, strlen((const char *)localname)+1+2);
+#endif
 		    }
 		
 			break;
