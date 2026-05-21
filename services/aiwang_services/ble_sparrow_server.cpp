@@ -1545,7 +1545,7 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 		case GET_FW_VERSION:{
 			uint8_t version[11+11+1] = {0};
 			memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
-			aiWangGetChargerBoxVersion(&version[strlen(DISPLAY_EARBUDS_VERSION)]);
+			//aiWangGetChargerBoxVersion(&version[strlen(DISPLAY_EARBUDS_VERSION)]);
 			read_send_data[1] = strlen((char*)version);
 			memcpy(&read_send_data[2],version,strlen((char*)version));
 			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,read_send_data, strlen((char*)version)+2);		

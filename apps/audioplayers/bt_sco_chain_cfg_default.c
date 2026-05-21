@@ -1340,7 +1340,8 @@ const SpeechConfig WEAK speech_cfg_default = {
         .gain       = 0.f,
         .num        = 1,
         .params = {
-			{IIR_BIQUARD_HIGHSHELF, {{4000, 0, 0.707}}},
+        	{IIR_BIQUARD_HPF, {{100, 0, 0.707f}}},
+			//{IIR_BIQUARD_HIGHSHELF, {{4000, 0, 0.707}}},
 			//{IIR_BIQUARD_PEAKINGEQ, {{3100, 8, 5}}},
         },
     },
