@@ -66,6 +66,18 @@
 
 #include "hal_sleep.h"
 
+// 串口空闲定时器
+static osTimerId uart_idle_timer_id = NULL;
+// 空闲超时时间（5秒）
+#define UART_IDLE_TIMEOUT_MS 5000
+// 空闲超时回调函数
+static void uart_idle_timeout_callback(void const *argument);
+void uart_idle_detection_init(void);
+
+// 定时器定义
+osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
+
+
 #undef printf
 #define printf(fmt, ...) \
     hal_trace_printf(0, "[goc-uart] " fmt, ##__VA_ARGS__)
@@ -152,6 +164,8 @@ typedef enum {
 static pogo_pin_state_t current_pogo_state = POGO_PIN_STATE_UNKNOWN;
 static osThreadId pogo_monitor_thread_id = NULL;
 static bool pogo_monitor_running = false;
+
+void set_er_inbox_status(uint8_t status);
 
 /**
  * @brief 初始化 Pogo Pin 检测引脚
@@ -712,6 +726,18 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         return;
     }
 
+	// 重置空闲定时器
+	if (uart_idle_timer_id != NULL) {
+		set_er_inbox_status(1);
+		osTimerStop(uart_idle_timer_id);
+		osTimerStart(uart_idle_timer_id, UART_IDLE_TIMEOUT_MS);
+		//printf("UART idle timer reset\n");
+	}
+	else{
+		uart_idle_detection_init();
+	}
+		
+
     DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
 	uart_rx_handle_data_count = 0;
 	
@@ -945,6 +971,42 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
     return 0;
 }
 
+
+/**
+ * @brief 串口空闲超时回调函数
+ * @param argument 回调参数（未使用）
+ */
+static void uart_idle_timeout_callback(void const *argument)
+{
+    DBGPRINT("UART idle timeout detected! No data received for %dms\n", UART_IDLE_TIMEOUT_MS);
+    set_er_inbox_status(0);
+	
+	osTimerDelete(uart_idle_timer_id);
+	uart_idle_timer_id = NULL;
+    // 调用其他函数
+    //call_other_function();
+}
+
+/**
+ * @brief 初始化串口空闲检测
+ * @param uart_id 串口ID
+ */
+void uart_idle_detection_init(void)
+{
+    // 创建空闲定时器
+    if (uart_idle_timer_id == NULL) {
+        uart_idle_timer_id = osTimerCreate(osTimer(UART_IDLE_TIMER), osTimerOnce, NULL);
+        if (uart_idle_timer_id == NULL) {
+            printf("Failed to create UART idle timer\n");
+            return;
+        }
+    }
+    
+    // 启动定时器
+    osTimerStart(uart_idle_timer_id, UART_IDLE_TIMEOUT_MS);
+
+}
+
 void wired_uart_communication_modual_init(void)
 {
     if(!wiredUartInitFlag)
@@ -959,6 +1021,7 @@ void wired_uart_communication_modual_init(void)
 		
 		// 启动 Pogo Pin 监控
     	//start_pogo_pin_monitor();
-		
+
+		uart_idle_detection_init();
     }
 }

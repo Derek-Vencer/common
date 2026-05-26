@@ -129,6 +129,7 @@ typedef struct{
 
 bleCmdSetStatus bleCmdSet_status;
 
+uint8_t er_inbox = 0;
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
 
@@ -1145,6 +1146,10 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 	{
 		ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
 	}
+	if(er_inbox == 1)
+	{
+		return;
+	}
 	switch(kick_type)
 	{
 		case KEY_CLICK:
@@ -1570,7 +1575,10 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
     }
 }
 
-
+void set_er_inbox_status(uint8_t status)
+{
+	er_inbox = status;
+}
 void sparraw_rx_thread_init(void)
 {
     TRACE(0,"[%s] %d ",__func__, sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0]));
