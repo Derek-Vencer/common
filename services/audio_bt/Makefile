@@ -94,7 +94,9 @@ ccflags-y += \
 	-Iservices/bt_watch_service/inc \
     -Iservices/audio_manager\
 	-Iservices/audio_manager/audio_policy/bredr_policy/inc \
-	-Ibthost/service/ble_app_new/inc
+	-Ibthost/service/ble_app_new/inc \
+	-Iapps/earbuds/conn \
+	
 
 ifeq ($(GFPS_ENABLE),1)
 ccflags-y += \

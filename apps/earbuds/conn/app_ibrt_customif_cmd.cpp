@@ -59,6 +59,13 @@
 #include "bts_core_if.h"
 #include "app_hfp.h"
 
+#include "hw_codec_iir_process.h"
+#include "audio_process.h"
+#include "nvrecord_bt.h"
+#include "nvrecord_env.h"
+#include "nvrecord_extension.h"
+extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
+
 #if defined(IBRT)
 
 /*********************external function declaration*************************/
@@ -72,6 +79,12 @@ static void app_ibrt_customif_test2_cmd_send_handler(uint16_t rsp_seq, uint8_t *
 static void app_ibrt_customif_test2_cmd_send_rsp_timeout_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 static void app_ibrt_customif_test2_cmd_send_rsp_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, uint16_t rsp_seq, uint8_t *ptrParam, uint16_t paramLen);
+
+static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length);
+static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
+
+static void app_ibrt_customif_button_map_cmd_send(uint8_t *p_buff, uint16_t length);
+static void app_ibrt_customif_button_map_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 
 #if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
@@ -612,6 +625,33 @@ void app_ibrt_customif_cmd_sync_set_reconnect_status(uint8_t device_id, uint8_t 
 	tws_ctrl_send_cmd(APP_TWS_CMD_SET_OPENRECONNET_STATUS, cmd_sync_set_reconnect_status, 2);
 }
 
+void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
+{
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        return;
+    }
+
+	uint8_t cmd_sync_music_eq[2];
+    cmd_sync_music_eq[0] = index;
+	EARBUDS_TRACE(0, "[UITWS]%s index %d ",__func__, index);
+	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq, 2);
+}
+
+void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length)
+{
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        return;
+    }
+
+	uint8_t cmd_sync_button_map[50] = {0};
+	memcpy(cmd_sync_button_map,p_buff,length);
+	
+	EARBUDS_TRACE(0, "[UITWS]%s index %d ",__func__, length);
+	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_BUTTON_MAP, cmd_sync_button_map, length);
+}
+
 static void app_ibrt_customif_sync_set_reconnect_status_send(uint8_t *p_buff, uint16_t length)
 {
 	app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SET_OPENRECONNET_STATUS, p_buff, length);
@@ -782,6 +822,22 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
     },
 #endif
 #endif //#ifdef BESUI_TWS_EN
+	{
+        APP_TWS_CMD_SYNC_MUSIC_EQ,                              "TWS_CMD_MUSIC_EQ",
+        app_ibrt_customif_music_eq_cmd_send,
+        app_ibrt_customif_music_eq_cmd_send_handler,               0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
+        APP_TWS_CMD_SYNC_BUTTON_MAP,                              "TWS_CMD_BUTTON_MAO",
+        app_ibrt_customif_button_map_cmd_send,
+        app_ibrt_customif_button_map_cmd_send_handler,               0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
 };
 
 static app_tws_cmd_timer_instance_t *g_ibrt_custom_cmd_handler_var_table[ARRAY_SIZE(g_ibrt_custom_cmd_handler_table)];
@@ -837,4 +893,74 @@ static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, u
 {
     EARBUDS_TRACE(1, "%s", __func__);
 }
+
+static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_MUSIC_EQ, p_buff, length);
+    EARBUDS_TRACE(1, "%s", __func__);
+}
+
+static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
+{
+    EARBUDS_TRACE(1, "%s", __func__);
+
+	struct nvrecord_env_t *nvrecord_env;
+	nv_record_env_get(&nvrecord_env);
+	uint8_t eq_index = p_buff[0];
+	if((eq_index >=0) && (eq_index <= 5))
+	{
+		if(eq_index != nvrecord_env->eq_index_data){
+			nvrecord_env->eq_index_data = eq_index;
+			nv_record_env_set(nvrecord_env);
+			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+			
+			//EARBUDS_TRACE(1, "success_set_eq %s", __func__);
+		}
+		//EARBUDS_TRACE(1, "%s,eq_index:%d", __func__,eq_index);
+	}
+			
+}
+
+static void app_ibrt_customif_button_map_cmd_send(uint8_t *p_buff, uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_BUTTON_MAP, p_buff, length);
+    EARBUDS_TRACE(1, "%s", __func__);
+}
+
+static keymap_load_config_cb keymap_load_config_callback = NULL;
+void app_ibrt_customifsetbuttonmap_cb(keymap_load_config_cb callback)
+{
+    keymap_load_config_callback = callback;
+}
+
+static void app_ibrt_customif_button_map_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
+{
+    EARBUDS_TRACE(1, "%s,length:%d", __func__,length);
+	uint8_t button_number = p_buff[0];
+	struct nvrecord_env_t *nvrecord_env;
+    nv_record_env_get(&nvrecord_env);
+	
+	nvrecord_env->key_map_number = button_number;
+	
+	for(int i = 0;i<button_number;i++)
+	{
+		nvrecord_env->key_map_action[i] = p_buff[i*2+1];
+		nvrecord_env->key_map_func[i] = p_buff[i*2+2];
+	}
+
+	nv_record_env_set(nvrecord_env);
+
+	if(keymap_load_config_callback)
+		keymap_load_config_callback();
+
+#if 0	
+	for(int i=0;i<button_number;i++){
+		//printf("%02x,",p_buff[i]);
+		EARBUDS_TRACE(1, "%02x,%02x,",nvrecord_env->key_map_action[i], nvrecord_env->key_map_func[i]);
+	}
+	EARBUDS_TRACE(1, "END%s", __func__);
+#endif			
+}
+
+
 #endif /* IBRT */

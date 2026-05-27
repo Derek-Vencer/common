@@ -55,6 +55,7 @@ subdir-ccflags-y += \
     -Iservices/audio_manager/audio_policy/bredr_policy/inc \
     -Iapps/earbuds/conn/ \
     -Iservices/communication/  \
+	-Iservices/audio_process \
      
 
 ifeq ($(BLE_AUDIO_ENABLED),1)

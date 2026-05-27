@@ -40,6 +40,7 @@
 #include "app_factory_audio.h"
 #include "charger_ntc.h"
 
+#include "app_ibrt_customif_cmd.h"
 
 #ifndef TRACE
 #define TRACE(attr, str, ...)   TR_DEBUG(attr, str, ##__VA_ARGS__)
@@ -128,6 +129,71 @@ typedef struct{
 #define need_send_data_by_notify 0
 
 bleCmdSetStatus bleCmdSet_status;
+
+//button function
+/***********************************************/
+/***********************************************/
+// 操作类型（高4位）
+typedef enum {
+    ACTION_IDLE_MUSIC = 0x00,   // 空闲/音乐播放
+    ACTION_CALL       = 0x01,   // 通话
+    ACTION_LEFT       = 0x20,   // 左
+    ACTION_RIGHT      = 0x30    // 右
+} action_type_t;
+
+// 点击类型（低4位）
+typedef enum {
+    CLICK_SINGLE       = 0x00,  // 单击
+    CLICK_DOUBLE       = 0x01,  // 双击
+    CLICK_TRIPLE       = 0x02,  // 三击
+    CLICK_DOUBLE_HOLD  = 0x03,  // 双击并按住
+    CLICK_HOLD_2S      = 0x04   // 按住2秒
+} click_type_t;
+
+// 功能码
+typedef enum {
+    FUNC_NOT_ASSIGNED   = 0x00,
+    FUNC_ACCEPT_CALL    = 0x01,
+    FUNC_REJECT_CALL    = 0x02,
+    FUNC_PLAY_PAUSE     = 0x03,
+    FUNC_NEXT_SONG      = 0x04,
+    FUNC_PREV_SONG      = 0x05,
+    FUNC_VOLUME_UP      = 0x06,
+    FUNC_VOLUME_DOWN    = 0x07,
+    FUNC_VOICE_ASSIST   = 0x08
+} function_t;
+
+// 单个映射条目
+typedef struct {
+    uint8_t actions;    // 高4位操作类型 + 低4位点击类型
+    uint8_t function;   // 对应的功能
+} key_map_entry_t;
+// 整个映射块头部（偏移1~3）
+typedef struct {
+    uint16_t length;    // 总长度 = 2 * key_count + 1
+    uint8_t  key_count; // 映射条目数量
+    // 后面紧跟 key_count 个 key_map_entry_t
+} key_map_header_t;
+
+/* 功能函数类型：无参数、无返回值（可根据需要扩展） */
+typedef void (*function_handler_t)(void);
+
+/*==============================================================================
+ * 2. 保存映射值的全局表（可修改，支持运行时保存/更新）
+ *----------------------------------------------------------------------------*/
+#define MAX_KEY_MAP_ENTRIES  21
+static key_map_entry_t s_key_map[MAX_KEY_MAP_ENTRIES];
+static uint8_t s_key_map_count = 0;
+
+// 1003 1104 1205 1307 1408 2003 2104 2205 2306 2408 
+// 5001 5102 5200 5300 5400 6001 6102 6200 6300 6400
+
+const key_map_entry_t s_key_default_map[21]{
+	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x08},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x08},
+	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x00},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x00},{0x64,0x00},
+};
+/***********************************************/
+
 
 uint8_t er_inbox = 0;
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
@@ -300,6 +366,14 @@ void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 				}
 				handleSetKeyMapNumber(local_er_count);
 				keymap_init_default();
+				uint8_t cmd_sync_button_map[50] = {0};
+				cmd_sync_button_map[0] = local_er_count;
+
+				for(int i = 0;i < local_er_count;i ++){
+					cmd_sync_button_map[i*2+1] = (uint8_t)s_key_map[i].actions;
+					cmd_sync_button_map[i*2+2] = (uint8_t)s_key_map[i].function;
+				}
+				app_ibrt_customif_cmd_sync_button_map(cmd_sync_button_map,local_er_count*2+1);
 			}
 		}
 	}
@@ -417,6 +491,7 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 			//audio_eq_set_cfg(NULL, &audio_eq_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR); 
 			
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[presetId], AUDIO_EQ_TYPE_HW_DAC_IIR); //AUDIO_EQ_TYPE_SW_IIR
+			app_ibrt_customif_cmd_sync_music_eq(presetId);
 
 			#ifdef __AUDIO_DYNAMIC_BOOST__
 #ifdef DYNAMIC_BOOST_USE_HW_EQ
@@ -746,9 +821,12 @@ static int32_t sparraw_event_mailbox_get(SPARRAW_MESSAGE_BLOCK** rx_event)
 }
 static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len);
 
-static uint8_t neet_notify_send_flash = 0;
-static uint8_t aiwan_read_data = 0;
 
+#if 1
+static uint8_t neet_notify_send_flash = 0;
+#endif
+static uint8_t aiwan_read_data = 0;
+#if 1
 static void need_notify_send(uint8_t *param, uint16_t len)
 {
 	aiwan_read_data = param[0];
@@ -762,9 +840,10 @@ static void need_notify_send(uint8_t *param, uint16_t len)
 		default:neet_notify_send_flash = 1;break;
 	}
 }
+#endif
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
 {
-#if 1
+#if 0
     osStatus status = osOK;
     SPARRAW_MESSAGE_BLOCK *msg_p = NULL;
 
@@ -802,11 +881,14 @@ int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t l
         return (int)status;
     }
 #else
-	osStatus status = osOK;
 	
+	osStatus status = osOK;
+	#if 0
 	if (sparraw_event_mailbox_id == NULL) {
 			return -1;
 		}
+	#endif
+	need_notify_send(param,len);
 	sparraw_rx_cmd_parse_v2(param, len);
 #endif
     return (int)status;
@@ -837,6 +919,7 @@ static void sparraw_tx_cmd_data_rsp_neg(uint8_t error_code, uint8_t cmd_type, ui
 //extern void handleGetKeyMapNumber(uint8_t *index);
 //extern void handleGetKeyMapActionAndFunc(uint8_t index,uint8_t *action,uint8_t *func);
 
+#if 0
 //button function
 /***********************************************/
 /***********************************************/
@@ -899,6 +982,7 @@ const key_map_entry_t s_key_default_map[21]{
 	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x08},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x08},
 	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x00},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x00},{0x64,0x00},
 };
+#endif
 // 初始化默认映射
 static void keymap_init_default(void)
 {
@@ -958,6 +1042,7 @@ void keymap_load_config(void)
 {
     // 实际项目：从非易失介质读取并恢复 s_key_map 和 s_key_map_count
     // 若无保存数据，则调用默认初始化
+    TRACE(0,"@@@@@@@%s", __func__);
     keymap_init_default();
     //printf("[KeyMap] Loaded %d entries\n", s_key_map_count);
 }
@@ -1603,11 +1688,12 @@ void sparraw_service_init(void)
 		TRACE(0,"[%s] has init done!!\n",__func__);
 		return;
 	}
-    sparraw_rx_thread_init();
+    //sparraw_rx_thread_init();
 	ble_aiwang_srv_register_event_cb(sparraw_event_handle);
 	ble_aiwang_srv_set_read_data_cb(sparraw_event_read_handle);
 	ble_sparrow_task_init = true;
 	keymap_load_config();
+	app_ibrt_customifsetbuttonmap_cb(keymap_load_config);
     //start charger_manager_thread
     //previous in apps_init,prior settings ICP1205_ADS
     //charger_manager_start();

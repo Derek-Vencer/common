@@ -63,6 +63,10 @@ typedef enum
 
 #if 1 //def BESUI_COMM_EN
     APP_TWS_CMD_SYNC_SOMETHING  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x14,
+
+	APP_TWS_CMD_SYNC_MUSIC_EQ  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x15,
+	APP_TWS_CMD_SYNC_BUTTON_MAP = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x16,
+
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -102,5 +106,11 @@ void app_ibrt_customif_cmd_sync_space_audio_status(bool switch_flag, uint8_t cur
 void app_ibrt_customif_cmd_sync_set_reconnect_status(uint8_t device_id, uint8_t recon_status);
 void twsui_wear_pp_tx(bool role, uint8_t sta);
 #endif
+
+typedef void(*keymap_load_config_cb)(void);
+
+void app_ibrt_customif_cmd_sync_music_eq(uint8_t index);
+void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length);
+void app_ibrt_customifsetbuttonmap_cb(keymap_load_config_cb callback);
 
 #endif

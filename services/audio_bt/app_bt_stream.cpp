@@ -224,6 +224,7 @@ uint8_t dolby_role = -1;
 
 
 #if 1
+#include "app_ibrt_customif_cmd.h"
 #include "hw_codec_iir_process.h"
 #include "audio_process.h"
 #include "nvrecord_bt.h"
@@ -4454,6 +4455,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 				nv_record_env_set(nvrecord_env);
 				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
 			}
+			app_ibrt_customif_cmd_sync_music_eq(eq_index);
 		}
 #endif
 
