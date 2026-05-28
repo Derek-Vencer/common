@@ -281,7 +281,8 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 		return;
 	}
 #if 1
-	name_len = name_len > 248?248:name_len;
+	//name_len = name_len > 248?248:name_len;
+	name_len = name_len > 45?45:name_len;
 	if (name_len > 0)
 	{
 		memcpy(nameBuffer, &data[3], name_len);
@@ -294,6 +295,8 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 		{
 			bleCmdSet_status.set_name_status = 0x3A;
 		}
+
+		app_ibrt_customif_cmd_sync_bt_name((uint8_t*)nameBuffer,name_len+1);
 		// if( factory_section_set_ble_name((const char*)nameBuffer,len+1))
 		// {
 		// 	TRACE(0,"%s set ble name error", __func__);

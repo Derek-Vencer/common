@@ -66,6 +66,7 @@ typedef enum
 
 	APP_TWS_CMD_SYNC_MUSIC_EQ  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x15,
 	APP_TWS_CMD_SYNC_BUTTON_MAP = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x16,
+	APP_TWS_CMD_SYNC_BT_NAME = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x17,
 
 #endif
 #endif
@@ -112,5 +113,7 @@ typedef void(*keymap_load_config_cb)(void);
 void app_ibrt_customif_cmd_sync_music_eq(uint8_t index);
 void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length);
 void app_ibrt_customifsetbuttonmap_cb(keymap_load_config_cb callback);
+void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length);
+
 
 #endif
