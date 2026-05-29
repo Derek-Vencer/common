@@ -797,7 +797,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         	osDelay(10);
             //hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
             //hal_sw_bootmode_set(HAL_SW_BOOTMODE_SINGLE_LINE_DOWNLOAD);
-            pmu_reboot();
+            //pmu_reboot();
         	//app_reset();
         }
     	break;
@@ -934,7 +934,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 		  DBGPRINT("CMD_SEND_EAR_PUTIN");
           boxChargerStatus.needOpenEarbuds = true;
 		  wired_uart_send_cmd_ack_ok();
-		  disconnected_device(true, BT_DEVICE_ID_1);
+		  //disconnected_device(true, BT_DEVICE_ID_1);
 	  }
       break;
     default:

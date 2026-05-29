@@ -7417,6 +7417,8 @@ static int app_bt_accessmode_process(uint32_t param0, uint32_t param1, uint32_t 
 
 bt_status_t app_bt_accessmode_set_req(btif_accessible_mode_t accmode)
 {
+	DEBUG_INFO(0,"!!!app_bt_accessmode_set_req:%d\n",accmode);
+
     app_bt_call_func_in_bt_thread(accmode, 0, 0, 0, (uint32_t)app_bt_accessmode_process);
 
     return BT_STS_SUCCESS;
