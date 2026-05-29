@@ -180,6 +180,7 @@ void ble_aiwang_srv_set_read_data_cb(ble_aiwang_read_event_cb callback);
 uint8_t ble_aiwang_srv_send_data_via_notification(uint8_t* data, uint32_t len);
 uint8_t ble_aiwang_srv_send_data_via_indication(uint8_t* data, uint32_t len);
 void sparraw_tx_key_click_notify_msg(uint8_t kick_type);
+void aparraw_set_key_event_left(uint8 status);
 
 #endif
 

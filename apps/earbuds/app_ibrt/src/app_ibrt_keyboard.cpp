@@ -638,11 +638,13 @@ void app_ibrt_keyboard_request_handler_v2(uint16_t rsp_seq, uint8_t *p_buff, uin
 
     if (bts_bt_if_is_dev_link_connected(&req->remote))
     {
+    	aparraw_set_key_event_left(1);
 #ifdef IBRT_SEARCH_UI
         app_ibrt_search_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #else
         app_ibrt_normal_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #endif
+		aparraw_set_key_event_left(0);
     }
     else
     {

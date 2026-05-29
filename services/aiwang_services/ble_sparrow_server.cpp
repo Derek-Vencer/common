@@ -192,6 +192,8 @@ const key_map_entry_t s_key_default_map[21]{
 	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x08},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x08},
 	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x00},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x00},{0x64,0x00},
 };
+
+uint8_t key_event_is_left = 0;
 /***********************************************/
 
 
@@ -1208,9 +1210,24 @@ void handle_key_event(click_type_t click)
 	{
 		action = 0x01;
 	}
+	#if 0
 	uint8_t *bt_local_addr = NULL;
 	bt_local_addr = (uint8_t *)bt_get_local_address();
-    uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?0x02:0x01;	
+    uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?0x02:0x01;
+	#else
+	uint8_t *bt_local_addr = NULL;
+	bt_local_addr = (uint8_t *)bt_get_local_address();
+    uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?0x02:0x01;
+	if(key_event_is_left == 1)
+	{
+		if(isLeftEarbuds == 0x02)
+			isLeftEarbuds = 0x01;
+		else
+			isLeftEarbuds = 0x02;
+		key_event_is_left = 0;
+	}
+
+	#endif
    uint8_t action_er = (action * 4)  | isLeftEarbuds;
    //action_er = action_er << 2;
     //printf("Key event: action=0x%02X, click=0x%02X\n", action_er, click);
@@ -1221,7 +1238,10 @@ void handle_key_event(click_type_t click)
 
 
 /***********************************************/
-
+void aparraw_set_key_event_left(uint8 status)
+{
+	key_event_is_left = status;
+}
 
 void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 {

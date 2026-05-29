@@ -504,6 +504,8 @@ struct BT_DEVICE_MANAGER_T {
 };
 
 void app_bt_manager_init(void);
+void app_bt_reset_delay_power_off(void);
+
 
 struct BT_DEVICE_T* app_bt_get_device(int i);
 extern struct BT_DEVICE_MANAGER_T app_bt_manager;

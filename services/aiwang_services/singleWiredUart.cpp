@@ -509,7 +509,7 @@ static void wired_uart_remove_all_phone_paired_list(void)
     ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
     int                    paired_dev_count = nv_record_get_paired_dev_count();
     DBGPRINT("%s.", __func__);
-    uint8_t address_compare[6] = {0};
+    //uint8_t address_compare[6] = {0};
     DBGPRINT("Master addr:");
     DUMP8("%02x ",p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE);
     DBGPRINT("Slave addr:");
@@ -522,9 +522,9 @@ static void wired_uart_remove_all_phone_paired_list(void)
         {
         	DBGPRINT("Remove The index %d of nv records:", index);
             DUMP8("%02x ", record.bdAddr.address, BTIF_BD_ADDR_SIZE);
-            if (memcmp(record.bdAddr.address, p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE) &&
-                memcmp(record.bdAddr.address, p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE)&&
-                memcmp(record.bdAddr.address, address_compare, BTIF_BD_ADDR_SIZE))
+            //if (memcmp(record.bdAddr.address, p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE) &&
+            //    memcmp(record.bdAddr.address, p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE)&&
+            //    memcmp(record.bdAddr.address, address_compare, BTIF_BD_ADDR_SIZE))
             {
             	nv_record_ddbrec_delete(&record.bdAddr);
             }
@@ -890,6 +890,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 				enter_pair_count = 0;
 				set_pair_status(0);
 				set_er_discover_connectable_status(1);
+				app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+				app_bt_reset_delay_power_off();
     		   aiWang_disconnet_phone_enter_pairmode();
 #else
     		   wired_uart_enter_pairmode();

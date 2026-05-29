@@ -461,6 +461,18 @@ static bool app_bt_encypt_changed(const bt_bdaddr_t *bd_addr)
 
 struct BT_DEVICE_MANAGER_T app_bt_manager;
 
+void app_bt_reset_delay_power_off(void)
+{
+	if(bt_disconnected_keep_alive_timer_id)
+    {
+    	DEBUG_INFO(2, "app_bt_reset_delay_power_off");
+		osTimerStop(bt_disconnected_keep_alive_timer_id);
+		osTimerStart(bt_disconnected_keep_alive_timer_id, (5*60*1000)); //ms
+    }
+
+	
+}
+
 void app_bt_manager_init(void)
 {
     struct BT_DEVICE_T *curr_device;
@@ -500,6 +512,10 @@ void app_bt_manager_init(void)
     {
     	DEBUG_INFO(2, "bt_disconnected_timer_id=%p", bt_disconnected_keep_alive_timer_id);
     }
+
+	osTimerStop(bt_disconnected_keep_alive_timer_id);
+	osTimerStart(bt_disconnected_keep_alive_timer_id, (5*60*1000)); //ms
+					   
 
     initialize_list_head(&app_bt_manager.poweron_reconnect_list);
     initialize_list_head(&app_bt_manager.linkloss_reconnect_list);
@@ -4076,9 +4092,15 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #else
 #ifdef __EARPHONE_STAY_BOTH_SCAN__
 #error __EARPHONE_STAY_BOTH_SCAN__
-        app_bt_accessmode_set_req(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR);
+        //app_bt_accessmode_set_req(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR);
+		//app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
+		app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+
+
 #else
-        app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
+        //app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
+		//app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
+		app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
 #endif
 #endif
     }
@@ -4662,7 +4684,7 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
                 {
                    DEBUG_INFO(2,"%s bt_disconnected_keep_alive_timer_id start a2dp",__func__);
                    osTimerStop(bt_disconnected_keep_alive_timer_id);
-                   osTimerStart(bt_disconnected_keep_alive_timer_id, (2*60*1000)); //ms
+                   osTimerStart(bt_disconnected_keep_alive_timer_id, (5*60*1000)); //ms
                 }
 
                 profile_mgr->a2dp_connect = bt_profile_connect_status_failure;
@@ -7378,8 +7400,10 @@ bt_status_t app_bt_set_access_mode(btif_accessible_mode_t mode)
     DEBUG_INFO(2,"@@app_bt_scan_mgr:set_access_mode=%d, LR=%p", mode, __builtin_return_address(0));
 	if(BTIF_BAM_GENERAL_ACCESSIBLE == mode && (get_er_discover_connectable_status() == 0))
 	{
-		mode = BTIF_BAM_CONNECTABLE_ONLY;
-		DEBUG_INFO(2,"@@@set BTIF_BAM_CONNECTABLE_ONLY");
+		if(nv_record_get_paired_dev_count() > 0){
+			mode = BTIF_BAM_CONNECTABLE_ONLY;
+			DEBUG_INFO(2,"@@@set BTIF_BAM_CONNECTABLE_ONLY");
+		}
 	}
     bt_defer_call_func_1(app_bt_set_access_mode_handler, bt_fixed_param(mode));
     return status;
