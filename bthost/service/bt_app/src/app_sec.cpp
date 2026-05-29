@@ -28,6 +28,7 @@
 #include "audio_player_adapter.h"
 
 uint8_t pair_status = 0;
+uint8_t er_into_discover_connectable = 0;
 static void app_pair_handler_func(enum pair_event evt, const btif_event_t *event)
 {
     switch(evt) {
@@ -77,14 +78,17 @@ static void pair_handler_func(enum pair_event event, void *data)
             cb((bt_bdaddr_t *)data, APP_BT_PAIRED);
         }
 		pair_status = 1;
+		set_er_discover_connectable_status(0);
         break;
     case PAIRING_TIMEOUT:
 		pair_status = 1;
+		set_er_discover_connectable_status(0);
         break;
     case PAIRING_FAILED:
         err_code = 1;
         app_pair_evt = PAIR_EVENT_COMPLETE;
 		pair_status = 1;
+		set_er_discover_connectable_status(0);
         break;
     default:
         break;
@@ -105,6 +109,16 @@ uint8_t get_pair_status(void)
 void set_pair_status(uint8_t status)
 {
 	pair_status = status;
+}
+
+uint8_t get_er_discover_connectable_status(void)
+{
+	return er_into_discover_connectable;
+}
+
+void set_er_discover_connectable_status(uint8_t status)
+{
+	er_into_discover_connectable = status;
 }
 
 int bt_pairing_init(void)

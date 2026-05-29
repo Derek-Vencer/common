@@ -889,6 +889,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 			   enter_pair = 1;
 				enter_pair_count = 0;
 				set_pair_status(0);
+				set_er_discover_connectable_status(1);
     		   aiWang_disconnet_phone_enter_pairmode();
 #else
     		   wired_uart_enter_pairmode();

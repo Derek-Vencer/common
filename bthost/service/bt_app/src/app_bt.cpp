@@ -4066,6 +4066,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     else
     {
         DEBUG_INFO(0,"!!!go to pairing\n");
+		set_er_discover_connectable_status(1);
 #ifdef FREEMAN_ENABLED_STERO
 #error FREEMAN_ENABLED_STERO
         app_ibrt_internal_enter_freeman_pairing();
@@ -7374,7 +7375,12 @@ bt_status_t app_bt_set_access_mode_handler(btif_accessible_mode_t mode)
 bt_status_t app_bt_set_access_mode(btif_accessible_mode_t mode)
 {
     bt_status_t status = BT_STS_SUCCESS;
-    DEBUG_INFO(2,"app_bt_scan_mgr:set_access_mode=%d, LR=%p", mode, __builtin_return_address(0));
+    DEBUG_INFO(2,"@@app_bt_scan_mgr:set_access_mode=%d, LR=%p", mode, __builtin_return_address(0));
+	if(BTIF_BAM_GENERAL_ACCESSIBLE == mode && (get_er_discover_connectable_status() == 0))
+	{
+		mode = BTIF_BAM_CONNECTABLE_ONLY;
+		DEBUG_INFO(2,"@@@set BTIF_BAM_CONNECTABLE_ONLY");
+	}
     bt_defer_call_func_1(app_bt_set_access_mode_handler, bt_fixed_param(mode));
     return status;
 }
