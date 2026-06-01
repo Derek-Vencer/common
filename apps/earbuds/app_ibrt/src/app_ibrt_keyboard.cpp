@@ -512,6 +512,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 break;
 
             case APP_KEY_EVENT_UP:
+				sparraw_tx_key_click_notify_msg(KEY_UP);
             	/*if (lastKeyEvent == APP_KEY_EVENT_LONG_8S_PRESS) {
             		EARBUDS_TRACE(0,"enter factory mode ...");
             		if (!app_bt_ibrt_has_mobile_link_connected()) {
@@ -577,6 +578,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
 #endif				
                 break;
             case APP_KEY_EVENT_UP_AFTER_LONGPRESS:
+				sparraw_tx_key_click_notify_msg(KEY_UP);
             	break;
         }
 
@@ -644,7 +646,7 @@ void app_ibrt_keyboard_request_handler_v2(uint16_t rsp_seq, uint8_t *p_buff, uin
 #else
         app_ibrt_normal_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #endif
-		aparraw_set_key_event_left(0);
+		//aparraw_set_key_event_left(0);
     }
     else
     {

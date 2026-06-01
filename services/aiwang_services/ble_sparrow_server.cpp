@@ -121,7 +121,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.1.1" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.1.2" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -129,6 +129,17 @@ typedef struct{
 #define need_send_data_by_notify 0
 
 bleCmdSetStatus bleCmdSet_status;
+
+// 空闲定时器
+static osTimerId double_hold_idle_timer_id = NULL;
+// 空闲超时时间（5秒）
+#define DOUBLE_HOLD_IDLE_TIMEOUT_MS 200
+uint8_t button_hold_type = 0xff;
+
+static void double_hold_idle_timeout_callback(void const *argument);
+
+// 定时器定义
+osTimerDef(DOUBLE_HOLD_IDLE_TIMER, double_hold_idle_timeout_callback);
 
 //button function
 /***********************************************/
@@ -1131,6 +1142,10 @@ static void on_reject_call(void)    {
     {
        bt_key_handle_call(call_state);
     }
+	else if((call_state == CALL_STATE_INCOMING) || (call_state == CALL_STATE_THREE_WAY_INCOMING))
+	{
+		app_audio_control_call_terminate();
+	}
 #endif	
 }
 static void on_play_pause(void)     {
@@ -1201,6 +1216,8 @@ void handle_key_event(click_type_t click)
 {
 	uint8_t action = 0;
 	CALL_STATE_E call_state = app_bt_get_call_state();
+	//TRACE(0, "%s call_state=%d",  __func__, call_state);
+	
     if (call_state == CALL_STATE_IDLE)
     {
        //bt_key_handle_music_playback();
@@ -1224,7 +1241,7 @@ void handle_key_event(click_type_t click)
 			isLeftEarbuds = 0x01;
 		else
 			isLeftEarbuds = 0x02;
-		key_event_is_left = 0;
+		//key_event_is_left = 0;
 	}
 
 	#endif
@@ -1243,6 +1260,47 @@ void aparraw_set_key_event_left(uint8 status)
 	key_event_is_left = status;
 }
 
+/*************************************************/
+static void double_hold_idle_timeout_callback(void const *argument)
+{
+    //DBGPRINT("UART idle timeout detected! No data received for %dms\n", DOUBLE_HOLD_IDLE_TIMEOUT_MS);
+	if(button_hold_type != 0xff){
+		if(button_hold_type == CLICK_DOUBLE_HOLD)
+			handle_key_event(CLICK_DOUBLE_HOLD);
+		else if(button_hold_type == CLICK_HOLD_2S)
+			handle_key_event(CLICK_HOLD_2S);
+		if(double_hold_idle_timer_id)
+		{
+			osTimerStart(double_hold_idle_timer_id, DOUBLE_HOLD_IDLE_TIMEOUT_MS);
+		}
+	}
+    // 调用其他函数
+    //call_other_function();
+}
+void double_hold_idle_detection_init(void)
+{
+    // 创建空闲定时器
+    if (double_hold_idle_timer_id == NULL) {
+        double_hold_idle_timer_id = osTimerCreate(osTimer(DOUBLE_HOLD_IDLE_TIMER), osTimerOnce, NULL);
+        if (double_hold_idle_timer_id == NULL) {
+            printf("Failed to create UART idle timer\n");
+            return;
+        }
+    }
+    
+    // 启动定时器
+    osTimerStart(double_hold_idle_timer_id, 500);
+
+}
+static void delete_double_hold_time(void)
+{
+	if(double_hold_idle_timer_id != NULL)
+	{
+		osTimerDelete(double_hold_idle_timer_id);
+		double_hold_idle_timer_id = NULL;
+	}
+}
+/************************************************/
 void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 {
 	uint8_t  keyEventNotify[3];
@@ -1254,7 +1312,7 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 	{
 		ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
 	}
-	if(er_inbox == 1)
+	if((er_inbox == 1) && (key_event_is_left == 0))
 	{
 		return;
 	}
@@ -1275,10 +1333,20 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 		case KEY_DOUBLE_HOLD_CLICK:
 		{
 			handle_key_event(CLICK_DOUBLE_HOLD);
+			double_hold_idle_detection_init();
+			button_hold_type = CLICK_DOUBLE_HOLD;
 		}break;
 		case KEY_HOLD_CLICK:
 		{
 			handle_key_event(CLICK_HOLD_2S);
+			double_hold_idle_detection_init();
+			button_hold_type = CLICK_HOLD_2S;
+		}break;
+		case KEY_UP:
+		{
+			delete_double_hold_time();
+			aparraw_set_key_event_left(0);
+			button_hold_type = 0xff;
 		}break;
 		default:break;
 	}
