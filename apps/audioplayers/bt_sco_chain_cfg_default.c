@@ -324,7 +324,7 @@ const SpeechConfig WEAK speech_cfg_default = {
  *     This is the recommended AEC
 ****************************************************************************************************/
     .tx_aec2float = {
-        .bypass         = 0,
+        .bypass         = 1,
         .hpf_enabled    = false,
         .af_enabled     = false,
         .adprop_enabled    = false,
@@ -349,10 +349,10 @@ const SpeechConfig WEAK speech_cfg_default = {
         .error_threshold = 1.5e-5f,
         .gamma          = 0.9,
         .echo_band_start = 100,
-        .echo_band_end  = 1800,
+        .echo_band_end  = 8000,
         .min_ovrd       = 2,
         .target_supp    = -40,
-        .highfre_band_start = 1000,
+        .highfre_band_start = 8000,
         .highfre_supp   = 8.f,
         .noise_supp     = -15,
         .cng_type       = 1,
