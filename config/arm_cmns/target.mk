@@ -1,0 +1,27 @@
+CHIP		?= best1306
+
+NOSTD ?= 0
+
+export ARM_CMNS ?= 1
+
+export TZ_TEST ?= 1
+
+export LARGE_RAM ?= 1
+
+export TRACE_GLOBAL_TAG ?= 1
+
+export DUMP_CRASH_LOG ?= 1
+
+export PSRAM_SIZE ?= 0x800000
+
+export PSRAMUHS_SIZE ?= 0x800000
+
+export OTA_CODE_OFFSET ?= 0x80000
+KBUILD_CPPFLAGS += -DOTA_CODE_OFFSET=$(OTA_CODE_OFFSET)
+
+export SYS_PSRAM_S_SIZE ?= 0x200000
+KBUILD_CPPFLAGS += -DSYS_PSRAM_S_SIZE=$(SYS_PSRAM_S_SIZE)
+
+include config/noapp_test/target.mk
+
+LDS_FILE	:= best1000_1306.lds

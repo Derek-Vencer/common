@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?fileVersion 4.0.0?><cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+	<storageModule moduleId="org.eclipse.cdt.core.settings">
+		<cconfiguration id="cdt.managedbuild.toolchain.gnu.cross.base.677157191">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.cross.base.677157191" moduleId="org.eclipse.cdt.core.settings" name="Default">
+				<externalSettings/>
+				<extensions>
+					<extension id="org.eclipse.cdt.core.GNU_ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.cross.base.677157191" name="Default" optionalBuildProperties="" parent="org.eclipse.cdt.build.core.emptycfg">
+					<folderInfo id="cdt.managedbuild.toolchain.gnu.cross.base.677157191.1514764375" name="/" resourcePath="">
+						<toolChain id="cdt.managedbuild.toolchain.gnu.cross.base.1726964893" name="Cross GCC" superClass="cdt.managedbuild.toolchain.gnu.cross.base">
+							<option id="cdt.managedbuild.option.gnu.cross.prefix.955122743" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix"/>
+							<option id="cdt.managedbuild.option.gnu.cross.path.235014868" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path"/>
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.1910604322" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
+							<builder arguments="V=1" cleanBuildTarget="T=best1306p clean" id="cdt.managedbuild.builder.gnu.cross.824059733" incrementalBuildTarget="T=best1306p all lst" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.builder.gnu.cross">
+								<outputEntries>
+									<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="outputPath" name=""/>
+								</outputEntries>
+							</builder>
+							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.860865642" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.851017198" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="POWER_ON_ENTER_TWS_PAIRING_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BLE=1"/>
+									<listOptionValue builtIn="false" value="GFPS_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="SPEECH_TX_AEC2FLOAT=1"/>
+									<listOptionValue builtIn="false" value="SPEECH_TX_1MIC_NS=1"/>
+									<listOptionValue builtIn="false" value="ANC_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BES_OTA=1"/>
+									<listOptionValue builtIn="false" value="OTA_BIN_COMPRESSED=1"/>
+									<listOptionValue builtIn="false" value="BES_LIB_DIR=lib/bes/best1306p/PRO_0015"/>
+									<listOptionValue builtIn="false" value="IBRT=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_FW_PRODUCT=BT_SVC_FW_PRODUCT_EARBUDS"/>
+									<listOptionValue builtIn="false" value="BT_SVC_MODULE_BT_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_MODULE_TWS_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_MODULE_IBRT_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="CFG_APP_BAS=1"/>
+									<listOptionValue builtIn="false" value="BLE_HOST_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="I2C_DEBUG=1"/>
+									<listOptionValue builtIn="false" value="I2C_TASK_MODE=1"/>
+									<listOptionValue builtIn="false" value="I2C_SIMPLE_MODE=1"/>
+									<listOptionValue builtIn="false" value="I2C0_BASE=0x40005000"/>
+									<listOptionValue builtIn="false" value="I2C1_BASE=0x40006000"/>
+									<listOptionValue builtIn="false" value="CHIP_HAS_CP=1"/>
+									<listOptionValue builtIn="false" value="CHIP_HAS_PSRAM=1"/>
+									<listOptionValue builtIn="false" value="CHIP_HAS_DAC_FIFO=1"/>
+									<listOptionValue builtIn="false" value="APP_KEY_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="IBRT_UI=1"/>
+									<listOptionValue builtIn="false" value="BES_AUD=1"/>
+									<listOptionValue builtIn="false" value="APP_BATTERY_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="ANC_APP=1"/>
+									<listOptionValue builtIn="false" value="OTA_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_FW_PRODUCT_EARBUDS=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_DC_AUTO_CALIB=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_ADC_DC_AUTO_CALIB=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_DIG_DC_DEEP_CALIB=1"/>
+									<listOptionValue builtIn="false" value="DAC_DRE_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_DC_NV_DATA=1"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_DC_DYN_BUF=1"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_DC_CHECK=1"/>
+									<listOptionValue builtIn="false" value="__APP_KEY_FN_STYLE_A__=1"/>
+									<listOptionValue builtIn="false" value="FIRMWARE_REV=1"/>
+									<listOptionValue builtIn="false" value="MEDIA_PLAYER_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="BT_HFP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="BT_A2DP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="GFPS_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BLE_BATT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BTHOST_DEBUG=1"/>
+									<listOptionValue builtIn="false" value="DBG_DEBUG_PRINT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__IAG_BLE_INCLUDE__=1"/>
+									<listOptionValue builtIn="false" value="IS_BES_BATTERY_MANAGER_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="SUPPORT_BATTERY_REPORT=1"/>
+									<listOptionValue builtIn="false" value="I2C_BASE=1"/>
+									<listOptionValue builtIn="false" value="I2C3_BASE=1"/>
+									<listOptionValue builtIn="false" value="I2C4_BASE=1"/>
+									<listOptionValue builtIn="false" value="I2C2_BASE=1"/>
+									<listOptionValue builtIn="false" value="CHIP_GPIO_VER=2"/>
+									<listOptionValue builtIn="false" value="GPIO_BASE=1"/>
+									<listOptionValue builtIn="false" value="DEBUG=1"/>
+									<listOptionValue builtIn="false" value="BT_AVRCP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_VOLUME_DEFAULT=13"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SIRI=1"/>
+									<listOptionValue builtIn="false" value="BT_SERVICE_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="IS_AUTOPOWEROFF_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="APP_10_SECOND_TIMER_EN=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_BT_RECONNECT__=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_AUTOPOWEROFF__=1"/>
+									<listOptionValue builtIn="false" value="__FACTORY_MODE_SUPPORT__=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_PORT=1"/>
+									<listOptionValue builtIn="false" value="__ENGINEER_MODE_SUPPORT__=1"/>
+									<listOptionValue builtIn="false" value="CRASH_REBOOT=1"/>
+									<listOptionValue builtIn="false" value="APP_TRACE_RX_ENABLE=0"/>
+									<listOptionValue builtIn="false" value="__PC_CMD_UART__=0"/>
+									<listOptionValue builtIn="false" value="AUDIO_SECTION_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__HW_DAC_IIR_EQ_PROCESS__=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_EQ_TUNING=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DRC__=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DYNAMIC_EQ__=1"/>
+									<listOptionValue builtIn="false" value="NEW_NV_RECORD_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
+									<listOptionValue builtIn="false" value="IBRT_RIGHT_MASTER=1"/>
+									<listOptionValue builtIn="false" value="USE_BASIC_THREADS=1"/>
+									<listOptionValue builtIn="false" value="A2DP_CP_ACCEL=1"/>
+									<listOptionValue builtIn="false" value="A2DP_DECODER_VER=2"/>
+									<listOptionValue builtIn="false" value="CORE_DUMP=1"/>
+									<listOptionValue builtIn="false" value="FAULT_DUMP=1"/>
+									<listOptionValue builtIn="false" value="CONTROLLER_DUMP_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="CPU_PC_DUMP=LR"/>
+									<listOptionValue builtIn="false" value="CPUDUMP_BASE=1"/>
+									<listOptionValue builtIn="false" value="SPEECH_TX_AEC_CODEC_REF=1"/>
+									<listOptionValue builtIn="false" value="SPP_EQ_TUNING=1"/>
+									<listOptionValue builtIn="false" value="BT_SPP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="FORCE_SIGNALINGMODE=0"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_MULTI_VOLUME_TABLE=1"/>
+									<listOptionValue builtIn="false" value="__HOST_GEN_ECDH_KEY__=1"/>
+									<listOptionValue builtIn="false" value="SYSFREQ_STATS=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_SLEEP_USER=1"/>
+									<listOptionValue builtIn="false" value="WAKEUP_SRC_STATS=1"/>
+									<listOptionValue builtIn="false" value="CACHE_STATS=1"/>
+									<listOptionValue builtIn="false" value="BT_DONT_PLAY_MUTE_WHEN_A2DP_STUCK_PATCH=1"/>
+									<listOptionValue builtIn="false" value="CHARGER_PLUGINOUT_RESET=0"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.179547202" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;D:\BES2700\Tools\GCC\gcc-arm-none-eabi-9-2019-q4-major-win32\arm-none-eabi\include&quot;"/>
+								</option>
+								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.380976643" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.compiler.1024330876" name="Cross G++ Compiler" superClass="cdt.managedbuild.tool.gnu.cross.cpp.compiler">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.1567808362" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="POWER_ON_ENTER_TWS_PAIRING_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BLE=1"/>
+									<listOptionValue builtIn="false" value="GFPS_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="SPEECH_TX_AEC2FLOAT=1"/>
+									<listOptionValue builtIn="false" value="SPEECH_TX_1MIC_NS=1"/>
+									<listOptionValue builtIn="false" value="ANC_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BES_OTA=1"/>
+									<listOptionValue builtIn="false" value="OTA_BIN_COMPRESSED=1"/>
+									<listOptionValue builtIn="false" value="BES_LIB_DIR=lib/bes/best1306p/PRO_0015"/>
+									<listOptionValue builtIn="false" value="IBRT=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_FW_PRODUCT=BT_SVC_FW_PRODUCT_EARBUDS"/>
+									<listOptionValue builtIn="false" value="BT_SVC_MODULE_BT_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_MODULE_TWS_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_MODULE_IBRT_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="CFG_APP_BAS=1"/>
+									<listOptionValue builtIn="false" value="BLE_HOST_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="I2C_DEBUG=1"/>
+									<listOptionValue builtIn="false" value="I2C_TASK_MODE=1"/>
+									<listOptionValue builtIn="false" value="I2C_SIMPLE_MODE=1"/>
+									<listOptionValue builtIn="false" value="I2C0_BASE=0x40005000"/>
+									<listOptionValue builtIn="false" value="I2C1_BASE=0x40006000"/>
+									<listOptionValue builtIn="false" value="CHIP_HAS_CP=1"/>
+									<listOptionValue builtIn="false" value="CHIP_HAS_PSRAM=1"/>
+									<listOptionValue builtIn="false" value="CHIP_HAS_DAC_FIFO=1"/>
+									<listOptionValue builtIn="false" value="APP_KEY_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="IBRT_UI=1"/>
+									<listOptionValue builtIn="false" value="BES_AUD=1"/>
+									<listOptionValue builtIn="false" value="APP_BATTERY_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="ANC_APP=1"/>
+									<listOptionValue builtIn="false" value="OTA_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BT_SVC_FW_PRODUCT_EARBUDS=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_DC_AUTO_CALIB=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_ADC_DC_AUTO_CALIB=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_DIG_DC_DEEP_CALIB=1"/>
+									<listOptionValue builtIn="false" value="DAC_DRE_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_DC_NV_DATA=1"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_DC_DYN_BUF=1"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_DC_CHECK=1"/>
+									<listOptionValue builtIn="false" value="__APP_KEY_FN_STYLE_A__=1"/>
+									<listOptionValue builtIn="false" value="FIRMWARE_REV=1"/>
+									<listOptionValue builtIn="false" value="MEDIA_PLAYER_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="BT_HFP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="BT_A2DP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="GFPS_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="BLE_BATT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="BTHOST_DEBUG=1"/>
+									<listOptionValue builtIn="false" value="DBG_DEBUG_PRINT_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__IAG_BLE_INCLUDE__=1"/>
+									<listOptionValue builtIn="false" value="IS_BES_BATTERY_MANAGER_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="SUPPORT_BATTERY_REPORT=1"/>
+									<listOptionValue builtIn="false" value="I2C_BASE=1"/>
+									<listOptionValue builtIn="false" value="I2C3_BASE=1"/>
+									<listOptionValue builtIn="false" value="I2C4_BASE=1"/>
+									<listOptionValue builtIn="false" value="I2C2_BASE=1"/>
+									<listOptionValue builtIn="false" value="CHIP_GPIO_VER=2"/>
+									<listOptionValue builtIn="false" value="GPIO_BASE=1"/>
+									<listOptionValue builtIn="false" value="DEBUG=1"/>
+									<listOptionValue builtIn="false" value="BT_AVRCP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_OUTPUT_VOLUME_DEFAULT=13"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SIRI=1"/>
+									<listOptionValue builtIn="false" value="BT_SERVICE_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="IS_AUTOPOWEROFF_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="APP_10_SECOND_TIMER_EN=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_BT_RECONNECT__=1"/>
+									<listOptionValue builtIn="false" value="__BTIF_AUTOPOWEROFF__=1"/>
+									<listOptionValue builtIn="false" value="__FACTORY_MODE_SUPPORT__=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_PORT=1"/>
+									<listOptionValue builtIn="false" value="__ENGINEER_MODE_SUPPORT__=1"/>
+									<listOptionValue builtIn="false" value="CRASH_REBOOT=1"/>
+									<listOptionValue builtIn="false" value="APP_TRACE_RX_ENABLE=0"/>
+									<listOptionValue builtIn="false" value="__PC_CMD_UART__=0"/>
+									<listOptionValue builtIn="false" value="AUDIO_SECTION_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="__HW_DAC_IIR_EQ_PROCESS__=1"/>
+									<listOptionValue builtIn="false" value="AUDIO_EQ_TUNING=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DRC__=1"/>
+									<listOptionValue builtIn="false" value="__AUDIO_DYNAMIC_EQ__=1"/>
+									<listOptionValue builtIn="false" value="NEW_NV_RECORD_ENABLED=1"/>
+									<listOptionValue builtIn="false" value="SUPPORT_SINGLE_WIRE_COM=1"/>
+									<listOptionValue builtIn="false" value="IBRT_RIGHT_MASTER=1"/>
+									<listOptionValue builtIn="false" value="USE_BASIC_THREADS=1"/>
+									<listOptionValue builtIn="false" value="A2DP_CP_ACCEL=1"/>
+									<listOptionValue builtIn="false" value="A2DP_DECODER_VER=2"/>
+									<listOptionValue builtIn="false" value="CORE_DUMP=1"/>
+									<listOptionValue builtIn="false" value="FAULT_DUMP=1"/>
+									<listOptionValue builtIn="false" value="CONTROLLER_DUMP_ENABLE=1"/>
+									<listOptionValue builtIn="false" value="CPU_PC_DUMP=LR"/>
+									<listOptionValue builtIn="false" value="CPUDUMP_BASE=1"/>
+									<listOptionValue builtIn="false" value="SPEECH_TX_AEC_CODEC_REF=1"/>
+									<listOptionValue builtIn="false" value="SPP_EQ_TUNING=1"/>
+									<listOptionValue builtIn="false" value="BT_SPP_SUPPORT=1"/>
+									<listOptionValue builtIn="false" value="FORCE_SIGNALINGMODE=0"/>
+									<listOptionValue builtIn="false" value="CODEC_DAC_MULTI_VOLUME_TABLE=1"/>
+									<listOptionValue builtIn="false" value="__HOST_GEN_ECDH_KEY__=1"/>
+									<listOptionValue builtIn="false" value="SYSFREQ_STATS=1"/>
+									<listOptionValue builtIn="false" value="DEBUG_SLEEP_USER=1"/>
+									<listOptionValue builtIn="false" value="WAKEUP_SRC_STATS=1"/>
+									<listOptionValue builtIn="false" value="CACHE_STATS=1"/>
+									<listOptionValue builtIn="false" value="A2DP_AAC_ON=1"/>
+									<listOptionValue builtIn="false" value="BT_DONT_PLAY_MUTE_WHEN_A2DP_STUCK_PATCH=1"/>
+									<listOptionValue builtIn="false" value="CHARGER_PLUGINOUT_RESET=0"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.include.paths.112373007" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;D:\BES2700\Tools\GCC\gcc-arm-none-eabi-9-2019-q4-major-win32\arm-none-eabi\include&quot;"/>
+								</option>
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.cross.c.linker.575641294" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker"/>
+							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.linker.191986502" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1500687570" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.cross.archiver.196584908" name="Cross GCC Archiver" superClass="cdt.managedbuild.tool.gnu.cross.archiver"/>
+							<tool id="cdt.managedbuild.tool.gnu.cross.assembler.1562989966" name="Cross GCC Assembler" superClass="cdt.managedbuild.tool.gnu.cross.assembler">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.both.asm.option.include.paths.1172469953" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;D:\BES2700\Tools\GCC\gcc-arm-none-eabi-9-2019-q4-major-win32\arm-none-eabi\include&quot;"/>
+								</option>
+								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.892755794" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+							</tool>
+						</toolChain>
+					</folderInfo>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+		</cconfiguration>
+	</storageModule>
+	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+		<project id="AIWANG_BES2710_EARBUDS.null.658954573" name="AIWANG_BES2710_EARBUDS"/>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.cross.base.677157191;cdt.managedbuild.toolchain.gnu.cross.base.677157191.1514764375;cdt.managedbuild.tool.gnu.cross.cpp.compiler.1024330876;cdt.managedbuild.tool.gnu.cpp.compiler.input.181693719">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.cross.base.677157191;cdt.managedbuild.toolchain.gnu.cross.base.677157191.1514764375;cdt.managedbuild.tool.gnu.cross.c.compiler.860865642;cdt.managedbuild.tool.gnu.c.compiler.input.380976643">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+	</storageModule>
+	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Default">
+			<resource resourceType="PROJECT" workspacePath="/AIWANG_BES2710_EARBUDS"/>
+		</configuration>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
+</cproject>
