@@ -121,7 +121,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.1.2" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.1.3" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -354,7 +354,8 @@ void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 {
 	TRACE(0,"%s.", __func__);
 	const uint8_t *data_buf = data + 1;
-	if(len > 2){
+	
+if(len > 2){
 		uint16_t data_len = data_buf[0] << 8 | (data_buf[1]);
 		uint16_t key_count = ((data_len - 1) >> 1);
 		if(key_count != data_buf[2] || (key_count > 20))

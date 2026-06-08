@@ -119,7 +119,7 @@ int app_key_handle_registration(const APP_KEY_HANDLE *key_handle)
 #endif
 
     APP_KEY_HANDLE *dest_key_handle = NULL;
-    KEY_TRACE(1,"%s",__func__);
+//    KEY_TRACE(1,"%s",__func__);
     dest_key_handle = app_key_handle_find(&(key_handle->key_status));
 
 //    KEY_TRACE(2,"%s dest handle:%p",__func__,dest_key_handle);

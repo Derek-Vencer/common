@@ -310,6 +310,7 @@ void hal_sysfreq_print_freq_stats(void)
     last_check_time = cur_time;
 
     int_unlock(lock);
+    (void)ratio;
 }
 
 WEAK SYSTEM_SYSFREQ_STAT_T* system_sysfreq_stat_get(void)

@@ -1755,10 +1755,20 @@ int app_bt_connect2tester_init(void)
     if (!nvrec_dev_get_dongleaddr(&tester_addr)){
         nv_record_open(section_usrdata_ddbrecord);
         for (i = 0; nv_record_enum_dev_records(i, &rec) == BT_STS_SUCCESS; i++) {
+        DEBUG_INFO(0,
+            "[DDB] index=%d addr=%02X:%02X:%02X:%02X:%02X:%02X",
+            i,
+            rec.bdAddr.address[0],
+            rec.bdAddr.address[1],
+            rec.bdAddr.address[2],
+            rec.bdAddr.address[3],
+            rec.bdAddr.address[4],
+            rec.bdAddr.address[5]);
             if (!memcmp(rec.bdAddr.address, tester_addr.address, BTIF_BD_ADDR_SIZE)){
                 find_tester = true;
             }
         }
+        DEBUG_INFO(0, "[DDB] total=%d find_tester=%d", i, find_tester);
         if(i==0 && !find_tester){
             memset(&rec, 0, sizeof(btif_device_record_t));
             memcpy(rec.bdAddr.address, tester_addr.address, BTIF_BD_ADDR_SIZE);

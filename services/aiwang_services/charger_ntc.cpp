@@ -18,15 +18,20 @@
 #include "hal_trace.h"
 #include "charger_ntc.h"
 
+#define GOC_NTC_DEBUG_ENABLE 0
+
 #undef printf
 #undef DBGPRINT
 
-#undef printf
+#if GOC_NTC_DEBUG_ENABLE
 #define printf(fmt, ...) \
     hal_trace_printf(0, "[goc-ntc] " fmt, ##__VA_ARGS__)
-#undef DBGPRINT
-#define DBGPRINT(fmt,...)  \
-	hal_trace_printf(2, "[goc-ntc] " fmt, ##__VA_ARGS__)
+#define DBGPRINT(fmt, ...) \
+    hal_trace_printf(2, "[goc-ntc] " fmt, ##__VA_ARGS__)
+#else
+#define printf(fmt, ...) do {} while (0)
+#define DBGPRINT(fmt, ...) do {} while (0)
+#endif
 
 #define NTC_SHAKE_CNT               5
 #define NTC_TYPE_CHARGER_STOP       1

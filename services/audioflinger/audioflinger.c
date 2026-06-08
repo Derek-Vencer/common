@@ -746,7 +746,7 @@ static void af_codec_dac1_output_gain_changed(float coef)
 
 void af_codec_dac1_set_algo_gain(float coef)
 {
-    AUDIOFLINGER_TRACE(1, "algo_gain da1:%08d", (int32_t)(coef * 10000000));
+    //AUDIOFLINGER_TRACE(1, "algo_gain da1:%08d", (int32_t)(coef * 10000000));
     dac1_algo_gain = coef;
     fade_update_gain(&dac1_fade, dac1_algo_gain);
 }

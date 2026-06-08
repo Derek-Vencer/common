@@ -257,7 +257,8 @@ static void pogo_pin_monitor_thread(void const *argument)
                     DBGPRINT("[POGO] Pogo Pin state unknown");
                     break;
             }
-        }
+        }
+
 #else
 		if(POGO_PIN_STATE_INSERTED != current_pogo_state) {
             current_pogo_state = POGO_PIN_STATE_INSERTED;

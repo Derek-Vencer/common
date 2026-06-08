@@ -37,17 +37,25 @@
 #define HAL_I2C_ID_3                 ((HAL_I2C_ID_T)3)
 #endif
 
+#define GOC_1205_DEBUG_ENABLE 0
+
 #undef printf
 #undef DBGPRINT
 
-//#define printf(fmt,...)     hal_trace_printf(2, fmt, ##__VA_ARGS__)
-//#define DBGPRINT(fmt,...)   hal_trace_printf(0, fmt, ##__VA_ARGS__)
-#undef printf
+#if GOC_1205_DEBUG_ENABLE
+
 #define printf(fmt, ...) \
     hal_trace_printf(0, "[goc-1205] " fmt, ##__VA_ARGS__)
-#undef DBGPRINT
-#define DBGPRINT(fmt,...)  \
-	hal_trace_printf(2, "[goc-1205] " fmt, ##__VA_ARGS__)
+
+#define DBGPRINT(fmt,...) \
+    hal_trace_printf(2, "[goc-1205] " fmt, ##__VA_ARGS__)
+
+#else
+
+#define printf(...)
+#define DBGPRINT(...)
+
+#endif
 
 
 static osThreadId charger_manager_thread_id = NULL;
@@ -87,6 +95,7 @@ void ICP1205_BES_I2c_Init(void)
     i2c_cfg.rising_time_ns = 0;
     uint32_t ret = hal_i2c_open(HAL_I2C_ID_3, &i2c_cfg);
     printf("%s open I2C Failed: 0x%x", __func__, ret);
+	(void)ret;
 }
 
 /*********************************************************************************
@@ -492,6 +501,7 @@ static void Icp1205UpdataIntSts(void)
 	//Read REG0x14 Reg0x15
 	ret = readDataFrom_ICP1205(ICP1205_REV_DAT1,&u8RegTable[0],2);
 	DBGPRINT("Icp1205UpdataIntSts REG0x14=0x%02x Reg0x15=0x%02x ret=%d",u8RegTable[0],u8RegTable[1], ret);
+	(void)ret;
 	if ( 0xA5 != u8RegTable[0] || 0xA5 != u8RegTable[1]) {
 		ICP1205_Init();
 		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
