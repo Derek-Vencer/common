@@ -208,6 +208,7 @@ void app_at_cmd_at_ship_mode_handle(uint8_t device_id)
     uictl.poweroff_fast_flag = true;
 #endif
     uictl.shutdown_type = SHUTDOWN_SHIP_MODE;
+    BESUI_TRACE(0,"SHUTDOWN_SHIP_MODE");
     app_shutdown();
 }
 

@@ -114,6 +114,7 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index);
 void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length);
 void app_ibrt_customifsetbuttonmap_cb(keymap_load_config_cb callback);
 void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length);
-
+void set_tws_peer_battery_percent(uint8_t battery);
+uint8_t get_tws_peer_battery_percent(void);
 
 #endif

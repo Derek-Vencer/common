@@ -103,6 +103,12 @@ bt_status_t app_ble_report_battery_level(uint8_t instance, uint8_t battery_level
 {
     gatt_char_notify_t notify = {NULL};
     app_ble_battery_inst_t *inst = NULL;
+    bt_status_t ret;
+    DEBUG_WARNING(0, "[LOCAL_BATT] enter instance=%d battery=%d", instance, battery_level);
+    MAIN_TRACE(2,
+        "[LOCAL_BATT] instance=%d battery=%d%%",
+        instance,
+        battery_level);
 
     if (instance >= BLE_BATTERY_INSTANCE_NUM)
     {
@@ -121,9 +127,19 @@ bt_status_t app_ble_report_battery_level(uint8_t instance, uint8_t battery_level
     inst = g_ble_battery_instance + instance;
     inst->battery_level = battery_level;
 
-    return gatts_send_value_notification(GAP_ALL_CONNS, &notify, &battery_level, sizeof(uint8_t));
-}
+    ret = gatts_send_value_notification(
+            GAP_ALL_CONNS,
+            &notify,
+            &battery_level,
+            sizeof(uint8_t));
 
+    MAIN_TRACE(2,
+        "[LOCAL_BATT] notify ret=%d battery=%d%%",
+        ret,
+        battery_level);
+
+    return ret;
+}
 /**
  * battery client
  *

@@ -73,17 +73,33 @@ static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时回调函数
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
+uint8_t getPeerBattery(void);
+extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 
+//#define DISABLE_GOC_UART_LOG
+
+#ifdef DISABLE_GOC_UART_LOG
+
+#undef printf
+#define printf(...)
+
+#undef DBGPRINT
+#define DBGPRINT(...)
+
+#else
 
 #undef printf
 #define printf(fmt, ...) \
     hal_trace_printf(0, "[goc-uart] " fmt, ##__VA_ARGS__)
+
 #undef DBGPRINT
-#define DBGPRINT(fmt,...)  \
-	hal_trace_printf(2, "[goc-uart] " fmt, ##__VA_ARGS__)
+#define DBGPRINT(fmt, ...) \
+    hal_trace_printf(2, "[goc-uart] " fmt, ##__VA_ARGS__)
+
+#endif
 
 //format
 // 55 aa  cmd  chanl_index  00 data
@@ -394,58 +410,97 @@ uint8_t crc8(const uint8_t *data, uint32_t length)
     return crc;
 }
 
+static uint8_t g_tws_peer_battery_percent = 0xFF;
+
+void set_tws_peer_battery_percent(uint8_t battery)
+{
+    if (battery <= 100)
+    {
+        g_tws_peer_battery_percent = battery;
+    }
+}
+
+uint8_t get_tws_peer_battery_percent(void)
+{
+    return g_tws_peer_battery_percent;
+}
+
 static uint8_t enter_pair = 0;
 static uint8_t enter_pair_count = 0;
 
 static uint8_t pair_status = 0;
 static void wired_uart_get_battery_level(void)
 {
-#if 0
-    uint8_t buff[4] = {0};
-    buff[0] = 0x55;
-    buff[1] = 0xAA;
-    buff[2] = app_battery_current_level()%9;
-	if(app_battery_current_level()>=9)
-	{
-		buff[2] = 9;
-	}
-    buff[3] = crc8(buff,3);
-    communication_send_buf(buff, 4);
-#else
-	uint8_t buff[5] = {0};
-    buff[0] = 0x55;
-    buff[1] = 0xAA;
-    buff[2] = app_battery_current_level()%9;
-	if(app_battery_current_level()>=9)
-	{
-		buff[2] = 9;
-	}
-	if(1)//(enter_pair == 1)
-	{
-		pair_status = get_pair_status();
-		buff[3] = pair_status;
-		//pair_status = 0;
-		if(enter_pair_count > 1)
-		{
-			enter_pair = 0;
-			set_pair_status(0);
-			enter_pair_count = 0;
-		}
-		else
-			enter_pair_count ++;
-		//set_pair_status(0);
-	}
-	else{
-		buff[3] = 0;
-		enter_pair_count = 0;
-	}
-	//set_pair_status(0);
-	//buff[3] = 0;
-    buff[4] = crc8(buff,4);
-    communication_send_buf(buff, 5);
-#endif
-}
+    uint8_t buff[5] = {0};
+    int8_t raw_level = 0;
+    uint8_t report_level = 0;
 
+    raw_level = app_battery_current_level();
+
+#if defined(IBRT)
+    DBGPRINT("[EAR_POWER][TWS] connected=%d role_right=%d",
+            bts_tws_if_is_tws_link_connected(),
+            app_ibrt_if_is_right_side());
+    DBGPRINT("[BAT_SYNC][EAR_POWER_TRIGGER] local=%d", raw_level);
+    app_ibrt_customif_cmd_sync_battery_level(raw_level);
+    DBGPRINT("[EAR_POWER][ROLE] local=%d peer=%d",
+            app_battery_current_level(),
+            getPeerBattery());
+#endif
+
+    if (raw_level < 0)
+    {
+        report_level = 0;
+    }
+    else if (raw_level >= 90)
+    {
+        report_level = 9;
+    }
+    else
+    {
+        report_level = raw_level / 10;
+    }
+
+    buff[0] = 0x55;
+    buff[1] = 0xAA;
+    buff[2] = report_level;
+
+    if (1)
+    {
+        pair_status = get_pair_status();
+        buff[3] = pair_status;
+
+        if (enter_pair_count > 1)
+        {
+            enter_pair = 0;
+            set_pair_status(0);
+            enter_pair_count = 0;
+        }
+        else
+        {
+            enter_pair_count++;
+        }
+    }
+    else
+    {
+        buff[3] = 0;
+        enter_pair_count = 0;
+    }
+
+    buff[4] = crc8(buff, 4);
+
+    DBGPRINT("[EAR_POWER][SRC] raw_level=%d report_level=%d pair_status=%d",
+             raw_level,
+             report_level,
+             pair_status);
+
+    DBGPRINT("[EAR_POWER][TX] 55 AA %02X %02X %02X",
+             buff[2],
+             buff[3],
+             buff[4]);
+
+    communication_send_buf(buff, 5);
+}
 
 static void wired_uart_get_ear_addr_handle(void)
 {
@@ -547,18 +602,61 @@ bool  aiWangIsNeedOpenEarBuds(void)
 
 uint8_t getPeerBattery(void)
 {
-	if(!boxChargerStatus.getBatteryOK) return 0xff;
-	return boxChargerStatus.leftEarBudsBattery;
+    uint8_t peerBattery = 0xFF;
+    uint8_t twsPeerBattery = get_tws_peer_battery_percent();
+
+    if (twsPeerBattery <= 100)
+    {
+        DEBUG_INFO(0,
+            "[BAT] getPeerBattery from TWS peer=%d",
+            twsPeerBattery);
+
+        return twsPeerBattery;
+    }
+
+    DEBUG_INFO(0,
+        "[BAT] getBatteryOK=%d L=%d R=%d",
+        boxChargerStatus.getBatteryOK,
+        boxChargerStatus.leftEarBudsBattery,
+        boxChargerStatus.rightEarBudsBattery);
+
+    if (!boxChargerStatus.getBatteryOK)
+    {
+        DEBUG_INFO(0, "[BAT] getPeerBattery INVALID");
+        return 0xFF;
+    }
+
+    if (app_ibrt_if_is_right_side())
+    {
+        peerBattery = boxChargerStatus.leftEarBudsBattery;
+
+        DEBUG_INFO(0,
+            "[BAT][RIGHT] Peer=LEFT Battery=%d",
+            peerBattery);
+    }
+    else
+    {
+        peerBattery = boxChargerStatus.rightEarBudsBattery;
+
+        DEBUG_INFO(0,
+            "[BAT][LEFT] Peer=RIGHT Battery=%d",
+            peerBattery);
+    }
+
+    DEBUG_INFO(0, "[BAT] getPeerBattery=%d", peerBattery);
+
+    return peerBattery;
 }
 
 static void wired_uart_get_box_battery(uint8_t *data ,uint8_t len)
 {
-	DBGPRINT("%s boxChargerBattery=0x%02x leftEarBudsBattery=0x%02x rightEarBudsBattery=0x%02x",
-			__func__,
-			data[0],
-			data[1],
-			data[2]
-			);
+	//DBGPRINT("%s boxChargerBattery=0x%02x leftEarBudsBattery=0x%02x rightEarBudsBattery=0x%02x",
+	//		__func__,
+	//		data[0],
+	//		data[1],
+	//		data[2]
+	//		);
+
 	boxChargerStatus.getBatteryOK        = true;
 	boxChargerStatus.boxChargerBattery   = data[0];
 	boxChargerStatus.leftEarBudsBattery  = data[1];
@@ -739,7 +837,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 	}
 		
 
-    DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
+    //DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
 	uart_rx_handle_data_count = 0;
 	
     boxChargerStatus.boxIsOpen = true;
@@ -766,18 +864,35 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
              }
         	 break;
          }
-    case CMD_GET_EAR_POWER:		  //Get headphone battery level
-         {
-        	 if (operateLeftOrRight == isRightEarbuds)
-        	 {
-        		 memset(&boxChargerStatus.boxSoftVersion[0], 0, 16+1);
-        		 memcpy(&boxChargerStatus.boxSoftVersion[0],&uart_cmd_dat[4],11);
-        		 DBGPRINT("CMD_GET_EAR_POWER include boxVersion:%s!!!", boxChargerStatus.boxSoftVersion);
-                 aiWangSetBoxVersion(&boxChargerStatus.boxSoftVersion[0], 11);
-        		 wired_uart_get_battery_level();
-        	 }
-       	     break;
-         }
+    case CMD_GET_EAR_POWER:               //Get headphone battery level
+        {
+            DBGPRINT("[EAR_POWER][REQ] CMD_GET_EAR_POWER operate=%d isRight=%d",
+                    operateLeftOrRight,
+                    isRightEarbuds);
+
+            if (isRightEarbuds)
+            {
+                memset(&boxChargerStatus.boxSoftVersion[0], 0, 16 + 1);
+                memcpy(&boxChargerStatus.boxSoftVersion[0], &uart_cmd_dat[4], 11);
+
+                DBGPRINT("[EAR_POWER][BOX] version:%s",
+                        boxChargerStatus.boxSoftVersion);
+
+                aiWangSetBoxVersion(&boxChargerStatus.boxSoftVersion[0], 11);
+
+                DBGPRINT("[EAR_POWER][CALL] wired_uart_get_battery_level");
+
+                getPeerBattery();
+
+                wired_uart_get_battery_level();
+            }
+            else
+            {
+                DBGPRINT("[EAR_POWER][SKIP] not right earbuds");
+            }
+
+            break;
+        }
     case CMD_NONE_CASE:
         {
     	    break;
@@ -810,8 +925,13 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
           if( app_is_stack_ready())
           {
 #ifndef BLE_ONLY_ENABLED
-			int activeCons = 0, active_phone_cons;
-			int activeSourceCons = 0;
+        int activeCons = 0;
+        int active_phone_cons = 0;
+        int activeSourceCons = 0;
+
+        (void)activeCons;
+        (void)active_phone_cons;
+        (void)activeSourceCons;
 			//fixed only count the phone count,except tws
 			activeCons = app_bt_get_active_cons();
 			active_phone_cons = app_bt_count_mobile_link();
@@ -969,8 +1089,8 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
     uint8_t data_len = 0;
     //DBGPRINT("%s", __func__);
     data_len = (uint8_t)msg_body->message_Param2;
-    DBGPRINT("wired_uart_communication_rx: ");
-    DUMP8("%02x ", wiredUartReceiveData, data_len);
+    //DBGPRINT("wired_uart_communication_rx: ");
+    //DUMP8("%02x ", wiredUartReceiveData, data_len);
     wired_uart_communication_cmd_handle_process(wiredUartReceiveData, data_len);
     return 0;
 }

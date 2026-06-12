@@ -147,7 +147,9 @@ extern "C" bool app_usbaudio_mode_on(void);
 #define APP_BATTERY_GET_STATUS(appevt, status) (status = (appevt>>16)&0xffff)
 #define APP_BATTERY_GET_VOLT(appevt, volt) (volt = appevt&0xffff)
 #define APP_BATTERY_GET_PRAMS(appevt, prams) ((prams) = appevt&0xffff)
-
+#if defined(IBRT)
+extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+#endif
 enum APP_BATTERY_MEASURE_PERIODIC_T
 {
     APP_BATTERY_MEASURE_PERIODIC_FAST = 0,
@@ -449,33 +451,63 @@ int app_status_battery_report(uint8_t level)
 
     if (app_is_stack_ready())
     {
-// #if (HF_CUSTOM_FEATURE_SUPPORT & HF_CUSTOM_FEATURE_BATTERY_REPORT) || (HF_SDK_FEATURES & HF_FEATURE_HF_INDICATORS)
 #if defined(SUPPORT_BATTERY_REPORT) || defined(SUPPORT_HF_INDICATORS)
+
 #if defined(IBRT)
         uint8_t hfp_device = app_bt_audio_get_curr_hfp_device();
         struct BT_DEVICE_T *curr_device = app_bt_get_device(hfp_device);
+
         if (curr_device->hf_conn_flag)
         {
+            BATTERY_TRACE(1,
+                          "[BATT] HFP connected level=%d",
+                          level);
+
             app_hfp_set_battery_level(level);
         }
         else
         {
 #if defined(BLE_BATT_ENABLE)
-        DEBUG_WARNING(0, "%s app_ble_report_battery_level", __func__);
-        for(int i=0; i<BT_DEVICE_NUM; i++)
-        {
-          app_ble_report_battery_level(i,level);
-        }
+
+            /* HFP battery level(0~9) -> BLE percent(0~100) */
+            uint8_t percent =
+                (level >= 9) ? 100 : ((level + 1) * 10);
+
+            DEBUG_WARNING(0,
+                          "[BLE_BATT][STATUS] level=%d percent=%d",
+                          level,
+                          percent);
+
+            for (int i = 0; i < BT_DEVICE_NUM; i++)
+            {
+                DEBUG_WARNING(0,
+                              "[BLE_BATT][STATUS] dev=%d report=%d%%",
+                              i,
+                              percent);
+
+                app_ble_report_battery_level(i, percent);
+            }
+
 #endif
         }
+
 #elif defined(BT_HFP_SUPPORT)
+
         app_hfp_set_battery_level(level);
+
 #endif
+
 #else
-        BATTERY_TRACE(1,"[%s] Can not enable SUPPORT_BATTERY_REPORT", __func__);
+
+        BATTERY_TRACE(1,
+                      "[%s] Can not enable SUPPORT_BATTERY_REPORT",
+                      __func__);
+
 #endif
+
         bes_bt_osapi_notify_evm();
     }
+
     return 0;
 }
 #endif
@@ -547,6 +579,23 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             BATTERY_TRACE(0,"%s previous_level=%d", __func__, level);
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
             BATTERY_TRACE(0,"%s actutal level=%d currvolt=%d", __func__, level, app_battery_measure.currvolt);
+#if defined(IBRT)
+            {
+                static int8_t last_sync_level = -1;
+
+                if (last_sync_level != level)
+                {
+                    last_sync_level = level;
+
+                    BATTERY_TRACE(0,
+                                  "[BAT_SYNC][BATT_UPDATE] level=%d currvolt=%d",
+                                  level,
+                                  app_battery_measure.currvolt);
+
+                    app_ibrt_customif_cmd_sync_battery_level(level);
+                }
+            }
+#endif
             app_status_battery_report(level);
             break;
 
@@ -1108,6 +1157,7 @@ static void app_battery_pluginout_debounce_handler(void const *param)
             app_battery_measure.start_time = hal_sys_timer_get();
 #ifdef BESUI_STEREO_EN
             if ((!app_ui_charging_io_read((enum HAL_GPIO_PIN_T)HAL_IOMUX_PIN_P1_7)) && app_get_charging_status() ) {
+                BATTERY_TRACE(0,"close box charging -2");
                 app_shutdown();
             }
 #endif

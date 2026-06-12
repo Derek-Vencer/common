@@ -41,11 +41,29 @@
 #include "charger_ntc.h"
 
 #include "app_ibrt_customif_cmd.h"
+#include "app_tws_ibrt.h"
 
-#ifndef TRACE
-#define TRACE(attr, str, ...)   TR_DEBUG(attr, str, ##__VA_ARGS__)
+#define GOC_APP_DEBUG_ENABLE 1
+
+#undef printf
+#undef TRACE
+
+#if GOC_APP_DEBUG_ENABLE
+
+#define printf(fmt, ...) \
+    hal_trace_printf(0, "[goc-app] " fmt, ##__VA_ARGS__)
+
+#define TRACE(attr, fmt, ...) \
+    hal_trace_printf(attr, "[goc-app] " fmt, ##__VA_ARGS__)
+
+#else
+
+#define printf(fmt, ...) do {} while (0)
+#define TRACE(attr, fmt, ...) do {} while (0)
+
 #endif
 
+extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 #define MAX_PACKET_SIZE             (512)
 #define SPARRAW_EVENT_MAX_MAILBOX   (10)
 #define SPARRAW_EVENT_BUF_SIZE      (MAX_PACKET_SIZE*SPARRAW_EVENT_MAX_MAILBOX)
@@ -211,44 +229,78 @@ uint8_t key_event_is_left = 0;
 uint8_t er_inbox = 0;
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
+    uint8_t localBattery = app_battery_current_level();
+    uint8_t peerBattery  = getPeerBattery();
+    uint8_t boxBattery   = getBoxChargerBattery();
 
-    uint8_t batflag; //left, right, box
-    batflag = app_battery_current_level();
-    TRACE(0,"%s batflag=%d", __func__, batflag);
-#if 0
-    if(batflag > 9)
+    uint8_t leftBattery  = 0;
+    uint8_t rightBattery = 0;
+    uint8_t batteryArray[3] = {0};
+
+	TRACE(0,
+      "[BAT][REQ] len=%d cmd=0x%02X",
+      len,
+      data[0]);
+
+	DUMP8("[BAT][REQ] payload: ", data, len);
+
+#ifdef IBRT
+    TRACE(0,
+          "[BAT_SYNC][REQ_TX] local=%d",
+          localBattery);
+
+    app_ibrt_customif_cmd_sync_battery_level(localBattery);
+
+    if (app_ibrt_if_is_right_side())
     {
-        batflag = 9;
+        /* Current device is RIGHT */
+        rightBattery = localBattery;
+        leftBattery  = (peerBattery != 0xFF) ? peerBattery : 0;
+
+        TRACE(0,
+              "[BAT][RIGHT] local=%d peer=%d",
+              localBattery,
+              peerBattery);
     }
+    else
+    {
+        /* Current device is LEFT */
+        leftBattery  = localBattery;
+        rightBattery = (peerBattery != 0xFF) ? peerBattery : 0;
+
+        TRACE(0,
+              "[BAT][LEFT] local=%d peer=%d",
+              localBattery,
+              peerBattery);
+    }
+#else
+    leftBattery  = localBattery;
+    rightBattery = peerBattery;
 #endif
-	uint8_t batteryArray[3] = {0, 0, 0};
-	batteryArray[0]  = batflag;
-	if( 0xFF == getPeerBattery())
-	{
-		batteryArray[1]  = batflag;
-	}
-	else
-	{
-		batteryArray[1]  = getPeerBattery();
-		#if 0
-	    if(batteryArray[1] > 9)
-	    {
-	    	batteryArray[1] = 9;
-	    }
-		#endif
-	}
-	batteryArray[2] = getBoxChargerBattery();
-//#if need_send_data_by_notify
-	//sparraw_tx_msg(RSP_GET_BATTERY_LEVEL, batteryArray, 3);
-//#endif
-	batteryArray[2] = getBoxChargerBattery();
-	uint8_t read_send_data[20] = {0};
-	read_send_data[1] = 3;
-	memcpy(&read_send_data[2],batteryArray,2);
-	//sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
-	sparraw_tx_msg(0x31, read_send_data, 3+2);
 
+    batteryArray[0] = leftBattery;
+    batteryArray[1] = rightBattery;
+    batteryArray[2] = boxBattery;
 
+    TRACE(0,
+          "[BAT][SRC] L=%d R=%d C=%d",
+          leftBattery,
+          rightBattery,
+          boxBattery);
+
+    uint8_t read_send_data[20] = {0};
+
+    read_send_data[1] = 3;
+    memcpy(&read_send_data[2], batteryArray, 3);
+
+    TRACE(0,
+          "[BAT][TX] count=%d L=%d R=%d C=%d",
+          read_send_data[1],
+          read_send_data[2],
+          read_send_data[3],
+          read_send_data[4]);
+
+    sparraw_tx_msg(0x31, read_send_data, 5);
 }
 
 void handleGetDeviceName(const uint8_t *data, uint16_t len)
@@ -576,6 +628,10 @@ void handleGetFwVersion(const uint8_t *data, uint16_t len)
 	//const uint8_t *version = (const uint8_t *)"01.01.00.03";
 	memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
 	aiWangGetChargerBoxVersion(&version[11]);
+
+	TRACE(0, "%s", __func__);
+    TRACE(0, "Earbuds FW : %s", &version[0]);
+    TRACE(0, "Case FW    : %s", &version[11]);
 #if 0
 	sparraw_tx_msg(RSP_GET_FW_VERSION, (const uint8_t*)version, 23);
 #endif
@@ -1493,16 +1549,61 @@ POSSIBLY_UNUSED static void sparraw_rx_cmd_parse(const uint8_t *data, uint16_t l
    }
 }
 
-static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len) {
-   uint16_t i ;
-   for (i = 0; i < aiWangCmdTypesCount/*sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0])*/; i++)
-   {
-	   TRACE(0,"%s data[0] = %02x %02x", __func__, data[0], aiWangCmdTypes[i].cmd);
-	   if ( data[0] == aiWangCmdTypes[i].cmd ) {
-		   if(aiWangCmdTypes[i].handleFunc) aiWangCmdTypes[i].handleFunc( data,  len);
-		   break;
-	   }
-   }
+static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len)
+{
+    uint16_t i;
+
+    TRACE(0,
+          "[SPARROW_RX] len=%d cmd=0x%02X",
+          len,
+          data[0]);
+
+    DUMP8("[SPARROW_RX] payload: ", data, len);
+
+    for (i = 0; i < aiWangCmdTypesCount; i++)
+    {
+        TRACE(0,
+              "[SPARROW_RX] search cmd=0x%02X table=0x%02X idx=%d",
+              data[0],
+              aiWangCmdTypes[i].cmd,
+              i);
+
+        if (data[0] == aiWangCmdTypes[i].cmd)
+        {
+            TRACE(0,
+                  "[SPARROW_RX] MATCH cmd=0x%02X idx=%d handler=%p",
+                  data[0],
+                  i,
+                  aiWangCmdTypes[i].handleFunc);
+
+            if (aiWangCmdTypes[i].handleFunc)
+            {
+                aiWangCmdTypes[i].handleFunc(data, len);
+
+                TRACE(0,
+                      "[SPARROW_RX] DONE cmd=0x%02X",
+                      data[0]);
+            }
+            else
+            {
+                TRACE(0,
+                      "[SPARROW_RX] NULL handler cmd=0x%02X",
+                      data[0]);
+            }
+
+            break;
+        }
+    }
+
+    if (i >= aiWangCmdTypesCount)
+    {
+        TRACE(0,
+              "[SPARROW_RX] UNKNOWN cmd=0x%02X len=%d",
+              data[0],
+              len);
+
+        DUMP8("[SPARROW_RX] unknown payload: ", data, len);
+    }
 }
 
 
@@ -1569,6 +1670,12 @@ void sparraw_event_handle(ble_aiwang_param_u *param)
 {
     ASSERT(param,"sparraw data is null. ble_sparrow_task_init=%d", ble_sparrow_task_init);
     TRACE(0,"[%s] ble_sparrow_task_init:%d",__func__, ble_sparrow_task_init);
+	DEBUG_WARNING(0,
+        "[SPARROW_EVT] enter event=0x%02X conidx=%d len=%d init=%d",
+        param->event,
+        param->conidx,
+        param->len,
+        ble_sparrow_task_init);
     switch(param->event)
     {
 		case BLE_AIWANG_SRV_CONN:{
@@ -1635,6 +1742,15 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 				#endif
 			}
 			batteryArray[2] = getBoxChargerBattery();
+
+			TRACE(0, "Local Battery  = %d%%", batteryArray[0]);
+			TRACE(0, "Peer Battery   = %d%%", batteryArray[1]);
+			TRACE(0, "Case Battery   = %d%%", batteryArray[2]);
+
+			TRACE(0, "APP Battery => L:%d R:%d C:%d",
+				batteryArray[0],
+				batteryArray[1],
+				batteryArray[2]);
 			read_send_data[1] = 3;
 			memcpy(&read_send_data[2],batteryArray,2);
 			//sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
@@ -1728,8 +1844,12 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			uint8_t version[11+11+1] = {0};
 			memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
 			//aiWangGetChargerBoxVersion(&version[strlen(DISPLAY_EARBUDS_VERSION)]);
+			TRACE(0, "GET_FW_VERSION");
+    		TRACE(0, "DISPLAY_EARBUDS_VERSION=%s", version);
 			read_send_data[1] = strlen((char*)version);
 			memcpy(&read_send_data[2],version,strlen((char*)version));
+			TRACE(0, "FW Version Len=%d", read_send_data[1]);
+    		TRACE(0, "FW Version Send=%s", &read_send_data[2]);
 			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,read_send_data, strlen((char*)version)+2);		
 			break;
 		}

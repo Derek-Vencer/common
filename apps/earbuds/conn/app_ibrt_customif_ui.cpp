@@ -93,6 +93,8 @@
 #include "app_tota_conn.h"
 #endif
 
+extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+
 extern ibrt_link_status_changed_cb_t* ibrt_link_status_changed_client_cb;
 extern ibrt_mgr_status_changed_cb_t *ibrt_mgr_status_changed_client_cb;
 extern ibrt_ext_conn_policy_cb_t *ibrt_ext_conn_policy_client_cb;
@@ -958,13 +960,24 @@ void app_ibrt_customif_on_ibrt_state_changed(const bt_bdaddr_t *addr, ibrt_conne
 #endif
             break;
         case IBRT_CONN_IBRT_CONNECTED:
-            if(IBRT_SLAVE == role)
+        {
+            uint8_t local_level = app_battery_current_level();
+
+            EARBUDS_TRACE(1,
+                "[BAT_SYNC][IBRT_CONNECTED] local=%d role=%d",
+                local_level,
+                role);
+
+            app_ibrt_customif_cmd_sync_battery_level(local_level);
+
+            if (IBRT_SLAVE == role)
             {
             #ifdef BT_DIP_SUPPORT
                 btif_dip_set_state(addr, DIP_CTRL_ST_IDLE);
             #endif
             }
             break;
+        }
         case IBRT_CONN_IBRT_START_FAIL:
             break;
         case IBRT_CONN_IBRT_ACL_CONNECTED:
@@ -1191,6 +1204,18 @@ void app_ibrt_customif_peer_box_state_update_callback(bud_box_state box_state)
     user_set_peer_box_sta(box_state);
 #endif
     EARBUDS_TRACE(0,"custom_ui:peer box state update=%s", app_ui_box_state_to_string(box_state));
+
+    if (box_state == IBRT_IN_BOX_OPEN)
+    {
+        uint8_t local_percent = app_battery_current_level();
+
+        EARBUDS_TRACE(1,
+            "[BAT_SYNC][BOX_OPEN] local=%d",
+            local_percent);
+
+        app_ibrt_customif_cmd_sync_battery_level(local_percent);
+    }
+
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->peer_box_state_update_hook) {
         ibrt_mgr_status_changed_client_cb->peer_box_state_update_hook(box_state);
     }

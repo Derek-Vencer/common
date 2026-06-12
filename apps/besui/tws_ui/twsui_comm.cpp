@@ -573,7 +573,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
         uictl.case_open_flag = false;
         batt_last = level_buf;
         uicom.bat_curr_level = level_buf;
-        app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
+        app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
         BESUI_TRACE(0,"[UIBAT]%s, case_open update!!!", __func__);
         goto CASE_OPEN_UPDATE;
     }
@@ -634,7 +634,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
             {
                 batt_last = level_buf;
                 uicom.bat_curr_level = level_buf;
-                app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
+                app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
             }
             else
             {
@@ -657,7 +657,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
             {
                 batt_last = level_buf;
                 uicom.bat_curr_level = level_buf;
-                app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
+                app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
             }
             else
             {

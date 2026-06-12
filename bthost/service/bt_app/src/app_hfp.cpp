@@ -352,44 +352,88 @@ int app_hfp_battery_report(uint8_t level)
     uint8_t i;
     int nRet = 0;
 
-    if (level>9)
+    if (level > 9)
         return -1;
 
+    uint8_t percent = (level >= 9) ? 100 : (level * 10);
+
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
-    for(i=0; i<BT_DEVICE_NUM; i++)
+
+    DEBUG_WARNING(0,
+        "[TWS_CHECK][HFP_BATT] enter level=%d percent=%d tws=%d",
+        level,
+        percent,
+        bts_tws_if_is_tws_link_connected());
+
+    for (i = 0; i < BT_DEVICE_NUM; i++)
     {
         chan = app_bt_get_device(i)->hf_channel;
+
+        DEBUG_WARNING(0,
+            "[TWS_CHECK][HFP_BATT] dev=%d hf_state=%d tws=%d",
+            i,
+            btif_get_hf_chan_state(chan),
+            bts_tws_if_is_tws_link_connected());
+
         if (btif_get_hf_chan_state(chan) == BT_HFP_CHAN_STATE_OPEN)
         {
-            if (!bt_host_cfg->apple_hf_at_support || btif_hf_is_hf_indicators_support(chan))
+            if (!bt_host_cfg->apple_hf_at_support ||
+                btif_hf_is_hf_indicators_support(chan))
             {
                 if (app_bt_get_device(i)->battery_level != level)
                 {
 #if defined(BLE_BATT_ENABLE)
-                	DEBUG_WARNING(0, "%s app_ble_report_battery_level=%d", __func__, level);
-					app_ble_report_battery_level(i,level);
+                    DEBUG_WARNING(0,
+                        "[BLE_BATT] dev=%d level=%d percent=%d tws=%d",
+                        i,
+                        level,
+                        percent,
+                        bts_tws_if_is_tws_link_connected());
+
+                    app_ble_report_battery_level(i, percent);
 #endif
-                    status = btif_hf_update_indicators_batt_level(chan, level*10); //battery range 0~100
+
+                    status =
+                        btif_hf_update_indicators_batt_level(
+                            chan,
+                            percent);
                 }
             }
             else if (btif_hf_is_batt_report_support(chan))
             {
                 if (app_bt_get_device(i)->battery_level != level)
                 {
-                #ifdef GFPS_ENABLED
+#ifdef GFPS_ENABLED
                     gfps_send_battery_levels(SET_BT_ID(i));
-                #endif
+#endif
+
 #if defined(BLE_BATT_ENABLE)
-                    DEBUG_WARNING(0, "hfp_battery_report app_ble_report_battery_level %d", level);
-                    app_ble_report_battery_level(i,level);
+                    DEBUG_WARNING(0,
+                        "[BLE_BATT] dev=%d level=%d percent=%d tws=%d",
+                        i,
+                        level,
+                        percent,
+                        bts_tws_if_is_tws_link_connected());
+
+                    app_ble_report_battery_level(i, percent);
 #endif
+
 #ifdef __INTERACTION_CUSTOMER_AT_COMMAND__
-                    status = Send_customer_battery_report_AT_command(chan, level);
+                    status =
+                        Send_customer_battery_report_AT_command(
+                            chan,
+                            level);
 #endif
-                    status = btif_hf_batt_report(chan, level); //iphoneaccev battery range 0~9
+
+                    status =
+                        btif_hf_batt_report(
+                            chan,
+                            level);
                 }
             }
-            if (BT_STS_PENDING == status){
+
+            if (BT_STS_PENDING == status)
+            {
                 app_bt_get_device(i)->battery_level = level;
             }
             else
@@ -399,21 +443,22 @@ int app_hfp_battery_report(uint8_t level)
         }
         else
         {
-
 #if defined(BLE_BATT_ENABLE)
-           DEBUG_WARNING(0, "BLE_BATT_ENABLE app_ble_report_battery_level=%d",level);
-		   app_ble_report_battery_level(i,level);
+            DEBUG_WARNING(0,
+                "[BLE_BATT] skip report dev=%d hf not connected tws=%d",
+                i,
+                bts_tws_if_is_tws_link_connected());
 #endif
-#ifdef GFPS_ENABLED
-		   gfps_send_battery_levels(SET_BT_ID(i));
-#endif
-           app_bt_get_device(i)->battery_level = 0xff;
-           nRet = -1;
+
+            app_bt_get_device(i)->battery_level = 0xFF;
+            nRet = -1;
         }
     }
+
 #if defined(BT_HFP_AG_ROLE)
     app_hfp_ag_battery_report(level);
 #endif
+
     return nRet;
 }
 
@@ -463,8 +508,13 @@ void app_bt_hfp_enahnced_battery_report(uint8_t level) // level range 0~100
             app_bt_get_device(i)->battery_level = 0xff;
         }
 #if defined(BLE_BATT_ENABLE)
-        DEBUG_WARNING(0, "%s app_ble_report_battery_level", __func__);
-        app_ble_report_battery_level(i,level);
+        DEBUG_WARNING(0,
+                      "[BLE_BATT][HFP_ENH] %s dev=%d percent=%d",
+                      __func__,
+                      i,
+                      level);
+
+        app_ble_report_battery_level(i, level);
 #endif
     }
 

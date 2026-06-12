@@ -946,6 +946,7 @@ void pmu_rtc_alarm_handler_dummy(uint32_t seconds)
 int app_shutdown(void)
 {
 #ifndef IGNORE_APP_SHUTDOWN
+    MAIN_TRACE(0,"app_shutdown");
     system_shutdown();
 #endif
 
@@ -2095,6 +2096,9 @@ static void app_tell_battery_info_handler(uint8_t *batteryValueCount,
                                           uint8_t *batteryValue)
 {
     GFPS_BATTERY_STATUS_E status = BATTERY_NOT_CHARGING;
+    uint8_t local_level = 0;
+    uint8_t local_percent = 0;
+
 #ifdef BESUI_TWS_EN
     if (app_battery_is_charging())
     {
@@ -2105,15 +2109,18 @@ static void app_tell_battery_info_handler(uint8_t *batteryValueCount,
         status = BATTERY_NOT_CHARGING;
     }
 #endif
-    // TODO: add the charger case's battery level
+
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 #if defined(BESUI_TWS_EN)
     *batteryValueCount = app_gfps_renew_battery_level(status, batteryValue);
 #elif defined(BESUI_STEREO_EN)
     *batteryValueCount = stereo_gfps_battery_level(0, batteryValue);
 #endif
-    BESUI_TRACE(1,"%s count %d", __func__, *batteryValueCount);
-    DUMP8("0x%02x ",batteryValue, *batteryValueCount);
+
+    BESUI_TRACE(2, "[BATT_LOCAL][TELL] %s count=%d status=%d",
+                __func__, *batteryValueCount, status);
+    DUMP8("0x%02x ", batteryValue, *batteryValueCount);
+
 #else
 #if defined(IBRT) && !defined(FREEMAN_ENABLED_STERO)
     if (bts_tws_if_is_tws_link_connected())
@@ -2131,23 +2138,53 @@ static void app_tell_battery_info_handler(uint8_t *batteryValueCount,
 #ifdef BESUI_STEREO_EN
     *batteryValueCount = 3;
 #endif
-    MAIN_TRACE(2,"%s,*batteryValueCount is %d",__func__,*batteryValueCount);
-    if (1 == *batteryValueCount)
+
+    local_level = app_battery_current_level();
+
+    if (local_level < 0)
     {
-        batteryValue[0] = ((app_battery_current_level()+1) * 10) | (status << 7);
+        local_percent = 0;
+    }
+    else if (local_level > 100)
+    {
+        local_percent = 100;
     }
     else
     {
-        batteryValue[0] = ((app_battery_current_level()+1) * 10) | (status << 7);
-        batteryValue[1] = ((app_battery_current_level()+1) * 10) | (status << 7);
-        batteryValue[2] = 0x7F;
+        local_percent = (uint8_t)local_level;
     }
+
+    MAIN_TRACE(4, "[BATT_LOCAL][TELL] %s count=%d local_level=%d local_percent=%d",
+               __func__, *batteryValueCount, local_level, local_percent);
+
+    if (1 == *batteryValueCount)
+    {
+        batteryValue[0] = local_percent | (status << 7);
+
+        MAIN_TRACE(3, "[BATT_LOCAL][TELL] single local_raw=0x%02x percent=%d status=%d",
+                   batteryValue[0], local_percent, status);
+    }
+    else
+    {
+        batteryValue[0] = local_percent | (status << 7);
+        batteryValue[1] = local_percent | (status << 7);
+        batteryValue[2] = 0x7F;
+
+        MAIN_TRACE(5, "[BATT_LOCAL][TELL] tws L/R/Case raw=0x%02x 0x%02x 0x%02x local_percent=%d status=%d",
+                   batteryValue[0], batteryValue[1], batteryValue[2], local_percent, status);
+    }
+
 #ifdef BESUI_STEREO_EN
-        batteryValue[0] = 0x7f;
-        batteryValue[1] = 0x7f;
-        batteryValue[2] = 0x7f;
+    batteryValue[0] = 0x7f;
+    batteryValue[1] = 0x7f;
+    batteryValue[2] = 0x7f;
+
+    MAIN_TRACE(3, "[BATT_LOCAL][TELL] stereo override raw=0x%02x 0x%02x 0x%02x",
+               batteryValue[0], batteryValue[1], batteryValue[2]);
 #endif
-#endif //#ifdef GFPS_ENABLED
+
+    DUMP8("[BATT_LOCAL][TELL] batteryValue: ", batteryValue, *batteryValueCount);
+#endif
 }
 #endif
 extern uint32_t __coredump_section_start[];
