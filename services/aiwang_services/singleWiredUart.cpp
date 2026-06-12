@@ -75,7 +75,7 @@ static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
 uint8_t getPeerBattery(void);
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
-
+extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 
@@ -164,6 +164,8 @@ static uint8_t  isRightEarbuds = 0xFF; //unknown odd  right , even left
 static uint8_t  wiredUartInitFlag  = FALSE;
 static uint8_t  wiredUartReceiveData[MAX_RX_SIZE];
 static BOX_STATUS  boxChargerStatus  ;
+static bool box_battery_cache_valid = false;
+static bool box_battery_update_enable = true;
 
 static uint8_t uart_rx_handle_data_count = 0;
 /************************************************/
@@ -438,6 +440,12 @@ static void wired_uart_get_battery_level(void)
     raw_level = app_battery_current_level();
 
 #if defined(IBRT)
+    DBGPRINT("[EAR_POWER][TWS] connected=%d",
+            bts_tws_if_is_tws_link_connected());
+
+    DBGPRINT("[EAR_POWER][PEER] battery=%d",
+            app_ibrt_customif_get_tws_peer_battery_level());
+
     DBGPRINT("[EAR_POWER][TWS] connected=%d role_right=%d",
             bts_tws_if_is_tws_link_connected(),
             app_ibrt_if_is_right_side());
@@ -591,8 +599,12 @@ static void wired_uart_remove_all_phone_paired_list(void)
 
 uint8_t getBoxChargerBattery(void)
 {
-	if(!boxChargerStatus.getBatteryOK) return 0xff;
-	return boxChargerStatus.boxChargerBattery ;
+    if (!box_battery_cache_valid)
+    {
+        return 0xFF;
+    }
+
+    return boxChargerStatus.boxChargerBattery;
 }
 
 bool  aiWangIsNeedOpenEarBuds(void)
@@ -602,65 +614,69 @@ bool  aiWangIsNeedOpenEarBuds(void)
 
 uint8_t getPeerBattery(void)
 {
-    uint8_t peerBattery = 0xFF;
-    uint8_t twsPeerBattery = get_tws_peer_battery_percent();
+    uint8_t twsPeerBattery = app_ibrt_customif_get_tws_peer_battery_level();
 
     if (twsPeerBattery <= 100)
     {
-        DEBUG_INFO(0,
-            "[BAT] getPeerBattery from TWS peer=%d",
-            twsPeerBattery);
+        DBGPRINT("[BAT] getPeerBattery from TWS sync peer=%d",
+                 twsPeerBattery);
 
         return twsPeerBattery;
     }
 
-    DEBUG_INFO(0,
-        "[BAT] getBatteryOK=%d L=%d R=%d",
-        boxChargerStatus.getBatteryOK,
-        boxChargerStatus.leftEarBudsBattery,
-        boxChargerStatus.rightEarBudsBattery);
+    DBGPRINT("[BAT] getPeerBattery TWS invalid=%d", twsPeerBattery);
 
-    if (!boxChargerStatus.getBatteryOK)
-    {
-        DEBUG_INFO(0, "[BAT] getPeerBattery INVALID");
-        return 0xFF;
-    }
-
-    if (app_ibrt_if_is_right_side())
-    {
-        peerBattery = boxChargerStatus.leftEarBudsBattery;
-
-        DEBUG_INFO(0,
-            "[BAT][RIGHT] Peer=LEFT Battery=%d",
-            peerBattery);
-    }
-    else
-    {
-        peerBattery = boxChargerStatus.rightEarBudsBattery;
-
-        DEBUG_INFO(0,
-            "[BAT][LEFT] Peer=RIGHT Battery=%d",
-            peerBattery);
-    }
-
-    DEBUG_INFO(0, "[BAT] getPeerBattery=%d", peerBattery);
-
-    return peerBattery;
+    return 0xFF;
 }
 
-static void wired_uart_get_box_battery(uint8_t *data ,uint8_t len)
+void aiwang_box_battery_update_enable(bool enable)
 {
-	//DBGPRINT("%s boxChargerBattery=0x%02x leftEarBudsBattery=0x%02x rightEarBudsBattery=0x%02x",
-	//		__func__,
-	//		data[0],
-	//		data[1],
-	//		data[2]
-	//		);
+    box_battery_update_enable = enable;
 
-	boxChargerStatus.getBatteryOK        = true;
-	boxChargerStatus.boxChargerBattery   = data[0];
-	boxChargerStatus.leftEarBudsBattery  = data[1];
-	boxChargerStatus.rightEarBudsBattery = data[2];
+    DBGPRINT("[BOX_BAT][UPDATE_ENABLE] enable=%d valid=%d box=%d",
+            box_battery_update_enable,
+            box_battery_cache_valid,
+            boxChargerStatus.boxChargerBattery);
+}
+
+static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
+{
+    if ((data == NULL) || (len < 3))
+    {
+        DBGPRINT("[BOX_BAT][RX] invalid len=%d", len);
+        return;
+    }
+
+    if (!box_battery_update_enable && box_battery_cache_valid)
+    {
+        DBGPRINT("[BOX_BAT][KEEP] old=%d new=%d left=%d right=%d",
+                boxChargerStatus.boxChargerBattery,
+                data[0],
+                data[1],
+                data[2]);
+        return;
+    }
+
+    boxChargerStatus.getBatteryOK        = true;
+    boxChargerStatus.boxChargerBattery   = data[0];
+    boxChargerStatus.leftEarBudsBattery  = data[1];
+    boxChargerStatus.rightEarBudsBattery = data[2];
+
+    box_battery_cache_valid = true;
+
+    DBGPRINT("[EAR_POWER][TWS] connected=%d",
+        bts_tws_if_is_tws_link_connected());
+
+    DBGPRINT("[BOX_BAT][SAVE] box=%d left=%d right=%d update=%d",
+            boxChargerStatus.boxChargerBattery,
+            boxChargerStatus.leftEarBudsBattery,
+            boxChargerStatus.rightEarBudsBattery,
+            box_battery_update_enable);
+
+    uint8_t twsPeerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+    
+    DBGPRINT("[BAT] getPeerBattery from TWS sync peer=%d",
+                 twsPeerBattery);
 }
 
 uint8_t aiWang_get_profile_conn_num(void)
@@ -1056,6 +1072,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_SEND_EAR_PUTIN:
 	  {
 		  DBGPRINT("CMD_SEND_EAR_PUTIN");
+          aiwang_box_battery_update_enable(true);
           boxChargerStatus.needOpenEarbuds = true;
 		  wired_uart_send_cmd_ack_ok();
 		  //disconnected_device(true, BT_DEVICE_ID_1);
@@ -1103,6 +1120,7 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
 static void uart_idle_timeout_callback(void const *argument)
 {
     DBGPRINT("UART idle timeout detected! No data received for %dms\n", UART_IDLE_TIMEOUT_MS);
+    aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
 	
 	osTimerDelete(uart_idle_timer_id);

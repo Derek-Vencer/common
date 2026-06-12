@@ -42,6 +42,8 @@
 
 #include "app_ibrt_customif_cmd.h"
 #include "app_tws_ibrt.h"
+#include "bts_tws_if.h"
+#include "app_ibrt_customif_cmd.h"
 
 #define GOC_APP_DEBUG_ENABLE 1
 
@@ -225,57 +227,82 @@ const key_map_entry_t s_key_default_map[21]{
 uint8_t key_event_is_left = 0;
 /***********************************************/
 
-
 uint8_t er_inbox = 0;
+
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
-    uint8_t localBattery = app_battery_current_level();
-    uint8_t peerBattery  = getPeerBattery();
-    uint8_t boxBattery   = getBoxChargerBattery();
+    uint8_t localBattery;
+    uint8_t peerBattery;
+    uint8_t boxBattery;
+    bool peerValid = false;
+    bool twsConnected = false;
 
     uint8_t leftBattery  = 0;
     uint8_t rightBattery = 0;
     uint8_t batteryArray[3] = {0};
+    uint8_t read_send_data[20] = {0};
 
-	TRACE(0,
-      "[BAT][REQ] len=%d cmd=0x%02X",
-      len,
-      data[0]);
+    if ((data == NULL) || (len == 0))
+    {
+        TRACE(0, "[BAT][REQ] invalid data=%p len=%d", data, len);
+        return;
+    }
 
-	DUMP8("[BAT][REQ] payload: ", data, len);
+    localBattery = app_battery_current_level();
+    peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
+    boxBattery   = getBoxChargerBattery();
+
+    twsConnected = bts_tws_if_is_tws_link_connected();
+
+    if ((peerBattery != 0xFF) && (peerBattery <= 100))
+    {
+        peerValid = true;
+    }
+    else
+    {
+        peerValid = false;
+        peerBattery = 0;
+    }
+
+    TRACE(0,
+          "[BAT][PEER] tws=%d peer=%d valid=%d",
+          twsConnected,
+          peerBattery,
+          peerValid);
+
+    TRACE(0, "[BAT][REQ] len=%d cmd=0x%02X", len, data[0]);
+    TRACE(0, "[BAT][REQ_PAYLOAD]:");
+    DUMP8("%02X ", data, len);
 
 #ifdef IBRT
-    TRACE(0,
-          "[BAT_SYNC][REQ_TX] local=%d",
-          localBattery);
-
+    TRACE(0, "[BAT_SYNC][REQ_TX] local=%d", localBattery);
     app_ibrt_customif_cmd_sync_battery_level(localBattery);
 
     if (app_ibrt_if_is_right_side())
     {
-        /* Current device is RIGHT */
         rightBattery = localBattery;
-        leftBattery  = (peerBattery != 0xFF) ? peerBattery : 0;
+        leftBattery  = peerValid ? peerBattery : 0;
 
         TRACE(0,
-              "[BAT][RIGHT] local=%d peer=%d",
+              "[BAT][ROLE] RIGHT local=%d tws_peer=%d valid=%d",
               localBattery,
-              peerBattery);
+              peerBattery,
+              peerValid);
     }
     else
     {
-        /* Current device is LEFT */
         leftBattery  = localBattery;
-        rightBattery = (peerBattery != 0xFF) ? peerBattery : 0;
+        rightBattery = peerValid ? peerBattery : 0;
 
         TRACE(0,
-              "[BAT][LEFT] local=%d peer=%d",
+              "[BAT][ROLE] LEFT local=%d tws_peer=%d valid=%d",
               localBattery,
-              peerBattery);
+              peerBattery,
+              peerValid);
     }
 #else
     leftBattery  = localBattery;
-    rightBattery = peerBattery;
+    rightBattery = peerValid ? peerBattery : 0;
 #endif
 
     batteryArray[0] = leftBattery;
@@ -283,22 +310,16 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     batteryArray[2] = boxBattery;
 
     TRACE(0,
-          "[BAT][SRC] L=%d R=%d C=%d",
-          leftBattery,
-          rightBattery,
-          boxBattery);
-
-    uint8_t read_send_data[20] = {0};
+          "[BAT][RSP] L=%d R=%d C=%d",
+          batteryArray[0],
+          batteryArray[1],
+          batteryArray[2]);
 
     read_send_data[1] = 3;
     memcpy(&read_send_data[2], batteryArray, 3);
 
-    TRACE(0,
-          "[BAT][TX] count=%d L=%d R=%d C=%d",
-          read_send_data[1],
-          read_send_data[2],
-          read_send_data[3],
-          read_send_data[4]);
+    TRACE(0, "[BAT][NOTIFY_PAYLOAD] rsp_cmd=0x31 len=%d:", 5);
+    DUMP8("%02X ", read_send_data, 5);
 
     sparraw_tx_msg(0x31, read_send_data, 5);
 }
@@ -1553,12 +1574,22 @@ static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len)
 {
     uint16_t i;
 
+    if ((data == NULL) || (len == 0))
+    {
+        TRACE(0,
+              "[SPARROW_RX] invalid data=%p len=%d",
+              data,
+              len);
+        return;
+    }
+
     TRACE(0,
           "[SPARROW_RX] len=%d cmd=0x%02X",
           len,
           data[0]);
 
-    DUMP8("[SPARROW_RX] payload: ", data, len);
+    TRACE(0, "[SPARROW_RX] payload:");
+    DUMP8("%02X ", data, len);
 
     for (i = 0; i < aiWangCmdTypesCount; i++)
     {
@@ -1602,10 +1633,10 @@ static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len)
               data[0],
               len);
 
-        DUMP8("[SPARROW_RX] unknown payload: ", data, len);
+        TRACE(0, "[SPARROW_RX] unknown payload:");
+        DUMP8("%02X ", data, len);
     }
 }
-
 
 static void sparraw_event_handler_thread(void const *argument)
 {
@@ -1715,46 +1746,55 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 	memset(read_send_data,0,sizeof(read_send_data));
     switch(aiwan_read_data)
     {
-		case GET_BATTERY_LEVEL:{
-			uint8_t batflag; //left, right, box
-		    batflag = app_battery_current_level();
-		    TRACE(0,"%s batflag=%d", __func__, batflag);
-#if 0
-		    if(batflag > 9)
-		    {
-		        batflag = 9;
-		    }
-#endif
+		case GET_BATTERY_LEVEL:
+		{
+			uint8_t localBattery;
+			uint8_t peerBattery;
+			uint8_t boxBattery;
 			uint8_t batteryArray[3] = {0, 0, 0};
-			batteryArray[0]  = batflag;
-			if( 0xFF == getPeerBattery())
+
+			localBattery = app_battery_current_level();
+			peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
+			boxBattery   = getBoxChargerBattery();
+
+			TRACE(0, "[APP_BAT][READ_REQ] GET_BATTERY_LEVEL");
+			TRACE(0, "[APP_BAT][SRC] local=%d peer=%d box=%d",
+				localBattery,
+				peerBattery,
+				boxBattery);
+
+			batteryArray[0] = localBattery;
+
+			if (peerBattery == 0xFF)
 			{
-				batteryArray[1]  = batflag;
+				batteryArray[1] = localBattery;
+				TRACE(0, "[APP_BAT][PEER] invalid 0xFF, use local=%d",
+					localBattery);
 			}
 			else
 			{
-				batteryArray[1]  = getPeerBattery();
-				#if 0
-			    if(batteryArray[1] > 9)
-			    {
-			    	batteryArray[1] = 9;
-			    }
-				#endif
+				batteryArray[1] = peerBattery;
 			}
-			batteryArray[2] = getBoxChargerBattery();
 
-			TRACE(0, "Local Battery  = %d%%", batteryArray[0]);
-			TRACE(0, "Peer Battery   = %d%%", batteryArray[1]);
-			TRACE(0, "Case Battery   = %d%%", batteryArray[2]);
+			batteryArray[2] = boxBattery;
 
-			TRACE(0, "APP Battery => L:%d R:%d C:%d",
+			TRACE(0, "[APP_BAT][RSP] L=%d R=%d C=%d",
 				batteryArray[0],
 				batteryArray[1],
 				batteryArray[2]);
+
+			read_send_data[0] = 0x00;
 			read_send_data[1] = 3;
-			memcpy(&read_send_data[2],batteryArray,2);
-			//sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, batteryArray, 3);
-			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,param->aw_connhdl,param->aw_token, read_send_data, 3+2);
+			memcpy(&read_send_data[2], batteryArray, 3);
+
+			TRACE(0, "[APP_BAT][RSP_PAYLOAD]:");
+			DUMP8("%02X ", read_send_data, 5);
+
+			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,
+								param->aw_connhdl,
+								param->aw_token,
+								read_send_data,
+								3 + 2);
 			break;
 		}
 		case GET_DEVICE_NAME:{

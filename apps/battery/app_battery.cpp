@@ -1267,7 +1267,7 @@ static struct NTC_CAPTURE_MEASURE_T ntc_capture_measure;
 void ntc_capture_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 {
     uint32_t meanVolt = 0;
-    BATTERY_TRACE(3,"%s %d irq:0x%04x",__func__, volt, irq_val);
+    //BATTERY_TRACE(3,"%s %d irq:0x%04x",__func__, volt, irq_val);
 
     if (volt == HAL_GPADC_BAD_VALUE)
     {
@@ -1291,7 +1291,7 @@ void ntc_capture_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
     }
     ntc_capture_measure.temperature = ((int32_t)ntc_capture_measure.currvolt - NTC_CAPTURE_VOLTAGE_REF)/NTC_CAPTURE_TEMPERATURE_STEP + NTC_CAPTURE_TEMPERATURE_REF;
     pmu_ntc_capture_disable();
-    BATTERY_TRACE(3,"%s ad:%d temperature:%d",__func__, ntc_capture_measure.currvolt, ntc_capture_measure.temperature);
+    //BATTERY_TRACE(3,"%s ad:%d temperature:%d",__func__, ntc_capture_measure.currvolt, ntc_capture_measure.temperature);
 #ifdef BESUI_NTC_EN
     app_ntc_detect_process(volt);
 #endif

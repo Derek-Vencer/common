@@ -68,6 +68,16 @@
 
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 
+
+static uint8_t g_tws_peer_battery_level = 0xFF;
+static bool g_tws_peer_battery_valid = false;
+extern "C" uint8_t app_battery_current_level(void);
+
+uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
+{
+    return g_tws_peer_battery_valid ? g_tws_peer_battery_level : 0xFF;
+}
+
 #if defined(IBRT)
 
 /*********************external function declaration*************************/
@@ -395,7 +405,7 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
 
     if (!tws_connected)
     {
-        return;
+        //return;
     }
 
     uint8_t cmd_sync_battery_level[1];
@@ -479,34 +489,27 @@ void app_tws_battery_update(bool tws_connect_flag)
 
 }
 
-static void app_ibrt_customif_sync_battery_level_send_handler(uint16_t rsp_seq,
-                                                              uint8_t *p_buff,
-                                                              uint16_t length)
+//static bool battery_sync_echo_guard = false;
+static void app_ibrt_customif_sync_battery_level_send_handler(
+    uint16_t rsp_seq,
+    uint8_t *p_buff,
+    uint16_t length)
 {
     uint8_t peer_raw = 0xFF;
     uint8_t peer_percent = 0xFF;
 
-    EARBUDS_TRACE(1, "[UITWS]%s", __func__);
-    EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
-
     if ((p_buff == NULL) || (length == 0))
     {
-        EARBUDS_TRACE(0, "[BAT_SYNC][RX][ERR] invalid payload len=%d", length);
         return;
     }
 
-    DUMP8("%02x ", p_buff, length);
-
     peer_raw = p_buff[0];
 
-    /*
-     * Battery sync format:
-     *   0~9   : legacy level format
-     *   0~100 : percent format
-     */
     if (peer_raw <= 9)
     {
-        peer_percent = (peer_raw >= 9) ? 100 : ((peer_raw + 1) * 10);
+        peer_percent = (peer_raw >= 9) ?
+                       100 :
+                       ((peer_raw + 1) * 10);
     }
     else if (peer_raw <= 100)
     {
@@ -517,30 +520,40 @@ static void app_ibrt_customif_sync_battery_level_send_handler(uint16_t rsp_seq,
         peer_percent = 0xFF;
     }
 
-    EARBUDS_TRACE(3,
-                  "[BAT_SYNC][RX] raw=%d percent=%d len=%d",
-                  peer_raw,
-                  peer_percent,
-                  length);
+    EARBUDS_TRACE(2,
+        "[BAT_SYNC][RX] raw=%d percent=%d",
+        peer_raw,
+        peer_percent);
 
 #ifdef BESUI_TWS_EN
     if (peer_percent != 0xFF)
     {
         set_tws_peer_battery_percent(peer_percent);
+
         app_battery_set_other_battery_level(peer_percent);
 
+        g_tws_peer_battery_level = peer_percent;
+        g_tws_peer_battery_valid = true;
+
         EARBUDS_TRACE(1,
-                      "[BAT_SYNC][SET] other=%d",
-                      peer_percent);
-    }
-    else
-    {
-        EARBUDS_TRACE(1,
-                      "[BAT_SYNC][SET][SKIP] invalid raw=%d",
-                      peer_raw);
+            "[BAT_SYNC][SAVE]=%d",
+            g_tws_peer_battery_level);
     }
 #endif
+#if 0
+    if (!battery_sync_echo_guard)
+    {
+        battery_sync_echo_guard = true;
 
+        EARBUDS_TRACE(1,
+                      "[BAT_SYNC][ECHO_TX] local=%d",
+                      app_battery_current_level());
+
+        app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+
+        battery_sync_echo_guard = false;
+    }
+#endif
     app_tws_battery_update(true);
 }
 
