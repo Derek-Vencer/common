@@ -66,6 +66,8 @@
 #include "nvrecord_extension.h"
 #include "factory_section.h"
 
+extern "C" uint8_t app_ibrt_if_get_ui_role(void);
+
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 
 
@@ -392,33 +394,38 @@ static void app_ibrt_customif_sync_poweroff_shutdown_send_handler(uint16_t rsp_s
 void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
 {
     bool tws_connected = bts_tws_if_is_tws_link_connected();
+    uint8_t role = app_ibrt_if_get_ui_role();
 
-    EARBUDS_TRACE(2,
-              "[BAT_SYNC][TX_REQ] tws=%d level=%d",
-              bts_tws_if_is_tws_link_connected(),
-              current_level);
-
-    EARBUDS_TRACE(2,
-        "[BAT_SYNC] tws=%d percent=%d",
-        tws_connected,
-        current_level);
+    EARBUDS_TRACE(3,
+                  "[BAT_SYNC][TX_REQ] tws=%d role=%d level=%d",
+                  tws_connected,
+                  role,
+                  current_level);
 
     if (!tws_connected)
     {
-        //return;
+        EARBUDS_TRACE(0, "[BAT_SYNC][TX_SKIP] tws not connected");
+        return;
+    }
+
+    if (role == TWS_UI_MASTER)
+    {
+        EARBUDS_TRACE(1,
+                      "[BAT_SYNC][TX_SKIP] master does not send level=%d",
+                      current_level);
+        return;
     }
 
     uint8_t cmd_sync_battery_level[1];
     cmd_sync_battery_level[0] = current_level;
 
     EARBUDS_TRACE(1,
-        "[BAT_SYNC][TX] percent=%d",
-        current_level);
+                  "[BAT_SYNC][PEER_TX] percent=%d",
+                  current_level);
 
-    tws_ctrl_send_cmd(
-        APP_TWS_CMD_BATTERY_LEVEL_SYNC,
-        cmd_sync_battery_level,
-        sizeof(cmd_sync_battery_level));
+    tws_ctrl_send_cmd(APP_TWS_CMD_BATTERY_LEVEL_SYNC,
+                      cmd_sync_battery_level,
+                      sizeof(cmd_sync_battery_level));
 }
 
 static void app_ibrt_customif_sync_battery_level_send(uint8_t *p_buff,
@@ -497,19 +504,24 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
 {
     uint8_t peer_raw = 0xFF;
     uint8_t peer_percent = 0xFF;
+    uint8_t role = app_ibrt_if_get_ui_role();
 
-    if ((p_buff == NULL) || (length == 0))
+    EARBUDS_TRACE(3,
+                "######## BAT_SYNC RX ENTER role=%d len=%d p=%p ########",
+                role,
+                length,
+                p_buff);
+
+    if (p_buff && length)
     {
-        return;
+        DUMP8("[BAT_SYNC][RX_DATA] ", p_buff, length);
     }
 
     peer_raw = p_buff[0];
 
     if (peer_raw <= 9)
     {
-        peer_percent = (peer_raw >= 9) ?
-                       100 :
-                       ((peer_raw + 1) * 10);
+        peer_percent = (peer_raw >= 9) ? 100 : ((peer_raw + 1) * 10);
     }
     else if (peer_raw <= 100)
     {
@@ -517,44 +529,34 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     }
     else
     {
-        peer_percent = 0xFF;
+        EARBUDS_TRACE(1,
+                      "[BAT_SYNC][RX_ERR] invalid peer_raw=%d",
+                      peer_raw);
+        return;
     }
 
-    EARBUDS_TRACE(2,
-        "[BAT_SYNC][RX] raw=%d percent=%d",
-        peer_raw,
-        peer_percent);
+    EARBUDS_TRACE(3,
+                  "[BAT_SYNC][RX] role=%d raw=%d percent=%d",
+                  role,
+                  peer_raw,
+                  peer_percent);
 
-#ifdef BESUI_TWS_EN
-    if (peer_percent != 0xFF)
+    if (role == TWS_UI_MASTER)
     {
-        set_tws_peer_battery_percent(peer_percent);
-
-        app_battery_set_other_battery_level(peer_percent);
-
         g_tws_peer_battery_level = peer_percent;
         g_tws_peer_battery_valid = true;
 
-        EARBUDS_TRACE(1,
-            "[BAT_SYNC][SAVE]=%d",
-            g_tws_peer_battery_level);
+        EARBUDS_TRACE(2,
+                    "[BAT_SYNC][MASTER_SAVE_PEER]=%d valid=%d",
+                    g_tws_peer_battery_level,
+                    g_tws_peer_battery_valid);
+
+    #ifdef BESUI_TWS_EN
+        set_tws_peer_battery_percent(peer_percent);
+        app_battery_set_other_battery_level(peer_percent);
+        app_tws_battery_update(true);
+    #endif
     }
-#endif
-#if 0
-    if (!battery_sync_echo_guard)
-    {
-        battery_sync_echo_guard = true;
-
-        EARBUDS_TRACE(1,
-                      "[BAT_SYNC][ECHO_TX] local=%d",
-                      app_battery_current_level());
-
-        app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
-
-        battery_sync_echo_guard = false;
-    }
-#endif
-    app_tws_battery_update(true);
 }
 
 #ifdef BESUI_GAME_EN

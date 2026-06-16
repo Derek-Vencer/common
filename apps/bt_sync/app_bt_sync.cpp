@@ -522,6 +522,7 @@ static int app_bt_sync_module_init(void)
 static bool app_bt_sync_process(uint32_t opCode, uint8_t extra_len, uint8_t *p_extra_info,
     uint8_t policy = APP_BT_SYNC_POLICY_DEFAULT, uint8_t triChl = APP_BT_SYNC_INVALID_CHANNEL)
 {
+    BT_SYNC_TRACE(0,"app_bt_sync_process");
     ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
     uint16_t tws_conhandle = bts_tws_if_get_tws_acl_handle();
     BT_SYNC_SHARE_INFO_T share_info = {0};

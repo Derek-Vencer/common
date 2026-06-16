@@ -674,8 +674,10 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
             box_battery_update_enable);
 
     uint8_t twsPeerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+
+    app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
     
-    DBGPRINT("[BAT] getPeerBattery from TWS sync peer=%d",
+    DBGPRINT("[BOX_BAT] getPeerBattery from TWS sync peer=%d",
                  twsPeerBattery);
 }
 

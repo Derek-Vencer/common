@@ -515,7 +515,11 @@ int app_status_battery_report(uint8_t level)
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     int8_t level = 0;
-
+    BATTERY_TRACE(0,"app_battery_handle_process_normal");
+    BATTERY_TRACE(2,
+              "[BAT] status=%d level=%d",
+              status,
+              level);
     switch (status)
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
@@ -630,6 +634,29 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #endif
 #endif
             }
+
+            BATTERY_TRACE(0,"%s previous_level=%d", __func__, level);
+            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
+            BATTERY_TRACE(0,"%s actutal level=%d currvolt=%d", __func__, level, app_battery_measure.currvolt);
+//#if defined(IBRT)
+            {
+                static int8_t last_sync_level = -1;
+
+                if (last_sync_level != level)
+                {
+                    last_sync_level = level;
+
+                    BATTERY_TRACE(0,
+                                  "[BAT_SYNC][BATT_UPDATE] level=%d currvolt=%d",
+                                  level,
+                                  app_battery_measure.currvolt);
+
+                    app_ibrt_customif_cmd_sync_battery_level(level);
+                }
+            }
+//#endif
+            app_status_battery_report(level);
+
             break;
         case APP_BATTERY_STATUS_INVALID:
         default:
@@ -732,13 +759,17 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
     uint32_t generatedSeed = hal_sys_timer_get();
     for (uint8_t index = 0; index < sizeof(bt_global_addr); index++)
     {
-        generatedSeed ^= (((uint32_t)(bt_global_addr[index])) << (hal_sys_timer_get()&0xF));
+        generatedSeed ^= (((uint32_t)(bt_global_addr[index])) << (hal_sys_timer_get() & 0xF));
     }
     srand(generatedSeed);
 
-    BATTERY_TRACE(1,"app_battery_handle_process:%d %d", status, app_battery_measure.status);
+    BATTERY_TRACE(2,
+                  "app_battery_handle_process:%d %d",
+                  status,
+                  app_battery_measure.status);
 
-    if (status == APP_BATTERY_STATUS_PLUGINOUT){
+    if (status == APP_BATTERY_STATUS_PLUGINOUT)
+    {
         app_battery_pluginout_debounce_start();
     }
     else
@@ -746,38 +777,66 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
         switch (app_battery_measure.status)
         {
             case APP_BATTERY_STATUS_NORMAL:
+                BATTERY_TRACE(0, "[BAT_PROC] enter normal handler");
+
                 app_battery_handle_process_normal((uint32_t)status, msg_prams);
+
 #if defined(CHIP_BEST1501P)
-                if(pmu_ana_volt_is_high() == false){
+                if (pmu_ana_volt_is_high() == false)
+                {
                     pmu_ntc_capture_start(NULL);
-                }else{
-                    BATTERY_TRACE(1,"%s stop ana check",__func__);
+                }
+                else
+                {
+                    BATTERY_TRACE(1, "%s stop ana check", __func__);
                 }
 #endif
                 break;
 
             case APP_BATTERY_STATUS_CHARGING:
+                BATTERY_TRACE(0, "[BAT_PROC] enter charging handler");
+
                 app_battery_handle_process_charging((uint32_t)status, msg_prams);
                 break;
 
             default:
+                BATTERY_TRACE(1,
+                              "[BAT_PROC] unknown measure_status=%d",
+                              app_battery_measure.status);
                 break;
         }
+
+        if (app_battery_measure.currlevel <= 100)
+        {
+            BATTERY_TRACE(3,
+                          "[BAT_SYNC][LOCAL] status=%d measure_status=%d level=%d",
+                          status,
+                          app_battery_measure.status,
+                          app_battery_measure.currlevel);
+
+            app_ibrt_customif_cmd_sync_battery_level(app_battery_measure.currlevel);
+        }
     }
+
     if (NULL != app_battery_measure.user_cb)
     {
         uint8_t batteryLevel;
-#ifdef __INTERCONNECTION__
-        APP_BATTERY_INFO_T* pBatteryInfo;
-        pBatteryInfo = (APP_BATTERY_INFO_T*)&app_battery_measure.currentBatteryInfo;
-        pBatteryInfo->chargingStatus = ((app_battery_measure.status == APP_BATTERY_STATUS_CHARGING)? 1:0);
-        batteryLevel = pBatteryInfo->batteryLevel;
 
+#ifdef __INTERCONNECTION__
+        APP_BATTERY_INFO_T *pBatteryInfo;
+        pBatteryInfo = (APP_BATTERY_INFO_T *)&app_battery_measure.currentBatteryInfo;
+        pBatteryInfo->chargingStatus =
+            ((app_battery_measure.status == APP_BATTERY_STATUS_CHARGING) ? 1 : 0);
+        batteryLevel = pBatteryInfo->batteryLevel;
 #else
         batteryLevel = app_battery_measure.currlevel;
 #endif
+
         app_battery_measure.user_cb(app_battery_measure.currvolt,
-                                    batteryLevel, app_battery_measure.status,status,msg_prams);
+                                    batteryLevel,
+                                    app_battery_measure.status,
+                                    status,
+                                    msg_prams);
     }
 
     return 0;

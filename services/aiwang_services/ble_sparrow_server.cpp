@@ -141,7 +141,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.1.3" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.1.4" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -1748,54 +1748,91 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
     {
 		case GET_BATTERY_LEVEL:
 		{
-			uint8_t localBattery;
-			uint8_t peerBattery;
-			uint8_t boxBattery;
-			uint8_t batteryArray[3] = {0, 0, 0};
+				uint8_t localBattery;
+				uint8_t peerBattery;
+				uint8_t boxBattery;
+				bool peerValid = false;
+				bool twsConnected = false;
 
-			localBattery = app_battery_current_level();
-			peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
-			boxBattery   = getBoxChargerBattery();
+				uint8_t leftBattery  = 0;
+				uint8_t rightBattery = 0;
+				uint8_t batteryArray[3] = {0, 0, 0};
 
-			TRACE(0, "[APP_BAT][READ_REQ] GET_BATTERY_LEVEL");
-			TRACE(0, "[APP_BAT][SRC] local=%d peer=%d box=%d",
-				localBattery,
-				peerBattery,
-				boxBattery);
+				localBattery = app_battery_current_level();
+				peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
+				boxBattery   = getBoxChargerBattery();
+				twsConnected = bts_tws_if_is_tws_link_connected();
 
-			batteryArray[0] = localBattery;
+				if ((peerBattery != 0xFF) && (peerBattery <= 100))
+				{
+						peerValid = true;
+				}
+				else
+				{
+						peerValid = false;
+						peerBattery = 0;
+				}
 
-			if (peerBattery == 0xFF)
-			{
-				batteryArray[1] = localBattery;
-				TRACE(0, "[APP_BAT][PEER] invalid 0xFF, use local=%d",
-					localBattery);
-			}
-			else
-			{
-				batteryArray[1] = peerBattery;
-			}
+				TRACE(0, "[BAT32][READ_REQ] GET_BATTERY_LEVEL");
+				TRACE(0,
+					"[BAT32][SRC] local=%d peer=%d peerValid=%d tws=%d box=%d",
+					localBattery,
+					peerBattery,
+					peerValid,
+					twsConnected,
+					boxBattery);
 
-			batteryArray[2] = boxBattery;
+		#ifdef IBRT
+				if (app_ibrt_if_is_right_side())
+				{
+						rightBattery = localBattery;
+						leftBattery  = peerValid ? peerBattery : 0;
 
-			TRACE(0, "[APP_BAT][RSP] L=%d R=%d C=%d",
-				batteryArray[0],
-				batteryArray[1],
-				batteryArray[2]);
+						TRACE(0,
+							"[BAT32][ROLE] RIGHT local=%d tws_peer=%d valid=%d",
+							localBattery,
+							peerBattery,
+							peerValid);
+				}
+				else
+				{
+						leftBattery  = localBattery;
+						rightBattery = peerValid ? peerBattery : 0;
 
-			read_send_data[0] = 0x00;
-			read_send_data[1] = 3;
-			memcpy(&read_send_data[2], batteryArray, 3);
+						TRACE(0,
+							"[BAT32][ROLE] LEFT local=%d tws_peer=%d valid=%d",
+							localBattery,
+							peerBattery,
+							peerValid);
+				}
+		#else
+				leftBattery  = localBattery;
+				rightBattery = peerValid ? peerBattery : 0;
+		#endif
 
-			TRACE(0, "[APP_BAT][RSP_PAYLOAD]:");
-			DUMP8("%02X ", read_send_data, 5);
+				batteryArray[0] = leftBattery;
+				batteryArray[1] = rightBattery;
+				batteryArray[2] = boxBattery;
 
-			sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,
-								param->aw_connhdl,
-								param->aw_token,
-								read_send_data,
-								3 + 2);
-			break;
+				TRACE(0,
+					"[BAT32][READ_RSP] L=%d R=%d C=%d",
+					batteryArray[0],
+					batteryArray[1],
+					batteryArray[2]);
+
+				read_send_data[0] = 0x00;
+				read_send_data[1] = 3;
+				memcpy(&read_send_data[2], batteryArray, 3);
+
+				TRACE(0, "[BAT32][READ_PAYLOAD] rsp_cmd=0x32 len=%d:", 5);
+				DUMP8("%02X ", read_send_data, 5);
+
+				sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,
+									param->aw_connhdl,
+									param->aw_token,
+									read_send_data,
+									3 + 2);
+				break;
 		}
 		case GET_DEVICE_NAME:{
 			uint8_t* localname =  factory_section_get_bt_name();
