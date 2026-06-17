@@ -228,22 +228,51 @@ extern bool  aiWangIsNeedOpenEarBuds(void);
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     (void)param;
-    bool isNeedOpen;
-    isNeedOpen = aiWangIsNeedOpenEarBuds();
-    BATTERY_TRACE(2,"%s power off as pogonPin In isNeedOpen=%d", __func__, isNeedOpen);
-    if(!isNeedOpen) {
-        app_shutdown();
+
+    bool isNeedOpen = aiWangIsNeedOpenEarBuds();
+
+    BATTERY_TRACE(2,
+        "%s close case power off check, isNeedOpen=%d",
+        __func__,
+        isNeedOpen);
+
+    /*
+     * Case open means earbuds should keep power on.
+     * Only case close is allowed to power off earbuds.
+     */
+    if (isNeedOpen)
+    {
+        BATTERY_TRACE(0,
+            "[CASE_OPEN] keep power on, skip shutdown");
+        return;
     }
+
+    BATTERY_TRACE(0,
+        "[CASE_CLOSE] power off earbuds");
+
+    app_shutdown();
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
 {
     if (NULL == pogonPinCloseTimer)
     {
-        pogonPinCloseTimer = osTimerCreate (osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
+        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
     }
+
     osTimerStop(pogonPinCloseTimer);
     osTimerStart(pogonPinCloseTimer, 1600);
+}
+
+void earBudsCloseOff_PogonIn_StopTimer(void)
+{
+    if (NULL != pogonPinCloseTimer)
+    {
+        osTimerStop(pogonPinCloseTimer);
+    }
+
+    BATTERY_TRACE(0,
+        "[CASE_OPEN] stop close-case power off timer");
 }
 //-------------------------------------------------------------------------------------------
 
@@ -515,11 +544,6 @@ int app_status_battery_report(uint8_t level)
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     int8_t level = 0;
-    BATTERY_TRACE(0,"app_battery_handle_process_normal");
-    BATTERY_TRACE(2,
-              "[BAT] status=%d level=%d",
-              status,
-              level);
     switch (status)
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
@@ -573,16 +597,13 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 
 #if defined(BESUI_STEREO_EN)
             level = stereo_battery_level_process(app_battery_measure.status, app_battery_measure.currvolt);
-            BATTERY_TRACE(0,"stereo return level=%d", level);
 #endif
 
             app_battery_measure.currlevel = level;
 #endif
 
 #endif
-            BATTERY_TRACE(0,"%s previous_level=%d", __func__, level);
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-            BATTERY_TRACE(0,"%s actutal level=%d currvolt=%d", __func__, level, app_battery_measure.currvolt);
 #if defined(IBRT)
             {
                 static int8_t last_sync_level = -1;
@@ -590,12 +611,6 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 if (last_sync_level != level)
                 {
                     last_sync_level = level;
-
-                    BATTERY_TRACE(0,
-                                  "[BAT_SYNC][BATT_UPDATE] level=%d currvolt=%d",
-                                  level,
-                                  app_battery_measure.currvolt);
-
                     app_ibrt_customif_cmd_sync_battery_level(level);
                 }
             }
@@ -622,11 +637,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #else
-                //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
-                //20260402
-                //app_shutdown();
-                //wired_uart_communication_modual_init();
-                earBudsCloseOff_PogonIn_StartTimer();
+
 #if CHARGER_PLUGINOUT_RESET
                 //app_reset();
 #else
@@ -634,10 +645,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #endif
 #endif
             }
-
-            BATTERY_TRACE(0,"%s previous_level=%d", __func__, level);
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-            BATTERY_TRACE(0,"%s actutal level=%d currvolt=%d", __func__, level, app_battery_measure.currvolt);
 //#if defined(IBRT)
             {
                 static int8_t last_sync_level = -1;
@@ -645,12 +653,6 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 if (last_sync_level != level)
                 {
                     last_sync_level = level;
-
-                    BATTERY_TRACE(0,
-                                  "[BAT_SYNC][BATT_UPDATE] level=%d currvolt=%d",
-                                  level,
-                                  app_battery_measure.currvolt);
-
                     app_ibrt_customif_cmd_sync_battery_level(level);
                 }
             }
@@ -712,10 +714,6 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
 #endif
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 osTimerStop(app_battery_timer);
-                //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
-                //20260402
-                //app_shutdown();
-                earBudsCloseOff_PogonIn_StartTimer();
             }
             break;
         case APP_BATTERY_STATUS_INVALID:

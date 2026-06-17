@@ -404,15 +404,26 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t role = app_ibrt_if_get_ui_role();
 
-    EARBUDS_TRACE(3,
-                  "[BAT_SYNC][TX_REQ] tws=%d role=%d level=%d",
-                  tws_connected,
-                  role,
-                  current_level);
-
     if (!tws_connected)
     {
-        EARBUDS_TRACE(0, "[BAT_SYNC][TX_SKIP] tws not connected");
+        static bool s_tws_not_connected_log_printed = false;
+
+        if (!bts_tws_if_is_tws_link_connected())
+        {
+            if (!s_tws_not_connected_log_printed)
+            {
+                EARBUDS_TRACE(0,
+                    "[BAT_SYNC][TX_SKIP] tws not connected");
+
+                s_tws_not_connected_log_printed = true;
+            }
+
+            return;
+        }
+
+        /* TWS connected, allow next disconnect log */
+        s_tws_not_connected_log_printed = false; 
+        
         return;
     }
 
@@ -428,11 +439,6 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
     uint8_t cmd_sync_battery_level[2];
     cmd_sync_battery_level[0] = current_level;
     cmd_sync_battery_level[1] = box_level;
-
-    EARBUDS_TRACE(2,
-                  "[BAT_SYNC][PEER_TX] ear=%d box=%d",
-                  current_level,
-                  box_level);
 
     tws_ctrl_send_cmd(APP_TWS_CMD_BATTERY_LEVEL_SYNC,
                       cmd_sync_battery_level,
