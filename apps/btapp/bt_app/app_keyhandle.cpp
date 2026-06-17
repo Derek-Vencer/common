@@ -655,6 +655,44 @@ extern void a2dp_handleKey(uint8_t a2dp_key)
     app_bt_a2dp_send_key_request(a2dp_id, a2dp_key);
 }
 
+void app_key_handle_pause_music_on_pogo_in(void)
+{
+#ifdef BT_AVRCP_SUPPORT
+    uint8_t a2dp_id = app_bt_audio_get_curr_a2dp_device();
+
+    if (a2dp_id == BT_DEVICE_INVALID_ID)
+    {
+        BTAPP_TRACE(0, "[POGO_IN][MUSIC] no current a2dp device");
+        return;
+    }
+
+    struct BT_DEVICE_T *curr_device = app_bt_get_device(a2dp_id);
+
+    if (curr_device == NULL)
+    {
+        BTAPP_TRACE(0, "[POGO_IN][MUSIC] device is null");
+        return;
+    }
+
+    if (!curr_device->a2dp_conn_flag)
+    {
+        BTAPP_TRACE(1, "[POGO_IN][MUSIC] a2dp not connected, device=%d", a2dp_id);
+        return;
+    }
+
+#ifdef BESUI_TWS_EN
+    if (btif_a2dp_get_stream_state(app_bt_get_mobile_a2dp_stream(a2dp_id)) != BT_A2DP_STREAM_STATE_STREAMING)
+    {
+        BTAPP_TRACE(1, "[POGO_IN][MUSIC] not streaming, device=%d", a2dp_id);
+        return;
+    }
+#endif
+
+    BTAPP_TRACE(1, "[POGO_IN][MUSIC] pause music, device=%d", a2dp_id);
+
+    a2dp_handleKey(AVRCP_KEY_PAUSE);
+#endif
+}
 
 void hfp_handle_key(uint8_t hfp_key)
 {

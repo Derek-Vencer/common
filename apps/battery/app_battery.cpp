@@ -28,6 +28,7 @@
 #include "app_bt.h"
 #include "apps.h"
 #include "app_hfp.h"
+#include "../btapp/bt_app/app_keyhandle.h"
 
 #ifdef APP_BATTERY_ENABLE
 #include "app_status_ind.h"
@@ -229,28 +230,34 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     (void)param;
 
-    bool isNeedOpen = aiWangIsNeedOpenEarBuds();
+    enum APP_BATTERY_CHARGER_T charger_status =
+        app_battery_charger_forcegetstatus();
 
     BATTERY_TRACE(2,
-        "%s close case power off check, isNeedOpen=%d",
-        __func__,
-        isNeedOpen);
+                  "%s charger_status=%d",
+                  __func__,
+                  charger_status);
 
     /*
-     * Case open means earbuds should keep power on.
-     * Only case close is allowed to power off earbuds.
+     * After CMD_POWER_OFF delay:
+     * charger_status == APP_BATTERY_CHARGER_PLUGIN means charging contact is active.
+     * Power off only in this case.
      */
-    if (isNeedOpen)
+    if (charger_status == APP_BATTERY_CHARGER_PLUGIN)
     {
         BATTERY_TRACE(0,
-            "[CASE_OPEN] keep power on, skip shutdown");
+                      "[POWER_OFF] charger=PLUGIN -> shutdown now");
+
+        app_shutdown();
         return;
     }
 
+    /*
+     * charger_status == APP_BATTERY_CHARGER_PLUGOUT
+     * Keep power on.
+     */
     BATTERY_TRACE(0,
-        "[CASE_CLOSE] power off earbuds");
-
-    app_shutdown();
+                  "[POWER_OFF] charger=PLUGOUT -> keep power on");
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
@@ -274,6 +281,23 @@ void earBudsCloseOff_PogonIn_StopTimer(void)
     BATTERY_TRACE(0,
         "[CASE_OPEN] stop close-case power off timer");
 }
+
+void earBudsCloseOff_PowerOff_StartTimer(void)
+{
+    if (NULL == pogonPinCloseTimer)
+    {
+        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER),
+                                           osTimerOnce,
+                                           NULL);
+    }
+
+    osTimerStop(pogonPinCloseTimer);
+    osTimerStart(pogonPinCloseTimer, 1600);
+
+    BATTERY_TRACE(0,
+                  "[POWER_OFF] start 1.6s charger check timer");
+}
+
 //-------------------------------------------------------------------------------------------
 
 
@@ -1185,6 +1209,12 @@ static void app_battery_pluginout_debounce_handler(void const *param)
         BATTERY_TRACE(2,"%s %s", __func__, status_charger == APP_BATTERY_CHARGER_PLUGOUT ? "PLUGOUT" : "PLUGIN");
         if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
         {
+                    /*
+            * Pogo pin is confirmed inserted.
+            * Pause music if A2DP is streaming.
+            */
+            app_key_handle_pause_music_on_pogo_in();
+
 #ifndef BESUI_TWS_EN
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
             {

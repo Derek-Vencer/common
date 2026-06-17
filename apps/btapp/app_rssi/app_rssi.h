@@ -31,7 +31,8 @@
 #define APP_RSSI_ALWAYS_TRIGGER         (0)
 #define APP_RSSI_EVENT_TRIGGER          (1)
 
-#define APP_RSSI_TRIGGER_MODE           APP_RSSI_EVENT_TRIGGER
+//#define APP_RSSI_TRIGGER_MODE           APP_RSSI_EVENT_TRIGGER
+#define APP_RSSI_TRIGGER_MODE           APP_RSSI_ALWAYS_TRIGGER
 
 typedef struct
 {

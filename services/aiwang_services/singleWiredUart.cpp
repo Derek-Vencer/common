@@ -74,9 +74,12 @@ static osTimerId uart_idle_timer_id = NULL;
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
 uint8_t getPeerBattery(void);
+static uint8_t g_case_state = 1;   // 1=open, 0=close
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
+extern void earBudsCloseOff_PowerOff_StartTimer(void);
+
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 
@@ -931,21 +934,22 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
 	uart_rx_handle_data_count = 0;
 	
-    boxChargerStatus.boxIsOpen = true;
     switch(cmd_event)
     {
-    case CMD_CASE_STATE:
-         {
-        	 break;
-         }
     case CMD_HANDSHAKE :		  //Handshake
          {
         	 break;
          }
-    case CMD_GET_STATE : 		  //Get headphone status
-         {
-        	 break;
-         }
+    case CMD_CASE_STATE:
+    case CMD_GET_STATE:
+        {
+            /*
+            * Current charging box firmware does not support real case-state query.
+            * Ignore this command for now.
+            */
+            DBGPRINT("[CASE_STATE] ignored, box query not supported");
+            break;
+        }
     case CMD_GET_MAC   :  		  //Obtain the MAC address of the earphones
          {
              if (operateLeftOrRight == isRightEarbuds)
@@ -988,18 +992,44 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
     	    break;
         }
-    case CMD_POWER_OFF:	         //Headphones enter shipping
+    case CMD_POWER_OFF:          // Headphones enter shipping / power off
         {
-        	boxChargerStatus.boxIsOpen = false;
-            boxChargerStatus.needOpenEarbuds = false;
-            app_shutdown();
+            DBGPRINT("[POWER_OFF] received, wait 1.6s and check charger state");
+
+            /*
+            * Do not directly set needOpenEarbuds = false.
+            * Do not shutdown immediately.
+            * Final decision is based on charger contact status after 1.6s.
+            */
+            earBudsCloseOff_PowerOff_StartTimer();
+
+            break;
         }
-    	break;
+    case CMD_OPEN_CASE:
+        {
+            g_case_state = 1;
+            boxChargerStatus.boxIsOpen = true;
+            boxChargerStatus.needOpenEarbuds = true;
+
+            earBudsCloseOff_PogonIn_StopTimer();
+
+            DBGPRINT("[CASE] OPEN -> cancel shutdown");
+        }
+        break;
+
     case CMD_CLOSE_CASE:
     {
-        printf("CMD_CLOSE_CASE poweroff!!!");
+        DBGPRINT("[CASE] CLOSE received");
 
+        /*
+        * Do not shutdown immediately.
+        * Mark close state and start delayed check.
+        * If CMD_OPEN_CASE comes before timer expires,
+        * CMD_OPEN_CASE will stop the timer.
+        */
+        g_case_state = 0;
         boxChargerStatus.boxIsOpen = false;
+        boxChargerStatus.needOpenEarbuds = false;
 
         wired_uart_get_battery_level();
 
@@ -1010,15 +1040,11 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             int active_phone_cons = 0;
             int activeSourceCons = 0;
 
-            (void)activeCons;
-            (void)active_phone_cons;
-            (void)activeSourceCons;
-
             activeCons = app_bt_get_active_cons();
             active_phone_cons = app_bt_count_mobile_link();
             activeSourceCons = btif_me_get_source_activeCons();
 
-            DBGPRINT("CMD_CLOSE_CASE activeCons==%d activeSourceCons=%d active_phone_cons=%d\n",
+            DBGPRINT("CMD_CLOSE_CASE activeCons=%d activeSourceCons=%d active_phone_cons=%d",
                     activeCons,
                     activeSourceCons,
                     active_phone_cons);
@@ -1030,27 +1056,23 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
                 cmd_sync_poweroff_shutdown[0] = 1;
 
-                DBGPRINT("%s poweroff_flag true", __func__);
+                DBGPRINT("%s send APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC",
+                        __func__);
 
                 tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
                                 cmd_sync_poweroff_shutdown,
                                 1);
-
-                osDelay(60);
             }
     #endif
     #endif
         }
 
-        osDelay(30);
+        DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
 
-        /*
-        * Only close case is allowed to trigger power off.
-        */
-        boxChargerStatus.needOpenEarbuds = false;
         earBudsCloseOff_PogonIn_StartTimer();
     }
     break;
+
     case CMD_EAR_RESET: //fatory
         {
         	//aiWang_remove_all_paired_list();  // Removed: deletes ALL pairings including TWS
@@ -1126,36 +1148,40 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	  break;
       }
     case CMD_SEND_BOX_BATTERY_LEVEL:
-       {
-    	   if (operateLeftOrRight == isRightEarbuds)
-    	   {
-    		   wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
-    	   }
-    	   break;
-       }
+        {
+            if (operateLeftOrRight == isRightEarbuds)
+            {
+                wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+            }
+            break;
+        }
     case CMD_SEND_DUT_MODE:
-      {
-		   if (operateLeftOrRight == isRightEarbuds)
-		   {
-			   DBGPRINT("CMD_SEND_DUT_MODE");
-			   wired_uart_send_cmd_ack_ok();
-			   osDelay(20);
-			   communication_stop();
-			   osDelay(10);
-			   hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
-			   app_factorymode_enter();
-		   }
-      }
-      break;
+        {
+            if (operateLeftOrRight == isRightEarbuds)
+            {
+                DBGPRINT("CMD_SEND_DUT_MODE");
+                wired_uart_send_cmd_ack_ok();
+                osDelay(20);
+                communication_stop();
+                osDelay(10);
+                hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
+                app_factorymode_enter();
+            }
+        }
+        break;
     case CMD_SEND_EAR_PUTIN:
-	  {
-		  DBGPRINT("CMD_SEND_EAR_PUTIN");
-          aiwang_box_battery_update_enable(true);
-          boxChargerStatus.needOpenEarbuds = true;
-		  wired_uart_send_cmd_ack_ok();
-		  //disconnected_device(true, BT_DEVICE_ID_1);
-	  }
-      break;
+    {
+        g_case_state = 1;
+        boxChargerStatus.boxIsOpen = true;
+        boxChargerStatus.needOpenEarbuds = true;
+
+        earBudsCloseOff_PogonIn_StopTimer();
+
+        DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
+
+        wired_uart_send_cmd_ack_ok();
+    }
+    break;
     default:
        break;
     }
