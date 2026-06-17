@@ -28,6 +28,7 @@ void nvrecord_rebuild_system_env(struct nvrecord_env_t* pSystemEnv, bool isRebui
     if (isRebuildAll)
     {
         memset((uint8_t *)pSystemEnv, 0, sizeof(struct nvrecord_env_t));
+        pSystemEnv->chargerBoxBattery = 0xFF;
 
         pSystemEnv->ibrt_mode.mode = NVRAM_ENV_TWS_MODE_DEFAULT;
         pSystemEnv->ibrt_mode.conn_mode = NV_DEFAULT_EVN_TWS_CONN_MODE;

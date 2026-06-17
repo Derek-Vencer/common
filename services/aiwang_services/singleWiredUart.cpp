@@ -76,6 +76,7 @@ void uart_idle_detection_init(void);
 uint8_t getPeerBattery(void);
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
+extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 
@@ -597,14 +598,110 @@ static void wired_uart_remove_all_phone_paired_list(void)
     nv_record_flash_flush();
 }
 
-uint8_t getBoxChargerBattery(void)
+#define BOX_BATTERY_INVALID 0xFF
+
+static uint8_t box_battery_nv_cache = BOX_BATTERY_INVALID;
+static bool box_battery_nv_loaded = false;
+
+static void box_battery_nv_load(void)
 {
-    if (!box_battery_cache_valid)
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    if (box_battery_nv_loaded)
     {
-        return 0xFF;
+        return;
     }
 
-    return boxChargerStatus.boxChargerBattery;
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        box_battery_nv_cache = BOX_BATTERY_INVALID;
+        box_battery_nv_loaded = true;
+        return;
+    }
+
+    box_battery_nv_cache = nvrecord_env->chargerBoxBattery;
+
+    boxChargerStatus.boxChargerBattery = box_battery_nv_cache;
+    box_battery_cache_valid = (box_battery_nv_cache <= 100);
+
+    box_battery_nv_loaded = true;
+
+    DBGPRINT("[BOX_BAT][NV_LOAD] box=%d valid=%d",
+             box_battery_nv_cache,
+             box_battery_cache_valid);
+}
+
+static void box_battery_nv_save(uint8_t box_battery)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    if (box_battery > 100)
+    {
+        DBGPRINT("[BOX_BAT][NV_SKIP] invalid=%d", box_battery);
+        return;
+    }
+
+    box_battery_nv_load();
+
+    if (box_battery_nv_cache == box_battery)
+    {
+        DBGPRINT("[BOX_BAT][NV_KEEP] box=%d", box_battery);
+        return;
+    }
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        DBGPRINT("[BOX_BAT][NV_ERR] env null");
+        return;
+    }
+
+    nvrecord_env->chargerBoxBattery = box_battery;
+    nv_record_env_set(nvrecord_env);
+    nv_record_flash_flush();
+
+    box_battery_nv_cache = box_battery;
+    box_battery_cache_valid = true;
+
+    DBGPRINT("[BOX_BAT][NV_SAVE] box=%d", box_battery);
+}
+
+static uint8_t box_battery_nv_get(void)
+{
+    box_battery_nv_load();
+
+    return box_battery_nv_cache;
+}
+
+uint8_t getBoxChargerBattery(void)
+{
+    uint8_t tws_box_battery = 0xFF;
+    uint8_t nv_box_battery = 0xFF;
+
+    if (box_battery_cache_valid &&
+        boxChargerStatus.boxChargerBattery <= 100)
+    {
+        return boxChargerStatus.boxChargerBattery;
+    }
+
+    nv_box_battery = box_battery_nv_get();
+    if (nv_box_battery <= 100)
+    {
+        DBGPRINT("[BOX_BAT][NV_GET] box=%d", nv_box_battery);
+        return nv_box_battery;
+    }
+
+    tws_box_battery = app_ibrt_customif_get_tws_peer_box_battery_level();
+    if (tws_box_battery <= 100)
+    {
+        DBGPRINT("[BOX_BAT][TWS_GET] box=%d", tws_box_battery);
+        return tws_box_battery;
+    }
+
+    return 0xFF;
 }
 
 bool  aiWangIsNeedOpenEarBuds(void)
@@ -664,6 +761,8 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
 
     box_battery_cache_valid = true;
 
+    box_battery_nv_save(data[0]);
+
     DBGPRINT("[EAR_POWER][TWS] connected=%d",
         bts_tws_if_is_tws_link_connected());
 
@@ -679,6 +778,10 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
     
     DBGPRINT("[BOX_BAT] getPeerBattery from TWS sync peer=%d",
                  twsPeerBattery);
+
+    DBGPRINT("[BOX_BAT][SYNC_TX] local=%d box=%d",
+             app_battery_current_level(),
+             boxChargerStatus.boxChargerBattery);
 }
 
 uint8_t aiWang_get_profile_conn_num(void)

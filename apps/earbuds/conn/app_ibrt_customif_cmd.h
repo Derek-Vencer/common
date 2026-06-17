@@ -117,5 +117,6 @@ void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length);
 void set_tws_peer_battery_percent(uint8_t battery);
 uint8_t get_tws_peer_battery_percent(void);
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
+uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 
 #endif

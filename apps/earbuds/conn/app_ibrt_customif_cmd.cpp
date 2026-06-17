@@ -73,11 +73,19 @@ extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ
 
 static uint8_t g_tws_peer_battery_level = 0xFF;
 static bool g_tws_peer_battery_valid = false;
+static uint8_t g_tws_peer_box_battery_level = 0xFF;
+static bool g_tws_peer_box_battery_valid = false;
 extern "C" uint8_t app_battery_current_level(void);
+uint8_t getBoxChargerBattery(void);
 
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
     return g_tws_peer_battery_valid ? g_tws_peer_battery_level : 0xFF;
+}
+
+uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void)
+{
+    return g_tws_peer_box_battery_valid ? g_tws_peer_box_battery_level : 0xFF;
 }
 
 #if defined(IBRT)
@@ -416,12 +424,15 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
         return;
     }
 
-    uint8_t cmd_sync_battery_level[1];
+    uint8_t box_level = getBoxChargerBattery();
+    uint8_t cmd_sync_battery_level[2];
     cmd_sync_battery_level[0] = current_level;
+    cmd_sync_battery_level[1] = box_level;
 
-    EARBUDS_TRACE(1,
-                  "[BAT_SYNC][PEER_TX] percent=%d",
-                  current_level);
+    EARBUDS_TRACE(2,
+                  "[BAT_SYNC][PEER_TX] ear=%d box=%d",
+                  current_level,
+                  box_level);
 
     tws_ctrl_send_cmd(APP_TWS_CMD_BATTERY_LEVEL_SYNC,
                       cmd_sync_battery_level,
@@ -431,10 +442,11 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
 static void app_ibrt_customif_sync_battery_level_send(uint8_t *p_buff,
                                                       uint16_t length)
 {
-    EARBUDS_TRACE(2,
-                  "[BAT_SYNC][SEND] len=%d value=%d",
+    EARBUDS_TRACE(3,
+                  "[BAT_SYNC][SEND] len=%d ear=%d box=%d",
                   length,
-                  (length > 0) ? p_buff[0] : 0xFF);
+                  (length > 0) ? p_buff[0] : 0xFF,
+                  (length > 1) ? p_buff[1] : 0xFF);
 
     if (p_buff && length)
     {
@@ -504,20 +516,28 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
 {
     uint8_t peer_raw = 0xFF;
     uint8_t peer_percent = 0xFF;
+    uint8_t peer_box_raw = 0xFF;
     uint8_t role = app_ibrt_if_get_ui_role();
-
+    EARBUDS_TRACE(0, "BAT_SYNC_HANDLER_VERSION_20260616_BOX_V2");
     EARBUDS_TRACE(3,
                 "######## BAT_SYNC RX ENTER role=%d len=%d p=%p ########",
                 role,
                 length,
                 p_buff);
 
-    if (p_buff && length)
+    //if (p_buff && length)
+    //{
+    //    DUMP8("[BAT_SYNC][RX_DATA] ", p_buff, length);
+    //}
+
+    if ((p_buff == NULL) || (length < 1))
     {
-        DUMP8("[BAT_SYNC][RX_DATA] ", p_buff, length);
+        EARBUDS_TRACE(0, "[BAT_SYNC][RX_ERR] empty payload");
+        return;
     }
 
     peer_raw = p_buff[0];
+    peer_box_raw = (length > 1) ? p_buff[1] : 0xFF;
 
     if (peer_raw <= 9)
     {
@@ -535,21 +555,30 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
         return;
     }
 
-    EARBUDS_TRACE(3,
-                  "[BAT_SYNC][RX] role=%d raw=%d percent=%d",
+    EARBUDS_TRACE(4,
+                  "[BAT_SYNC][RX] role=%d raw=%d percent=%d box=%d",
                   role,
                   peer_raw,
-                  peer_percent);
+                  peer_percent,
+                  peer_box_raw);
 
     if (role == TWS_UI_MASTER)
     {
         g_tws_peer_battery_level = peer_percent;
         g_tws_peer_battery_valid = true;
 
-        EARBUDS_TRACE(2,
-                    "[BAT_SYNC][MASTER_SAVE_PEER]=%d valid=%d",
+        if (peer_box_raw <= 100)
+        {
+            g_tws_peer_box_battery_level = peer_box_raw;
+            g_tws_peer_box_battery_valid = true;
+        }
+
+        EARBUDS_TRACE(4,
+                    "[BAT_SYNC][MASTER_SAVE_PEER] ear=%d valid=%d box=%d box_valid=%d",
                     g_tws_peer_battery_level,
-                    g_tws_peer_battery_valid);
+                    g_tws_peer_battery_valid,
+                    g_tws_peer_box_battery_level,
+                    g_tws_peer_box_battery_valid);
 
     #ifdef BESUI_TWS_EN
         set_tws_peer_battery_percent(peer_percent);

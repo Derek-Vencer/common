@@ -1640,7 +1640,8 @@ int app_deinit(int deinit_case)
 		if(button_power_status == 1)
         	media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
 		else{
-			media_PlayAudio_standalone_locally(AUDIO_ID_FIND_MY_BUDS, 0);
+			//media_PlayAudio_standalone_locally(AUDIO_ID_FIND_MY_BUDS, 0);
+            media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
 		}
 		button_power_status = 0;
 #endif
