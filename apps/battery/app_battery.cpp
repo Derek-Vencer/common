@@ -228,36 +228,27 @@ extern bool  aiWangIsNeedOpenEarBuds(void);
 
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
-    (void)param;
-
-    enum APP_BATTERY_CHARGER_T charger_status =
-        app_battery_charger_forcegetstatus();
+    int8_t charging = app_battery_is_charging();
 
     BATTERY_TRACE(2,
-                  "%s charger_status=%d",
-                  __func__,
-                  charger_status);
+                  "[POWER_OFF] charging=%d status=%d",
+                  charging,
+                  app_battery_measure.status);
 
     /*
-     * After CMD_POWER_OFF delay:
-     * charger_status == APP_BATTERY_CHARGER_PLUGIN means charging contact is active.
-     * Power off only in this case.
+     * Power off only when battery state is charging.
      */
-    if (charger_status == APP_BATTERY_CHARGER_PLUGIN)
+    if (charging)
     {
         BATTERY_TRACE(0,
-                      "[POWER_OFF] charger=PLUGIN -> shutdown now");
+                      "[POWER_OFF] charging=1 -> shutdown");
 
         app_shutdown();
         return;
     }
 
-    /*
-     * charger_status == APP_BATTERY_CHARGER_PLUGOUT
-     * Keep power on.
-     */
     BATTERY_TRACE(0,
-                  "[POWER_OFF] charger=PLUGOUT -> keep power on");
+                  "[POWER_OFF] charging=0 -> keep power on");
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
