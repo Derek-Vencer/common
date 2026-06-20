@@ -47,7 +47,7 @@
 #endif
 #include "ble_core_common.h"
 #include "bes_gap_api.h"
-
+#include "bts_tws_if.h"
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -1071,7 +1071,8 @@ bool app_ibrt_customif_custom_disallow_reconnect_tws_callback(void)
 
 bool app_ibrt_customif_disallow_tws_role_switch_callback()
 {
-    EARBUDS_TRACE(0,"custom_ui:tws role switch ext-policy");
+    EARBUDS_TRACE(0, "custom_ui:tws role switch ext-policy");
+    EARBUDS_TRACE(0, "[NTT_ROLE] disallow role switch callback enter");
 
     /*
      * So procedure may not working well when tws role switch happen, return
@@ -1240,8 +1241,31 @@ void app_ibrt_customif_ui_tws_switch(void)
 /*
 * custom reconfig bd_addr
 */
-void app_ibrt_customif_ui_reconfig_bd_addr(bt_bdaddr_t local_addr, bt_bdaddr_t peer_addr, ibrt_role_e nv_role)
+void app_ibrt_customif_ui_reconfig_bd_addr(
+    bt_bdaddr_t local_addr,
+    bt_bdaddr_t peer_addr,
+    ibrt_role_e nv_role)
 {
+    EARBUDS_TRACE(1,
+        "[NTT_NV_ROLE][BOOT] nv_role=%d",
+        nv_role);
+
+    EARBUDS_TRACE(7,
+        "[NTT_NV_ROLE][BOOT] role=%d local=%02X:%02X:%02X:%02X:%02X:%02X peer=%02X:%02X:%02X:%02X:%02X:%02X",
+        nv_role,
+        local_addr.address[0],
+        local_addr.address[1],
+        local_addr.address[2],
+        local_addr.address[3],
+        local_addr.address[4],
+        local_addr.address[5],
+        peer_addr.address[0],
+        peer_addr.address[1],
+        peer_addr.address[2],
+        peer_addr.address[3],
+        peer_addr.address[4],
+        peer_addr.address[5]);
+
     ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
 
     p_ibrt_ctrl->local_addr = local_addr;
@@ -1252,11 +1276,17 @@ void app_ibrt_customif_ui_reconfig_bd_addr(bt_bdaddr_t local_addr, bt_bdaddr_t p
     {
         if (IBRT_MASTER == p_ibrt_ctrl->nv_role)
         {
+            EARBUDS_TRACE(0,
+                "[NTT_NV_ROLE][BOOT] MASTER");
+
             p_ibrt_ctrl->peer_addr = local_addr;
             btif_me_set_bt_address(p_ibrt_ctrl->local_addr.address);
         }
         else if (IBRT_SLAVE == p_ibrt_ctrl->nv_role)
         {
+            EARBUDS_TRACE(0,
+                "[NTT_NV_ROLE][BOOT] SLAVE");
+
             p_ibrt_ctrl->local_addr = peer_addr;
             btif_me_set_bt_address(p_ibrt_ctrl->local_addr.address);
         }

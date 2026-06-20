@@ -90,7 +90,7 @@
 #if defined(APP_USB_A2DP_SOURCE) && defined(BT_SOURCE)
 #include "app_bt_stream.h"
 #endif
-
+bool ntt_manual_pairing_mode = false;
 
 #ifdef BIS_SELFSCAN_ENABLED
 extern void app_bis_selfscan_cmd_init(void);
@@ -411,6 +411,8 @@ extern "C" {
 #include "charger_with_icp1205.h"
 extern void sparraw_service_init(void);
 extern bool aiWangBoxIsUsed(void);
+extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
+extern bool ntt_case_open_pending;
 //extern void charger_manager_start(void);
 
 #ifdef IBRT
@@ -587,25 +589,71 @@ void app_10_second_timer_check(void)
     unsigned int i;
 
 #ifdef BESUI_TWS_EN
-    if(uicom.box_open_bat_det_flag)
+    if (uicom.box_open_bat_det_flag)
     {
-        BESUI_TRACE(0,"[UITIMER]fast get battery do not count++");
+        BESUI_TRACE(0, "[UITIMER]fast get battery do not count++");
         return;
     }
 #endif
 
-    for(i = 0; i < ARRAY_SIZE(app_10_second_array); i++) {
-        if (timer->timer_en) {
-            timer->timer_count++;
-#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-            MAIN_TRACE(0,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
+#ifdef IBRT
+    static uint8_t ntt_reconnect_retry = 0;
+
+    if (!app_ibrt_middleware_is_ui_slave())
+    {
+        if (ntt_manual_pairing_mode)
+        {
+            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] skip reconnect in manual pairing mode");
+        }
+        else if (btif_me_get_pendCons() != 0)
+        {
+            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] pending ACL exists, wait next timer");
+        }
+        else if (ntt_reconnect_retry < 30)
+        {
+            MAIN_TRACE(1,
+                "[NTT_TAKEOVER][TIMER] opening reconnect retry=%d",
+                ntt_reconnect_retry);
+
+            ntt_reconnect_retry++;
+
+            app_bt_profile_connect_manager_opening_reconnect();
+        }
+        else
+        {
+            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] reconnect retry limit reached");
+        }
+
+        if (app_bt_ibrt_has_mobile_link_connected() &&
+            btif_me_get_pendCons() == 0)
+        {
+            ntt_reconnect_retry = 0;
+        }
+    }
 #endif
-            if (timer->timer_count >= timer->timer_period) {
+
+    for (i = 0; i < ARRAY_SIZE(app_10_second_array); i++)
+    {
+        if (timer->timer_en)
+        {
+            timer->timer_count++;
+
+#if 1
+            MAIN_TRACE(0, "[UITIMER]%s id %d count %d",
+                       __func__, i, timer->timer_count);
+#endif
+
+            if (timer->timer_count >= timer->timer_period)
+            {
                 timer->timer_en = 0;
+
                 if (timer->cb)
+                {
                     timer->cb();
+                }
             }
         }
+
         timer++;
     }
 }
@@ -1944,18 +1992,60 @@ void app_ibrt_init(void)
         else
     #endif
         {
+
         #if defined(IBRT_UI)
-        	MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
-            if(memcmp(&config.peer_addr.address[0],"\xFF\xFF\xFF\xFF\xFF\xFF",6)
-               && memcmp(&config.peer_addr.address[0],"\x00\x00\x00\x00\x00\x00",6))
             {
-                //app_ibrt_start_power_on_tws_pairing();
+                btif_device_record_t record1;
+                btif_device_record_t record2;
+                int record_count = nv_record_enum_latest_two_paired_dev(&record1, &record2);
+                uint8_t mobile_record_count = 0;
+
+                bool has_tws_peer =
+                    memcmp(&config.peer_addr.address[0], "\xFF\xFF\xFF\xFF\xFF\xFF", 6) &&
+                    memcmp(&config.peer_addr.address[0], "\x00\x00\x00\x00\x00\x00", 6);
+
+                if (record_count >= 1)
+                {
+                    if ((memcmp(record1.bdAddr.address, config.local_addr.address, 6) != 0) &&
+                        (memcmp(record1.bdAddr.address, config.peer_addr.address, 6) != 0))
+                    {
+                        mobile_record_count++;
+                    }
+                }
+
+                if (record_count >= 2)
+                {
+                    if ((memcmp(record2.bdAddr.address, config.local_addr.address, 6) != 0) &&
+                        (memcmp(record2.bdAddr.address, config.peer_addr.address, 6) != 0))
+                    {
+                        mobile_record_count++;
+                    }
+                }
+
+                MAIN_TRACE(3,
+                    "[NTT_PAIR] record_count=%d mobile_record_count=%d has_tws_peer=%d",
+                    record_count,
+                    mobile_record_count,
+                    has_tws_peer);
+
+                if (mobile_record_count == 0)
+                {
+                    app_ibrt_start_power_on_tws_pairing();
+                }
+                else if (mobile_record_count == 1)
+                {
+                    MAIN_TRACE(0, "[NTT_PAIR] one mobile record, allow second phone pairing");
+
+                    app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
+                    // 或專案裡對應的 connectable/discoverable pairing API
+                }
+                else
+                {
+                    MAIN_TRACE(0, "[NTT_PAIR] two mobile records, disable pairing discoverable");
+
+                    app_bt_accessmode_set_req(BTIF_BAM_NOT_ACCESSIBLE);
+                }
             }
-            else
-            {
-            	MAIN_TRACE(0, "Not TWS Peers!!!");
-            }
-            app_ibrt_start_power_on_tws_pairing();
         #endif
         }
     #elif defined(POWER_ON_ENTER_FREEMAN_PAIRING_ENABLED)
@@ -1974,7 +2064,13 @@ void app_ibrt_init(void)
 #if defined(IBRT) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
     app_ibrt_internal_stack_is_ready();
 #endif
-
+    MAIN_TRACE(0, "[CASE] ntt_case_open_pending = %d",ntt_case_open_pending);
+    if (ntt_case_open_pending)
+    {
+        MAIN_TRACE(0, "[CASE] apply pending CASE_OPEN after IBRT stack ready");
+        app_ibrt_if_init_open_box_state_for_evb();
+        ntt_case_open_pending = false;
+    }
 #if defined(IBRT_UI) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
     app_tws_ibrt_ui_cmd_init();
 #endif

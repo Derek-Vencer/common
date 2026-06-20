@@ -34,7 +34,7 @@
 #include "besbt.h"
 
 // #define nv_record_verbose_log
-
+extern bool ntt_manual_pairing_mode;
 #ifdef IBRT
 extern bool bts_tws_if_is_tws_addr(const uint8_t* pBdAddr);
 #endif
@@ -565,7 +565,7 @@ static bt_status_t POSSIBLY_UNUSED nv_record_ddbrec_add(const btif_device_record
     NV_SECTION_TRACE(1,"paired Bt dev:%d", pBtDevInfo->pairedDevNum);
     NV_SECTION_TRACE(1,"isUpdateNv: %d", isUpdateNv);
     nv_record_all_ddbrec_print();
-
+    ntt_manual_pairing_mode = false;
     return BT_STS_SUCCESS;
 }
 

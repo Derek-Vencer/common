@@ -29,7 +29,7 @@
 #include "apps.h"
 #include "app_hfp.h"
 #include "../btapp/bt_app/app_keyhandle.h"
-
+extern bool ntt_case_open_pending;
 #ifdef APP_BATTERY_ENABLE
 #include "app_status_ind.h"
 #include "bluetooth_bt_api.h"
@@ -1281,6 +1281,7 @@ int app_battery_charger_indication_open(void)
     uint8_t cnt = 0;
 
     BATTERY_TRACE(1,"%s",__func__);
+    ntt_case_open_pending = true;
 
     pmu_charger_init();
 
