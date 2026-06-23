@@ -482,6 +482,20 @@ void app_poweroff_timerout(void);
 void CloseEarphone(void);
 void wired_uart_communication_modual_init(void);
 
+uint8_t operateLeftOrRight = 0xFF;
+extern uint8_t isRightEarbuds;
+
+extern uint8_t enter_pair;
+extern uint8_t enter_pair_count;
+
+extern bool ntt_manual_pairing_mode;
+
+extern void set_pair_status(uint8_t status);
+extern void set_er_discover_connectable_status(uint8_t status);
+extern void aiWang_disconnet_phone_enter_pairmode(void);
+#define LEFT_BUDS   0
+#define RIGHT_BUDS  1
+
 typedef struct
 {
     uint8_t timer_id;
@@ -1930,6 +1944,7 @@ WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 
 }
 
+
 void app_ibrt_init(void)
 {
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
@@ -2030,7 +2045,31 @@ void app_ibrt_init(void)
 
                 if (mobile_record_count == 0)
                 {
-                    app_ibrt_start_power_on_tws_pairing();
+                    uint8_t bt_local_addr[6] = {0};
+                    bool is_right = false;
+
+                    app_bt_get_local_device_address(bt_local_addr);
+                    is_right = (bt_local_addr[0] & 0x01) ? true : false;
+
+                    if (is_right)
+                    {
+                        MAIN_TRACE(0, "[NTT_PAIR] Right ear enter pairing mode");
+
+                        ntt_manual_pairing_mode = true;
+
+                        set_pair_status(0);
+                        set_er_discover_connectable_status(1);
+
+                        app_ui_enter_pairing_mode(0, false);
+
+                        osDelay(500);
+
+                        app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
+                    }
+                    else
+                    {
+                        MAIN_TRACE(0, "[NTT_PAIR] Left ear skip mobile pairing mode");
+                    }
                 }
                 else if (mobile_record_count == 1)
                 {

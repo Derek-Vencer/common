@@ -808,36 +808,73 @@ void app_tota_anc_send_to_app(uint8_t param)
 #endif
 
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+
+#define NTT_FACTORY_DEFAULT_NAME "nwm CLIPS"
+
 void besui_app_clear_all_nvrecord(void)
 {
-    BESUI_TRACE(0,"[UIAPP]%s", __func__);
-    if(bts_tws_if_is_tws_link_connected())
+    BESUI_TRACE(0, "[UIAPP]%s", __func__);
+
+    if (bts_tws_if_is_tws_link_connected())
     {
-        if(TWS_UI_MASTER == app_ibrt_if_get_ui_role())
-            tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_TOTA_FACTORY_RESET, NULL, 0); ///>send to slave        
+        if (TWS_UI_MASTER == app_ibrt_if_get_ui_role())
+        {
+            tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_TOTA_FACTORY_RESET, NULL, 0);
+        }
     }
-  
+
+    /*
+     * Force default key mapping to be rebuilt on next boot.
+     */
     app_tota_general_button_event_reset();
+
+    /*
+     * Clear SDK NV records.
+     */
     nv_record_rebuild(NV_REBUILD_SDK_ONLY);
 
     ota_disconnect();
     bes_ble_gap_disconnect_all();
 
     nv_record_env_get(&nvrecord_uienv);
+
 #ifdef LATENCY_NV_EN
     nvrecord_uienv->remember_game_mode = 0;
 #endif
+
 #if defined(__VIRTUAL_SURROUND__) || defined(__VIRTUAL_SURROUND_CP__) || defined(__VIRTUAL_SURROUND_STEREO__)
-    nvrecord_uienv->space_audio_type = 0;  
+    nvrecord_uienv->space_audio_type = 0;
 #endif
+
 #if defined(ANC_APP) && defined(BESUI_TWS_EN)
     nvrecord_uienv->sync_anc_flag = false;
     nvrecord_uienv->sync_anc_mode = 0;
-    nvrecord_uienv->sync_anc_adapt = false;    
+    nvrecord_uienv->sync_anc_adapt = false;
 #endif
+
+#ifdef EQ_SET_CUSTOMER_EN
+    nvrecord_uienv->eq_onoff = 1;
+    nvrecord_uienv->eq_mode = 0;
+#endif
+
+#ifdef EQ_CUSTOM_APP_EN
+    for (uint8_t i = 0; i < EQBAND_NUM; i++)
+    {
+        nvrecord_uienv->eq_custom[i] = (EQBAND_RANGE_DB / 2);
+    }
+#endif
+
     nv_record_env_set(nvrecord_uienv);
 
+    /*
+     * Restore factory default BT name.
+     */
+    factory_section_set_bt_name(NTT_FACTORY_DEFAULT_NAME,
+                                strlen(NTT_FACTORY_DEFAULT_NAME) + 1);
+
     app_reset_factory_timer_onoff();
+
+    nv_record_flash_flush();
 }
 #endif
 
