@@ -1115,111 +1115,134 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         break;
 
     case CMD_CLOSE_CASE:
-    {
-        DBGPRINT("[CASE] CLOSE received");
-
-        /*
-        * Do not shutdown immediately.
-        * Mark close state and start delayed check.
-        * If CMD_OPEN_CASE comes before timer expires,
-        * CMD_OPEN_CASE will stop the timer.
-        */
-        g_case_state = 0;
-        boxChargerStatus.boxIsOpen = false;
-        boxChargerStatus.needOpenEarbuds = false;
-
-        wired_uart_get_battery_level();
-
-        if (app_is_stack_ready())
         {
-    #ifndef BLE_ONLY_ENABLED
-            int activeCons = 0;
-            int active_phone_cons = 0;
-            int activeSourceCons = 0;
+            DBGPRINT("[CASE] CLOSE received");
 
-            activeCons = app_bt_get_active_cons();
-            active_phone_cons = app_bt_count_mobile_link();
-            activeSourceCons = btif_me_get_source_activeCons();
+            /*
+            * Do not shutdown immediately.
+            * Mark close state and start delayed check.
+            * If CMD_OPEN_CASE comes before timer expires,
+            * CMD_OPEN_CASE will stop the timer.
+            */
+            g_case_state = 0;
+            boxChargerStatus.boxIsOpen = false;
+            boxChargerStatus.needOpenEarbuds = false;
 
-            DBGPRINT("CMD_CLOSE_CASE activeCons=%d activeSourceCons=%d active_phone_cons=%d",
-                    activeCons,
-                    activeSourceCons,
-                    active_phone_cons);
+            wired_uart_get_battery_level();
 
-    #ifdef IBRT
-            if (bts_tws_if_is_tws_link_connected())
+            enum APP_BATTERY_CHARGER_T charger_status =
+                (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+            DBGPRINT("[CASE_CLOSE] charger=%s",
+                    (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
+                    "PLUGIN" : "PLUGOUT");
+
+            /*
+            * Only allow shutdown when charger is really detected.
+            */
+            if (charger_status != APP_BATTERY_CHARGER_PLUGIN)
             {
-                uint8_t cmd_sync_poweroff_shutdown[1];
-
-                cmd_sync_poweroff_shutdown[0] = 1;
-
-                DBGPRINT("%s send APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC",
-                        __func__);
-
-                tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-                                cmd_sync_poweroff_shutdown,
-                                1);
+                DBGPRINT("[CASE_CLOSE] skip shutdown, charger plugout");
+                break;
             }
-    #endif
-    #endif
+
+            if (app_is_stack_ready())
+            {
+        #ifndef BLE_ONLY_ENABLED
+                int activeCons = 0;
+                int active_phone_cons = 0;
+                int activeSourceCons = 0;
+
+                activeCons = app_bt_get_active_cons();
+                active_phone_cons = app_bt_count_mobile_link();
+                activeSourceCons = btif_me_get_source_activeCons();
+
+                DBGPRINT("CMD_CLOSE_CASE activeCons=%d activeSourceCons=%d active_phone_cons=%d",
+                        activeCons,
+                        activeSourceCons,
+                        active_phone_cons);
+
+        #ifdef IBRT
+                if (bts_tws_if_is_tws_link_connected())
+                {
+                    uint8_t cmd_sync_poweroff_shutdown[1];
+
+                    cmd_sync_poweroff_shutdown[0] = 1;
+
+                    DBGPRINT("%s send APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC",
+                            __func__);
+
+                    tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+                                    cmd_sync_poweroff_shutdown,
+                                    1);
+                }
+        #endif
+        #endif
+            }
+
+            DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
+
+            earBudsCloseOff_PogonIn_StartTimer();
         }
-
-        DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
-
-        earBudsCloseOff_PogonIn_StartTimer();
-    }
     break;
 
     case CMD_EAR_RESET:
     {
-       
-        printf("CMD_EAR_RESET factory reset!!!");
+      
+        if (1)
+        {
+            printf("CMD_EAR_RESET factory reset!!! return ");
+            return;
+        }
+        else {
 
-        LinkDisconnectDirectly(true);
+            printf("CMD_EAR_RESET factory reset!!!");
 
-        /*
-        * Delete phone paired records only.
-        * Do not delete TWS pairing records.
-        */
-        wired_uart_remove_all_phone_paired_list();
+            LinkDisconnectDirectly(true);
 
-        /*
-        * Clear SDK NV records.
-        * Note: Do not call besui_app_clear_all_nvrecord() here,
-        * because it cannot be linked from this module.
-        */
-        nv_record_rebuild(NV_REBUILD_SDK_ONLY);
+            /*
+            * Delete phone paired records only.
+            * Do not delete TWS pairing records.
+            */
+            wired_uart_remove_all_phone_paired_list();
 
-        /*
-        * Restore EQ preset 0.
-        */
-        handleSetEqIndex(0);
-        app_ibrt_customif_cmd_sync_music_eq(0);
+            /*
+            * Clear SDK NV records.
+            * Note: Do not call besui_app_clear_all_nvrecord() here,
+            * because it cannot be linked from this module.
+            */
+            nv_record_rebuild(NV_REBUILD_SDK_ONLY);
 
-        /*
-        * Restore default key mapping.
-        */
-        wired_uart_factory_reset_app_nv();
-        /*
-        * Restore default device name.
-        */
-        factory_section_set_bt_name("nwm CLIPS", strlen("nwm CLIPS") + 1);
+            /*
+            * Restore EQ preset 0.
+            */
+            handleSetEqIndex(0);
+            app_ibrt_customif_cmd_sync_music_eq(0);
 
-        /*
-        * Reset saved box battery to invalid value.
-        */
-        //box_battery_nv_reset();
+            /*
+            * Restore default key mapping.
+            */
+            wired_uart_factory_reset_app_nv();
+            /*
+            * Restore default device name.
+            */
+            factory_section_set_bt_name("nwm CLIPS", strlen("nwm CLIPS") + 1);
 
-        /*
-        * Clear BLE state.
-        */
-        bes_ble_gap_disconnect_all();
-        bes_ble_gap_clear_white_list_for_mobile();
+            /*
+            * Reset saved box battery to invalid value.
+            */
+            //box_battery_nv_reset();
 
-        osDelay(500);
+            /*
+            * Clear BLE state.
+            */
+            bes_ble_gap_disconnect_all();
+            bes_ble_gap_clear_white_list_for_mobile();
 
-        app_reset();
+            osDelay(500);
 
+            app_reset();
+        }
     }
     break;
 

@@ -401,41 +401,37 @@ static void app_ibrt_customif_sync_poweroff_shutdown_send_handler(uint16_t rsp_s
 
 void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
 {
+    static uint32_t s_last_sync_ms = 0;
+    static uint8_t s_last_level = 0xFF;
+    static uint8_t s_last_box_level = 0xFF;
+
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t role = app_ibrt_if_get_ui_role();
 
     if (!tws_connected)
     {
-        static bool s_tws_not_connected_log_printed = false;
-
-        if (!bts_tws_if_is_tws_link_connected())
-        {
-            if (!s_tws_not_connected_log_printed)
-            {
-                EARBUDS_TRACE(0,
-                    "[BAT_SYNC][TX_SKIP] tws not connected");
-
-                s_tws_not_connected_log_printed = true;
-            }
-
-            return;
-        }
-
-        /* TWS connected, allow next disconnect log */
-        s_tws_not_connected_log_printed = false; 
-        
         return;
     }
 
     if (role == TWS_UI_MASTER)
     {
-        EARBUDS_TRACE(1,
-                      "[BAT_SYNC][TX_SKIP] master does not send level=%d",
-                      current_level);
         return;
     }
 
     uint8_t box_level = getBoxChargerBattery();
+    uint32_t now_ms = GET_CURRENT_MS();
+
+    if ((s_last_level == current_level) &&
+        (s_last_box_level == box_level) &&
+        ((now_ms - s_last_sync_ms) < 120000))
+    {
+        return;
+    }
+
+    s_last_level = current_level;
+    s_last_box_level = box_level;
+    s_last_sync_ms = now_ms;
+
     uint8_t cmd_sync_battery_level[2];
     cmd_sync_battery_level[0] = current_level;
     cmd_sync_battery_level[1] = box_level;

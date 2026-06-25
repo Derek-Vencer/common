@@ -661,7 +661,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #endif
             }
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-//#if defined(IBRT)
+#if defined(IBRT)
             {
                 static int8_t last_sync_level = -1;
 
@@ -671,7 +671,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                     app_ibrt_customif_cmd_sync_battery_level(level);
                 }
             }
-//#endif
+#endif
             app_status_battery_report(level);
 
             break;
@@ -819,16 +819,26 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
                 break;
         }
 
-        if (app_battery_measure.currlevel <= 100)
-        {
-            BATTERY_TRACE(3,
-                          "[BAT_SYNC][LOCAL] status=%d measure_status=%d level=%d",
-                          status,
-                          app_battery_measure.status,
-                          app_battery_measure.currlevel);
+        #if defined(IBRT)
+                static uint8_t battery_sync_cnt = 0;
 
-            app_ibrt_customif_cmd_sync_battery_level(app_battery_measure.currlevel);
-        }
+                if (app_battery_measure.currlevel <= 100)
+                {
+                    battery_sync_cnt++;
+
+                    if (battery_sync_cnt >= 12)
+                    {
+                        battery_sync_cnt = 0;
+
+                        BATTERY_TRACE(1,
+                                    "[BAT_SYNC][120S] level=%d",
+                                    app_battery_measure.currlevel);
+
+                        app_ibrt_customif_cmd_sync_battery_level(
+                            app_battery_measure.currlevel);
+                    }
+                }
+        #endif
     }
 
     if (NULL != app_battery_measure.user_cb)
