@@ -470,7 +470,7 @@ void app_tws_connected_event_timehandler(void const *param)
     BESUI_TRACE(3, "[UIBT][UITIMER]%s conn_devices %d accessmode %d nv_role %d ui_role %d", __func__, conn_devices, 
             app_bt_get_curr_access_mode(), p_ibrt_ctrl->nv_role, app_ibrt_if_get_ui_role());
 
-    app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+    //app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
 
     uint8_t *bt_local_addr;
     bt_local_addr = bt_get_local_address();

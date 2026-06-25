@@ -23,6 +23,7 @@
 #include "apps.h"
 #include "app_media_player.h"
 #include "bt_common_define.h"
+#include "audio_cfg.h"
 
 #ifdef IBRT
 #include "app_ibrt_internal.h"
@@ -136,7 +137,7 @@ extern void handleSetEqIndex(uint8_t index);
 #define         CMD_SEND_BOX_BATTERY_LEVEL              0x0F
 #define         CMD_SEND_DUT_MODE                       0x10
 #define         CMD_SEND_EAR_PUTIN                      0x11
-
+#define         CMD_SEND_DTM_MODE                       0x12
 
 typedef enum {
 	PARSE_IDLE,
@@ -1327,6 +1328,15 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
 
         wired_uart_send_cmd_ack_ok();
+    }
+    break;
+    case CMD_SEND_DTM_MODE:
+    {
+        DBGPRINT("[DUT] Enter DTM mode");
+
+        /* Disable 1-Mic Noise Suppression */
+        ntt_dut_speech_tx_1mic_ns_bypass_set(1);
+        DBGPRINT("[DUT] TX 1Mic NS -> BYPASS");
     }
     break;
     default:
