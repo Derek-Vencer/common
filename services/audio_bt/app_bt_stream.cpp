@@ -250,12 +250,12 @@ extern "C" void ntt_audio_output_mute_refresh(void)
     if (get_er_inbox_status())
     {
         hal_codec_dac_mute(true);
-        AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud in box, force speaker mute");
+        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud in box, force speaker mute");
     }
     else
     {
         hal_codec_dac_mute(false);
-        AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud out box, release speaker un-mute");
+        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud out box, release speaker un-mute");
     }
 }
 

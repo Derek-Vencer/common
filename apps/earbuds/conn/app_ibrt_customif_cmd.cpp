@@ -77,6 +77,11 @@ static uint8_t g_tws_peer_box_battery_level = 0xFF;
 static bool g_tws_peer_box_battery_valid = false;
 extern "C" uint8_t app_battery_current_level(void);
 uint8_t getBoxChargerBattery(void);
+extern "C" void ntt_color_code_nv_set(uint8_t color);
+extern "C" uint8_t ntt_color_code_nv_get(void);
+extern void ntt_ble_adv_refresh_data(void);
+
+extern bool ntt_color_code_is_valid(uint8_t color);
 
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
@@ -86,6 +91,17 @@ uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void)
 {
     return g_tws_peer_box_battery_valid ? g_tws_peer_box_battery_level : 0xFF;
+}
+
+#define NTT_COLOR_CODE_BLACK         0x4B
+#define NTT_COLOR_CODE_SILVER_WHITE  0x53
+#define NTT_COLOR_CODE_GOLD          0x4E
+
+static bool ntt_color_code_is_valid_local(uint8_t color)
+{
+    return ((color == NTT_COLOR_CODE_BLACK) ||
+            (color == NTT_COLOR_CODE_SILVER_WHITE) ||
+            (color == NTT_COLOR_CODE_GOLD));
 }
 
 #if defined(IBRT)
@@ -807,6 +823,56 @@ static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rs
 
 }
 
+void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code)
+{
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][TX] skip, tws not connected color=0x%02X", color_code);
+        return;
+    }
+
+    if (!ntt_color_code_is_valid_local(color_code))
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][TX] invalid color=0x%02X", color_code);
+        return;
+    }
+
+    EARBUDS_TRACE(0, "[COLOR_SYNC][TX] color=0x%02X", color_code);
+
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_COLOR_CODE,
+                      &color_code,
+                      sizeof(color_code));
+}
+
+static void app_ibrt_customif_sync_color_code_send(uint8_t *p_buff, uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_COLOR_CODE, p_buff, length);
+}
+
+static void app_ibrt_customif_sync_color_code_received_handler(uint16_t rsp_seq,
+                                                               uint8_t *p_buff,
+                                                               uint16_t length)
+{
+    if ((p_buff == NULL) || (length < 1))
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][RX] invalid len=%d", length);
+        return;
+    }
+
+    uint8_t color_code = p_buff[0];
+
+    if (!ntt_color_code_is_valid_local(color_code))
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][RX] invalid color=0x%02X", color_code);
+        return;
+    }
+
+    EARBUDS_TRACE(0, "[COLOR_SYNC][RX] color=0x%02X", color_code);
+
+    ntt_color_code_nv_set(color_code);
+    ntt_ble_adv_refresh_data();
+}
+
 #if defined(USER_IMU_SENSORHUB_EN)
 static void imu_data_send_handler(uint8_t *p_buff, uint16_t length)
 {
@@ -980,6 +1046,14 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         APP_TWS_CMD_SYNC_BT_NAME,                              "TWS_CMD_SYNC_BT_NAME",
         app_ibrt_customif_sync_bt_name_cmd_send,
         app_ibrt_customif_sync_bt_name_cmd_send_handler,               0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
+        APP_TWS_CMD_SYNC_COLOR_CODE,                            "SYNC_COLOR_CODE",
+        app_ibrt_customif_sync_color_code_send,
+        app_ibrt_customif_sync_color_code_received_handler,             0,
         app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
         app_ibrt_custom_cmd_tx_done_handler_null,
         APP_TWS_CMD_PRIO_0

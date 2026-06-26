@@ -70,7 +70,8 @@
 
 #include "ble_aiwang_srv.h"
 #include "factory_section.h"
-
+#include "earbud_ux_api.h"
+#include "nvrecord_extension.h"
 #ifndef ADV_DATA_LEN
 #define ADV_DATA_LEN                    (0x1F)
 #endif
@@ -111,6 +112,7 @@ static void app_ble_check_load_client_cache(const gap_conn_item_t *conn);
 static void app_ble_gatt_server_cache(const gap_conn_item_t *conn, const gatt_server_cache_t *cache);
 static void app_ble_gatt_client_cache(const gap_conn_item_t *conn, const gatt_client_cache_t *cache);
 static void app_ble_global_handle(ble_event_t *event, void *output);
+extern uint8_t ntt_color_code_nv_get(void);
 
 #if (BLE_AUDIO_ENABLED)
 bool aob_conn_start_adv(bool, bool, bool);
@@ -3619,19 +3621,83 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     ble_adv->scanRspData[2] = 0x9B;
     ble_adv->scanRspData[3] = 0x0C;
 
-    factory_section_original_btaddr_get(&ble_adv->scanRspData[4]);
+    uint8_t *local_bt_addr = app_ibrt_if_get_bt_local_address();
+    uint8_t *peer_nv_addr  = nv_record_get_ibrt_peer_addr();
+
+    static const uint8_t invalid_ff[6] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
+
+    static const uint8_t invalid_00[6] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    /*
+     * Project rule:
+     * address[0] odd  = right ear
+     * address[0] even = left ear
+     *
+     * local_bt_addr : current ear BT address
+     * peer_nv_addr  : TWS peer BT address saved in NV, valid before TWS connected
+     */
+    if (local_bt_addr &&
+        memcmp(local_bt_addr, invalid_ff, 6) &&
+        memcmp(local_bt_addr, invalid_00, 6) &&
+        (local_bt_addr[0] & 0x01))
+    {
+        /*
+         * Current ear is right ear.
+         */
+        memcpy(&ble_adv->scanRspData[4], local_bt_addr, 6);
+    }
+    else if (peer_nv_addr &&
+             memcmp(peer_nv_addr, invalid_ff, 6) &&
+             memcmp(peer_nv_addr, invalid_00, 6) &&
+             (peer_nv_addr[0] & 0x01))
+    {
+        /*
+         * Current ear is left ear, NV peer is right ear.
+         */
+        memcpy(&ble_adv->scanRspData[4], peer_nv_addr, 6);
+    }
+    else
+    {
+        /*
+         * Fallback only. This should not happen after TWS pairing is saved.
+         */
+        factory_section_original_btaddr_get(&ble_adv->scanRspData[4]);
+    }
+
     memcpy(&ble_adv->scanRspData[10], "MBE003", 6);
 
     uint8_t earBudsColor = aiWangGetEarBudsColor();
+    uint8_t nvColor = ntt_color_code_nv_get();
+
     if ((0 == earBudsColor) || (0xFF == earBudsColor))
     {
-        ble_adv->scanRspData[16] = 0x42;
+        ble_adv->scanRspData[16] = nvColor;
     }
     else
     {
         ble_adv->scanRspData[16] = earBudsColor;
     }
 
+    DEBUG_INFO(0, "[ADV] aiWangGetEarBudsColor=0x%02X", earBudsColor);
+    DEBUG_INFO(0, "[ADV] ntt_color_code_nv_get=0x%02X", nvColor);
+    DEBUG_INFO(0, "[ADV] final color scanRspData[16]=0x%02X",
+            ble_adv->scanRspData[16]);
+
+    DEBUG_INFO(0, "[ADV] Full Manufacturer Data:");
+    DUMP8("%02X ", &ble_adv->scanRspData[0], 17);
+
+    DEBUG_INFO(0, "[ADV] Local BT Addr:");
+    DUMP8("%02X ", local_bt_addr, 6);
+
+    DEBUG_INFO(0, "[ADV] Peer NV BT Addr:");
+    DUMP8("%02X ", peer_nv_addr, 6);
+
+    DEBUG_INFO(0, "[ADV] Manufacturer BT Addr:");
+    DUMP8("%02X ", &ble_adv->scanRspData[4], 6);
     /*
      * Do not add local name into ADV or Scan Response.
      * This prevents other phones from scanning nwm SLIPS / nwm CLIPS.

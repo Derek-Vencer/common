@@ -361,6 +361,7 @@ struct nvrecord_env_t {
     uint8_t peer_bleaddr[6];
 #endif
     uint8_t chargerBoxBattery;
+    uint8_t color_code;
     //fixed storage for box version
     //uint8_t chargerBoxVersion[16+1];
 //----------------------------------------------------------------------------------------------

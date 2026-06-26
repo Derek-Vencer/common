@@ -64,13 +64,30 @@
 #define TRACE(attr, fmt, ...) do {} while (0)
 
 #endif
-
+extern void ntt_ble_adv_refresh_data(void);
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+extern "C" uint8_t ntt_color_code_nv_get(void);
+extern "C" void ntt_color_code_nv_set(uint8_t color);
+extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
+
 #define MAX_PACKET_SIZE             (512)
 #define SPARRAW_EVENT_MAX_MAILBOX   (10)
 #define SPARRAW_EVENT_BUF_SIZE      (MAX_PACKET_SIZE*SPARRAW_EVENT_MAX_MAILBOX)
 #define SPARRAW_BUFF_SIZE           (4096)
 
+#define NTT_COLOR_CODE_BLACK         0x4B
+#define NTT_COLOR_CODE_SILVER_WHITE  0x53
+#define NTT_COLOR_CODE_GOLD          0x4E
+#define NTT_COLOR_CODE_DEFAULT       NTT_COLOR_CODE_BLACK
+
+uint8_t g_ntt_color_code = NTT_COLOR_CODE_DEFAULT;
+
+static bool ntt_color_code_is_valid(uint8_t color)
+{
+    return (color == NTT_COLOR_CODE_BLACK) ||
+           (color == NTT_COLOR_CODE_SILVER_WHITE) ||
+           (color == NTT_COLOR_CODE_GOLD);
+}
 typedef struct {
     uint8_t     devId;
     uint8_t     event;
@@ -680,20 +697,14 @@ void handleFactoryCmdSys(const uint8_t *data, uint16_t len)
 }
 
 
-extern "C" uint8_t aiWangGetEarBudsColor(void) {
-    struct nvrecord_env_t *nvrecord_env;
-    nv_record_env_get(&nvrecord_env);
-    return nvrecord_env->color_data;
+extern "C" uint8_t aiWangGetEarBudsColor(void)
+{
+    return ntt_color_code_nv_get();
 }
 
-void aiWangSetEarBudsColor(uint8_t color){
-    struct nvrecord_env_t *nvrecord_env;
-    nv_record_env_get(&nvrecord_env);
-    if (nvrecord_env->color_data != color)
-    {
-		nvrecord_env->color_data = color;
-		nv_record_env_set(nvrecord_env);
-    }
+void aiWangSetEarBudsColor(uint8_t color)
+{
+    ntt_color_code_nv_set(color);
 }
 
 void handleFactoryCmdAudio(const uint8_t *data, uint16_t len)
@@ -1287,6 +1298,59 @@ void key_function_execute(function_t func)
 		default: printf(">>> No function assigned\n"); break;
 	}
 }
+
+extern "C" uint8_t ntt_color_code_nv_get(void)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env)
+    {
+        TRACE(0, "[COLOR_CODE][GET] color_data=0x%02X",
+              nvrecord_env->color_data);
+
+        switch (nvrecord_env->color_data)
+        {
+            case NTT_COLOR_CODE_BLACK:
+            case NTT_COLOR_CODE_SILVER_WHITE:
+            case NTT_COLOR_CODE_GOLD:
+                return nvrecord_env->color_data;
+        }
+    }
+
+    return NTT_COLOR_CODE_BLACK;
+}
+
+extern "C" void ntt_color_code_nv_set(uint8_t color)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    if (!ntt_color_code_is_valid(color))
+    {
+        TRACE(0, "[COLOR_CODE][SET] invalid=0x%02X", color);
+        return;
+    }
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env)
+    {
+        TRACE(0, "[COLOR_CODE][SET] old=0x%02X new=0x%02X",
+              nvrecord_env->color_data,
+              color);
+
+        if (nvrecord_env->color_data != color)
+        {
+            nvrecord_env->color_data = color;
+            nv_record_env_set(nvrecord_env);
+        }
+
+        TRACE(0, "[COLOR_CODE][SET] readback=0x%02X",
+              nvrecord_env->color_data);
+    }
+}
+
 /*==============================================================================
  * 5. 按键事件处理：判断并调用相关函数
  *----------------------------------------------------------------------------*/
@@ -1570,6 +1634,44 @@ POSSIBLY_UNUSED static void sparraw_rx_cmd_parse(const uint8_t *data, uint16_t l
    }
 }
 
+static void sparraw_handle_set_color_code_cmd(const uint8_t *data, uint16_t len)
+{
+    uint8_t color_code;
+
+    if ((data == NULL) || (len < 1))
+    {
+        TRACE(0, "[COLOR_CODE][RX] invalid");
+        return;
+    }
+
+    /*
+     * APP packet:
+     * 50 00 08 73 70 61 72 72 6F 77 XX
+     *
+     * Last byte is color code:
+     * Black        0x4B
+     * Silver White 0x53
+     * Gold         0x4E
+     */
+    color_code = data[len - 1];
+
+    TRACE(0, "[COLOR_CODE][RX] color=0x%02X", color_code);
+
+    if (!ntt_color_code_is_valid(color_code))
+    {
+        TRACE(0, "[COLOR_CODE][RX] invalid color=0x%02X", color_code);
+        return;
+    }
+
+    ntt_color_code_nv_set(color_code);
+    ntt_ble_adv_refresh_data();
+#ifdef IBRT
+	app_ibrt_customif_cmd_sync_color_code(color_code);
+#endif
+
+    TRACE(0, "[COLOR_CODE][RX] save done color=0x%02X", color_code);
+}
+
 static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len)
 {
     uint16_t i;
@@ -1590,6 +1692,12 @@ static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len)
 
     TRACE(0, "[SPARROW_RX] payload:");
     DUMP8("%02X ", data, len);
+
+	if (data[0] == SET_COLOR_CODE)
+    {
+        sparraw_handle_set_color_code_cmd(data, len);
+        return;
+    }
 
     for (i = 0; i < aiWangCmdTypesCount; i++)
     {
@@ -1928,6 +2036,47 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			TRACE(0, "FW Version Len=%d", read_send_data[1]);
     		TRACE(0, "FW Version Send=%s", &read_send_data[2]);
 			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,read_send_data, strlen((char*)version)+2);		
+			break;
+		}
+		case SET_COLOR_CODE:
+		{
+			uint8_t color_code = NTT_COLOR_CODE_DEFAULT;
+
+			/*
+			* Current API command:
+			* 50 00 08 73 70 61 72 72 6F 77 04
+			*
+			* Since sparraw_event_read_handle() currently has no RX buffer,
+			* temporarily map old APP color index:
+			*   0x04 -> Black 0x4B
+			*
+			* Later APP v3.7 should send direct color code:
+			*   Black        0x4B
+			*   Silver White 0x53
+			*   Gold         0x4E
+			*/
+			color_code = NTT_COLOR_CODE_BLACK;
+
+			if (!ntt_color_code_is_valid(color_code))
+			{
+				TRACE(0, "[COLOR_CODE][SET] invalid color=0x%02X", color_code);
+				color_code = NTT_COLOR_CODE_DEFAULT;
+			}
+
+			ntt_color_code_nv_set(color_code);
+			ntt_ble_adv_refresh_data();
+
+			TRACE(0, "[COLOR_CODE][SET] save color=0x%02X", color_code);
+
+			read_send_data[0] = 0x00;
+			read_send_data[1] = 1;
+			read_send_data[2] = color_code;
+
+			sparraw_read_rsp_msg(SET_COLOR_CODE,
+								param->aw_connhdl,
+								param->aw_token,
+								read_send_data,
+								3);
 			break;
 		}
 		case FACTORY_COMMAND_SYS:{
