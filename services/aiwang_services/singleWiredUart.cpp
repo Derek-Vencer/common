@@ -70,7 +70,7 @@
 // 串口空闲定时器
 static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
-#define UART_IDLE_TIMEOUT_MS 5000
+#define UART_IDLE_TIMEOUT_MS 2000
 // 空闲超时回调函数
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
@@ -88,6 +88,7 @@ bool ntt_case_open_pending = false;
 //#define DISABLE_GOC_UART_LOG
 static void wired_uart_remove_all_phone_paired_list(void);
 extern void handleSetEqIndex(uint8_t index);
+extern "C" void ntt_audio_output_mute_refresh(void);
 //static void box_battery_nv_reset(void);
 
 #ifdef DISABLE_GOC_UART_LOG
@@ -1012,9 +1013,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 	// 重置空闲定时器
 	if (uart_idle_timer_id != NULL) {
 		set_er_inbox_status(1);
+        ntt_audio_output_mute_refresh();
 		osTimerStop(uart_idle_timer_id);
 		osTimerStart(uart_idle_timer_id, UART_IDLE_TIMEOUT_MS);
-		//printf("UART idle timer reset\n");
+		//DBGPRINT("UART idle timer reset\n");
 	}
 	else{
 		uart_idle_detection_init();
@@ -1190,7 +1192,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1321,8 +1323,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         g_case_state = 1;
         boxChargerStatus.boxIsOpen = true;
-        boxChargerStatus.needOpenEarbuds = true;
-
+        boxChargerStatus.needOpenEarbuds = true;        
         earBudsCloseOff_PogonIn_StopTimer();
 
         DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
@@ -1383,7 +1384,7 @@ static void uart_idle_timeout_callback(void const *argument)
     DBGPRINT("UART idle timeout detected! No data received for %dms\n", UART_IDLE_TIMEOUT_MS);
     aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
-	
+	ntt_audio_output_mute_refresh();
 	osTimerDelete(uart_idle_timer_id);
 	uart_idle_timer_id = NULL;
     // 调用其他函数

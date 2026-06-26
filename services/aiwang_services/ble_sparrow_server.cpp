@@ -1953,6 +1953,12 @@ void set_er_inbox_status(uint8_t status)
 {
 	er_inbox = status;
 }
+
+extern "C" uint8_t get_er_inbox_status(void)
+{
+    return er_inbox;
+}
+
 void sparraw_rx_thread_init(void)
 {
     TRACE(0,"[%s] %d ",__func__, sizeof(aiWangCmdTypes)/sizeof(aiWangCmdTypes[0]));
