@@ -53,6 +53,8 @@
 #include "app_tws_profile_sync.h"
 #include "bts_bt_if.h"
 #include "bts_ibrt_profile_cmd_handler.h"
+#include "app_ibrt_customif_cmd.h"
+
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -556,6 +558,7 @@ static void ntt_tws_connected_profile_sync_timer_handler(void const *param)
         "[NTT_PROFILE_SYNC] TWS profiles connected delayed check timer");
 
     ntt_profile_sync_retry_start_for_current_mobile();
+    ntt_master_sync_all_user_settings_to_peer();
 }
 
 osTimerDef(NTT_TWS_CONNECTED_PROFILE_SYNC_TIMER,
