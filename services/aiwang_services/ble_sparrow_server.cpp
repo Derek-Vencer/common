@@ -324,7 +324,6 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     uint8_t leftBattery  = 0;
     uint8_t rightBattery = 0;
     uint8_t batteryArray[3] = {0};
-    uint8_t read_send_data[20] = {0};
 
     if ((data == NULL) || (len == 0))
     {
@@ -336,12 +335,6 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     localBattery = app_battery_current_level();
     peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
     boxBattery   = getBoxChargerBattery();
-
-	TRACE(0,
-      "[BAT][PEER] tws=%d peer=%d valid=%d",
-      twsConnected,
-      peerBattery,
-      peerValid);
 
     /* 電池尚未更新完成 */
     if ((localBattery > 100) || (boxBattery > 100))
@@ -379,15 +372,17 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     leftBattery  = localBattery;
     rightBattery = peerValid ? peerBattery : 0;
 #endif
-
+	TRACE(0,
+      "[BAT][PEER] tws=%d peer=%d valid=%d",
+      twsConnected,
+      peerBattery,
+      peerValid);
+      
     batteryArray[0] = leftBattery;
     batteryArray[1] = rightBattery;
     batteryArray[2] = boxBattery;
 
-    read_send_data[1] = 3;
-    memcpy(&read_send_data[2], batteryArray, 3);
-
-    sparraw_tx_msg(0x31, read_send_data, 5);
+    sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray));
 }
 
 void handleGetDeviceName(const uint8_t *data, uint16_t len)
