@@ -74,9 +74,12 @@ static osTimerId uart_idle_timer_id = NULL;
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
 uint8_t getPeerBattery(void);
+static uint8_t g_case_state = 1;   // 1=open, 0=close
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
+extern void earBudsCloseOff_PowerOff_StartTimer(void);
+
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 
@@ -157,6 +160,7 @@ extern void app_tws_ibrt_update_info(ibrt_role_e ibrtRole,bt_bdaddr_t *ibrtPeerA
 extern void aiWangSetBoxVersion(uint8_t *data, uint8_t len);
 
 extern void earBudsCloseOff_PogonIn_StartTimer(void);
+extern void earBudsCloseOff_PogonIn_StopTimer(void);
 
 #define LEFT_BUDS  0
 #define RIGHT_BUDS 1
@@ -441,20 +445,18 @@ static void wired_uart_get_battery_level(void)
     raw_level = app_battery_current_level();
 
 #if defined(IBRT)
-    DBGPRINT("[EAR_POWER][TWS] connected=%d",
-            bts_tws_if_is_tws_link_connected());
+    static int8_t s_last_tws_connected = -1;
 
-    DBGPRINT("[EAR_POWER][PEER] battery=%d",
-            app_ibrt_customif_get_tws_peer_battery_level());
+    bool tws_connected = bts_tws_if_is_tws_link_connected();
 
-    DBGPRINT("[EAR_POWER][TWS] connected=%d role_right=%d",
-            bts_tws_if_is_tws_link_connected(),
-            app_ibrt_if_is_right_side());
-    DBGPRINT("[BAT_SYNC][EAR_POWER_TRIGGER] local=%d", raw_level);
+    if (s_last_tws_connected != tws_connected)
+    {
+
+        s_last_tws_connected = tws_connected;
+    }
+
+
     app_ibrt_customif_cmd_sync_battery_level(raw_level);
-    DBGPRINT("[EAR_POWER][ROLE] local=%d peer=%d",
-            app_battery_current_level(),
-            getPeerBattery());
 #endif
 
     if (raw_level < 0)
@@ -497,17 +499,6 @@ static void wired_uart_get_battery_level(void)
     }
 
     buff[4] = crc8(buff, 4);
-
-    DBGPRINT("[EAR_POWER][SRC] raw_level=%d report_level=%d pair_status=%d",
-             raw_level,
-             report_level,
-             pair_status);
-
-    DBGPRINT("[EAR_POWER][TX] 55 AA %02X %02X %02X",
-             buff[2],
-             buff[3],
-             buff[4]);
-
     communication_send_buf(buff, 5);
 }
 
@@ -627,10 +618,6 @@ static void box_battery_nv_load(void)
     box_battery_cache_valid = (box_battery_nv_cache <= 100);
 
     box_battery_nv_loaded = true;
-
-    DBGPRINT("[BOX_BAT][NV_LOAD] box=%d valid=%d",
-             box_battery_nv_cache,
-             box_battery_cache_valid);
 }
 
 static void box_battery_nv_save(uint8_t box_battery)
@@ -639,7 +626,6 @@ static void box_battery_nv_save(uint8_t box_battery)
 
     if (box_battery > 100)
     {
-        DBGPRINT("[BOX_BAT][NV_SKIP] invalid=%d", box_battery);
         return;
     }
 
@@ -647,7 +633,6 @@ static void box_battery_nv_save(uint8_t box_battery)
 
     if (box_battery_nv_cache == box_battery)
     {
-        DBGPRINT("[BOX_BAT][NV_KEEP] box=%d", box_battery);
         return;
     }
 
@@ -665,8 +650,6 @@ static void box_battery_nv_save(uint8_t box_battery)
 
     box_battery_nv_cache = box_battery;
     box_battery_cache_valid = true;
-
-    DBGPRINT("[BOX_BAT][NV_SAVE] box=%d", box_battery);
 }
 
 static uint8_t box_battery_nv_get(void)
@@ -690,14 +673,12 @@ uint8_t getBoxChargerBattery(void)
     nv_box_battery = box_battery_nv_get();
     if (nv_box_battery <= 100)
     {
-        DBGPRINT("[BOX_BAT][NV_GET] box=%d", nv_box_battery);
         return nv_box_battery;
     }
 
     tws_box_battery = app_ibrt_customif_get_tws_peer_box_battery_level();
     if (tws_box_battery <= 100)
     {
-        DBGPRINT("[BOX_BAT][TWS_GET] box=%d", tws_box_battery);
         return tws_box_battery;
     }
 
@@ -729,28 +710,17 @@ uint8_t getPeerBattery(void)
 void aiwang_box_battery_update_enable(bool enable)
 {
     box_battery_update_enable = enable;
-
-    DBGPRINT("[BOX_BAT][UPDATE_ENABLE] enable=%d valid=%d box=%d",
-            box_battery_update_enable,
-            box_battery_cache_valid,
-            boxChargerStatus.boxChargerBattery);
 }
 
 static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
 {
     if ((data == NULL) || (len < 3))
     {
-        DBGPRINT("[BOX_BAT][RX] invalid len=%d", len);
         return;
     }
 
     if (!box_battery_update_enable && box_battery_cache_valid)
     {
-        DBGPRINT("[BOX_BAT][KEEP] old=%d new=%d left=%d right=%d",
-                boxChargerStatus.boxChargerBattery,
-                data[0],
-                data[1],
-                data[2]);
         return;
     }
 
@@ -763,17 +733,15 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
 
     box_battery_nv_save(data[0]);
 
-    DBGPRINT("[EAR_POWER][TWS] connected=%d",
-        bts_tws_if_is_tws_link_connected());
+    static int8_t s_last_tws_connected = -1;
 
-    DBGPRINT("[BOX_BAT][SAVE] box=%d left=%d right=%d update=%d",
-            boxChargerStatus.boxChargerBattery,
-            boxChargerStatus.leftEarBudsBattery,
-            boxChargerStatus.rightEarBudsBattery,
-            box_battery_update_enable);
+    bool tws_connected = bts_tws_if_is_tws_link_connected();
 
-    app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
-    
+    if (s_last_tws_connected != tws_connected)
+    {
+
+        s_last_tws_connected = tws_connected;
+    }
 
 }
 
@@ -951,24 +919,32 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 	}
 		
 
-    //DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
+    static uint8_t s_last_cmd_event = 0xFF;
+
+    if (s_last_cmd_event != cmd_event)
+    {
+
+        s_last_cmd_event = cmd_event;
+    }
+
 	uart_rx_handle_data_count = 0;
 	
-    boxChargerStatus.boxIsOpen = true;
     switch(cmd_event)
     {
-    case CMD_CASE_STATE:
-         {
-        	 break;
-         }
     case CMD_HANDSHAKE :		  //Handshake
          {
         	 break;
          }
-    case CMD_GET_STATE : 		  //Get headphone status
-         {
-        	 break;
-         }
+    case CMD_CASE_STATE:
+    case CMD_GET_STATE:
+        {
+            /*
+            * Current charging box firmware does not support real case-state query.
+            * Ignore this command for now.
+            */
+            DBGPRINT("[CASE_STATE] ignored, box query not supported");
+            break;
+        }
     case CMD_GET_MAC   :  		  //Obtain the MAC address of the earphones
          {
              if (operateLeftOrRight == isRightEarbuds)
@@ -980,9 +956,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
          }
     case CMD_GET_EAR_POWER:               //Get headphone battery level
         {
-            DBGPRINT("[EAR_POWER][REQ] CMD_GET_EAR_POWER operate=%d isRight=%d",
-                    operateLeftOrRight,
-                    isRightEarbuds);
 
             if (isRightEarbuds)
             {
@@ -1011,66 +984,84 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
     	    break;
         }
-    case CMD_POWER_OFF:	         //Headphones enter shipping
+    case CMD_POWER_OFF:          // Headphones enter shipping / power off
         {
-        	boxChargerStatus.boxIsOpen = false;
-            boxChargerStatus.needOpenEarbuds = false;
-            app_shutdown();
+            DBGPRINT("[POWER_OFF] received, wait 1.6s and check charger state");
+
+            /*
+            * Do not directly set needOpenEarbuds = false.
+            * Do not shutdown immediately.
+            * Final decision is based on charger contact status after 1.6s.
+            */
+            earBudsCloseOff_PowerOff_StartTimer();
+
+            break;
         }
-    	break;
     case CMD_OPEN_CASE:
         {
-        	printf("CMD_OPEN_CASE!!!");
+            g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
-        	wired_uart_get_battery_level();
-        	osDelay(10);
-            //hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
-            //hal_sw_bootmode_set(HAL_SW_BOOTMODE_SINGLE_LINE_DOWNLOAD);
-            //pmu_reboot();
-        	//app_reset();
-        }
-    	break;
-    case CMD_CLOSE_CASE:
-        {
-          printf("CMD_CLOSE_CASE poweroff!!!");
-          boxChargerStatus.boxIsOpen = false;
-          wired_uart_get_battery_level();
-          if( app_is_stack_ready())
-          {
-#ifndef BLE_ONLY_ENABLED
-        int activeCons = 0;
-        int active_phone_cons = 0;
-        int activeSourceCons = 0;
 
-        (void)activeCons;
-        (void)active_phone_cons;
-        (void)activeSourceCons;
-			//fixed only count the phone count,except tws
-			activeCons = app_bt_get_active_cons();
-			active_phone_cons = app_bt_count_mobile_link();
-			activeSourceCons = btif_me_get_source_activeCons();
-			DBGPRINT("CMD_CLOSE_CASE activeCons==%d activeSourceCons=%d active_phone_cons=%d\n", activeCons, activeSourceCons, active_phone_cons);
-#ifdef IBRT
-			if (bts_tws_if_is_tws_link_connected())
-			{
-				//app_ibrt_customif_cmd_sync_poweroff_shutdown(true);
-				uint8_t cmd_sync_poweroff_shutdown[1];
-				cmd_sync_poweroff_shutdown[0] = 1;
-				DBGPRINT("%s poweroff_flag true",__func__);
-				tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_poweroff_shutdown, 1);
-				osDelay(60);
-		   }
-#endif //IBRT
-#endif //BLE_ONLY_ENABLED
-          }
-          osDelay(30);
-          
-          boxChargerStatus.needOpenEarbuds = false;
-          earBudsCloseOff_PogonIn_StartTimer();
-          //app_shutdown();
+            earBudsCloseOff_PogonIn_StopTimer();
+
+            DBGPRINT("[CASE] OPEN -> cancel shutdown");
         }
-    	break;
+        break;
+
+    case CMD_CLOSE_CASE:
+    {
+        DBGPRINT("[CASE] CLOSE received");
+
+        /*
+        * Do not shutdown immediately.
+        * Mark close state and start delayed check.
+        * If CMD_OPEN_CASE comes before timer expires,
+        * CMD_OPEN_CASE will stop the timer.
+        */
+        g_case_state = 0;
+        boxChargerStatus.boxIsOpen = false;
+        boxChargerStatus.needOpenEarbuds = false;
+
+        wired_uart_get_battery_level();
+
+        if (app_is_stack_ready())
+        {
+    #ifndef BLE_ONLY_ENABLED
+            int activeCons = 0;
+            int active_phone_cons = 0;
+            int activeSourceCons = 0;
+
+            activeCons = app_bt_get_active_cons();
+            active_phone_cons = app_bt_count_mobile_link();
+            activeSourceCons = btif_me_get_source_activeCons();
+
+            DBGPRINT("CMD_CLOSE_CASE activeCons=%d activeSourceCons=%d active_phone_cons=%d",
+                    activeCons,
+                    activeSourceCons,
+                    active_phone_cons);
+
+    #ifdef IBRT
+            if (bts_tws_if_is_tws_link_connected())
+            {
+                uint8_t cmd_sync_poweroff_shutdown[1];
+
+                cmd_sync_poweroff_shutdown[0] = 1;
+
+
+                tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+                                cmd_sync_poweroff_shutdown,
+                                1);
+            }
+    #endif
+    #endif
+        }
+
+
+        earBudsCloseOff_PogonIn_StartTimer();
+    }
+    break;
+
     case CMD_EAR_RESET: //fatory
         {
         	//aiWang_remove_all_paired_list();  // Removed: deletes ALL pairings including TWS
@@ -1146,36 +1137,40 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	  break;
       }
     case CMD_SEND_BOX_BATTERY_LEVEL:
-       {
-    	   if (operateLeftOrRight == isRightEarbuds)
-    	   {
-    		   wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
-    	   }
-    	   break;
-       }
+        {
+            if (operateLeftOrRight == isRightEarbuds)
+            {
+                wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+            }
+            break;
+        }
     case CMD_SEND_DUT_MODE:
-      {
-		   if (operateLeftOrRight == isRightEarbuds)
-		   {
-			   DBGPRINT("CMD_SEND_DUT_MODE");
-			   wired_uart_send_cmd_ack_ok();
-			   osDelay(20);
-			   communication_stop();
-			   osDelay(10);
-			   hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
-			   app_factorymode_enter();
-		   }
-      }
-      break;
+        {
+            if (operateLeftOrRight == isRightEarbuds)
+            {
+                DBGPRINT("CMD_SEND_DUT_MODE");
+                wired_uart_send_cmd_ack_ok();
+                osDelay(20);
+                communication_stop();
+                osDelay(10);
+                hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
+                app_factorymode_enter();
+            }
+        }
+        break;
     case CMD_SEND_EAR_PUTIN:
-	  {
-		  DBGPRINT("CMD_SEND_EAR_PUTIN");
-          aiwang_box_battery_update_enable(true);
-          boxChargerStatus.needOpenEarbuds = true;
-		  wired_uart_send_cmd_ack_ok();
-		  //disconnected_device(true, BT_DEVICE_ID_1);
-	  }
-      break;
+    {
+        g_case_state = 1;
+        boxChargerStatus.boxIsOpen = true;
+        boxChargerStatus.needOpenEarbuds = true;
+
+        earBudsCloseOff_PogonIn_StopTimer();
+
+        DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
+
+        wired_uart_send_cmd_ack_ok();
+    }
+    break;
     default:
        break;
     }
