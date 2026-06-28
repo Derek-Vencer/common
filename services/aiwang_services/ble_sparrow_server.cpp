@@ -174,7 +174,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.1.4" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.1.5" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -1253,46 +1253,48 @@ const key_map_entry_t s_key_default_map[21]{
 // 初始化默认映射
 static void keymap_init_default(void)
 {
-    uint8_t key_number = 0;
-
-    handleGetKeyMapNumber(&key_number);
-
-    if ((key_number == 0) || (key_number > 20))
-    {
-        TRACE(0, "[KEYMAP] NV empty, write default to NV");
-
-        s_key_map_count = 20;
-
-        for (uint8_t i = 0; i < 20; i++)
-        {
-            uint8_t key_action = s_key_default_map[i].actions;
-            uint8_t key_func   = s_key_default_map[i].function;
-
-            s_key_map[i].actions  = key_action;
-            s_key_map[i].function = key_func;
-
-            handleSetKeyMapActionAndFunc(i, key_action, key_func);
-        }
-
-        handleSetKeyMapNumber(20);
-    }
-    else
-    {
-        s_key_map_count = key_number;
-
-        for (uint8_t i = 0; i < key_number; i++)
-        {
-            uint8_t key_action = 0;
-            uint8_t key_func   = 0;
-
-            handleGetKeyMapActionAndFunc(i, &key_action, &key_func);
-
-            s_key_map[i].actions  = key_action;
-            s_key_map[i].function = key_func;
-        }
-    }
-
-    TRACE(0, "[KEYMAP] init count=%d", s_key_map_count);
+#if 0
+    s_key_map_count = 0;
+    // 音乐模式
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_SINGLE),      .function = FUNC_PLAY_PAUSE };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_DOUBLE),      .function = FUNC_NEXT_SONG };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_TRIPLE),      .function = FUNC_PREV_SONG };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_HOLD_2S),     .function = FUNC_VOICE_ASSIST };
+    // 通话模式
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_SINGLE),            .function = FUNC_ACCEPT_CALL };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_DOUBLE),            .function = FUNC_REJECT_CALL };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_HOLD_2S),           .function = FUNC_VOICE_ASSIST };
+    // 左右方向
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_LEFT | CLICK_SINGLE),            .function = FUNC_VOLUME_DOWN };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_LEFT | CLICK_HOLD_2S),           .function = FUNC_PREV_SONG };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_RIGHT | CLICK_SINGLE),           .function = FUNC_VOLUME_UP };
+    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_RIGHT | CLICK_HOLD_2S),          .function = FUNC_NEXT_SONG };
+#endif
+	uint8_t key_number = 0;
+	handleGetKeyMapNumber(&key_number);
+	s_key_map_count = key_number;
+	if(key_number == 0)
+	{
+		for(int i = 0;i<20;i++)
+		{
+			uint8_t key_action = s_key_default_map[i].actions;
+			uint8_t key_func = s_key_default_map[i].function;
+			
+			s_key_map[i] = (key_map_entry_t){ .actions = key_action,      .function = key_func };
+		}
+		s_key_map_count = 20;
+		//printf("@@key_number usr defaule\n");
+	}
+	else{
+		for(int i = 0;i<key_number;i++)
+		{
+			uint8_t key_action = 0;
+			uint8_t key_func = 0;
+			handleGetKeyMapActionAndFunc(i,&key_action,&key_func);
+			
+			s_key_map[i] = (key_map_entry_t){ .actions = key_action,      .function = key_func };
+		}
+	}
 }
 
 // 保存整个映射表（例如写入 Flash / EEPROM）

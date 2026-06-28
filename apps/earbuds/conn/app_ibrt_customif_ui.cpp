@@ -402,196 +402,6 @@ void besui_hfp_state_event(const bt_bdaddr_t* addr, ibrt_conn_hfp_state_change *
 }
 #endif
 
-#ifdef IBRT
-static bool ntt_tws_reconnect_test_done = false;
-#endif
-
-#ifdef IBRT
-#define NTT_PROFILE_SYNC_RETRY_MS        100
-#define NTT_PROFILE_SYNC_RETRY_MAX       1
-
-static osTimerId ntt_profile_sync_retry_timer = NULL;
-static bt_bdaddr_t ntt_profile_sync_retry_addr = {{0}};
-static uint8_t ntt_profile_sync_retry_count = 0;
-
-static void ntt_profile_sync_retry_timer_handler(void const *param)
-{
-    ibrt_mobile_info_t *p_mobile_info = NULL;
-
-    if (app_ibrt_middleware_is_ui_slave())
-    {
-        EARBUDS_TRACE(0, "[NTT_PROFILE_SYNC] retry stop, role is slave");
-        return;
-    }
-
-    if (app_ibrt_sync_a2dp_status_onprocess(&ntt_profile_sync_retry_addr))
-    {
-        EARBUDS_TRACE(0, "[NTT_PROFILE_SYNC] retry stop, sync already onprocess");
-        return;
-    }
-
-    if (bts_bt_if_is_profile_connecting(&ntt_profile_sync_retry_addr) ||
-        bts_bt_if_is_any_profile_connecting())
-    {
-        ntt_profile_sync_retry_count++;
-
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] retry wait profile connecting count=%d profile_connecting=%d any=%d",
-            ntt_profile_sync_retry_count,
-            bts_bt_if_is_profile_connecting(&ntt_profile_sync_retry_addr),
-            bts_bt_if_is_any_profile_connecting());
-
-        if (ntt_profile_sync_retry_count < NTT_PROFILE_SYNC_RETRY_MAX)
-        {
-            osTimerStart(ntt_profile_sync_retry_timer, NTT_PROFILE_SYNC_RETRY_MS);
-            return;
-        }
-
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] force profile exchange after retry count=%d",
-            ntt_profile_sync_retry_count);
-    }
-
-    p_mobile_info = bts_bt_sink_conn_get_mobile_info_by_addr(&ntt_profile_sync_retry_addr);
-
-    EARBUDS_TRACE(0,
-        "[NTT_PROFILE_SYNC] retry profile ready mobile_info=%p count=%d",
-        p_mobile_info,
-        ntt_profile_sync_retry_count);
-
-    if (p_mobile_info != NULL)
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] TWS reconnect test begin mobile_info=%p done=%d",
-            p_mobile_info,
-            ntt_tws_reconnect_test_done);
-
-        if (!ntt_tws_reconnect_test_done)
-        {
-            ntt_tws_reconnect_test_done = true;
-
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] force disconnect TWS ACL link for resync test");
-
-            bts_tws_if_disconnect_acl_link();
-        }
-        else
-        {
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] TWS reconnect test already done, skip");
-        }
-
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] TWS reconnect test end");
-    }
-}
-
-osTimerDef(NTT_PROFILE_SYNC_RETRY_TIMER, ntt_profile_sync_retry_timer_handler);
-
-static void ntt_profile_sync_retry_start(const bt_bdaddr_t *addr)
-{
-    if (addr == NULL)
-    {
-        return;
-    }
-
-    if (ntt_profile_sync_retry_timer == NULL)
-    {
-        ntt_profile_sync_retry_timer =
-            osTimerCreate(osTimer(NTT_PROFILE_SYNC_RETRY_TIMER), osTimerOnce, NULL);
-    }
-
-    if (ntt_profile_sync_retry_timer == NULL)
-    {
-        EARBUDS_TRACE(0, "[NTT_PROFILE_SYNC] retry timer create failed");
-        return;
-    }
-
-    memcpy(&ntt_profile_sync_retry_addr, addr, sizeof(bt_bdaddr_t));
-    ntt_profile_sync_retry_count = 0;
-
-    osTimerStop(ntt_profile_sync_retry_timer);
-    osTimerStart(ntt_profile_sync_retry_timer, NTT_PROFILE_SYNC_RETRY_MS);
-
-    EARBUDS_TRACE(0,
-        "[NTT_PROFILE_SYNC] retry start addr:%02x:%02x:*:*:*:%02x",
-        addr->address[0],
-        addr->address[1],
-        addr->address[5]);
-}
-
-static void ntt_profile_sync_retry_start_for_current_mobile(void)
-{
-    bt_bdaddr_t mobile_addr_list[BT_DEVICE_NUM] = {{{0}}};
-    uint8_t mobile_count = 0;
-
-    if (app_ibrt_middleware_is_ui_slave())
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] current mobile retry skip, role is slave");
-        return;
-    }
-
-    mobile_count = bts_bt_if_get_dev_connected_list(mobile_addr_list);
-
-    EARBUDS_TRACE(0,
-        "[NTT_PROFILE_SYNC] current mobile count=%d",
-        mobile_count);
-
-    if (mobile_count == 0)
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] no connected mobile, skip current mobile retry");
-        return;
-    }
-
-    ntt_profile_sync_retry_start(&mobile_addr_list[0]);
-}
-
-#define NTT_TWS_CONNECTED_PROFILE_SYNC_DELAY_MS    2000
-
-static osTimerId ntt_tws_connected_profile_sync_timer = NULL;
-
-static void ntt_tws_connected_profile_sync_timer_handler(void const *param)
-{
-    EARBUDS_TRACE(0,
-        "[NTT_PROFILE_SYNC] TWS profiles connected delayed check timer");
-
-    ntt_profile_sync_retry_start_for_current_mobile();
-    ntt_master_sync_all_user_settings_to_peer();
-}
-
-osTimerDef(NTT_TWS_CONNECTED_PROFILE_SYNC_TIMER,
-           ntt_tws_connected_profile_sync_timer_handler);
-
-static void ntt_tws_connected_profile_sync_delay_start(void)
-{
-    if (ntt_tws_connected_profile_sync_timer == NULL)
-    {
-        ntt_tws_connected_profile_sync_timer =
-            osTimerCreate(osTimer(NTT_TWS_CONNECTED_PROFILE_SYNC_TIMER),
-                          osTimerOnce,
-                          NULL);
-    }
-
-    if (ntt_tws_connected_profile_sync_timer == NULL)
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] TWS profiles connected delay timer create failed");
-        return;
-    }
-
-    osTimerStop(ntt_tws_connected_profile_sync_timer);
-    osTimerStart(ntt_tws_connected_profile_sync_timer,
-                 NTT_TWS_CONNECTED_PROFILE_SYNC_DELAY_MS);
-
-    EARBUDS_TRACE(0,
-        "[NTT_PROFILE_SYNC] TWS profiles connected delay timer start %d ms",
-        NTT_TWS_CONNECTED_PROFILE_SYNC_DELAY_MS);
-}
-
-#endif
-
 void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_state_change *state)
 {
     if (addr != NULL)
@@ -610,9 +420,27 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
         _close_some_chnls_when_both_a2dp_hfp_closed(addr, state->device_id);
     }
 
+#ifdef IBRT
+    bool is_slave = app_ibrt_middleware_is_ui_slave();
+    bool is_tws_connected = bts_ibrt_if_is_ibrt_link_connected(addr);
+
+        REL_LOG(0,
+            "[NTT_A2DP_CB] dev=%d state=%d slave=%d tws=%d",
+            state->device_id,
+            state->a2dp_state,
+            is_slave,
+            is_tws_connected);
+#endif
+
 #ifdef BESUI_BTMSG_EN
     besui_a2dp_state_event(addr, state);
 #endif
+    EARBUDS_TRACE(0,
+        "[NTT_A2DP][DBG] state=%d profile_connecting=%d any=%d streaming=%d",
+        state->a2dp_state,
+        addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
+        bts_bt_if_is_any_profile_connecting(),
+        app_bt_audio_count_streaming_a2dp());
     switch(state->a2dp_state)
     {
         case IBRT_CONN_A2DP_IDLE:
@@ -628,20 +456,6 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             break;
         case IBRT_CONN_A2DP_STREAMING:
         {
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] enter A2DP_STREAMING d%x addr:%02x:%02x:*:*:*:%02x slave=%d sync_onprocess=%d",
-                state->device_id,
-                addr ? addr->address[0] : 0,
-                addr ? addr->address[1] : 0,
-                addr ? addr->address[5] : 0,
-                app_ibrt_middleware_is_ui_slave(),
-                addr ? app_ibrt_sync_a2dp_status_onprocess(addr) : 0xff);
-
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] profile_connecting=%d any_profile_connecting=%d",
-                addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
-                bts_bt_if_is_any_profile_connecting());
-
             if (bts_ibrt_if_is_ibrt_link_connected(addr)) {
                 bt_drv_reg_op_afh_assess_en(false);
             } else {
@@ -649,40 +463,11 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             }
 
         #ifdef IBRT
-            if ((addr != NULL) &&
-                !app_ibrt_middleware_is_ui_slave())
-            {
-                ibrt_mobile_info_t *p_mobile_info =
-                    bts_bt_sink_conn_get_mobile_info_by_addr(addr);
-
-                EARBUDS_TRACE(0,
-                    "[NTT_PROFILE_SYNC] mobile_info=%p sync_onprocess=%d",
-                    p_mobile_info,
-                    app_ibrt_sync_a2dp_status_onprocess(addr));
-
-                if ((p_mobile_info != NULL) &&
-                    !app_ibrt_sync_a2dp_status_onprocess(addr) &&
-                    (app_bt_audio_count_streaming_a2dp() > 0))
-                {
-                    if (bts_bt_if_is_profile_connecting(addr) ||
-                        bts_bt_if_is_any_profile_connecting())
-                    {
-                        EARBUDS_TRACE(0,
-                            "[NTT_PROFILE_SYNC] profile still connecting, start retry");
-
-                        //ntt_profile_sync_retry_start(addr);
-                    }
-                    else
-                    {
-                        EARBUDS_TRACE(0,
-                            "[NTT_PROFILE_SYNC] profile ready, start profile exchange");
-
-                        //app_ibrt_conn_profile_data_exchange(p_mobile_info);
-                    }
-                }
-            }
+            REL_LOG(0,
+                "[NTT_A2DP_SYNC] A2DP_STREAMING dev=%d slave=%d, no manual sync",
+                state->device_id,
+                app_ibrt_middleware_is_ui_slave());
         #endif
-
             break;
         }
         case IBRT_CONN_A2DP_SUSPENED:
@@ -716,6 +501,12 @@ void app_ibrt_customif_hfp_callback(const bt_bdaddr_t* addr, ibrt_conn_hfp_state
 #ifdef BESUI_BTMSG_EN
     besui_hfp_state_event(addr, state);
 #endif
+    EARBUDS_TRACE(0,
+        "[NTT_HFP][DBG] state=%d profile_connecting=%d any=%d",
+        state->hfp_state,
+        addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
+        bts_bt_if_is_any_profile_connecting());
+
     switch(state->hfp_state)
     {
         case IBRT_CONN_HFP_SLC_DISCONNECTED:
@@ -790,6 +581,12 @@ void app_ibrt_customif_avrcp_callback(const bt_bdaddr_t* addr, ibrt_conn_avrcp_s
         EARBUDS_TRACE(0,"(d%x) custom_ui avrcp_status changed = %d addr is NULL",
             state->device_id, state->avrcp_state);
     }
+
+    EARBUDS_TRACE(0,
+        "[NTT_AVRCP][DBG] state=%d profile_connecting=%d any=%d",
+        state->avrcp_state,
+        addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
+        bts_bt_if_is_any_profile_connecting());
 
     switch(state->avrcp_state)
     {
@@ -895,6 +692,57 @@ void besui_tws_state_event(ibrt_conn_tws_conn_state_event *state, uint8_t reason
 }
 #endif
 
+#ifdef IBRT
+#define NTT_USER_SETTING_SYNC_DELAY_MS    10000
+
+static osTimerId ntt_user_setting_sync_timer = NULL;
+
+static void ntt_user_setting_sync_timer_handler(void const *param)
+{
+    if (!app_ibrt_middleware_is_ui_slave())
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_USER_SYNC] delayed sync user settings");
+
+        ntt_master_sync_all_user_settings_to_peer();
+    }
+    else
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_USER_SYNC] skip, role is slave");
+    }
+}
+
+osTimerDef(NTT_USER_SETTING_SYNC_TIMER,
+           ntt_user_setting_sync_timer_handler);
+
+static void ntt_user_setting_sync_delay_start(void)
+{
+    if (ntt_user_setting_sync_timer == NULL)
+    {
+        ntt_user_setting_sync_timer =
+            osTimerCreate(osTimer(NTT_USER_SETTING_SYNC_TIMER),
+                          osTimerOnce,
+                          NULL);
+    }
+
+    if (ntt_user_setting_sync_timer == NULL)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_USER_SYNC] delay timer create failed");
+        return;
+    }
+
+    osTimerStop(ntt_user_setting_sync_timer);
+    osTimerStart(ntt_user_setting_sync_timer,
+                 NTT_USER_SETTING_SYNC_DELAY_MS);
+
+    EARBUDS_TRACE(0,
+        "[NTT_USER_SYNC] delay start %d ms",
+        NTT_USER_SETTING_SYNC_DELAY_MS);
+}
+#endif
+
 void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *state, uint8_t reason_code)
 {
     EARBUDS_TRACE(0,"custom_ui tws acl state changed = %d with reason 0x%x role %d", state->state.acl_state, reason_code, state->current_role);
@@ -920,17 +768,15 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
         if (!app_ibrt_middleware_is_ui_slave())
         {
             EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] TWS profiles connected, start early reconnect check");
-
-            ntt_tws_connected_profile_sync_delay_start();
+                "[NTT_PROFILE_SYNC] TWS profiles connected, skip early profile sync test");
+            ntt_user_setting_sync_delay_start();
         }
 #endif
         break;
         case IBRT_CONN_ACL_DISCONNECTED:
         #ifdef IBRT
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] TWS ACL disconnected, reconnect test done=%d",
-                ntt_tws_reconnect_test_done);
+        EARBUDS_TRACE(0,
+            "[NTT_PROFILE_SYNC] TWS ACL disconnected");
         #endif
             break;
         case IBRT_CONN_ACL_CONNECTING_CANCELED:

@@ -1631,6 +1631,12 @@ int a2dp_audio_store_packet(uint8_t device_id, btif_media_header_t * header, uns
             a2dp_audio_context.audio_decoder.audio_decoder_preparse_packet(header, buf, len);
         }
 
+        AUDIOPLAYERS_TRACE(3,
+            "[A2DP_STORE] dev=%d seq=%d cb=%p",
+            device_id,
+            header->sequenceNumber,
+            a2dp_audio_detect_next_packet_callback);
+
         if (a2dp_audio_detect_next_packet_callback){
             a2dp_audio_detect_next_packet_callback(device_id, header, buf, len);
         }
@@ -2449,6 +2455,10 @@ int a2dp_audio_detect_next_packet_callback_register(A2DP_AUDIO_DETECT_NEXT_PACKE
     a2dp_audio_status_mutex_lock();
     a2dp_audio_detect_next_packet_callback = callback;
     a2dp_audio_status_mutex_unlock();
+
+    AUDIOPLAYERS_TRACE(1,
+        "[A2DP_DETECT_CB] register cb=%p",
+        callback);
 
     return 0;
 }
