@@ -79,10 +79,11 @@ extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 extern void earBudsCloseOff_PowerOff_StartTimer(void);
-
+extern bool ntt_manual_pairing_mode;
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
-
+extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
+bool ntt_case_open_pending = false;
 //#define DISABLE_GOC_UART_LOG
 
 #ifdef DISABLE_GOC_UART_LOG
@@ -1002,10 +1003,11 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
+            ntt_case_open_pending = true;
 
             earBudsCloseOff_PogonIn_StopTimer();
 
-            DBGPRINT("[CASE] OPEN -> cancel shutdown");
+
         }
         break;
 
@@ -1106,36 +1108,29 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	  app_shutdown();
     	  break;
        }
-    case  CMD_SET_EARBUD_ENTER_PAIR:
-      {
-    	  if (operateLeftOrRight == isRightEarbuds)
-    	  {
-    		   DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!", isRightEarbuds);
-#if 1
-			   enter_pair = 1;
-				enter_pair_count = 0;
-				set_pair_status(0);
-				set_er_discover_connectable_status(1);
-				app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
-				app_bt_reset_delay_power_off();
-    		   aiWang_disconnet_phone_enter_pairmode();
-#else
-    		   wired_uart_enter_pairmode();
-               if( 1 == isRightEarbuds) //Enter PairMode
-               {
-            	   app_ibrt_if_init_open_box_state_for_evb();
-                   app_ibrt_if_enter_pairing_after_tws_connected();
-               }
-               else
-               {
-	                app_ibrt_if_init_open_box_state_for_evb();
-	                app_ibrt_internal_enter_freeman_pairing();
-               }
-#endif
+    case CMD_SET_EARBUD_ENTER_PAIR:
+    {
+        if (operateLeftOrRight == isRightEarbuds)
+        {
+            DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!", isRightEarbuds);
 
-    	  }
-    	  break;
-      }
+            enter_pair = 1;
+            enter_pair_count = 0;
+
+            ntt_manual_pairing_mode = true;            
+
+            set_pair_status(0);
+            set_er_discover_connectable_status(1);
+
+            app_ibrt_if_init_open_box_state_for_evb();
+
+            app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+            app_bt_reset_delay_power_off();
+
+            aiWang_disconnet_phone_enter_pairmode();
+        }
+        break;
+    }
     case CMD_SEND_BOX_BATTERY_LEVEL:
         {
             if (operateLeftOrRight == isRightEarbuds)

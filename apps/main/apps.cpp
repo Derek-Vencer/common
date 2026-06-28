@@ -90,6 +90,7 @@
 #if defined(APP_USB_A2DP_SOURCE) && defined(BT_SOURCE)
 #include "app_bt_stream.h"
 #endif
+bool ntt_manual_pairing_mode = false;
 
 
 #ifdef BIS_SELFSCAN_ENABLED
