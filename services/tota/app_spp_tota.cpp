@@ -162,9 +162,6 @@ extern "C" void reset_programmer_state(unsigned char **buf, size_t *len);
 extern unsigned char *g_buf;
 extern size_t g_len;
 
-extern "C" bool sparrow_spp_api_is_cmd(const uint8_t *data, uint16_t len);
-extern "C" void sparrow_spp_api_rx_handler(const uint8_t *data, uint16_t len);
-
 static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote, bt_spp_event_t event, bt_spp_callback_param_t *param)
 {
     uint8_t *pData = (uint8_t *)param->rx_data_ptr;
@@ -172,21 +169,6 @@ static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote, bt_spp_eve
 
     TOTA_TRACE(2,"[%s]data receive length = %d", __func__, dataLen);
     TOTA_DUMP8("[0x%x]", pData, dataLen);
-
-#if defined(BESUI_COMM_EN)
-    /* SPP bridge for Sparrow GATT API.
-     * When App sends the same raw API packet through SPP, dispatch it to
-     * ble_sparrow_server.cpp and return the response through SPP.
-     * HAL_CMD/TOTA packets are kept in the original path.
-     */
-    if (sparrow_spp_api_is_cmd(pData, dataLen))
-    {
-        TOTA_TRACE(2, "[SPARROW_SPP_API] rx len=%d cmd=0x%02X", dataLen, pData[0]);
-        sparrow_spp_api_rx_handler(pData, dataLen);
-        return 0;
-    }
-#endif
-
 #if defined(APP_ANC_TEST)
     app_anc_tota_cmd_received(pData, (uint32_t)dataLen);
 #else

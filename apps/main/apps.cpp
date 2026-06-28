@@ -90,7 +90,7 @@
 #if defined(APP_USB_A2DP_SOURCE) && defined(BT_SOURCE)
 #include "app_bt_stream.h"
 #endif
-bool ntt_manual_pairing_mode = false;
+
 
 #ifdef BIS_SELFSCAN_ENABLED
 extern void app_bis_selfscan_cmd_init(void);
@@ -411,8 +411,6 @@ extern "C" {
 #include "charger_with_icp1205.h"
 extern void sparraw_service_init(void);
 extern bool aiWangBoxIsUsed(void);
-extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
-extern bool ntt_case_open_pending;
 //extern void charger_manager_start(void);
 
 #ifdef IBRT
@@ -481,20 +479,6 @@ void app_pair_timerout(void);
 void app_poweroff_timerout(void);
 void CloseEarphone(void);
 void wired_uart_communication_modual_init(void);
-
-uint8_t operateLeftOrRight = 0xFF;
-extern uint8_t isRightEarbuds;
-
-extern uint8_t enter_pair;
-extern uint8_t enter_pair_count;
-
-extern bool ntt_manual_pairing_mode;
-
-extern void set_pair_status(uint8_t status);
-extern void set_er_discover_connectable_status(uint8_t status);
-extern void aiWang_disconnet_phone_enter_pairmode(void);
-#define LEFT_BUDS   0
-#define RIGHT_BUDS  1
 
 typedef struct
 {
@@ -603,71 +587,25 @@ void app_10_second_timer_check(void)
     unsigned int i;
 
 #ifdef BESUI_TWS_EN
-    if (uicom.box_open_bat_det_flag)
+    if(uicom.box_open_bat_det_flag)
     {
-        BESUI_TRACE(0, "[UITIMER]fast get battery do not count++");
+        BESUI_TRACE(0,"[UITIMER]fast get battery do not count++");
         return;
     }
 #endif
 
-#ifdef IBRT
-    static uint8_t ntt_reconnect_retry = 0;
-
-    if (!app_ibrt_middleware_is_ui_slave())
-    {
-        if (ntt_manual_pairing_mode)
-        {
-            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] skip reconnect in manual pairing mode");
-        }
-        else if (btif_me_get_pendCons() != 0)
-        {
-            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] pending ACL exists, wait next timer");
-        }
-        else if (ntt_reconnect_retry < 30)
-        {
-            MAIN_TRACE(1,
-                "[NTT_TAKEOVER][TIMER] opening reconnect retry=%d",
-                ntt_reconnect_retry);
-
-            ntt_reconnect_retry++;
-
-            app_bt_profile_connect_manager_opening_reconnect();
-        }
-        else
-        {
-            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] reconnect retry limit reached");
-        }
-
-        if (app_bt_ibrt_has_mobile_link_connected() &&
-            btif_me_get_pendCons() == 0)
-        {
-            ntt_reconnect_retry = 0;
-        }
-    }
-#endif
-
-    for (i = 0; i < ARRAY_SIZE(app_10_second_array); i++)
-    {
-        if (timer->timer_en)
-        {
+    for(i = 0; i < ARRAY_SIZE(app_10_second_array); i++) {
+        if (timer->timer_en) {
             timer->timer_count++;
-
-#if 1
-            MAIN_TRACE(0, "[UITIMER]%s id %d count %d",
-                       __func__, i, timer->timer_count);
+#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+            MAIN_TRACE(0,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
 #endif
-
-            if (timer->timer_count >= timer->timer_period)
-            {
+            if (timer->timer_count >= timer->timer_period) {
                 timer->timer_en = 0;
-
                 if (timer->cb)
-                {
                     timer->cb();
-                }
             }
         }
-
         timer++;
     }
 }
@@ -1944,7 +1882,6 @@ WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 
 }
 
-
 void app_ibrt_init(void)
 {
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
@@ -2007,84 +1944,18 @@ void app_ibrt_init(void)
         else
     #endif
         {
-
         #if defined(IBRT_UI)
+        	MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
+            if(memcmp(&config.peer_addr.address[0],"\xFF\xFF\xFF\xFF\xFF\xFF",6)
+               && memcmp(&config.peer_addr.address[0],"\x00\x00\x00\x00\x00\x00",6))
             {
-                btif_device_record_t record1;
-                btif_device_record_t record2;
-                int record_count = nv_record_enum_latest_two_paired_dev(&record1, &record2);
-                uint8_t mobile_record_count = 0;
-
-                bool has_tws_peer =
-                    memcmp(&config.peer_addr.address[0], "\xFF\xFF\xFF\xFF\xFF\xFF", 6) &&
-                    memcmp(&config.peer_addr.address[0], "\x00\x00\x00\x00\x00\x00", 6);
-
-                if (record_count >= 1)
-                {
-                    if ((memcmp(record1.bdAddr.address, config.local_addr.address, 6) != 0) &&
-                        (memcmp(record1.bdAddr.address, config.peer_addr.address, 6) != 0))
-                    {
-                        mobile_record_count++;
-                    }
-                }
-
-                if (record_count >= 2)
-                {
-                    if ((memcmp(record2.bdAddr.address, config.local_addr.address, 6) != 0) &&
-                        (memcmp(record2.bdAddr.address, config.peer_addr.address, 6) != 0))
-                    {
-                        mobile_record_count++;
-                    }
-                }
-
-                MAIN_TRACE(3,
-                    "[NTT_PAIR] record_count=%d mobile_record_count=%d has_tws_peer=%d",
-                    record_count,
-                    mobile_record_count,
-                    has_tws_peer);
-
-                if (mobile_record_count == 0)
-                {
-                    uint8_t bt_local_addr[6] = {0};
-                    bool is_right = false;
-
-                    app_bt_get_local_device_address(bt_local_addr);
-                    is_right = (bt_local_addr[0] & 0x01) ? true : false;
-
-                    if (is_right)
-                    {
-                        MAIN_TRACE(0, "[NTT_PAIR] Right ear enter pairing mode");
-
-                        ntt_manual_pairing_mode = true;
-
-                        set_pair_status(0);
-                        set_er_discover_connectable_status(1);
-
-                        app_ui_enter_pairing_mode(0, false);
-
-                        osDelay(500);
-
-                        app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
-                    }
-                    else
-                    {
-                        MAIN_TRACE(0, "[NTT_PAIR] Left ear skip mobile pairing mode");
-                    }
-                }
-                else if (mobile_record_count == 1)
-                {
-                    MAIN_TRACE(0, "[NTT_PAIR] one mobile record, allow second phone pairing");
-
-                    app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
-                    // 或專案裡對應的 connectable/discoverable pairing API
-                }
-                else
-                {
-                    MAIN_TRACE(0, "[NTT_PAIR] two mobile records, disable pairing discoverable");
-
-                    app_bt_accessmode_set_req(BTIF_BAM_NOT_ACCESSIBLE);
-                }
+                //app_ibrt_start_power_on_tws_pairing();
             }
+            else
+            {
+            	MAIN_TRACE(0, "Not TWS Peers!!!");
+            }
+            app_ibrt_start_power_on_tws_pairing();
         #endif
         }
     #elif defined(POWER_ON_ENTER_FREEMAN_PAIRING_ENABLED)
@@ -2103,13 +1974,7 @@ void app_ibrt_init(void)
 #if defined(IBRT) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
     app_ibrt_internal_stack_is_ready();
 #endif
-    MAIN_TRACE(0, "[CASE] ntt_case_open_pending = %d",ntt_case_open_pending);
-    if (ntt_case_open_pending)
-    {
-        MAIN_TRACE(0, "[CASE] apply pending CASE_OPEN after IBRT stack ready");
-        app_ibrt_if_init_open_box_state_for_evb();
-        ntt_case_open_pending = false;
-    }
+
 #if defined(IBRT_UI) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
     app_tws_ibrt_ui_cmd_init();
 #endif

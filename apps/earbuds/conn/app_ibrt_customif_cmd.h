@@ -62,12 +62,12 @@ typedef enum
 #endif
 
 #if 1 //def BESUI_COMM_EN
-    APP_TWS_CMD_SYNC_SOMETHING   = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x14,
+    APP_TWS_CMD_SYNC_SOMETHING  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x14,
 
-    APP_TWS_CMD_SYNC_MUSIC_EQ    = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x15,
-    APP_TWS_CMD_SYNC_BUTTON_MAP  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x16,
-    APP_TWS_CMD_SYNC_BT_NAME     = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x17,
-    APP_TWS_CMD_SYNC_COLOR_CODE  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x18,
+	APP_TWS_CMD_SYNC_MUSIC_EQ  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x15,
+	APP_TWS_CMD_SYNC_BUTTON_MAP = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x16,
+	APP_TWS_CMD_SYNC_BT_NAME = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x17,
+
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -118,5 +118,5 @@ void set_tws_peer_battery_percent(uint8_t battery);
 uint8_t get_tws_peer_battery_percent(void);
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
-void ntt_master_sync_all_user_settings_to_peer(void);
+
 #endif

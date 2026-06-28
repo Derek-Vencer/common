@@ -741,7 +741,7 @@ static void af_dump_cfg()
 static void af_codec_dac1_output_gain_changed(float coef)
 {
     dac1_saved_output_coef = coef;
-    //AUDIOFLINGER_TRACE(1, "output_gain_change da1:%08d, final:%08d", (int32_t)(coef * 10000000), (int32_t)(dac1_saved_output_coef * 10000000));
+    AUDIOFLINGER_TRACE(1, "output_gain_change da1:%08d, final:%08d", (int32_t)(coef * 10000000), (int32_t)(dac1_saved_output_coef * 10000000));
 }
 
 void af_codec_dac1_set_algo_gain(float coef)

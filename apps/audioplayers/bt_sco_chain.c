@@ -35,7 +35,7 @@
 #endif
 #include "app_utils.h"
 #include "arm_math_ex.h"
-#include "audio_cfg.h"
+
 #if defined(SPEECH_ALGO_DSP)
 #include "app_mcpp.h"
 #endif
@@ -853,11 +853,6 @@ int speech_init2(int tx_sample_rate, int rx_sample_rate,
     // and call in apps.cpp: app_init()
     speech_cfg = (SpeechConfig *)speech_calloc(1, sizeof(SpeechConfig));
     speech_store_config(&speech_cfg_default);
-    if (ntt_dut_speech_tx_1mic_ns_bypass_get())
-    {
-        speech_cfg->tx_1mic_ns.bypass = 1;
-        speech_cfg->tx_1mic_ns.wdrc_enable = 0;
-    }
 
 #ifdef AUDIO_DEBUG
     speech_tuning_open();

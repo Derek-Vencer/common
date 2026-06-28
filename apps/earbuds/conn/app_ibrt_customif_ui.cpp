@@ -47,13 +47,6 @@
 #endif
 #include "ble_core_common.h"
 #include "bes_gap_api.h"
-#include "bts_tws_if.h"
-#include "bts_bt_conn.h"
-#include "bts_ibrt_conn.h"
-#include "app_tws_profile_sync.h"
-#include "bts_bt_if.h"
-#include "bts_ibrt_profile_cmd_handler.h"
-#include "app_ibrt_customif_cmd.h"
 
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
@@ -420,27 +413,9 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
         _close_some_chnls_when_both_a2dp_hfp_closed(addr, state->device_id);
     }
 
-#ifdef IBRT
-    bool is_slave = app_ibrt_middleware_is_ui_slave();
-    bool is_tws_connected = bts_ibrt_if_is_ibrt_link_connected(addr);
-
-        REL_LOG(0,
-            "[NTT_A2DP_CB] dev=%d state=%d slave=%d tws=%d",
-            state->device_id,
-            state->a2dp_state,
-            is_slave,
-            is_tws_connected);
-#endif
-
 #ifdef BESUI_BTMSG_EN
     besui_a2dp_state_event(addr, state);
 #endif
-    EARBUDS_TRACE(0,
-        "[NTT_A2DP][DBG] state=%d profile_connecting=%d any=%d streaming=%d",
-        state->a2dp_state,
-        addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
-        bts_bt_if_is_any_profile_connecting(),
-        app_bt_audio_count_streaming_a2dp());
     switch(state->a2dp_state)
     {
         case IBRT_CONN_A2DP_IDLE:
@@ -455,21 +430,14 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
             break;
         case IBRT_CONN_A2DP_STREAMING:
-        {
             if (bts_ibrt_if_is_ibrt_link_connected(addr)) {
                 bt_drv_reg_op_afh_assess_en(false);
             } else {
                 bt_drv_reg_op_afh_assess_en(true);
             }
-
-        #ifdef IBRT
-            REL_LOG(0,
-                "[NTT_A2DP_SYNC] A2DP_STREAMING dev=%d slave=%d, no manual sync",
-                state->device_id,
-                app_ibrt_middleware_is_ui_slave());
-        #endif
+            //just add Qos setting interface for music state, if need, uncomment it.
+            //app_ibrt_if_update_mobile_link_qos(state->device_id, 40);
             break;
-        }
         case IBRT_CONN_A2DP_SUSPENED:
             break;
         case IBRT_CONN_A2DP_CLOSED:
@@ -501,12 +469,6 @@ void app_ibrt_customif_hfp_callback(const bt_bdaddr_t* addr, ibrt_conn_hfp_state
 #ifdef BESUI_BTMSG_EN
     besui_hfp_state_event(addr, state);
 #endif
-    EARBUDS_TRACE(0,
-        "[NTT_HFP][DBG] state=%d profile_connecting=%d any=%d",
-        state->hfp_state,
-        addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
-        bts_bt_if_is_any_profile_connecting());
-
     switch(state->hfp_state)
     {
         case IBRT_CONN_HFP_SLC_DISCONNECTED:
@@ -581,12 +543,6 @@ void app_ibrt_customif_avrcp_callback(const bt_bdaddr_t* addr, ibrt_conn_avrcp_s
         EARBUDS_TRACE(0,"(d%x) custom_ui avrcp_status changed = %d addr is NULL",
             state->device_id, state->avrcp_state);
     }
-
-    EARBUDS_TRACE(0,
-        "[NTT_AVRCP][DBG] state=%d profile_connecting=%d any=%d",
-        state->avrcp_state,
-        addr ? bts_bt_if_is_profile_connecting(addr) : 0xff,
-        bts_bt_if_is_any_profile_connecting());
 
     switch(state->avrcp_state)
     {
@@ -692,57 +648,6 @@ void besui_tws_state_event(ibrt_conn_tws_conn_state_event *state, uint8_t reason
 }
 #endif
 
-#ifdef IBRT
-#define NTT_USER_SETTING_SYNC_DELAY_MS    10000
-
-static osTimerId ntt_user_setting_sync_timer = NULL;
-
-static void ntt_user_setting_sync_timer_handler(void const *param)
-{
-    if (!app_ibrt_middleware_is_ui_slave())
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_USER_SYNC] delayed sync user settings");
-
-        ntt_master_sync_all_user_settings_to_peer();
-    }
-    else
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_USER_SYNC] skip, role is slave");
-    }
-}
-
-osTimerDef(NTT_USER_SETTING_SYNC_TIMER,
-           ntt_user_setting_sync_timer_handler);
-
-static void ntt_user_setting_sync_delay_start(void)
-{
-    if (ntt_user_setting_sync_timer == NULL)
-    {
-        ntt_user_setting_sync_timer =
-            osTimerCreate(osTimer(NTT_USER_SETTING_SYNC_TIMER),
-                          osTimerOnce,
-                          NULL);
-    }
-
-    if (ntt_user_setting_sync_timer == NULL)
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_USER_SYNC] delay timer create failed");
-        return;
-    }
-
-    osTimerStop(ntt_user_setting_sync_timer);
-    osTimerStart(ntt_user_setting_sync_timer,
-                 NTT_USER_SETTING_SYNC_DELAY_MS);
-
-    EARBUDS_TRACE(0,
-        "[NTT_USER_SYNC] delay start %d ms",
-        NTT_USER_SETTING_SYNC_DELAY_MS);
-}
-#endif
-
 void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *state, uint8_t reason_code)
 {
     EARBUDS_TRACE(0,"custom_ui tws acl state changed = %d with reason 0x%x role %d", state->state.acl_state, reason_code, state->current_role);
@@ -763,21 +668,7 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
     {
         case IBRT_CONN_ACL_CONNECTED:
             break;
-        case IBRT_CONN_ACL_PROFILES_CONNECTED:
-#ifdef IBRT
-        if (!app_ibrt_middleware_is_ui_slave())
-        {
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] TWS profiles connected, skip early profile sync test");
-            ntt_user_setting_sync_delay_start();
-        }
-#endif
-        break;
         case IBRT_CONN_ACL_DISCONNECTED:
-        #ifdef IBRT
-        EARBUDS_TRACE(0,
-            "[NTT_PROFILE_SYNC] TWS ACL disconnected");
-        #endif
             break;
         case IBRT_CONN_ACL_CONNECTING_CANCELED:
             break;
@@ -1077,7 +968,7 @@ void app_ibrt_customif_on_ibrt_state_changed(const bt_bdaddr_t *addr, ibrt_conne
                 local_level,
                 role);
 
-            //app_ibrt_customif_cmd_sync_battery_level(local_level);
+            app_ibrt_customif_cmd_sync_battery_level(local_level);
 
             if (IBRT_SLAVE == role)
             {
@@ -1180,8 +1071,7 @@ bool app_ibrt_customif_custom_disallow_reconnect_tws_callback(void)
 
 bool app_ibrt_customif_disallow_tws_role_switch_callback()
 {
-    EARBUDS_TRACE(0, "custom_ui:tws role switch ext-policy");
-    EARBUDS_TRACE(0, "[NTT_ROLE] disallow role switch callback enter");
+    EARBUDS_TRACE(0,"custom_ui:tws role switch ext-policy");
 
     /*
      * So procedure may not working well when tws role switch happen, return
@@ -1350,31 +1240,8 @@ void app_ibrt_customif_ui_tws_switch(void)
 /*
 * custom reconfig bd_addr
 */
-void app_ibrt_customif_ui_reconfig_bd_addr(
-    bt_bdaddr_t local_addr,
-    bt_bdaddr_t peer_addr,
-    ibrt_role_e nv_role)
+void app_ibrt_customif_ui_reconfig_bd_addr(bt_bdaddr_t local_addr, bt_bdaddr_t peer_addr, ibrt_role_e nv_role)
 {
-    EARBUDS_TRACE(1,
-        "[NTT_NV_ROLE][BOOT] nv_role=%d",
-        nv_role);
-
-    EARBUDS_TRACE(7,
-        "[NTT_NV_ROLE][BOOT] role=%d local=%02X:%02X:%02X:%02X:%02X:%02X peer=%02X:%02X:%02X:%02X:%02X:%02X",
-        nv_role,
-        local_addr.address[0],
-        local_addr.address[1],
-        local_addr.address[2],
-        local_addr.address[3],
-        local_addr.address[4],
-        local_addr.address[5],
-        peer_addr.address[0],
-        peer_addr.address[1],
-        peer_addr.address[2],
-        peer_addr.address[3],
-        peer_addr.address[4],
-        peer_addr.address[5]);
-
     ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
 
     p_ibrt_ctrl->local_addr = local_addr;
@@ -1385,17 +1252,11 @@ void app_ibrt_customif_ui_reconfig_bd_addr(
     {
         if (IBRT_MASTER == p_ibrt_ctrl->nv_role)
         {
-            EARBUDS_TRACE(0,
-                "[NTT_NV_ROLE][BOOT] MASTER");
-
             p_ibrt_ctrl->peer_addr = local_addr;
             btif_me_set_bt_address(p_ibrt_ctrl->local_addr.address);
         }
         else if (IBRT_SLAVE == p_ibrt_ctrl->nv_role)
         {
-            EARBUDS_TRACE(0,
-                "[NTT_NV_ROLE][BOOT] SLAVE");
-
             p_ibrt_ctrl->local_addr = peer_addr;
             btif_me_set_bt_address(p_ibrt_ctrl->local_addr.address);
         }

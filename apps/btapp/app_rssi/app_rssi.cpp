@@ -27,7 +27,7 @@
 #include "bts_tws_conn.h"
 
 /* Open for debug */
-#define APP_RSSI_DEBUG
+// #define APP_RSSI_DEBUG
 
 
 

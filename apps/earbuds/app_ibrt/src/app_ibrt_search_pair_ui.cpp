@@ -859,27 +859,6 @@ void app_ibrt_search_ui_config_load(void *config)
 
     bts_core_set_ui_role(ibrt_config->nv_role);
 
-    EARBUDS_TRACE(2,
-    "[NTT_ROLE_LOAD] nv_role=%d ui_role=%d",
-    ibrt_config->nv_role,
-    app_ibrt_if_get_ui_role());
-
-    EARBUDS_TRACE(0,
-        "current ibrt_mode.mode(nv_role)=%d ",
-        ibrt_config->nv_role);
-
-    EARBUDS_TRACE(0,
-        "load local_addr: %02x:%02x:*:*:*:%02x",
-        ibrt_config->local_addr.address[0],
-        ibrt_config->local_addr.address[1],
-        ibrt_config->local_addr.address[5]);
-
-    EARBUDS_TRACE(0,
-        "load peer_addr: %02x:%02x:*:*:*:%02x",
-        ibrt_config->peer_addr.address[0],
-        ibrt_config->peer_addr.address[1],
-        ibrt_config->peer_addr.address[5]);
-
     EARBUDS_TRACE(0,"current ibrt_mode.mode(nv_role)=%d ", ibrt_config->nv_role);
     EARBUDS_TRACE(0,"load local_addr: %02x:%02x:*:*:*:%02x",ibrt_config->local_addr.address[0],
     ibrt_config->local_addr.address[1], ibrt_config->local_addr.address[5]);

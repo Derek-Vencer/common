@@ -10,17 +10,11 @@
 #include "co_bt_defines.h"
 #include "app_tws_ibrt.h"
 #include "app_ibrt_debug.h"
-#include "earbud_ux_api.h"
+
 SLAVE_BLE_MODE_T slaveBleMode;
 static app_ble_adv_para_data_t app_ble_adv_para_data_cfg;
 #define APP_IBRT_BLE_ADV_DATA_MAX_LEN (31)
 #define APP_IBRT_BLE_SCAN_RSP_DATA_MAX_LEN (31)
-/* NTT color code from ble_sparrow_server.cpp */
-extern "C" uint8_t ntt_color_code_nv_get(void);
-
-/* Forward declarations */
-void app_ibrt_ble_adv_para_data_init(void);
-void app_ibrt_ble_set_adv_data_handler(app_ble_adv_para_data_t *adv_data_cfg);
 
 const char *g_slave_ble_state_str[] =
 {
@@ -51,35 +45,6 @@ const char *g_slave_ble_op_str[] =
         EARBUDS_TRACE(0,"[BLE][OP]%s->%s at line %d", g_slave_ble_op_str[slaveBleMode.op], g_slave_ble_op_str[newOp], __LINE__); \
         slaveBleMode.op = (newOp);                                                                     \
     } while (0);
-
-static bool ntt_is_valid_bt_addr(const uint8_t *addr)
-{
-    static const uint8_t zero[6] = {0};
-    static const uint8_t ff[6] = {0xff,0xff,0xff,0xff,0xff,0xff};
-
-    return addr &&
-           memcmp(addr, zero, 6) &&
-           memcmp(addr, ff, 6);
-}
-
-static bool ntt_get_right_ear_bt_addr(uint8_t right_addr[6])
-{
-    uint8_t *local = app_ibrt_if_get_bt_local_address();
-    uint8_t *peer  = app_ibrt_if_get_bt_peer_address();
-
-    if (ntt_is_valid_bt_addr(local) && ((local[0] & 0x01) == 0)) {
-        memcpy(right_addr, local, 6);
-        return true;
-    }
-
-    if (ntt_is_valid_bt_addr(peer) && ((peer[0] & 0x01) == 0)) {
-        memcpy(right_addr, peer, 6);
-        return true;
-    }
-
-    return false;
-}
-
 /*****************************************************************************
  Prototype    : app_slave_ble_cmd_complete_callback
  Description  : stop ble adv
@@ -172,68 +137,18 @@ const uint8_t aiWangPrimaryService[16] = { 0xCD, 0x4B, 0xEF, 0xBA, 0x10, 0xDA, 0
     adv_para_cfg->scan_rsp_data[3]  = 0x0C;
 
     factory_section_original_bleaddr_get(&adv_para_cfg->scan_rsp_data[4]); //6Bytes
-
-    /*
-     * Keep real BLE advertising address unchanged.
-     */
-    memcpy(adv_para_cfg->bd_addr.address,
-           &adv_para_cfg->scan_rsp_data[4],
-           BTIF_BD_ADDR_SIZE);
-
-    /*
-     * Manufacturer data must carry right ear BT address.
-     * Example:
-     *   right: 66 00 50 99 D1 88 -> 88:D1:99:05:00:66
-     *   left : 65 00 50 99 D1 88 -> 88:D1:99:05:00:65
-     */
-    uint8_t right_bt_addr[6] = {0};
-
-    if (ntt_get_right_ear_bt_addr(right_bt_addr))
-    {
-        memcpy(&adv_para_cfg->scan_rsp_data[4], right_bt_addr, 6);
-        EARBUDS_TRACE(0, "[NTT_ADV] manufacturer use right BT addr");
-        DUMP8("%02x ", right_bt_addr, 6);
-    }
-    else
-    {
-        EARBUDS_TRACE(0, "[NTT_ADV] get right BT addr failed, keep original BLE addr");
-    }
+    memcpy(adv_para_cfg->bd_addr.address, &adv_para_cfg->scan_rsp_data[4], BTIF_BD_ADDR_SIZE);
 
     memcpy(&adv_para_cfg->scan_rsp_data[10], "MBE003", 6);
+    adv_para_cfg->scan_rsp_data[16] = 0x42; //Black 0x42 Gold 0x47 //color code
 
-    adv_para_cfg->scan_rsp_data[16] = ntt_color_code_nv_get();
+    uint32_t scan_rsp_nameLen = strlen(ble_name_in_nv) >=12 ?12:strlen(ble_name_in_nv);
+    adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len++] = scan_rsp_nameLen + 1;
+    adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len++] = 0x08;
+    memcpy(&adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len], ble_name_in_nv, scan_rsp_nameLen);
+    adv_para_cfg->scan_rsp_data_len += scan_rsp_nameLen;
 
-    EARBUDS_TRACE(1,
-        "[COLOR_CODE][ADV] manufacturer color=0x%02X",
-        adv_para_cfg->scan_rsp_data[16]);
-
-        uint32_t scan_rsp_nameLen = strlen(ble_name_in_nv) >=12 ?12:strlen(ble_name_in_nv);
-        adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len++] = scan_rsp_nameLen + 1;
-        adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len++] = 0x08;
-        memcpy(&adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len], ble_name_in_nv, scan_rsp_nameLen);
-        adv_para_cfg->scan_rsp_data_len += scan_rsp_nameLen;
-
-        memset(&slaveBleMode, 0, sizeof(slaveBleMode));
-    }
-
-void ntt_ble_adv_refresh_data(void)
-{
-    app_ibrt_ble_adv_para_data_init();
-
-    EARBUDS_TRACE(0,
-        "[NTT_ADV] refresh color=0x%02X",
-        app_ble_adv_para_data_cfg.scan_rsp_data[16]);
-
-    if (slaveBleMode.state == BLE_ADVERTISING)
-    {
-        btif_me_ble_set_adv_en(false);
-        app_ibrt_ble_set_adv_data_handler(&app_ble_adv_para_data_cfg);
-        btif_me_ble_set_adv_en(true);
-    }
-    else
-    {
-        app_ibrt_ble_set_adv_data_handler(&app_ble_adv_para_data_cfg);
-    }
+    memset(&slaveBleMode, 0, sizeof(slaveBleMode));
 }
 
 /*****************************************************************************
@@ -305,7 +220,6 @@ void app_ibrt_ble_set_adv_data_handler(app_ble_adv_para_data_t *adv_data_cfg)
 void app_ibrt_ble_adv_start(uint8_t adv_type, uint16_t advInterval)
 {
     EARBUDS_TRACE(0,"ble adv start with adv_type %d advIntervalms %dms", adv_type, advInterval);
-    app_ibrt_ble_adv_para_data_init();
     app_ble_adv_para_data_cfg.adv_type = adv_type;
     app_ble_adv_para_data_cfg.advInterval_Ms = advInterval;
 

@@ -17,5 +17,5 @@
 #define __APP_KEY_HANDLE__
 
 void app_key_handle_init(void);
-void app_key_handle_pause_music_on_pogo_in(void);
+
 #endif /* __APP_KEY_HANDLE__ */

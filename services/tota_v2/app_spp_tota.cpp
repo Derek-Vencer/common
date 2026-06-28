@@ -66,11 +66,7 @@ static tota_spp_ctl_t tota_spp_ctl = {
 extern bool app_spp_debug_cmd_check(uint8_t *cmd, uint16_t len);
 extern uint8_t *app_spp_debug_cmd_process(uint8_t *cmd, uint16_t len, uint16_t *out_len);
 #endif
-extern "C" bool hal_cmd_debug_check(uint8_t *cmd, uint16_t len);
-extern "C" uint8_t *hal_cmd_debug_process(uint8_t *cmd, uint16_t len, uint16_t *out_len);
 
-extern "C" bool sparrow_spp_api_is_cmd(const uint8_t *data, uint16_t len);
-extern "C" void sparrow_spp_api_rx_handler(const uint8_t *data, uint16_t len);
 /* is tota busy, use to handle sniff */
 bool spp_tota_in_progress(void)
 {
@@ -190,70 +186,25 @@ static bt_sdp_record_attr_t TotaSppSdpAttributes2[] = { // list attr id in ascen
 };
 */
 
-/* extern declaration */
-extern bool sparrow_spp_api_is_cmd(const uint8_t *data, uint16_t len);
-extern void sparrow_spp_api_rx_handler(const uint8_t *data, uint16_t len);
-
-static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote,
-                                           bt_spp_event_t event,
-                                           bt_spp_callback_param_t *param)
+static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote, bt_spp_event_t event, bt_spp_callback_param_t *param)
 {
     uint8_t *pData = (uint8_t *)param->rx_data_ptr;
     uint16_t dataLen = param->rx_data_len;
 
-    TOTA_V2_TRACE(1, "spp tota v2 rx:%d", dataLen);
-    DUMP8("%02X ", pData, dataLen);
+    TOTA_V2_TRACE(1,"spp tota v2 rx:%d", dataLen);
+    //TOTA_V2_DUMP8("[0x%x]", pData, dataLen);
 
 #ifdef SPP_DEBUG_TOOL
-    /*
-     * HAL CMD (EQ Tuning)
-     * Header:
-     * 7B 00 00 00 7B 00 00 00 ...
-     */
-    if (app_spp_debug_cmd_check(pData, dataLen))
-    {
+    if (app_spp_debug_cmd_check(pData, dataLen)) {
         uint8_t *ret_buf = app_spp_debug_cmd_process(pData, dataLen, &dataLen);
-
-        if (ret_buf != NULL)
-        {
-            bta_spp_write(param->spp_chan->rfcomm_handle,
-                          ret_buf,
-                          dataLen);
+        if (ret_buf != NULL) {
+            bta_spp_write(param->spp_chan->rfcomm_handle, ret_buf, dataLen);
         }
-
-        TOTA_V2_TRACE(0, "[%s] HAL CMD handled.", __func__);
+        TOTA_V2_TRACE(0, "[%s] Bypass TOTA.", __func__);
         return 0;
     }
 #endif
-
-    /*
-     * Sparrow API
-     * 0x30 Get Battery
-     * 0x34 Get Device Name
-     * 0x3C Get Key Mapping
-     * 0x40 Set Key Mapping
-     * 0x44 Get EQ
-     * 0x46 Set EQ
-     * 0x4C Get FW Version
-     * 0x50 Color Code
-     * ...
-     */
-    if (sparrow_spp_api_is_cmd(pData, dataLen))
-    {
-        TOTA_V2_TRACE(1,
-                      "[SPARROW_API] cmd=0x%02X",
-                      pData[0]);
-
-        sparrow_spp_api_rx_handler(pData, dataLen);
-
-        return 0;
-    }
-
-    /*
-     * Original TOTA v2
-     */
     tota_spp_ctl.callBack->rx_cb(pData, dataLen);
-
     return 0;
 }
 

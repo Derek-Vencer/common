@@ -3995,130 +3995,113 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     btdevice_profile *btdevice_plf_p;
     int find_invalid_record_cnt;
 
-    bthost_cfg_t *bt_host_cfg = bt_host_get_cfg();
-
-    if (!bt_host_cfg->bt_sink_enable)
+    bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
+    if(!bt_host_cfg->bt_sink_enable)
     {
-        return;
+        return ;
     }
 
     if (BT_DEVICE_NUM == 1 && app_bt_get_active_cons() != 0)
     {
-        DEBUG_INFO(0, "bt link disconnect not complete,ignore this time reconnect");
+        DEBUG_INFO(0,"bt link disconnect not complete,ignore this time reconnect");
         return;
     }
 
     do
     {
         find_invalid_record_cnt = 0;
-        ret = nv_record_enum_latest_two_paired_dev(&record1, &record2);
-
-        if (ret == 1)
+        ret = nv_record_enum_latest_two_paired_dev(&record1,&record2);
+        if(ret == 1)
         {
-            btdevice_plf_p =
-                (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
-
-            if (!(btdevice_plf_p->hfp_act) && !(btdevice_plf_p->a2dp_act))
+            btdevice_plf_p = (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
+            if (!(btdevice_plf_p->hfp_act)&&!(btdevice_plf_p->a2dp_act))
             {
                 nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
                 find_invalid_record_cnt++;
             }
         }
-        else if (ret == 2)
+        else if(ret == 2)
         {
-            btdevice_plf_p =
-                (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
-
-            if (!(btdevice_plf_p->hfp_act) && !(btdevice_plf_p->a2dp_act))
+            btdevice_plf_p = (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
+            if (!(btdevice_plf_p->hfp_act)&&!(btdevice_plf_p->a2dp_act))
             {
                 nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
                 find_invalid_record_cnt++;
             }
-
-            btdevice_plf_p =
-                (btdevice_profile *)app_bt_profile_active_store_ptr_get(record2.bdAddr.address);
-
-            if (!(btdevice_plf_p->hfp_act) && !(btdevice_plf_p->a2dp_act))
+            btdevice_plf_p = (btdevice_profile *)app_bt_profile_active_store_ptr_get(record2.bdAddr.address);
+            if (!(btdevice_plf_p->hfp_act)&&!(btdevice_plf_p->a2dp_act))
             {
                 nv_record_ddbrec_delete((bt_bdaddr_t *)&record2.bdAddr);
                 find_invalid_record_cnt++;
             }
         }
     }
-    while (find_invalid_record_cnt);
+    while(find_invalid_record_cnt);
 
-    DEBUG_INFO(1, "!!!app_bt_opening_reconnect: devices %d\n", ret);
+    DEBUG_INFO(1,"!!!app_bt_opening_reconnect: devices %d\n", ret);
     DUMP8("%02x ", &record1.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
     DUMP8("%02x ", &record2.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
 
-    if (ret > 0)
+    if(ret > 0)
     {
-        DEBUG_INFO(0, "!!!start reconnect device list\n");
+        DEBUG_INFO(0,"!!!start reconnect first device\n");
 
 #if defined(FREEMAN_ENABLED_STERO)
 #ifdef IBRT_UI
         app_ibrt_if_event_entry(APP_UI_EV_CASE_OPEN);
 #endif
 #else
-        if (btif_me_get_pendCons() != 0)
-        {
-            DEBUG_INFO(0, "[NTT_RECONN] pending ACL exists, skip opening reconnect");
-            return;
-        }
-
-#ifdef BT_SOURCE
-        app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
-                                        &record1.bdAddr,
-                                        record1.for_bt_source);
-#else
-        app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
-                                        &record1.bdAddr,
-                                        false);
-#endif
-
-#ifdef BT_SOURCE
-        if (ret > 1 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1)
-#else
-        if (ret > 1 && BT_DEVICE_NUM > 1)
-#endif
+        if (btif_me_get_pendCons() == 0)
         {
 #ifdef BT_SOURCE
-            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
-                                            &record2.bdAddr,
-                                            record2.for_bt_source);
+            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record1.bdAddr, record1.for_bt_source);
 #else
-            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
-                                            &record2.bdAddr,
-                                            false);
+            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record1.bdAddr, false);
 #endif
         }
 
+        //Only connect last devices,so comment it
+        //fixed 20250308
+#if 0
+#ifdef BT_SOURCE
+        if(ret > 1 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1)
+#else
+        if(ret > 1 && BT_DEVICE_NUM > 1)
+#endif
+        {
+#ifdef BT_SOURCE
+            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record2.bdAddr, record2.for_bt_source);
+#else
+            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record2.bdAddr, false);
+#endif
+        }
+#endif
         app_bt_start_poweron_reconnect();
 #endif
     }
     else
     {
-        DEBUG_INFO(0, "!!!go to pairing\n");
-
-        set_er_discover_connectable_status(1);
-
+        DEBUG_INFO(0,"!!!go to pairing\n");
+		set_er_discover_connectable_status(1);
 #ifdef FREEMAN_ENABLED_STERO
 #error FREEMAN_ENABLED_STERO
         app_ibrt_internal_enter_freeman_pairing();
-
 #ifdef GFPS_ENABLED
         app_enter_fastpairing_mode();
 #endif
-
 #else
-
 #ifdef __EARPHONE_STAY_BOTH_SCAN__
 #error __EARPHONE_STAY_BOTH_SCAN__
-        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
-#else
-        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
-#endif
+        //app_bt_accessmode_set_req(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR);
+		//app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
+		app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
 
+
+#else
+        //app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
+		//app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
+		app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+#endif
 #endif
     }
 }

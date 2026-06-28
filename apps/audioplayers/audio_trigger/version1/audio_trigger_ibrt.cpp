@@ -195,12 +195,6 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(uint8_t device_id, bti
                 AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip delay dma trigger1\n");
                 return 0;
             }
-            AUDIOPLAYERS_TRACE(3,
-                "[AUTO_SYNC][MASTER][TRIGGER1] profile=%d a2dp_profile=%d tws_link=%d",
-                bts_ibrt_if_is_profile_exchanged(&curr_device->remote),
-                bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote),
-                bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote));
-                
             AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache ok use dma trigger1\n");
             a2dp_audio_detect_next_packet_callback_register(NULL);
             a2dp_audio_detect_store_packet_callback_register(NULL);
@@ -223,13 +217,6 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(uint8_t device_id, bti
                                 app_ibrt_if_start_ibrt_onprocess(&curr_device->remote),
                                 app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote),
                                 bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote));
-
-            AUDIOPLAYERS_TRACE(3,
-                "[AUTO_SYNC][MASTER] skip trigger start=%d sync=%d a2dp_ex=%d",
-                app_ibrt_if_start_ibrt_onprocess(&curr_device->remote),
-                app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote),
-                bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote));
-
             AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip profile_exchanged sync_a2dp_status_onporcess\n");
             return 0;
         }else{
@@ -340,11 +327,6 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(uint8_t device_id, bti
             sync_trigger.mobile_addr = curr_device->remote;
 #endif
             app_bt_stream_ibrt_auto_synchronize_initsync_start(device_id, &sync_trigger);
-
-            AUDIOPLAYERS_TRACE(2,
-                "[AUTO_SYNC][MASTER] send SET_TRIGGER_TIME link=%d profile=%d",
-                bts_bt_if_is_dev_link_connected(&curr_device->remote),
-                bts_ibrt_if_is_profile_exchanged(&curr_device->remote));
 
             if (bts_bt_if_is_dev_link_connected(&curr_device->remote) &&
                 bts_ibrt_if_is_profile_exchanged(&curr_device->remote)){

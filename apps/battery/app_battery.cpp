@@ -28,8 +28,7 @@
 #include "app_bt.h"
 #include "apps.h"
 #include "app_hfp.h"
-#include "../btapp/bt_app/app_keyhandle.h"
-extern bool ntt_case_open_pending;
+
 #ifdef APP_BATTERY_ENABLE
 #include "app_status_ind.h"
 #include "bluetooth_bt_api.h"
@@ -228,67 +227,24 @@ extern bool  aiWangIsNeedOpenEarBuds(void);
 
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
-    int8_t charging = app_battery_is_charging();
-
-    BATTERY_TRACE(2,
-                  "[POWER_OFF] charging=%d status=%d",
-                  charging,
-                  app_battery_measure.status);
-
-    /*
-     * Power off only when battery state is charging.
-     */
-    if (charging)
-    {
-        BATTERY_TRACE(0,
-                      "[POWER_OFF] charging=1 -> shutdown");
-
+    (void)param;
+    bool isNeedOpen;
+    isNeedOpen = aiWangIsNeedOpenEarBuds();
+    BATTERY_TRACE(2,"%s power off as pogonPin In isNeedOpen=%d", __func__, isNeedOpen);
+    if(!isNeedOpen) {
         app_shutdown();
-        return;
     }
-
-    BATTERY_TRACE(0,
-                  "[POWER_OFF] charging=0 -> keep power on");
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
 {
     if (NULL == pogonPinCloseTimer)
     {
-        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
+        pogonPinCloseTimer = osTimerCreate (osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
     }
-
     osTimerStop(pogonPinCloseTimer);
     osTimerStart(pogonPinCloseTimer, 1600);
 }
-
-void earBudsCloseOff_PogonIn_StopTimer(void)
-{
-    if (NULL != pogonPinCloseTimer)
-    {
-        osTimerStop(pogonPinCloseTimer);
-    }
-
-    BATTERY_TRACE(0,
-        "[CASE_OPEN] stop close-case power off timer");
-}
-
-void earBudsCloseOff_PowerOff_StartTimer(void)
-{
-    if (NULL == pogonPinCloseTimer)
-    {
-        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER),
-                                           osTimerOnce,
-                                           NULL);
-    }
-
-    osTimerStop(pogonPinCloseTimer);
-    osTimerStart(pogonPinCloseTimer, 1600);
-
-    BATTERY_TRACE(0,
-                  "[POWER_OFF] start 1.6s charger check timer");
-}
-
 //-------------------------------------------------------------------------------------------
 
 
@@ -559,6 +515,7 @@ int app_status_battery_report(uint8_t level)
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     int8_t level = 0;
+
     switch (status)
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
@@ -612,13 +569,16 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 
 #if defined(BESUI_STEREO_EN)
             level = stereo_battery_level_process(app_battery_measure.status, app_battery_measure.currvolt);
+            BATTERY_TRACE(0,"stereo return level=%d", level);
 #endif
 
             app_battery_measure.currlevel = level;
 #endif
 
 #endif
+            BATTERY_TRACE(0,"%s previous_level=%d", __func__, level);
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
+            BATTERY_TRACE(0,"%s actutal level=%d currvolt=%d", __func__, level, app_battery_measure.currvolt);
 #if defined(IBRT)
             {
                 static int8_t last_sync_level = -1;
@@ -626,6 +586,12 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 if (last_sync_level != level)
                 {
                     last_sync_level = level;
+
+                    BATTERY_TRACE(0,
+                                  "[BAT_SYNC][BATT_UPDATE] level=%d currvolt=%d",
+                                  level,
+                                  app_battery_measure.currvolt);
+
                     app_ibrt_customif_cmd_sync_battery_level(level);
                 }
             }
@@ -652,7 +618,11 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #else
-
+                //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
+                //20260402
+                //app_shutdown();
+                //wired_uart_communication_modual_init();
+                earBudsCloseOff_PogonIn_StartTimer();
 #if CHARGER_PLUGINOUT_RESET
                 //app_reset();
 #else
@@ -660,20 +630,6 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #endif
 #endif
             }
-            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-#if defined(IBRT)
-            {
-                static int8_t last_sync_level = -1;
-
-                if (last_sync_level != level)
-                {
-                    last_sync_level = level;
-                    app_ibrt_customif_cmd_sync_battery_level(level);
-                }
-            }
-#endif
-            app_status_battery_report(level);
-
             break;
         case APP_BATTERY_STATUS_INVALID:
         default:
@@ -729,6 +685,10 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
 #endif
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 osTimerStop(app_battery_timer);
+                //fixed delay close the earbuds, added a timer to close, otherwise directly shutdown
+                //20260402
+                //app_shutdown();
+                earBudsCloseOff_PogonIn_StartTimer();
             }
             break;
         case APP_BATTERY_STATUS_INVALID:
@@ -776,10 +736,6 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
     }
     srand(generatedSeed);
 
-    BATTERY_TRACE(2,
-                  "app_battery_handle_process:%d %d",
-                  status,
-                  app_battery_measure.status);
 
     if (status == APP_BATTERY_STATUS_PLUGINOUT)
     {
@@ -790,8 +746,6 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
         switch (app_battery_measure.status)
         {
             case APP_BATTERY_STATUS_NORMAL:
-                BATTERY_TRACE(0, "[BAT_PROC] enter normal handler");
-
                 app_battery_handle_process_normal((uint32_t)status, msg_prams);
 
 #if defined(CHIP_BEST1501P)
@@ -807,38 +761,17 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
                 break;
 
             case APP_BATTERY_STATUS_CHARGING:
-                BATTERY_TRACE(0, "[BAT_PROC] enter charging handler");
-
                 app_battery_handle_process_charging((uint32_t)status, msg_prams);
                 break;
 
             default:
-                BATTERY_TRACE(1,
-                              "[BAT_PROC] unknown measure_status=%d",
-                              app_battery_measure.status);
                 break;
         }
 
-        #if defined(IBRT)
-                static uint8_t battery_sync_cnt = 0;
-
-                if (app_battery_measure.currlevel <= 100)
-                {
-                    battery_sync_cnt++;
-
-                    if (battery_sync_cnt >= 12)
-                    {
-                        battery_sync_cnt = 0;
-
-                        BATTERY_TRACE(1,
-                                    "[BAT_SYNC][120S] level=%d",
-                                    app_battery_measure.currlevel);
-
-                        app_ibrt_customif_cmd_sync_battery_level(
-                            app_battery_measure.currlevel);
-                    }
-                }
-        #endif
+        if (app_battery_measure.currlevel <= 100)
+        {
+            app_ibrt_customif_cmd_sync_battery_level(app_battery_measure.currlevel);
+        }
     }
 
     if (NULL != app_battery_measure.user_cb)
@@ -1210,12 +1143,6 @@ static void app_battery_pluginout_debounce_handler(void const *param)
         BATTERY_TRACE(2,"%s %s", __func__, status_charger == APP_BATTERY_CHARGER_PLUGOUT ? "PLUGOUT" : "PLUGIN");
         if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
         {
-                    /*
-            * Pogo pin is confirmed inserted.
-            * Pause music if A2DP is streaming.
-            */
-            app_key_handle_pause_music_on_pogo_in();
-
 #ifndef BESUI_TWS_EN
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
             {
@@ -1291,7 +1218,6 @@ int app_battery_charger_indication_open(void)
     uint8_t cnt = 0;
 
     BATTERY_TRACE(1,"%s",__func__);
-    ntt_case_open_pending = true;
 
     pmu_charger_init();
 
