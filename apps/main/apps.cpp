@@ -411,6 +411,7 @@ extern "C" {
 #include "charger_with_icp1205.h"
 extern void sparraw_service_init(void);
 extern bool aiWangBoxIsUsed(void);
+extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
 //extern void charger_manager_start(void);
 
 #ifdef IBRT
@@ -1944,19 +1945,101 @@ void app_ibrt_init(void)
         else
     #endif
         {
-        #if defined(IBRT_UI)
-        	MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
-            if(memcmp(&config.peer_addr.address[0],"\xFF\xFF\xFF\xFF\xFF\xFF",6)
-               && memcmp(&config.peer_addr.address[0],"\x00\x00\x00\x00\x00\x00",6))
+#if defined(IBRT_UI)
+        MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
+
+        btif_device_record_t record1 = {0};
+        btif_device_record_t record2 = {0};
+        int record_count = nv_record_enum_latest_two_paired_dev(&record1, &record2);
+        uint8_t mobile_record_count = 0;
+
+        bool has_tws_peer =
+            memcmp(config.peer_addr.address, "\xFF\xFF\xFF\xFF\xFF\xFF", 6) &&
+            memcmp(config.peer_addr.address, "\x00\x00\x00\x00\x00\x00", 6);
+
+        MAIN_TRACE(1,
+            "[NTT_PAIR] record_count=%d",
+            record_count);
+
+        MAIN_TRACE(6,
+            "[NTT_PAIR] local=%02X:%02X:%02X:%02X:%02X:%02X",
+            config.local_addr.address[0], config.local_addr.address[1],
+            config.local_addr.address[2], config.local_addr.address[3],
+            config.local_addr.address[4], config.local_addr.address[5]);
+
+        MAIN_TRACE(6,
+            "[NTT_PAIR] peer =%02X:%02X:%02X:%02X:%02X:%02X",
+            config.peer_addr.address[0], config.peer_addr.address[1],
+            config.peer_addr.address[2], config.peer_addr.address[3],
+            config.peer_addr.address[4], config.peer_addr.address[5]);
+
+        if (record_count >= 1)
+        {
+            MAIN_TRACE(6,
+                "[NTT_PAIR] record1=%02X:%02X:%02X:%02X:%02X:%02X",
+                record1.bdAddr.address[0], record1.bdAddr.address[1],
+                record1.bdAddr.address[2], record1.bdAddr.address[3],
+                record1.bdAddr.address[4], record1.bdAddr.address[5]);
+
+            if ((memcmp(record1.bdAddr.address, config.local_addr.address, 6) != 0) &&
+                (memcmp(record1.bdAddr.address, config.peer_addr.address, 6) != 0))
             {
-                //app_ibrt_start_power_on_tws_pairing();
+                mobile_record_count++;
+            }
+        }
+
+        if (record_count >= 2)
+        {
+            MAIN_TRACE(6,
+                "[NTT_PAIR] record2=%02X:%02X:%02X:%02X:%02X:%02X",
+                record2.bdAddr.address[0], record2.bdAddr.address[1],
+                record2.bdAddr.address[2], record2.bdAddr.address[3],
+                record2.bdAddr.address[4], record2.bdAddr.address[5]);
+
+            if ((memcmp(record2.bdAddr.address, config.local_addr.address, 6) != 0) &&
+                (memcmp(record2.bdAddr.address, config.peer_addr.address, 6) != 0))
+            {
+                mobile_record_count++;
+            }
+        }
+
+        MAIN_TRACE(2,
+            "[NTT_PAIR] has_tws_peer=%d mobile_record_count=%d",
+            has_tws_peer,
+            mobile_record_count);
+
+        if (mobile_record_count == 0)
+        {
+            if (!app_ibrt_middleware_is_ui_slave())
+            {
+                MAIN_TRACE(0,
+                    "[NTT_PAIR] no mobile record -> start pair mode (master)");
+
+                ntt_manual_pairing_mode = true;
+
+                set_pair_status(0);
+                set_er_discover_connectable_status(1);
+
+                // app_ibrt_if_init_open_box_state_for_evb();
+
+                app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+
+                app_bt_reset_delay_power_off();
             }
             else
             {
-            	MAIN_TRACE(0, "Not TWS Peers!!!");
-            }
-            app_ibrt_start_power_on_tws_pairing();
-        #endif
+                MAIN_TRACE(0,
+                    "[NTT_PAIR] no mobile record, skip pair mode on slave");
+            }        
+        }
+        else
+        {
+            MAIN_TRACE(1,
+                "[NTT_PAIR] mobile record exists (%d), skip pair mode",
+                mobile_record_count);
+        }
+        app_ibrt_start_power_on_tws_pairing();
+#endif
         }
     #elif defined(POWER_ON_ENTER_FREEMAN_PAIRING_ENABLED)
             app_ibrt_if_enter_freeman_pairing();
