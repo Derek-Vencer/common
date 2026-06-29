@@ -1877,6 +1877,7 @@ int btdrv_tportopen(void);
 
 void app_ibrt_start_power_on_tws_pairing(void);
 void app_ibrt_start_power_on_freeman_pairing(void);
+extern bool ntt_first_no_mobile_pair_mode;
 
 WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 {
@@ -2015,6 +2016,7 @@ void app_ibrt_init(void)
                 MAIN_TRACE(0,
                     "[NTT_PAIR] no mobile record -> start pair mode (master)");
 
+                ntt_first_no_mobile_pair_mode = true;
                 ntt_manual_pairing_mode = true;
 
                 set_pair_status(0);
@@ -2037,6 +2039,7 @@ void app_ibrt_init(void)
             MAIN_TRACE(1,
                 "[NTT_PAIR] mobile record exists (%d), skip pair mode",
                 mobile_record_count);
+                ntt_first_no_mobile_pair_mode = false;
         }
         app_ibrt_start_power_on_tws_pairing();
 #endif

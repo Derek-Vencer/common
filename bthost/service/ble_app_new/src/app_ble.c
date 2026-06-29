@@ -3722,13 +3722,21 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 #else
 
 #ifdef CUSTOMER_DEFINE_ADV_DATA
-        adv_enable = false;
+        adv_enable = true;
 #else
         adv_enable = true;
 #endif
 
 #endif
     } while (0);
+
+    DEBUG_INFO(1, "[ADV] USER_STUB adv_enable=%d", adv_enable);
+    DEBUG_INFO(2, "[ADV] advDataLen=%d scanRspDataLen=%d",
+            ble_adv->advDataLen,
+            ble_adv->scanRspDataLen);
+
+    DUMP8("%02X ", ble_adv->advData, ble_adv->advDataLen);
+    DUMP8("%02X ", ble_adv->scanRspData, ble_adv->scanRspDataLen);
 
     app_ble_data_fill_enable(USER_STUB, adv_enable);
 }

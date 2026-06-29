@@ -90,7 +90,7 @@ static void wired_uart_remove_all_phone_paired_list(void);
 extern void handleSetEqIndex(uint8_t index);
 extern "C" void ntt_audio_output_mute_refresh(void);
 //static void box_battery_nv_reset(void);
-
+bool ntt_first_no_mobile_pair_mode = false;
 #ifdef DISABLE_GOC_UART_LOG
 
 #undef printf
@@ -1367,14 +1367,44 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
  */
 static void uart_idle_timeout_callback(void const *argument)
 {
-    DBGPRINT("UART idle timeout detected! No data received for %dms\n", UART_IDLE_TIMEOUT_MS);
+    DBGPRINT("UART idle timeout detected! No data received for %dms\n",
+             UART_IDLE_TIMEOUT_MS);
+
     aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
-	ntt_audio_output_mute_refresh();
-	osTimerDelete(uart_idle_timer_id);
-	uart_idle_timer_id = NULL;
-    // 调用其他函数
-    //call_other_function();
+
+    boxChargerStatus.boxIsOpen = false;
+    boxChargerStatus.needOpenEarbuds = false;
+
+    ntt_audio_output_mute_refresh();
+
+#ifdef IBRT
+    if (ntt_first_no_mobile_pair_mode &&
+        bts_tws_if_is_tws_link_connected() &&
+        !app_bt_ibrt_has_mobile_link_connected())
+    {
+        //uint8_t cmd_sync_poweroff_shutdown[1] = {1};
+
+        DBGPRINT("[NTT_PAIR] uart idle -> send peer shutdown");
+
+        //tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+        //                  cmd_sync_poweroff_shutdown,
+        //                  1);
+
+        osDelay(500);
+
+        DBGPRINT("[NTT_PAIR] uart idle -> local shutdown");
+
+        //app_shutdown();
+        return;
+    }
+#endif
+
+    if (uart_idle_timer_id)
+    {
+        osTimerDelete(uart_idle_timer_id);
+        uart_idle_timer_id = NULL;
+    }
 }
 
 /**
