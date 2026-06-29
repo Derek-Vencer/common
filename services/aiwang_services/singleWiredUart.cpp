@@ -23,6 +23,7 @@
 #include "apps.h"
 #include "app_media_player.h"
 #include "bt_common_define.h"
+#include "audio_cfg.h"
 
 #ifdef IBRT
 #include "app_ibrt_internal.h"
@@ -69,7 +70,7 @@
 // 串口空闲定时器
 static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
-#define UART_IDLE_TIMEOUT_MS 5000
+#define UART_IDLE_TIMEOUT_MS 2000
 // 空闲超时回调函数
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
@@ -85,6 +86,10 @@ osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
 bool ntt_case_open_pending = false;
 //#define DISABLE_GOC_UART_LOG
+static void wired_uart_remove_all_phone_paired_list(void);
+extern void handleSetEqIndex(uint8_t index);
+extern "C" void ntt_audio_output_mute_refresh(void);
+//static void box_battery_nv_reset(void);
 
 #ifdef DISABLE_GOC_UART_LOG
 
@@ -133,7 +138,7 @@ bool ntt_case_open_pending = false;
 #define         CMD_SEND_BOX_BATTERY_LEVEL              0x0F
 #define         CMD_SEND_DUT_MODE                       0x10
 #define         CMD_SEND_EAR_PUTIN                      0x11
-
+#define         CMD_SEND_DTM_MODE                       0x12
 
 typedef enum {
 	PARSE_IDLE,
@@ -558,36 +563,96 @@ static void wired_uart_set_peer_address(uint8_t *data ,uint8_t len)
 	}
 }
 
-
 static void wired_uart_remove_all_phone_paired_list(void)
 {
-    bt_status_t            retStatus;
-    btif_device_record_t   record;
+    bt_status_t retStatus;
+    btif_device_record_t record;
     ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
-    int                    paired_dev_count = nv_record_get_paired_dev_count();
+    int paired_dev_count = nv_record_get_paired_dev_count();
+    uint8_t empty_addr[BTIF_BD_ADDR_SIZE] = {0};
+
     DBGPRINT("%s.", __func__);
-    //uint8_t address_compare[6] = {0};
+
+    if (p_ibrt_ctrl == NULL)
+    {
+        DBGPRINT("[PAIR_CLR] ibrt ctrl is NULL");
+        return;
+    }
+
     DBGPRINT("Master addr:");
-    DUMP8("%02x ",p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE);
+    DUMP8("%02x ", p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE);
+
     DBGPRINT("Slave addr:");
-    DUMP8("%02x ",p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE);
+    DUMP8("%02x ", p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE);
 
     for (int32_t index = paired_dev_count - 1; index >= 0; index--)
     {
         retStatus = nv_record_enum_dev_records(index, &record);
-        if (BT_STS_SUCCESS == retStatus)
+        if (BT_STS_SUCCESS != retStatus)
         {
-        	DBGPRINT("Remove The index %d of nv records:", index);
-            DUMP8("%02x ", record.bdAddr.address, BTIF_BD_ADDR_SIZE);
-            //if (memcmp(record.bdAddr.address, p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE) &&
-            //    memcmp(record.bdAddr.address, p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE)&&
-            //    memcmp(record.bdAddr.address, address_compare, BTIF_BD_ADDR_SIZE))
-            {
-            	nv_record_ddbrec_delete(&record.bdAddr);
-            }
+            DBGPRINT("[PAIR_CLR] enum index=%d failed ret=%d", index, retStatus);
+            continue;
         }
+
+        DBGPRINT("[PAIR_CLR] check index=%d:", index);
+        DUMP8("%02x ", record.bdAddr.address, BTIF_BD_ADDR_SIZE);
+
+        if (!memcmp(record.bdAddr.address, p_ibrt_ctrl->local_addr.address, BTIF_BD_ADDR_SIZE) ||
+            !memcmp(record.bdAddr.address, p_ibrt_ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE) ||
+            !memcmp(record.bdAddr.address, empty_addr, BTIF_BD_ADDR_SIZE))
+        {
+            DBGPRINT("[PAIR_CLR] skip TWS/local/empty record");
+            continue;
+        }
+
+        DBGPRINT("[PAIR_CLR] delete phone record index=%d", index);
+        nv_record_ddbrec_delete(&record.bdAddr);
     }
+
     nv_record_flash_flush();
+}
+
+static void wired_uart_factory_reset_app_nv(void)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    static const uint8_t default_action[] =
+    {
+        0x10, 0x11, 0x12, 0x13, 0x14,
+        0x20, 0x21, 0x22, 0x23, 0x24,
+        0x50, 0x51, 0x52, 0x53, 0x54,
+        0x60, 0x61, 0x62, 0x63, 0x64,
+    };
+
+    static const uint8_t default_func[] =
+    {
+        0x03, 0x04, 0x05, 0x07, 0x08,
+        0x03, 0x04, 0x05, 0x06, 0x08,
+        0x01, 0x02, 0x00, 0x00, 0x00,
+        0x01, 0x02, 0x00, 0x00, 0x00,
+    };
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        DBGPRINT("[FACTORY_RESET] app nv env null");
+        return;
+    }
+
+    nvrecord_env->eq_index_data = 0;
+    nvrecord_env->key_map_number = sizeof(default_action);
+
+    for (uint8_t i = 0; i < sizeof(default_action); i++)
+    {
+        nvrecord_env->key_map_action[i] = default_action[i];
+        nvrecord_env->key_map_func[i] = default_func[i];
+    }
+
+    nv_record_env_set(nvrecord_env);
+
+    DBGPRINT("[FACTORY_RESET] EQ index reset to 0");
+    DBGPRINT("[FACTORY_RESET] key mapping reset count=%d", nvrecord_env->key_map_number);
 }
 
 #define BOX_BATTERY_INVALID 0xFF
@@ -659,7 +724,33 @@ static uint8_t box_battery_nv_get(void)
 
     return box_battery_nv_cache;
 }
+/*
+static void box_battery_nv_reset(void)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
 
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        DBGPRINT("[BOX_BAT][RESET] nv env null");
+        return;
+    }
+
+    nvrecord_env->chargerBoxBattery = BOX_BATTERY_INVALID;
+    nv_record_env_set(nvrecord_env);
+
+    box_battery_nv_cache = BOX_BATTERY_INVALID;
+    box_battery_nv_loaded = true;
+    box_battery_cache_valid = false;
+
+    boxChargerStatus.boxChargerBattery = BOX_BATTERY_INVALID;
+    boxChargerStatus.leftEarBudsBattery = BOX_BATTERY_INVALID;
+    boxChargerStatus.rightEarBudsBattery = BOX_BATTERY_INVALID;
+
+    DBGPRINT("[BOX_BAT][RESET] box battery reset to 0xFF");
+}
+*/
 uint8_t getBoxChargerBattery(void)
 {
     uint8_t tws_box_battery = 0xFF;
@@ -911,9 +1002,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 	// 重置空闲定时器
 	if (uart_idle_timer_id != NULL) {
 		set_er_inbox_status(1);
+        ntt_audio_output_mute_refresh();
 		osTimerStop(uart_idle_timer_id);
 		osTimerStart(uart_idle_timer_id, UART_IDLE_TIMEOUT_MS);
-		//printf("UART idle timer reset\n");
+		//DBGPRINT("UART idle timer reset\n");
 	}
 	else{
 		uart_idle_detection_init();
@@ -924,7 +1016,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
     if (s_last_cmd_event != cmd_event)
     {
-
+        DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
         s_last_cmd_event = cmd_event;
     }
 
@@ -1012,77 +1104,137 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         break;
 
     case CMD_CLOSE_CASE:
-    {
-        DBGPRINT("[CASE] CLOSE received");
-
-        /*
-        * Do not shutdown immediately.
-        * Mark close state and start delayed check.
-        * If CMD_OPEN_CASE comes before timer expires,
-        * CMD_OPEN_CASE will stop the timer.
-        */
-        g_case_state = 0;
-        boxChargerStatus.boxIsOpen = false;
-        boxChargerStatus.needOpenEarbuds = false;
-
-        wired_uart_get_battery_level();
-
-        if (app_is_stack_ready())
         {
-    #ifndef BLE_ONLY_ENABLED
-            int activeCons = 0;
-            int active_phone_cons = 0;
-            int activeSourceCons = 0;
+            DBGPRINT("[CASE] CLOSE received");
 
-            activeCons = app_bt_get_active_cons();
-            active_phone_cons = app_bt_count_mobile_link();
-            activeSourceCons = btif_me_get_source_activeCons();
+            /*
+            * Do not shutdown immediately.
+            * Mark close state and start delayed check.
+            * If CMD_OPEN_CASE comes before timer expires,
+            * CMD_OPEN_CASE will stop the timer.
+            */
+            g_case_state = 0;
+            boxChargerStatus.boxIsOpen = false;
+            boxChargerStatus.needOpenEarbuds = false;
 
-            DBGPRINT("CMD_CLOSE_CASE activeCons=%d activeSourceCons=%d active_phone_cons=%d",
-                    activeCons,
-                    activeSourceCons,
-                    active_phone_cons);
+            wired_uart_get_battery_level();
 
-    #ifdef IBRT
-            if (bts_tws_if_is_tws_link_connected())
+            enum APP_BATTERY_CHARGER_T charger_status =
+                (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+            DBGPRINT("[CASE_CLOSE] charger=%s",
+                    (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
+                    "PLUGIN" : "PLUGOUT");
+
+            /*
+            * Only allow shutdown when charger is really detected.
+            */
+            if (charger_status != APP_BATTERY_CHARGER_PLUGIN)
             {
-                uint8_t cmd_sync_poweroff_shutdown[1];
-
-                cmd_sync_poweroff_shutdown[0] = 1;
-
-
-                tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-                                cmd_sync_poweroff_shutdown,
-                                1);
+                DBGPRINT("[CASE_CLOSE] skip shutdown, charger plugout");
+                break;
             }
-    #endif
-    #endif
+
+            if (app_is_stack_ready())
+            {
+        #ifndef BLE_ONLY_ENABLED
+                int activeCons = 0;
+                int active_phone_cons = 0;
+                int activeSourceCons = 0;
+
+                activeCons = app_bt_get_active_cons();
+                active_phone_cons = app_bt_count_mobile_link();
+                activeSourceCons = btif_me_get_source_activeCons();
+
+                DBGPRINT("CMD_CLOSE_CASE activeCons=%d activeSourceCons=%d active_phone_cons=%d",
+                        activeCons,
+                        activeSourceCons,
+                        active_phone_cons);
+
+        #ifdef IBRT
+                if (bts_tws_if_is_tws_link_connected())
+                {
+                    uint8_t cmd_sync_poweroff_shutdown[1];
+
+                    cmd_sync_poweroff_shutdown[0] = 1;
+
+                    DBGPRINT("%s send APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC",
+                            __func__);
+
+                    tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+                                    cmd_sync_poweroff_shutdown,
+                                    1);
+                }
+        #endif
+        #endif
+            }
+
+            DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
+
+            earBudsCloseOff_PogonIn_StartTimer();
         }
+    break;
 
+    case CMD_EAR_RESET:
+    {
+      
+        if (1)
+        {
+            printf("CMD_EAR_RESET factory reset!!! return ");
+            return;
+        }
+        else {
 
-        earBudsCloseOff_PogonIn_StartTimer();
+            printf("CMD_EAR_RESET factory reset!!!");
+
+            LinkDisconnectDirectly(true);
+
+            /*
+            * Delete phone paired records only.
+            * Do not delete TWS pairing records.
+            */
+            wired_uart_remove_all_phone_paired_list();
+
+            /*
+            * Clear SDK NV records.
+            * Note: Do not call besui_app_clear_all_nvrecord() here,
+            * because it cannot be linked from this module.
+            */
+            nv_record_rebuild(NV_REBUILD_SDK_ONLY);
+
+            /*
+            * Restore EQ preset 0.
+            */
+            handleSetEqIndex(0);
+            app_ibrt_customif_cmd_sync_music_eq(0);
+
+            /*
+            * Restore default key mapping.
+            */
+            wired_uart_factory_reset_app_nv();
+            /*
+            * Restore default device name.
+            */
+            factory_section_set_bt_name("nwm CLIPS", strlen("nwm CLIPS") + 1);
+
+            /*
+            * Reset saved box battery to invalid value.
+            */
+            //box_battery_nv_reset();
+
+            /*
+            * Clear BLE state.
+            */
+            bes_ble_gap_disconnect_all();
+            bes_ble_gap_clear_white_list_for_mobile();
+
+            osDelay(500);
+
+            app_reset();
+        }
     }
     break;
 
-    case CMD_EAR_RESET: //fatory
-        {
-        	//aiWang_remove_all_paired_list();  // Removed: deletes ALL pairings including TWS
-        	printf("CMD_EAR_RESET factory resett!!!");
-            LinkDisconnectDirectly(true);
-        	wired_uart_remove_all_phone_paired_list();  // Keep: only deletes phone pairings, preserves TWS
-        	if (bts_tws_if_is_tws_link_connected())
-        	{
-        		uint8_t cmd_sync_clear_pairlist[2];
-        	    cmd_sync_clear_pairlist[0] = 0;
-        	    cmd_sync_clear_pairlist[1] = 1;
-        		tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_clear_pairlist, 2);
-        	}
-            bes_ble_gap_disconnect_all();
-            bes_ble_gap_clear_white_list_for_mobile();
-            osDelay(10);
-        	app_reset();
-        }
-    	break;
     case CMD_SET_MAC:
         {
         	if (operateLeftOrRight == isRightEarbuds)
@@ -1157,13 +1309,21 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         g_case_state = 1;
         boxChargerStatus.boxIsOpen = true;
-        boxChargerStatus.needOpenEarbuds = true;
-
+        boxChargerStatus.needOpenEarbuds = true;        
         earBudsCloseOff_PogonIn_StopTimer();
 
         DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
 
         wired_uart_send_cmd_ack_ok();
+    }
+    break;
+    case CMD_SEND_DTM_MODE:
+    {
+        DBGPRINT("[DUT] Enter DTM mode");
+
+        /* Disable 1-Mic Noise Suppression */
+        ntt_dut_speech_tx_1mic_ns_bypass_set(1);
+        DBGPRINT("[DUT] TX 1Mic NS -> BYPASS");
     }
     break;
     default:
@@ -1210,7 +1370,7 @@ static void uart_idle_timeout_callback(void const *argument)
     DBGPRINT("UART idle timeout detected! No data received for %dms\n", UART_IDLE_TIMEOUT_MS);
     aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
-	
+	ntt_audio_output_mute_refresh();
 	osTimerDelete(uart_idle_timer_id);
 	uart_idle_timer_id = NULL;
     // 调用其他函数

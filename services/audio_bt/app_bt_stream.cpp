@@ -234,6 +234,8 @@ extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ
 
 #endif
 
+extern "C" uint8_t get_er_inbox_status(void);
+
 void(*app_bt_stream_ext_sco_playback)(uint8_t *buf, uint32_t len) = NULL;
 uint32_t (*app_bt_stream_ext_sco_capture)(uint8_t *buf, uint32_t len) = NULL;
 void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32_t len),
@@ -241,6 +243,20 @@ void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32
 {
     app_bt_stream_ext_sco_playback = playback_cb;
     app_bt_stream_ext_sco_capture  = capture_cb;
+}
+
+extern "C" void ntt_audio_output_mute_refresh(void)
+{
+    if (get_er_inbox_status())
+    {
+        hal_codec_dac_mute(true);
+        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud in box, force speaker mute");
+    }
+    else
+    {
+        hal_codec_dac_mute(false);
+        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud out box, release speaker un-mute");
+    }
 }
 
 // #define A2DP_STREAM_AUDIO_DUMP      (16)
@@ -4400,6 +4416,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
         {
             af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK);
+            ntt_audio_output_mute_refresh();
             osThreadSetPriority(localThread, currentPriority);
         }
 
@@ -7245,6 +7262,7 @@ static int bt_sco_player(bool on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
 
         af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK);
+        ntt_audio_output_mute_refresh();
         af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_CAPTURE);
 
         af_stream_start(AUD_STREAM_ID_1, AUD_STREAM_PLAYBACK);

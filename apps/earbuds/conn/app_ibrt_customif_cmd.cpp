@@ -77,6 +77,11 @@ static uint8_t g_tws_peer_box_battery_level = 0xFF;
 static bool g_tws_peer_box_battery_valid = false;
 extern "C" uint8_t app_battery_current_level(void);
 uint8_t getBoxChargerBattery(void);
+extern "C" void ntt_color_code_nv_set(uint8_t color);
+extern "C" uint8_t ntt_color_code_nv_get(void);
+extern void ntt_ble_adv_refresh_data(void);
+
+extern bool ntt_color_code_is_valid(uint8_t color);
 
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
@@ -86,6 +91,17 @@ uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void)
 {
     return g_tws_peer_box_battery_valid ? g_tws_peer_box_battery_level : 0xFF;
+}
+
+#define NTT_COLOR_CODE_BLACK         0x4B
+#define NTT_COLOR_CODE_SILVER_WHITE  0x53
+#define NTT_COLOR_CODE_GOLD          0x4E
+
+static bool ntt_color_code_is_valid_local(uint8_t color)
+{
+    return ((color == NTT_COLOR_CODE_BLACK) ||
+            (color == NTT_COLOR_CODE_SILVER_WHITE) ||
+            (color == NTT_COLOR_CODE_GOLD));
 }
 
 #if defined(IBRT)
@@ -110,6 +126,11 @@ static void app_ibrt_customif_button_map_cmd_send_handler(uint16_t rsp_seq, uint
 
 static void app_ibrt_customif_sync_bt_name_cmd_send(uint8_t *p_buff, uint16_t length);
 static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
+
+static void ntt_master_sync_eq_to_peer(void);
+static void ntt_master_sync_keymap_to_peer(void);
+static void ntt_master_sync_bt_name_to_peer(void);
+void ntt_master_sync_all_user_settings_to_peer(void);
 
 #if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
@@ -215,6 +236,108 @@ void app_ibrt_tws_capsensor_wear_rx_handler(uint16_t rsp_seq, uint8_t *p_buff, u
 }
 //----------------------------------------------------------------------------------------------------
 #endif
+
+void ntt_master_sync_all_user_settings_to_peer(void)
+{
+#ifdef IBRT
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip, tws not connected");
+        return;
+    }
+
+    EARBUDS_TRACE(0, "[NTT_USER_SYNC] sync all settings to peer");
+
+    ntt_master_sync_eq_to_peer();
+    ntt_master_sync_keymap_to_peer();
+    ntt_master_sync_bt_name_to_peer();
+#endif
+}
+
+static void ntt_master_sync_eq_to_peer(void)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+    uint8_t eq_index = 0;
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC][EQ] nvrecord_env null");
+        return;
+    }
+
+    eq_index = nvrecord_env->eq_index_data;
+
+    if (eq_index > 5)
+    {
+        EARBUDS_TRACE(1, "[NTT_USER_SYNC][EQ] invalid eq_index=%d, force 0", eq_index);
+        eq_index = 0;
+        nvrecord_env->eq_index_data = eq_index;
+        nv_record_env_set(nvrecord_env);
+    }
+
+    EARBUDS_TRACE(1,
+        "[NTT_USER_SYNC][EQ] send music eq_index=%d",
+        eq_index);
+
+    app_ibrt_customif_cmd_sync_music_eq(eq_index);
+}
+
+static void ntt_master_sync_keymap_to_peer(void)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC][KEYMAP] nvrecord_env null");
+        return;
+    }
+
+    uint8_t key_num = nvrecord_env->key_map_number;
+
+    if (key_num > 21)
+    {
+        key_num = 21;
+    }
+
+    uint8_t data[1 + 21 * 2] = {0};
+
+    data[0] = key_num;
+
+    for (uint8_t i = 0; i < key_num; i++)
+    {
+        data[i * 2 + 1] = nvrecord_env->key_map_action[i];
+        data[i * 2 + 2] = nvrecord_env->key_map_func[i];
+    }
+
+    EARBUDS_TRACE(1, "[NTT_USER_SYNC][KEYMAP] count=%d", key_num);
+
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_BUTTON_MAP, data, 1 + key_num * 2);
+}
+
+static void ntt_master_sync_bt_name_to_peer(void)
+{
+    uint8_t *name = factory_section_get_bt_name();
+
+    if (name == NULL)
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC][NAME] name null");
+        return;
+    }
+
+    uint8_t len = strlen((char *)name) + 1;
+
+    if (len > 49)
+    {
+        len = 49;
+    }
+
+    EARBUDS_TRACE(1, "[NTT_USER_SYNC][NAME] len=%d", len);
+
+    app_ibrt_customif_cmd_sync_bt_name(name, len);
+}
 
 #ifdef ALGO_INFO_SYNC_EN
 void algo_send_request(uint32_t message_id, uint32_t param0, uint32_t param1, uint32_t param2, uint32_t param3, uint32_t ptr);
@@ -401,12 +524,15 @@ static void app_ibrt_customif_sync_poweroff_shutdown_send_handler(uint16_t rsp_s
 
 void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
 {
+    static uint32_t s_last_sync_ms = 0;
+    static uint8_t s_last_level = 0xFF;
+    static uint8_t s_last_box_level = 0xFF;
+
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t role = app_ibrt_if_get_ui_role();
 
     if (!tws_connected)
     {
-
         return;
     }
 
@@ -416,6 +542,19 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
     }
 
     uint8_t box_level = getBoxChargerBattery();
+    uint32_t now_ms = GET_CURRENT_MS();
+
+    if ((s_last_level == current_level) &&
+        (s_last_box_level == box_level) &&
+        ((now_ms - s_last_sync_ms) < 120000))
+    {
+        return;
+    }
+
+    s_last_level = current_level;
+    s_last_box_level = box_level;
+    s_last_sync_ms = now_ms;
+
     uint8_t cmd_sync_battery_level[2];
     cmd_sync_battery_level[0] = current_level;
     cmd_sync_battery_level[1] = box_level;
@@ -767,6 +906,56 @@ static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rs
 
 }
 
+void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code)
+{
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][TX] skip, tws not connected color=0x%02X", color_code);
+        return;
+    }
+
+    if (!ntt_color_code_is_valid_local(color_code))
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][TX] invalid color=0x%02X", color_code);
+        return;
+    }
+
+    EARBUDS_TRACE(0, "[COLOR_SYNC][TX] color=0x%02X", color_code);
+
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_COLOR_CODE,
+                      &color_code,
+                      sizeof(color_code));
+}
+
+static void app_ibrt_customif_sync_color_code_send(uint8_t *p_buff, uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_COLOR_CODE, p_buff, length);
+}
+
+static void app_ibrt_customif_sync_color_code_received_handler(uint16_t rsp_seq,
+                                                               uint8_t *p_buff,
+                                                               uint16_t length)
+{
+    if ((p_buff == NULL) || (length < 1))
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][RX] invalid len=%d", length);
+        return;
+    }
+
+    uint8_t color_code = p_buff[0];
+
+    if (!ntt_color_code_is_valid_local(color_code))
+    {
+        EARBUDS_TRACE(0, "[COLOR_SYNC][RX] invalid color=0x%02X", color_code);
+        return;
+    }
+
+    EARBUDS_TRACE(0, "[COLOR_SYNC][RX] color=0x%02X", color_code);
+
+    ntt_color_code_nv_set(color_code);
+    ntt_ble_adv_refresh_data();
+}
+
 #if defined(USER_IMU_SENSORHUB_EN)
 static void imu_data_send_handler(uint8_t *p_buff, uint16_t length)
 {
@@ -940,6 +1129,14 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         APP_TWS_CMD_SYNC_BT_NAME,                              "TWS_CMD_SYNC_BT_NAME",
         app_ibrt_customif_sync_bt_name_cmd_send,
         app_ibrt_customif_sync_bt_name_cmd_send_handler,               0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
+        APP_TWS_CMD_SYNC_COLOR_CODE,                            "SYNC_COLOR_CODE",
+        app_ibrt_customif_sync_color_code_send,
+        app_ibrt_customif_sync_color_code_received_handler,             0,
         app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
         app_ibrt_custom_cmd_tx_done_handler_null,
         APP_TWS_CMD_PRIO_0
