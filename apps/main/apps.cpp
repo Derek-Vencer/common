@@ -92,7 +92,6 @@
 #endif
 bool ntt_manual_pairing_mode = false;
 
-
 #ifdef BIS_SELFSCAN_ENABLED
 extern void app_bis_selfscan_cmd_init(void);
 #endif

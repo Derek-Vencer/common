@@ -69,6 +69,7 @@ extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern "C" uint8_t ntt_color_code_nv_get(void);
 extern "C" void ntt_color_code_nv_set(uint8_t color);
 extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
+extern bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length);
 
 #define MAX_PACKET_SIZE             (512)
 #define SPARRAW_EVENT_MAX_MAILBOX   (10)
@@ -150,6 +151,21 @@ static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
 static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
 //#endif
 
+typedef enum
+{
+    SPARROW_API_TRANSPORT_BLE = 0,
+    SPARROW_API_TRANSPORT_SPP = 1,
+} SPARROW_API_TRANSPORT_E;
+
+static SPARROW_API_TRANSPORT_E g_sparrow_api_transport = SPARROW_API_TRANSPORT_BLE;
+
+/* app_spp_tota.cpp */
+
+static void sparrow_api_set_transport(SPARROW_API_TRANSPORT_E transport)
+{
+    g_sparrow_api_transport = transport;
+}
+
 extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1, uint8_t *fw_rev_2, uint8_t *fw_rev_3);
 
 void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func);
@@ -163,7 +179,7 @@ static void keymap_init_default(void);
 typedef struct{
 	uint8_t set_name_status;
 }bleCmdSetStatus;
-#define need_send_data_by_notify 0
+#define need_send_data_by_notify 1
 
 bleCmdSetStatus bleCmdSet_status;
 
@@ -238,7 +254,7 @@ static uint8_t s_key_map_count = 0;
 
 const key_map_entry_t s_key_default_map[21]{
 	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x08},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x08},
-	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x00},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x00},{0x64,0x00},
+	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x07},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x06},{0x64,0x00},
 };
 
 uint8_t key_event_is_left = 0;
@@ -308,7 +324,6 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     uint8_t leftBattery  = 0;
     uint8_t rightBattery = 0;
     uint8_t batteryArray[3] = {0};
-    uint8_t read_send_data[20] = {0};
 
     if ((data == NULL) || (len == 0))
     {
@@ -320,12 +335,6 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     localBattery = app_battery_current_level();
     peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
     boxBattery   = getBoxChargerBattery();
-
-	TRACE(0,
-      "[BAT][PEER] tws=%d peer=%d valid=%d",
-      twsConnected,
-      peerBattery,
-      peerValid);
 
     /* 電池尚未更新完成 */
     if ((localBattery > 100) || (boxBattery > 100))
@@ -363,15 +372,17 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     leftBattery  = localBattery;
     rightBattery = peerValid ? peerBattery : 0;
 #endif
-
+	TRACE(0,
+      "[BAT][PEER] tws=%d peer=%d valid=%d",
+      twsConnected,
+      peerBattery,
+      peerValid);
+      
     batteryArray[0] = leftBattery;
     batteryArray[1] = rightBattery;
     batteryArray[2] = boxBattery;
 
-    read_send_data[1] = 3;
-    memcpy(&read_send_data[2], batteryArray, 3);
-
-    sparraw_tx_msg(0x31, read_send_data, 5);
+    sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray));
 }
 
 void handleGetDeviceName(const uint8_t *data, uint16_t len)
@@ -455,9 +466,11 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 #endif
 }
 
+extern void handleGetKeyMapNumber(uint8_t *index);
+extern void handleGetKeyMapActionAndFunc(uint8_t index, uint8_t *action, uint8_t *func);
 void handleGetKeyMapping(const uint8_t *data, uint16_t len)
 {
-    TRACE(0,"%s.", __func__);
+    TRACE(0, "%s.", __func__);
 
     if ((data == NULL) || (len == 0))
     {
@@ -465,19 +478,84 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
         return;
     }
 
-#if need_send_data_by_notify
+    struct nvrecord_env_t *nvrecord_env = NULL;
+    nv_record_env_get(&nvrecord_env);
 
-    const uint8_t keyMaps[2] =
+    if (nvrecord_env == NULL)
     {
-        0x00,
-        0x14
-    };
+        ntt_api_send_error_notify(0x3F, API_ERR_STORAGE_ERROR);
+        return;
+    }
+
+    uint8_t key_number = nvrecord_env->key_map_number;
+    uint8_t read_key_map_data[64] = {0};
+    bool use_default_map = false;
+    bool all_empty = true;
+
+    TRACE(0, "[KEYMAP] nv key_number=%d", key_number);
+
+    if ((key_number == 0) || (key_number > 20))
+    {
+        TRACE(0, "[KEYMAP] invalid nv key_number=%d, use default", key_number);
+        key_number = 20;
+        use_default_map = true;
+    }
+    else
+    {
+        for (uint8_t i = 0; i < key_number; i++)
+        {
+            if ((nvrecord_env->key_map_action[i] != 0) ||
+                (nvrecord_env->key_map_func[i] != 0))
+            {
+                all_empty = false;
+                break;
+            }
+        }
+
+        if (all_empty)
+        {
+            TRACE(0, "[KEYMAP] nv keymap empty, use default");
+            key_number = 20;
+            use_default_map = true;
+        }
+    }
+
+    read_key_map_data[0] = 0x00;
+    read_key_map_data[1] = key_number * 2;
+
+    for (uint8_t i = 0; i < key_number; i++)
+    {
+        uint8_t action = 0;
+        uint8_t func = 0;
+
+        if (use_default_map)
+        {
+            action = s_key_default_map[i].actions;
+            func   = s_key_default_map[i].function;
+        }
+        else
+        {
+            action = nvrecord_env->key_map_action[i];
+            func   = nvrecord_env->key_map_func[i];
+        }
+
+        TRACE(0, "[KEYMAP] i=%d action=0x%02X func=0x%02X",
+              i, action, func);
+
+        read_key_map_data[i * 2 + 2] = action;
+        read_key_map_data[i * 2 + 3] = func;
+    }
+
+    TRACE(0, "[KEYMAP] number=%d payload_len=%d source=%s",
+          key_number,
+          key_number * 2 + 2,
+          use_default_map ? "default" : "nv");
+
+    DUMP8("%02X ", read_key_map_data, key_number * 2 + 2);
 
     sparraw_tx_msg(RSP_GET_KEY_MAPPING,
-                   keyMaps,
-                   sizeof(keyMaps));
-
-#endif
+                   read_key_map_data,
+                   key_number * 2 + 2);
 }
 
 void handleSetKeyMapping(const uint8_t *data, uint16_t len)
@@ -606,7 +684,7 @@ void handleGetEqIndex(uint8_t *index)
 
 void handleGetEqPresent(const uint8_t *data, uint16_t len)
 {
-    TRACE(0,"%s.", __func__);
+    TRACE(0, "%s.", __func__);
 
     if ((data == NULL) || (len == 0))
     {
@@ -624,11 +702,11 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
         return;
     }
 
-#if need_send_data_by_notify
+    TRACE(0, "[EQ] preset=%d", index);
+
     sparraw_tx_msg(RSP_GET_EQ_PRESET,
                    &index,
-                   1);
-#endif
+                   sizeof(index));
 }
 
 #include "hw_codec_iir_process.h"
@@ -1106,8 +1184,6 @@ static void sparraw_tx_cmd_data_rsp_neg(uint8_t error_code, uint8_t cmd_type, ui
 	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, 6);
 }
 
-
-//extern void handleGetKeyMapNumber(uint8_t *index);
 //extern void handleGetKeyMapActionAndFunc(uint8_t index,uint8_t *action,uint8_t *func);
 
 #if 0
@@ -1177,48 +1253,46 @@ const key_map_entry_t s_key_default_map[21]{
 // 初始化默认映射
 static void keymap_init_default(void)
 {
-#if 0
-    s_key_map_count = 0;
-    // 音乐模式
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_SINGLE),      .function = FUNC_PLAY_PAUSE };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_DOUBLE),      .function = FUNC_NEXT_SONG };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_TRIPLE),      .function = FUNC_PREV_SONG };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_IDLE_MUSIC | CLICK_HOLD_2S),     .function = FUNC_VOICE_ASSIST };
-    // 通话模式
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_SINGLE),            .function = FUNC_ACCEPT_CALL };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_DOUBLE),            .function = FUNC_REJECT_CALL };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_CALL | CLICK_HOLD_2S),           .function = FUNC_VOICE_ASSIST };
-    // 左右方向
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_LEFT | CLICK_SINGLE),            .function = FUNC_VOLUME_DOWN };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_LEFT | CLICK_HOLD_2S),           .function = FUNC_PREV_SONG };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_RIGHT | CLICK_SINGLE),           .function = FUNC_VOLUME_UP };
-    s_key_map[s_key_map_count++] = (key_map_entry_t){ .actions = (ACTION_RIGHT | CLICK_HOLD_2S),          .function = FUNC_NEXT_SONG };
-#endif
-	uint8_t key_number = 0;
-	handleGetKeyMapNumber(&key_number);
-	s_key_map_count = key_number;
-	if(key_number == 0)
-	{
-		for(int i = 0;i<20;i++)
-		{
-			uint8_t key_action = s_key_default_map[i].actions;
-			uint8_t key_func = s_key_default_map[i].function;
-			
-			s_key_map[i] = (key_map_entry_t){ .actions = key_action,      .function = key_func };
-		}
-		s_key_map_count = 20;
-		//printf("@@key_number usr defaule\n");
-	}
-	else{
-		for(int i = 0;i<key_number;i++)
-		{
-			uint8_t key_action = 0;
-			uint8_t key_func = 0;
-			handleGetKeyMapActionAndFunc(i,&key_action,&key_func);
-			
-			s_key_map[i] = (key_map_entry_t){ .actions = key_action,      .function = key_func };
-		}
-	}
+    uint8_t key_number = 0;
+
+    handleGetKeyMapNumber(&key_number);
+
+    if ((key_number == 0) || (key_number > 20))
+    {
+        TRACE(0, "[KEYMAP] NV empty, write default to NV");
+
+        s_key_map_count = 20;
+
+        for (uint8_t i = 0; i < 20; i++)
+        {
+            uint8_t key_action = s_key_default_map[i].actions;
+            uint8_t key_func   = s_key_default_map[i].function;
+
+            s_key_map[i].actions  = key_action;
+            s_key_map[i].function = key_func;
+
+            handleSetKeyMapActionAndFunc(i, key_action, key_func);
+        }
+
+        handleSetKeyMapNumber(20);
+    }
+    else
+    {
+        s_key_map_count = key_number;
+
+        for (uint8_t i = 0; i < key_number; i++)
+        {
+            uint8_t key_action = 0;
+            uint8_t key_func   = 0;
+
+            handleGetKeyMapActionAndFunc(i, &key_action, &key_func);
+
+            s_key_map[i].actions  = key_action;
+            s_key_map[i].function = key_func;
+        }
+    }
+
+    TRACE(0, "[KEYMAP] init count=%d", s_key_map_count);
 }
 
 // 保存整个映射表（例如写入 Flash / EEPROM）
@@ -1581,14 +1655,62 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 }
 
 //#if need_send_data_by_notify
-static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len) {
-	uint8_t  rsp_buffer[64];
-	rsp_buffer[0] = rsp_type;
-	if (NULL != data && len > 0)
-	{
-		memcpy(&rsp_buffer[1], data, len);
-	}
-	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, len + 1);
+extern bool app_spp_tota_send_data(uint8_t *ptrData, uint16_t length);
+
+static void sparraw_tx_msg(uint8_t rsp_type,
+                           const uint8_t *data,
+                           uint16_t len)
+{
+    uint8_t rsp_buffer[256] = {0};
+    const uint16_t rsp_len = (uint16_t)(len + 3U);
+
+    if ((size_t)rsp_len > sizeof(rsp_buffer))
+    {
+        TRACE(0, "[SPARROW_TX] overflow len=%u", (unsigned)rsp_len);
+        return;
+    }
+
+    rsp_buffer[0] = rsp_type;
+    rsp_buffer[1] = (uint8_t)((len >> 8) & 0xFF);
+    rsp_buffer[2] = (uint8_t)(len & 0xFF);
+
+    if ((data != NULL) && (len > 0))
+    {
+        memcpy(&rsp_buffer[3], data, len);
+    }
+
+    if (g_sparrow_api_transport == SPARROW_API_TRANSPORT_SPP)
+    {
+        bool ret = false;
+
+        TRACE(0, "[SPARROW_TX][SPP] rsp=0x%02X payload_len=%u total=%u",
+              rsp_type,
+              (unsigned)len,
+              (unsigned)rsp_len);
+
+        DUMP8("%02X ", rsp_buffer, rsp_len);
+
+        ret = app_spp_tota_send_data(rsp_buffer, rsp_len);
+
+        TRACE(0, "[SPARROW_TX][SPP] send ret=%d", ret ? 1 : 0);
+        return;
+    }
+
+    if (app_sparraw_env.notifyEnable)
+    {
+        TRACE(0, "[SPARROW_TX][BLE] rsp=0x%02X payload_len=%u total=%u",
+              rsp_type,
+              (unsigned)len,
+              (unsigned)rsp_len);
+
+        ble_aiwang_srv_send_data_via_notification(rsp_buffer, rsp_len);
+    }
+    else
+    {
+        TRACE(0, "[SPARROW_TX][BLE] notify disabled rsp=0x%02X len=%u",
+              rsp_type,
+              (unsigned)rsp_len);
+    }
 }
 //#endif
 static void sparraw_read_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token, const uint8_t* data, uint16_t len) {
@@ -1860,6 +1982,57 @@ static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len)
     }
 }
 
+
+extern "C" bool sparrow_spp_api_is_cmd(const uint8_t *data, uint16_t len)
+{
+    uint16_t i;
+
+    if ((data == NULL) || (len == 0))
+    {
+        return false;
+    }
+
+    /* HAL_CMD/SPP EQ tuning packet starts with 7B 00 00 00 7B 00 00 00.
+     * Keep it in the original TOTA/HAL path, not Sparrow GATT API bridge.
+     */
+    if ((len >= 8) &&
+        (data[0] == 0x7B) && (data[1] == 0x00) &&
+        (data[2] == 0x00) && (data[3] == 0x00) &&
+        (data[4] == 0x7B) && (data[5] == 0x00) &&
+        (data[6] == 0x00) && (data[7] == 0x00))
+    {
+        return false;
+    }
+
+    if (data[0] == SET_COLOR_CODE)
+    {
+        return true;
+    }
+
+    for (i = 0; i < aiWangCmdTypesCount; i++)
+    {
+        if (data[0] == aiWangCmdTypes[i].cmd)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+extern "C" void sparrow_spp_api_rx_handler(const uint8_t *data, uint16_t len)
+{
+    if (!sparrow_spp_api_is_cmd(data, len))
+    {
+        TRACE(0, "[SPARROW_RX][SPP] not api packet len=%d", len);
+        return;
+    }
+
+    TRACE(0, "[SPARROW_RX][SPP] len=%d cmd=0x%02X", len, data[0]);
+    sparrow_api_set_transport(SPARROW_API_TRANSPORT_SPP);
+    sparraw_rx_cmd_parse_v2(data, len);
+}
+
 static void sparraw_event_handler_thread(void const *argument)
 {
 	int len = 0;
@@ -1888,6 +2061,7 @@ static void sparraw_event_handler_thread(void const *argument)
 #else
         if (BLE_AIWANG_SRV_RX == event)
         {
+           sparrow_api_set_transport(SPARROW_API_TRANSPORT_BLE);
            sparraw_rx_cmd_parse_v2(&payload_buffer[0], len);
         }
 #endif
