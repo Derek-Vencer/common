@@ -3591,10 +3591,10 @@ void ble_core_disable_stub_adv(void)
 }
 POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 {
-    DEBUG_INFO(0, "%s", __func__);
-
     bool adv_enable = false;
     BLE_ADV_PARAM_T *ble_adv = (BLE_ADV_PARAM_T *)param;
+
+    DEBUG_INFO(0, "%s", __func__);
 
     const uint8_t aiWangPrimaryService[16] = {
         0xCD, 0x4B, 0xEF, 0xBA,
@@ -3616,10 +3616,33 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     memset(ble_adv->scanRspData, 0, sizeof(ble_adv->scanRspData));
     ble_adv->scanRspDataLen = 17;
 
+    /*
+     * Manufacturer Specific Data:
+     * 0:    AD Len = 0x10
+     * 1:    AD Type = 0xFF
+     * 2-3:  Manufacturer ID = 0x9B, 0x0C
+     * 4-9:  Sparrow ID = "MBE003"
+     * 10:   Color Code
+     * 11-16 Device Address
+     */
     ble_adv->scanRspData[0] = 0x10;
     ble_adv->scanRspData[1] = 0xFF;
     ble_adv->scanRspData[2] = 0x9B;
     ble_adv->scanRspData[3] = 0x0C;
+
+    memcpy(&ble_adv->scanRspData[4], "MBE003", 6);
+
+    uint8_t earBudsColor = aiWangGetEarBudsColor();
+    uint8_t nvColor = ntt_color_code_nv_get();
+
+    if ((0 == earBudsColor) || (0xFF == earBudsColor))
+    {
+        ble_adv->scanRspData[10] = nvColor;
+    }
+    else
+    {
+        ble_adv->scanRspData[10] = earBudsColor;
+    }
 
     uint8_t *local_bt_addr = app_ibrt_if_get_bt_local_address();
     uint8_t *peer_nv_addr  = nv_record_get_ibrt_peer_addr();
@@ -3632,60 +3655,29 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
-    /*
-     * Project rule:
-     * address[0] odd  = right ear
-     * address[0] even = left ear
-     *
-     * local_bt_addr : current ear BT address
-     * peer_nv_addr  : TWS peer BT address saved in NV, valid before TWS connected
-     */
     if (local_bt_addr &&
         memcmp(local_bt_addr, invalid_ff, 6) &&
         memcmp(local_bt_addr, invalid_00, 6) &&
         (local_bt_addr[0] & 0x01))
     {
-        /*
-         * Current ear is right ear.
-         */
-        memcpy(&ble_adv->scanRspData[4], local_bt_addr, 6);
+        memcpy(&ble_adv->scanRspData[11], local_bt_addr, 6);
     }
     else if (peer_nv_addr &&
              memcmp(peer_nv_addr, invalid_ff, 6) &&
              memcmp(peer_nv_addr, invalid_00, 6) &&
              (peer_nv_addr[0] & 0x01))
     {
-        /*
-         * Current ear is left ear, NV peer is right ear.
-         */
-        memcpy(&ble_adv->scanRspData[4], peer_nv_addr, 6);
+        memcpy(&ble_adv->scanRspData[11], peer_nv_addr, 6);
     }
     else
     {
-        /*
-         * Fallback only. This should not happen after TWS pairing is saved.
-         */
-        factory_section_original_btaddr_get(&ble_adv->scanRspData[4]);
-    }
-
-    memcpy(&ble_adv->scanRspData[10], "MBE003", 6);
-
-    uint8_t earBudsColor = aiWangGetEarBudsColor();
-    uint8_t nvColor = ntt_color_code_nv_get();
-
-    if ((0 == earBudsColor) || (0xFF == earBudsColor))
-    {
-        ble_adv->scanRspData[16] = nvColor;
-    }
-    else
-    {
-        ble_adv->scanRspData[16] = earBudsColor;
+        factory_section_original_btaddr_get(&ble_adv->scanRspData[11]);
     }
 
     DEBUG_INFO(0, "[ADV] aiWangGetEarBudsColor=0x%02X", earBudsColor);
     DEBUG_INFO(0, "[ADV] ntt_color_code_nv_get=0x%02X", nvColor);
-    DEBUG_INFO(0, "[ADV] final color scanRspData[16]=0x%02X",
-            ble_adv->scanRspData[16]);
+    DEBUG_INFO(0, "[ADV] final color scanRspData[10]=0x%02X",
+            ble_adv->scanRspData[10]);
 
     DEBUG_INFO(0, "[ADV] Full Manufacturer Data:");
     DUMP8("%02X ", &ble_adv->scanRspData[0], 17);
@@ -3697,12 +3689,8 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     DUMP8("%02X ", peer_nv_addr, 6);
 
     DEBUG_INFO(0, "[ADV] Manufacturer BT Addr:");
-    DUMP8("%02X ", &ble_adv->scanRspData[4], 6);
-    /*
-     * Do not add local name into ADV or Scan Response.
-     * This prevents other phones from scanning nwm SLIPS / nwm CLIPS.
-     * Bonded phones may still show the cached name and connect by address.
-     */
+    DUMP8("%02X ", &ble_adv->scanRspData[11], 6);
+
     DEBUG_INFO(0, "%s skip BleName in USER_STUB adv", __func__);
 
     do {
