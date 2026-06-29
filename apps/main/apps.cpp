@@ -412,6 +412,7 @@ extern "C" {
 extern void sparraw_service_init(void);
 extern bool aiWangBoxIsUsed(void);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
+extern bool ntt_case_open_pending;
 //extern void charger_manager_start(void);
 
 #ifdef IBRT
@@ -588,25 +589,71 @@ void app_10_second_timer_check(void)
     unsigned int i;
 
 #ifdef BESUI_TWS_EN
-    if(uicom.box_open_bat_det_flag)
+    if (uicom.box_open_bat_det_flag)
     {
-        BESUI_TRACE(0,"[UITIMER]fast get battery do not count++");
+        BESUI_TRACE(0, "[UITIMER]fast get battery do not count++");
         return;
     }
 #endif
 
-    for(i = 0; i < ARRAY_SIZE(app_10_second_array); i++) {
-        if (timer->timer_en) {
-            timer->timer_count++;
-#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-            MAIN_TRACE(0,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
+#ifdef IBRT
+    static uint8_t ntt_reconnect_retry = 0;
+
+    if (!app_ibrt_middleware_is_ui_slave())
+    {
+        if (ntt_manual_pairing_mode)
+        {
+            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] skip reconnect in manual pairing mode");
+        }
+        else if (btif_me_get_pendCons() != 0)
+        {
+            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] pending ACL exists, wait next timer");
+        }
+        else if (ntt_reconnect_retry < 30)
+        {
+            MAIN_TRACE(1,
+                "[NTT_TAKEOVER][TIMER] opening reconnect retry=%d",
+                ntt_reconnect_retry);
+
+            ntt_reconnect_retry++;
+
+            app_bt_profile_connect_manager_opening_reconnect();
+        }
+        else
+        {
+            MAIN_TRACE(0, "[NTT_TAKEOVER][TIMER] reconnect retry limit reached");
+        }
+
+        if (app_bt_ibrt_has_mobile_link_connected() &&
+            btif_me_get_pendCons() == 0)
+        {
+            ntt_reconnect_retry = 0;
+        }
+    }
 #endif
-            if (timer->timer_count >= timer->timer_period) {
+
+    for (i = 0; i < ARRAY_SIZE(app_10_second_array); i++)
+    {
+        if (timer->timer_en)
+        {
+            timer->timer_count++;
+
+#if 1
+            MAIN_TRACE(0, "[UITIMER]%s id %d count %d",
+                       __func__, i, timer->timer_count);
+#endif
+
+            if (timer->timer_count >= timer->timer_period)
+            {
                 timer->timer_en = 0;
+
                 if (timer->cb)
+                {
                     timer->cb();
+                }
             }
         }
+
         timer++;
     }
 }

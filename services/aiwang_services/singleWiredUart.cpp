@@ -1150,22 +1150,37 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                         activeCons,
                         activeSourceCons,
                         active_phone_cons);
-
+#if 0
         #ifdef IBRT
-                if (bts_tws_if_is_tws_link_connected())
-                {
-                    uint8_t cmd_sync_poweroff_shutdown[1];
+        if (bts_tws_if_is_tws_link_connected())
+        {
+            if (app_ibrt_if_get_ui_role() == TWS_UI_MASTER &&
+                bts_tws_if_is_tws_link_connected())
+            {
+                DBGPRINT("[ROLE_SWITCH] Master close case, request role switch");
 
-                    cmd_sync_poweroff_shutdown[0] = 1;
+                /*
+                * Ask peer to become Master first.
+                */
+                app_ibrt_customif_ui_tws_switch();
 
-                    DBGPRINT("%s send APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC",
-                            __func__);
+                /*
+                * Give role switch some time before shutdown.
+                */
+                osDelay(200);
+            }
 
-                    tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-                                    cmd_sync_poweroff_shutdown,
-                                    1);
-                }
+            uint8_t cmd_sync_poweroff_shutdown[1] = {1};
+
+            DBGPRINT("%s send APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC",
+                    __func__);
+
+            tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+                            cmd_sync_poweroff_shutdown,
+                            1);
+        }
         #endif
+#endif
         #endif
             }
 
