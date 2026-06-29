@@ -1271,19 +1271,43 @@ static void app_ibrt_customif_sync_bt_name_cmd_send(uint8_t *p_buff, uint16_t le
     EARBUDS_TRACE(1, "%s", __func__);
 }
 
-static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
+static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq,
+                                                            uint8_t *p_buff,
+                                                            uint16_t length)
 {
-    EARBUDS_TRACE(1, "%s,length:%d", __func__,length);
-	#if 0
-	char nameBuffer[50+1] = {0};
-	uint16_t name_len = 0;
-	name_len = length > 45?45:length;
-	memcpy(nameBuffer, p_buff, name_len);
-	factory_section_set_bt_name(nameBuffer, name_len);
-	#endif
-	factory_section_set_bt_name((char*)p_buff, length);
-		
+    EARBUDS_TRACE(1, "%s,length:%d", __func__, length);
+
+    char nameBuffer[50 + 1] = {0};
+    uint16_t name_len = 0;
+
+    if (p_buff == NULL || length == 0)
+    {
+        EARBUDS_TRACE(0, "[BT_NAME_SYNC] invalid name data");
+        return;
+    }
+
+    name_len = (length > 50) ? 50 : length;
+    memcpy(nameBuffer, p_buff, name_len);
+    nameBuffer[name_len] = '\0';
+
+    const char *old_name = (const char *)factory_section_get_bt_name();
+
+    if (old_name && strcmp(old_name, nameBuffer) == 0)
+    {
+        EARBUDS_TRACE(1,
+            "[BT_NAME_SYNC] same name, skip factory write: %s",
+            nameBuffer);
+        return;
+    }
+
+    EARBUDS_TRACE(2,
+        "[BT_NAME_SYNC] update name: old=%s new=%s",
+        old_name ? old_name : "NULL",
+        nameBuffer);
+
+    factory_section_set_bt_name(nameBuffer, name_len);
 }
+
 void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length)
 {
 	if (!bts_tws_if_is_tws_link_connected())

@@ -100,6 +100,7 @@ extern ibrt_mgr_status_changed_cb_t *ibrt_mgr_status_changed_client_cb;
 extern ibrt_ext_conn_policy_cb_t *ibrt_ext_conn_policy_client_cb;
 
 uint32_t app_ibrt_customif_set_profile_delaytime_on_spp_connect(const uint8_t *uuid_data_ptr, uint8_t uuid_len);
+extern void ntt_master_sync_all_user_settings_to_peer(void);
 
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
@@ -648,6 +649,68 @@ void besui_tws_state_event(ibrt_conn_tws_conn_state_event *state, uint8_t reason
 }
 #endif
 
+#ifdef IBRT
+#define NTT_USER_SETTING_SYNC_DELAY_MS    2000
+
+static osTimerId ntt_user_setting_sync_timer = NULL;
+static bool ntt_user_setting_synced_once = false;
+
+static void ntt_user_setting_sync_timer_handler(void const *param)
+{
+    if (ntt_user_setting_synced_once)
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip, already synced once");
+        return;
+    }
+
+    if (!app_ibrt_middleware_is_ui_slave())
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC] delayed sync user settings");
+
+        ntt_user_setting_synced_once = true;
+        ntt_master_sync_all_user_settings_to_peer();
+    }
+    else
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip, role is slave");
+    }
+}
+
+osTimerDef(NTT_USER_SETTING_SYNC_TIMER,
+           ntt_user_setting_sync_timer_handler);
+
+static void ntt_user_setting_sync_delay_start(void)
+{
+    if (ntt_user_setting_synced_once)
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip start, already synced once");
+        return;
+    }
+
+    if (ntt_user_setting_sync_timer == NULL)
+    {
+        ntt_user_setting_sync_timer =
+            osTimerCreate(osTimer(NTT_USER_SETTING_SYNC_TIMER),
+                          osTimerOnce,
+                          NULL);
+    }
+
+    if (ntt_user_setting_sync_timer == NULL)
+    {
+        EARBUDS_TRACE(0, "[NTT_USER_SYNC] delay timer create failed");
+        return;
+    }
+
+    osTimerStop(ntt_user_setting_sync_timer);
+    osTimerStart(ntt_user_setting_sync_timer,
+                 NTT_USER_SETTING_SYNC_DELAY_MS);
+
+    EARBUDS_TRACE(0,
+        "[NTT_USER_SYNC] delay start %d ms",
+        NTT_USER_SETTING_SYNC_DELAY_MS);
+}
+#endif
+
 void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *state, uint8_t reason_code)
 {
     EARBUDS_TRACE(0,"custom_ui tws acl state changed = %d with reason 0x%x role %d", state->state.acl_state, reason_code, state->current_role);
@@ -668,6 +731,16 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
     {
         case IBRT_CONN_ACL_CONNECTED:
             break;
+        case IBRT_CONN_ACL_PROFILES_CONNECTED:
+#ifdef IBRT
+        if (!app_ibrt_middleware_is_ui_slave())
+        {
+            EARBUDS_TRACE(0,
+                "[NTT_PROFILE_SYNC] TWS profiles connected, skip early profile sync test");
+            ntt_user_setting_sync_delay_start();
+        }
+#endif
+        break;
         case IBRT_CONN_ACL_DISCONNECTED:
             break;
         case IBRT_CONN_ACL_CONNECTING_CANCELED:
