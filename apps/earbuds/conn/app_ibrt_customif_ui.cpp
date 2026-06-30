@@ -101,6 +101,10 @@ extern ibrt_ext_conn_policy_cb_t *ibrt_ext_conn_policy_client_cb;
 
 uint32_t app_ibrt_customif_set_profile_delaytime_on_spp_connect(const uint8_t *uuid_data_ptr, uint8_t uuid_len);
 extern void ntt_master_sync_all_user_settings_to_peer(void);
+extern bool app_ui_user_role_switch(bool switch2master);
+#ifdef IBRT
+static bool g_ntt_case_close_wait_poweroff = false;
+#endif
 
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
@@ -1266,6 +1270,36 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
     {
         EARBUDS_TRACE(0,"custom_ui:exist device doing ibrt role switch to %d failed", current_role);
     }
+
+#ifdef IBRT
+    if (g_ntt_case_close_wait_poweroff)
+    {
+        EARBUDS_TRACE(2,
+            "[ROLE_SWITCH][CASE_CLOSE] complete role=%d err=%d",
+            current_role,
+            errCode);
+
+        if ((!errCode) && (current_role == TWS_UI_SLAVE))
+        {
+            EARBUDS_TRACE(0,
+                "[ROLE_SWITCH][CASE_CLOSE] role switch done, shutdown old master");
+
+            g_ntt_case_close_wait_poweroff = false;
+
+            app_shutdown();
+            return;
+        }
+
+        if (errCode)
+        {
+            EARBUDS_TRACE(0,
+                "[ROLE_SWITCH][CASE_CLOSE] role switch failed, clear wait flag");
+
+            g_ntt_case_close_wait_poweroff = false;
+        }
+    }
+#endif
+
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook) {
         ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook(current_role, errCode);
     }
@@ -1300,14 +1334,6 @@ void app_ibrt_customif_pre_handle_box_event_callback(app_ui_evt_t box_evt)
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->pre_handle_box_event_hook) {
         ibrt_mgr_status_changed_client_cb->pre_handle_box_event_hook(box_evt);
     }
-}
-/*
-* custom tws switch interface
-* tws switch cmd send sucess, return true, else return false
-*/
-void app_ibrt_customif_ui_tws_switch(void)
-{
-    app_ibrt_if_tws_role_switch_request();
 }
 
 /*
@@ -1928,3 +1954,41 @@ bool app_ibrt_customif_disallow_reconnect_mobile()
 
     return false;
 }
+
+#ifdef IBRT
+
+extern "C" bool ntt_case_close_role_switch_can_shutdown(void)
+{
+#ifdef IBRT
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        return true;
+    }
+
+    return (app_ibrt_if_get_ui_role() != TWS_UI_MASTER);
+#else
+    return true;
+#endif
+}
+
+extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
+{
+    if (bts_tws_if_is_tws_link_connected() &&
+        app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+    {
+        EARBUDS_TRACE(0,
+            "[ROLE_SWITCH][CASE_CLOSE] master switch to slave by UI API");
+
+        g_ntt_case_close_wait_poweroff = true;
+
+        return app_ui_user_role_switch(false);
+    }
+
+    return false;
+}
+
+extern "C" void ntt_case_close_role_switch_reset(void)
+{
+    g_ntt_case_close_wait_poweroff = false;
+}
+#endif

@@ -204,6 +204,10 @@ osTimerDef (APP_BATTERY_PLUGINOUT_DEBOUNCE, app_battery_pluginout_debounce_handl
 static osTimerId app_battery_pluginout_debounce_timer = NULL;
 static uint32_t app_battery_pluginout_debounce_ctx = 0;
 static uint32_t app_battery_pluginout_debounce_cnt = 0;
+#ifdef IBRT
+extern "C" void ntt_case_close_role_switch_reset(void);
+extern "C" bool ntt_case_close_role_switch_can_shutdown(void);
+#endif
 
 #ifndef MORE_THAN_ONE_TYPE_OF_CHARGER
 const
@@ -226,25 +230,80 @@ osTimerDef (POGONIN_CLOSE_TIMER, earBudsCloseOff_PogonIn_handler);
 static osTimerId pogonPinCloseTimer = NULL;
 extern bool  aiWangIsNeedOpenEarBuds(void);
 
+#ifdef IBRT
+extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void);
+#endif
+void earBudsCloseOff_PogonIn_StartTimer(void);
+
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     int8_t charging = app_battery_is_charging();
 
-
-    /*
-     * Power off only when battery state is charging.
-     */
     if (charging)
     {
-        BATTERY_TRACE(0,
-                      "[POWER_OFF] charging=1 -> shutdown");
+        BATTERY_TRACE(0, "[POWER_OFF] charging=1 -> check role switch");
 
+#ifdef IBRT
+        static bool s_role_switch_requested = false;
+        static uint8_t s_role_switch_wait_cnt = 0;
+
+        if (s_role_switch_requested)
+        {
+            if (ntt_case_close_role_switch_can_shutdown())
+            {
+                BATTERY_TRACE(0,
+                    "[POWER_OFF] role switch done by timer check, shutdown now");
+
+                s_role_switch_requested = false;
+                s_role_switch_wait_cnt = 0;
+                app_shutdown();
+                return;
+            }
+
+            s_role_switch_wait_cnt++;
+
+            BATTERY_TRACE(1,
+                "[POWER_OFF] wait role switch callback/timer cnt=%d",
+                s_role_switch_wait_cnt);
+
+            if (s_role_switch_wait_cnt < 10)
+            {
+                earBudsCloseOff_PogonIn_StartTimer();
+                return;
+            }
+
+            BATTERY_TRACE(0,
+                "[POWER_OFF] role switch timeout, fallback shutdown");
+
+            s_role_switch_requested = false;
+            s_role_switch_wait_cnt = 0;
+            app_shutdown();
+            return;
+        }
+
+        if (ntt_case_close_try_role_switch_before_shutdown())
+        {
+            BATTERY_TRACE(0,
+                "[POWER_OFF] role switch requested, start fallback timer");
+
+            s_role_switch_requested = true;
+            s_role_switch_wait_cnt = 0;
+
+            earBudsCloseOff_PogonIn_StartTimer();
+            return;
+        }
+#endif
+
+        BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
         app_shutdown();
         return;
     }
 
-    BATTERY_TRACE(0,
-                  "[POWER_OFF] charging=0 -> keep power on");
+#ifdef IBRT
+    ntt_case_close_role_switch_reset();
+#endif
+
+    BATTERY_TRACE(0, "[POWER_OFF] charging=0 -> keep power on");
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
