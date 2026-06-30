@@ -2269,15 +2269,15 @@ static void app_ble_refresh_advertising(uint8_t adv_handle, gap_adv_param_t *adv
         */
         adv_param->directed_adv = false;
         adv_param->connectable = true;
-        adv_param->scannable = true;
+        adv_param->scannable = false;
         adv_param->include_tx_power_data = false;
 
         DEBUG_INFO(0,
-            "[BLE_ADV_REFRESH] handle=0 keep scan rsp conn=%d scan=%d directed=%d",
+            "[BLE_ADV_REFRESH] handle=0 hide public adv conn=%d scan=%d directed=%d",
             adv_param->connectable,
             adv_param->scannable,
             adv_param->directed_adv);
-}
+    }
 #if 0
     else if (adv_handle == 2)
     {
@@ -2910,7 +2910,7 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
     adv_param->connectable = true;
     adv_param->scannable = true;
     adv_param->use_legacy_pdu = true;
-    adv_param->include_tx_power_data = false;
+    adv_param->include_tx_power_data = true;
 
     app_ble_set_adv_tx_power_level(adv, BLE_ADV_TX_POWER_LEVEL_0);
 
@@ -3619,74 +3619,42 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     memset(ble_adv->advData, 0, sizeof(ble_adv->advData));
     ble_adv->advDataLen = 0;
 
-    /* Flags */
-    ble_adv->advData[ble_adv->advDataLen++] = 0x02;
-    ble_adv->advData[ble_adv->advDataLen++] = 0x01;
-    ble_adv->advData[ble_adv->advDataLen++] = 0x06;
-
-    /* Complete 128-bit Service UUID */
     ble_adv->advData[ble_adv->advDataLen++] = 17;
     ble_adv->advData[ble_adv->advDataLen++] = 0x07;
     memcpy(&ble_adv->advData[ble_adv->advDataLen],
-        aiWangPrimaryService,
-        sizeof(aiWangPrimaryService));
+           aiWangPrimaryService,
+           sizeof(aiWangPrimaryService));
     ble_adv->advDataLen += sizeof(aiWangPrimaryService);
 
-     memset(ble_adv->scanRspData, 0, sizeof(ble_adv->scanRspData));
-    ble_adv->scanRspDataLen = 0;
-
-    uint8_t *ble_name = factory_section_get_bt_name();
-    uint8_t ble_name_len = 0;
-
-    if (ble_name)
-    {
-        ble_name_len = strlen((const char *)ble_name);
-    }
+    memset(ble_adv->scanRspData, 0, sizeof(ble_adv->scanRspData));
+    ble_adv->scanRspDataLen = 17;
 
     /*
-     * Scan Response:
-     * Complete Local Name + Manufacturer Specific Data
-     *
-     * Name AD = 2 + name_len
-     * Manufacturer AD = 17
-     * Max legacy scan rsp = 31
+     * Manufacturer Specific Data:
+     * 0:    AD Len = 0x10
+     * 1:    AD Type = 0xFF
+     * 2-3:  Manufacturer ID = 0x9B, 0x0C
+     * 4-9:  Sparrow ID = "MBE003"
+     * 10:   Color Code
+     * 11-16 Device Address
      */
-    if (ble_name && ((ble_name_len + 2 + 17) <= 31))
-    {
-        ble_adv->scanRspData[ble_adv->scanRspDataLen++] = ble_name_len + 1;
-        ble_adv->scanRspData[ble_adv->scanRspDataLen++] = 0x09;   // Complete Local Name
+    ble_adv->scanRspData[0] = 0x10;
+    ble_adv->scanRspData[1] = 0xFF;
+    ble_adv->scanRspData[2] = 0x9B;
+    ble_adv->scanRspData[3] = 0x0C;
 
-        memcpy(&ble_adv->scanRspData[ble_adv->scanRspDataLen],
-               ble_name,
-               ble_name_len);
-
-        ble_adv->scanRspDataLen += ble_name_len;
-    }
-    else
-    {
-        DEBUG_INFO(1, "[ADV] name too long or null, skip name len=%d",
-                   ble_name_len);
-    }
-
-    uint8_t mfg_offset = ble_adv->scanRspDataLen;
-
-    ble_adv->scanRspData[mfg_offset + 0] = 0x10;
-    ble_adv->scanRspData[mfg_offset + 1] = 0xFF;
-    ble_adv->scanRspData[mfg_offset + 2] = 0x9B;
-    ble_adv->scanRspData[mfg_offset + 3] = 0x0C;
-
-    memcpy(&ble_adv->scanRspData[mfg_offset + 4], "MBE003", 6);
+    memcpy(&ble_adv->scanRspData[4], "MBE003", 6);
 
     uint8_t earBudsColor = aiWangGetEarBudsColor();
     uint8_t nvColor = ntt_color_code_nv_get();
 
     if ((0 == earBudsColor) || (0xFF == earBudsColor))
     {
-        ble_adv->scanRspData[mfg_offset + 10] = nvColor;
+        ble_adv->scanRspData[10] = nvColor;
     }
     else
     {
-        ble_adv->scanRspData[mfg_offset + 10] = earBudsColor;
+        ble_adv->scanRspData[10] = earBudsColor;
     }
 
     uint8_t *local_bt_addr = app_ibrt_if_get_bt_local_address();
@@ -3705,36 +3673,27 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
         memcmp(local_bt_addr, invalid_00, 6) &&
         (local_bt_addr[0] & 0x01))
     {
-        memcpy(&ble_adv->scanRspData[mfg_offset + 11], local_bt_addr, 6);
+        memcpy(&ble_adv->scanRspData[11], local_bt_addr, 6);
     }
     else if (peer_nv_addr &&
              memcmp(peer_nv_addr, invalid_ff, 6) &&
              memcmp(peer_nv_addr, invalid_00, 6) &&
              (peer_nv_addr[0] & 0x01))
     {
-        memcpy(&ble_adv->scanRspData[mfg_offset + 11], peer_nv_addr, 6);
+        memcpy(&ble_adv->scanRspData[11], peer_nv_addr, 6);
     }
     else
     {
-        factory_section_original_btaddr_get(&ble_adv->scanRspData[mfg_offset + 11]);
-    }
-
-    ble_adv->scanRspDataLen = mfg_offset + 17;
-
-    DEBUG_INFO(1, "[ADV] ble name len=%d", ble_name_len);
-    if (ble_name && ble_name_len)
-    {
-        DUMP8("%02X ", ble_name, ble_name_len);
+        factory_section_original_btaddr_get(&ble_adv->scanRspData[11]);
     }
 
     DEBUG_INFO(0, "[ADV] aiWangGetEarBudsColor=0x%02X", earBudsColor);
     DEBUG_INFO(0, "[ADV] ntt_color_code_nv_get=0x%02X", nvColor);
-    DEBUG_INFO(1, "[ADV] final color scanRspData[%d]=0x%02X",
-            mfg_offset + 10,
-            ble_adv->scanRspData[mfg_offset + 10]);
+    DEBUG_INFO(0, "[ADV] final color scanRspData[10]=0x%02X",
+            ble_adv->scanRspData[10]);
 
     DEBUG_INFO(0, "[ADV] Full Manufacturer Data:");
-    DUMP8("%02X ", &ble_adv->scanRspData[mfg_offset], 17);
+    DUMP8("%02X ", &ble_adv->scanRspData[0], 17);
 
     DEBUG_INFO(0, "[ADV] Local BT Addr:");
     DUMP8("%02X ", local_bt_addr, 6);
@@ -3743,7 +3702,9 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     DUMP8("%02X ", peer_nv_addr, 6);
 
     DEBUG_INFO(0, "[ADV] Manufacturer BT Addr:");
-    DUMP8("%02X ", &ble_adv->scanRspData[mfg_offset + 11], 6);
+    DUMP8("%02X ", &ble_adv->scanRspData[11], 6);
+
+    DEBUG_INFO(0, "%s skip BleName in USER_STUB adv", __func__);
 
     do {
 #if (BLE_APP_HID)

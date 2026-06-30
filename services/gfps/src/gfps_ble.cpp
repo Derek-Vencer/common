@@ -365,13 +365,12 @@ static bool gfps_ble_adv_activity_prepare(ble_adv_activity_t *adv)
         return false;
     }
 
-//#if defined(IBRT)
-//    if (!app_ble_check_ibrt_allow_adv(USER_GFPS))
-//    {
-        GFPS_TRACE(0, "[NTT_ADV_TEST] disable USER_GFPS adv for service UUID test");
+#if defined(IBRT)
+    if (!app_ble_check_ibrt_allow_adv(USER_GFPS))
+    {
         return false;
-//    }
-//#endif
+    }
+#endif
 
     adv->user = USER_GFPS;
     adv_param->connectable = true;
