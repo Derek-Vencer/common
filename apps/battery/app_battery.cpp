@@ -314,7 +314,7 @@ void earBudsCloseOff_PogonIn_StartTimer(void)
     }
 
     osTimerStop(pogonPinCloseTimer);
-    osTimerStart(pogonPinCloseTimer, 1600);
+    osTimerStart(pogonPinCloseTimer, 5000);
 }
 
 void earBudsCloseOff_PogonIn_StopTimer(void)

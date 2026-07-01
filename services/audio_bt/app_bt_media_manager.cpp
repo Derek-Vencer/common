@@ -628,6 +628,27 @@ void app_bt_media_set_current_media(uint16_t media_type)
     bt_media_set_current_media(media_type);
 }
 
+int ntt_hfp_pcm_force_restart_after_role_switch(uint8_t device_id)
+{
+    AUDIO_BT_TRACE(1,
+        "[NTT_HFP_RS] force restart hfp pcm device=%d",
+        device_id);
+
+    bt_sco_player_forcemute(false, false);
+
+    bt_media_set_current_media(BT_STREAM_VOICE);
+    bt_media_set_media_type(BT_STREAM_VOICE, device_id);
+
+    app_audio_sendrequest(APP_BT_STREAM_HFP_PCM,
+                          APP_BT_SETTING_RESTART,
+                          0);
+
+    bt_sco_player_forcemute(false, false);
+    app_bt_audio_state_checker();
+
+    return 0;
+}
+
 #ifdef RB_CODEC
 bool  bt_media_rbcodec_start_process(uint16_t stream_type, int device_id,AUD_ID_ENUM media_id, uint32_t param, uint32_t ptr)
 {

@@ -1371,35 +1371,31 @@ static void uart_idle_timeout_callback(void const *argument)
     aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
 	ntt_audio_output_mute_refresh();
+    #ifdef IBRT
+    if (ntt_first_no_mobile_pair_mode &&
+        bts_tws_if_is_tws_link_connected() &&
+        !app_bt_ibrt_has_mobile_link_connected())
+        {
+            DBGPRINT("[NTT_PAIR] uart idle + no mobile record + tws connected + out case -> exit pairing mode");
+
+            /*
+            * Out case for 2 seconds:
+            * Do not shutdown.
+            * Only leave pairing / discoverable mode.
+            */
+            app_bt_set_access_mode(BTIF_BAM_NOT_ACCESSIBLE);
+
+            /*
+            * Clear first-pair flag to avoid entering this flow again.
+            */
+            ntt_first_no_mobile_pair_mode = false;
+        }
+    #endif
 	osTimerDelete(uart_idle_timer_id);
 	uart_idle_timer_id = NULL;
     // 调用其他函数
     //call_other_function();
 }
-
-#if 0
-#ifdef IBRT
-    if (ntt_first_no_mobile_pair_mode &&
-        bts_tws_if_is_tws_link_connected() &&
-        !app_bt_ibrt_has_mobile_link_connected())
-    {
-        //uint8_t cmd_sync_poweroff_shutdown[1] = {1};
-
-        DBGPRINT("[NTT_PAIR] uart idle -> send peer shutdown");
-
-        //tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-        //                  cmd_sync_poweroff_shutdown,
-        //                  1);
-
-        osDelay(500);
-
-        DBGPRINT("[NTT_PAIR] uart idle -> local shutdown");
-
-        //app_shutdown();
-        return;
-    }
-#endif
-#endif
 
 /**
  * @brief 初始化串口空闲检测

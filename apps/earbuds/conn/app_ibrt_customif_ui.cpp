@@ -47,6 +47,7 @@
 #endif
 #include "ble_core_common.h"
 #include "bes_gap_api.h"
+#include "hfp_api.h"
 
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
@@ -102,6 +103,8 @@ extern ibrt_ext_conn_policy_cb_t *ibrt_ext_conn_policy_client_cb;
 uint32_t app_ibrt_customif_set_profile_delaytime_on_spp_connect(const uint8_t *uuid_data_ptr, uint8_t uuid_len);
 extern void ntt_master_sync_all_user_settings_to_peer(void);
 extern bool app_ui_user_role_switch(bool switch2master);
+extern "C" void btif_hfp_ibrt_role_switch_handle(const bt_bdaddr_t *remote);
+
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
 #endif
@@ -1264,11 +1267,15 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
 {
     if (!errCode)
     {
-        EARBUDS_TRACE(0,"custom_ui:switch ibrt role to %d run complete", current_role);
+        EARBUDS_TRACE(0,
+            "custom_ui:switch ibrt role to %d run complete",
+            current_role);
     }
     else
     {
-        EARBUDS_TRACE(0,"custom_ui:exist device doing ibrt role switch to %d failed", current_role);
+        EARBUDS_TRACE(0,
+            "custom_ui:exist device doing ibrt role switch to %d failed",
+            current_role);
     }
 
 #ifdef IBRT
@@ -1279,29 +1286,37 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
             current_role,
             errCode);
 
-        if ((!errCode) && (current_role == TWS_UI_SLAVE))
+        if (!errCode)
         {
-            EARBUDS_TRACE(0,
-                "[ROLE_SWITCH][CASE_CLOSE] role switch done, shutdown old master");
+            if (current_role == TWS_UI_SLAVE)
+            {
+                EARBUDS_TRACE(0,
+                    "[ROLE_SWITCH][CASE_CLOSE] old master switched to slave, wait timer shutdown");
 
-            g_ntt_case_close_wait_poweroff = false;
-
-            app_shutdown();
-            return;
+                g_ntt_case_close_wait_poweroff = false;
+            }
+            else if (current_role == TWS_UI_MASTER)
+            {
+                EARBUDS_TRACE(0,
+                    "[ROLE_SWITCH][CASE_CLOSE] new master ready");
+            }
         }
-
-        if (errCode)
+        else
         {
             EARBUDS_TRACE(0,
-                "[ROLE_SWITCH][CASE_CLOSE] role switch failed, clear wait flag");
+                "[ROLE_SWITCH][CASE_CLOSE] role switch failed");
 
             g_ntt_case_close_wait_poweroff = false;
         }
     }
 #endif
 
-    if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook) {
-        ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook(current_role, errCode);
+    if (ibrt_mgr_status_changed_client_cb &&
+        ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook)
+    {
+        ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook(
+            current_role,
+            errCode);
     }
 }
 
@@ -1931,10 +1946,69 @@ int app_ibrt_customif_ui_start(void)
 void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
 {
     app_ibrt_middleware_ui_role_updated_handler(newRole);
-    EARBUDS_TRACE(0,"%s newRole=%d", __func__, newRole);
+
+    EARBUDS_TRACE(0,
+        "%s newRole=%d",
+        __func__,
+        newRole);
+
     extern int bt_sco_chain_set_master_role(bool is_master);
+    extern void bt_media_set_current_media(uint16_t stream_type);
+    extern void bt_media_set_media_type(uint16_t stream_type, uint8_t device_id);
+    extern int app_audio_sendrequest(uint8_t status, uint8_t op, uint32_t param);
+
     bt_sco_chain_set_master_role(newRole == TWS_UI_MASTER);
-    // to add custom implementation here
+
+#ifdef BT_HFP_SUPPORT
+    if (newRole == TWS_UI_MASTER)
+    {
+        uint8_t device_id = app_bt_audio_get_curr_playing_sco();
+
+        EARBUDS_TRACE(1,
+            "[ROLE_SWITCH][HFP] playing_sco=%d",
+            device_id);
+
+        if (device_id == BT_DEVICE_INVALID_ID)
+        {
+            device_id = app_bt_audio_get_hfp_device_for_user_action();
+
+            EARBUDS_TRACE(1,
+                "[ROLE_SWITCH][HFP] user_action_dev=%d",
+                device_id);
+        }
+
+        if (device_id != BT_DEVICE_INVALID_ID)
+        {
+            BT_DEVICE_T *curr_device = app_bt_get_device(device_id);
+
+            EARBUDS_TRACE(1,
+                "[ROLE_SWITCH][HFP] curr_device=%p",
+                curr_device);
+
+            if (curr_device)
+            {
+                EARBUDS_TRACE(0,
+                    "[ROLE_SWITCH][HFP] call btif_hfp_ibrt_role_switch_handle");
+
+                btif_hfp_ibrt_role_switch_handle(&curr_device->remote);
+
+                EARBUDS_TRACE(0,
+                    "[ROLE_SWITCH][HFP] hfp role switch handle done");
+
+                EARBUDS_TRACE(1,
+                    "[ROLE_SWITCH][HFP] force restart hfp pcm device=%d",
+                    device_id);
+
+                ntt_hfp_pcm_force_restart_after_role_switch(device_id);
+            }
+        }
+        else
+        {
+            EARBUDS_TRACE(0,
+                "[ROLE_SWITCH][HFP] no active sco device");
+        }
+    }
+#endif
 }
 
 bool app_ibrt_customif_disallow_pagescan()
