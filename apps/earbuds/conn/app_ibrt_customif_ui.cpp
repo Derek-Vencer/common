@@ -177,7 +177,26 @@ void app_ibrt_customif_pairing_mode_entry()
     uint8_t select_a2dp_device = app_bt_audio_get_curr_playing_a2dp();
     struct BT_DEVICE_T *curr_device = NULL;
 
-    EARBUDS_TRACE(0,"custom_ui pairing mode entry: disc_sco_during_paring %d", p_app_ui_config->pairing_with_disc_hf_cfg);
+EARBUDS_TRACE(0,
+    "custom_ui pairing mode entry: disc_sco_during_paring %d",
+    p_app_ui_config->pairing_with_disc_hf_cfg);
+
+#ifdef BT_HFP_SUPPORT
+    uint8_t hfp_dev = app_bt_audio_get_hfp_device_for_user_action();
+
+    EARBUDS_TRACE(2,
+        "[NTT_HFP_PAIR] pairing entry check curr_sco=%d hfp_dev=%d",
+        select_sco_device,
+        hfp_dev);
+
+    if ((select_sco_device != BT_DEVICE_INVALID_ID) ||
+        (hfp_dev != BT_DEVICE_INVALID_ID))
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_HFP_PAIR] call active, reject mobile pairing mode");
+        return;
+    }
+#endif
 
 #ifdef BESUI_BTMSG_EN
     besui_bt_msg_put(ENTER_PAIRMODE_EVENT, 0xff, BT_DEVICE_NUM);
@@ -1718,17 +1737,17 @@ int app_ibrt_customif_ui_start(void)
 
     //passive enter pairing when no mobile record, the default should be false
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-    config.enter_pairing_on_empty_record            = true;
+    config.enter_pairing_on_empty_record            = false;
 #else
     config.enter_pairing_on_empty_record            = false;
 #endif
 
     //passive enter pairing when reconnect failed, the default should be false
 #ifdef FREEMAN_ENABLED_STERO
-    config.enter_pairing_on_reconnect_mobile_failed = true;
+    config.enter_pairing_on_reconnect_mobile_failed = false;
 #else
 #ifdef BESUI_TWS_EN
-    config.enter_pairing_on_reconnect_mobile_failed = true;
+    config.enter_pairing_on_reconnect_mobile_failed = false;
 #else
     config.enter_pairing_on_reconnect_mobile_failed = false;
 #endif
@@ -1736,7 +1755,7 @@ int app_ibrt_customif_ui_start(void)
 
     //passive enter pairing when mobile disconnect, the default should be false
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-    config.enter_pairing_on_mobile_disconnect       = true;
+    config.enter_pairing_on_mobile_disconnect       = false;
 #else
     config.enter_pairing_on_mobile_disconnect       = false;
 #endif
@@ -1758,7 +1777,7 @@ int app_ibrt_customif_ui_start(void)
     config.paring_with_disc_le_mob_num              = IBRT_PAIRING_DISC_NONE;
 
     //disconnect SCO or not when accepting phone connection in pairing mode
-    config.pairing_with_disc_hf_cfg                 = IBRT_PAIRING_HF_HUNGUP;
+    config.pairing_with_disc_hf_cfg                 = IBRT_PAIRING_DISC_NONE;
 
     //pause current music when entering pairing mode
     config.pairing_with_pause_music                 = true;
@@ -1767,7 +1786,7 @@ int app_ibrt_customif_ui_start(void)
     config.pairing_without_start_ibrt               = false;
 
     //set nv master to tws master for lea connection
-    config.pairing_with_set_nv_master_as_master     = true;
+    config.pairing_with_set_nv_master_as_master     = false;
 
     //accept new dev only in pairing state
     config.accept_new_dev_only_in_pairing           = false;
@@ -1962,18 +1981,19 @@ void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
 #ifdef BT_HFP_SUPPORT
     if (newRole == TWS_UI_MASTER)
     {
-        uint8_t device_id = app_bt_audio_get_curr_playing_sco();
+        uint8_t curr_sco = app_bt_audio_get_curr_playing_sco();
+        uint8_t device_id = curr_sco;
 
         EARBUDS_TRACE(1,
-            "[ROLE_SWITCH][HFP] playing_sco=%d",
-            device_id);
+            "[ROLE_SWITCH][HFP] curr_sco=%d",
+            curr_sco);
 
         if (device_id == BT_DEVICE_INVALID_ID)
         {
             device_id = app_bt_audio_get_hfp_device_for_user_action();
 
             EARBUDS_TRACE(1,
-                "[ROLE_SWITCH][HFP] user_action_dev=%d",
+                "[ROLE_SWITCH][HFP] hfp_user_action_dev=%d",
                 device_id);
         }
 
@@ -1987,25 +2007,52 @@ void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
 
             if (curr_device)
             {
+                if (!curr_device->acl_is_connected)
+                {
+                    EARBUDS_TRACE(1,
+                        "[ROLE_SWITCH][HFP] skip, mobile acl not connected device=%d",
+                        device_id);
+                    return;
+                }
+
+                if (!curr_device->hf_channel)
+                {
+                    EARBUDS_TRACE(1,
+                        "[ROLE_SWITCH][HFP] skip, hf_channel null device=%d",
+                        device_id);
+                    return;
+                }
+
                 EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][HFP] call btif_hfp_ibrt_role_switch_handle");
+                    "[ROLE_SWITCH][HFP] call hfp ibrt role switch handle");
 
                 btif_hfp_ibrt_role_switch_handle(&curr_device->remote);
 
                 EARBUDS_TRACE(0,
                     "[ROLE_SWITCH][HFP] hfp role switch handle done");
 
-                EARBUDS_TRACE(1,
-                    "[ROLE_SWITCH][HFP] force restart hfp pcm device=%d",
-                    device_id);
+                if (curr_sco != BT_DEVICE_INVALID_ID)
+                {
+                    EARBUDS_TRACE(1,
+                        "[ROLE_SWITCH][HFP] sco active, restart hfp pcm device=%d",
+                        device_id);
 
-                ntt_hfp_pcm_force_restart_after_role_switch(device_id);
+                    ntt_hfp_pcm_force_restart_after_role_switch(device_id);
+                }
+                else
+                {
+                    EARBUDS_TRACE(1,
+                        "[ROLE_SWITCH][HFP] no sco, create hfp audio link device=%d",
+                        device_id);
+
+                    app_ibrt_if_hf_create_audio_link(device_id);
+                }
             }
         }
         else
         {
             EARBUDS_TRACE(0,
-                "[ROLE_SWITCH][HFP] no active sco device");
+                "[ROLE_SWITCH][HFP] no hfp device");
         }
     }
 #endif

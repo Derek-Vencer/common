@@ -1947,7 +1947,7 @@ void app_ibrt_init(void)
     #endif
         {
 #if defined(IBRT_UI)
-        MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
+        //MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
 
         btif_device_record_t record1 = {0};
         btif_device_record_t record2 = {0};
@@ -2041,6 +2041,7 @@ void app_ibrt_init(void)
                 mobile_record_count);
                 ntt_first_no_mobile_pair_mode = false;
         }
+ 
         app_ibrt_start_power_on_tws_pairing();
 #endif
         }

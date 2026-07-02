@@ -75,6 +75,8 @@
 #include "audio_trigger_common.h"
 #include "audio_policy.h"
 
+extern bool app_bt_stream_isrun(uint16_t player);
+
 static int bt_audio_media_play(uint16_t stream_type, const Audio_device_t* device)
 {
     if (device->audio_device.device_type == AUDIO_TYPE_BT)
@@ -630,21 +632,38 @@ void app_bt_media_set_current_media(uint16_t media_type)
 
 int ntt_hfp_pcm_force_restart_after_role_switch(uint8_t device_id)
 {
-    AUDIO_BT_TRACE(1,
-        "[NTT_HFP_RS] force restart hfp pcm device=%d",
-        device_id);
+    bool hfp_pcm_is_run = app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM);
+
+    AUDIO_BT_TRACE(2,
+        "[NTT_HFP_RS] device=%d hfp_pcm_is_run=%d",
+        device_id,
+        hfp_pcm_is_run);
 
     bt_sco_player_forcemute(false, false);
 
-    bt_media_set_current_media(BT_STREAM_VOICE);
-    bt_media_set_media_type(BT_STREAM_VOICE, device_id);
+    if (hfp_pcm_is_run)
+    {
+        app_audio_sendrequest(APP_BT_STREAM_HFP_PCM,
+                            APP_BT_SETTING_RESTART,
+                            0);
+    }
+    else
+    {
+        uint8_t curr_sco = app_bt_audio_get_curr_playing_sco();
 
-    app_audio_sendrequest(APP_BT_STREAM_HFP_PCM,
-                          APP_BT_SETTING_RESTART,
-                          0);
+        AUDIO_BT_TRACE(2,
+            "[NTT_HFP_RS] hfp not run, curr_sco=%d target=%d",
+            curr_sco,
+            device_id);
 
+        if (curr_sco == device_id)
+        {
+            app_audio_sendrequest(APP_BT_STREAM_HFP_PCM,
+                                APP_BT_SETTING_OPEN,
+                                0);
+        }
+    }
     bt_sco_player_forcemute(false, false);
-    app_bt_audio_state_checker();
 
     return 0;
 }

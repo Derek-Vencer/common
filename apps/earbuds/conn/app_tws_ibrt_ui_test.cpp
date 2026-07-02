@@ -472,6 +472,19 @@ int app_ibrt_ui_v2_test_config_load(void *config)
 #if defined(A2DP_SBC_PLC_ENABLED)
     ch_select = ibrt_config->audio_chnl_sel;
 #endif
+
+//#ifdef BESUI_TWS_EN
+    EARBUDS_TRACE(0,
+        "[NTT_BOX] before config local_box=%d",
+        app_ui_get_local_box_state());
+
+    app_ui_set_local_box_state(IBRT_OUT_BOX);
+
+    EARBUDS_TRACE(0,
+        "[NTT_BOX] after config local_box=%d",
+        app_ui_get_local_box_state());
+//#endif
+
     bts_core_set_ui_role(nvrecord_env->ibrt_mode.mode);
     EARBUDS_TRACE(0,"%s ibrt_mode.mode(nv_role)=%d ", __func__, ibrt_config->nv_role);
     EARBUDS_TRACE(0,"load local_addr: %02x:%02x:%02x:%02x:%02x:%02x",ibrt_config->local_addr.address[0],
