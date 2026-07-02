@@ -1269,6 +1269,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             enter_pair = 1;
             enter_pair_count = 0;
 
+            ntt_first_no_mobile_pair_mode = true;
             ntt_manual_pairing_mode = true;            
 
             set_pair_status(0);
@@ -1372,6 +1373,12 @@ static void uart_idle_timeout_callback(void const *argument)
     set_er_inbox_status(0);
 	ntt_audio_output_mute_refresh();
     #ifdef IBRT
+    EARBUDS_TRACE(3,
+    "[NTT_PAIR] first_no_mobile=%d tws_connected=%d mobile_connected=%d",
+    ntt_first_no_mobile_pair_mode,
+    bts_tws_if_is_tws_link_connected(),
+    app_bt_ibrt_has_mobile_link_connected());
+    
     if (ntt_first_no_mobile_pair_mode &&
         bts_tws_if_is_tws_link_connected() &&
         !app_bt_ibrt_has_mobile_link_connected())
