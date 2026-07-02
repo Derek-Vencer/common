@@ -1446,17 +1446,52 @@ static void on_voice_assist(void)   {
 
 void key_function_execute(function_t func)
 {
-	switch (func) {
-		case FUNC_ACCEPT_CALL:	on_accept_call(); break;
-		case FUNC_REJECT_CALL:	on_reject_call(); break;
-		case FUNC_PLAY_PAUSE:	on_play_pause(); break;
-		case FUNC_NEXT_SONG:	on_next_song(); break;
-		case FUNC_PREV_SONG:	on_prev_song(); break;
-		case FUNC_VOLUME_UP:	on_volume_up(); break;
-		case FUNC_VOLUME_DOWN:	on_volume_down(); break;
-		case FUNC_VOICE_ASSIST: on_voice_assist(); break;
-		default: printf(">>> No function assigned\n"); break;
-	}
+    switch (func)
+    {
+        case FUNC_ACCEPT_CALL:
+            TRACE(0, "[ACTION] ACCEPT_CALL");
+            on_accept_call();
+            break;
+
+        case FUNC_REJECT_CALL:
+            TRACE(0, "[ACTION] REJECT_CALL");
+            on_reject_call();
+            break;
+
+        case FUNC_PLAY_PAUSE:
+            TRACE(0, "[ACTION] PLAY_PAUSE");
+            on_play_pause();
+            break;
+
+        case FUNC_NEXT_SONG:
+            TRACE(0, "[ACTION] NEXT_SONG");
+            on_next_song();
+            break;
+
+        case FUNC_PREV_SONG:
+            TRACE(0, "[ACTION] PREV_SONG");
+            on_prev_song();
+            break;
+
+        case FUNC_VOLUME_UP:
+            TRACE(0, "[ACTION] VOLUME_UP");
+            on_volume_up();
+            break;
+
+        case FUNC_VOLUME_DOWN:
+            TRACE(0, "[ACTION] VOLUME_DOWN");
+            on_volume_down();
+            break;
+
+        case FUNC_VOICE_ASSIST:
+            TRACE(0, "[ACTION] VOICE_ASSIST");
+            on_voice_assist();
+            break;
+
+        default:
+            TRACE(0, "[ACTION] NONE func=0x%02X", func);
+            break;
+    }
 }
 
 extern "C" uint8_t ntt_color_code_nv_get(void)
@@ -1514,47 +1549,171 @@ extern "C" void ntt_color_code_nv_set(uint8_t color)
 /*==============================================================================
  * 5. 按键事件处理：判断并调用相关函数
  *----------------------------------------------------------------------------*/
-void handle_key_event(click_type_t click)
+ 
+#define NTT_KEY_SIDE_RIGHT    0x01
+#define NTT_KEY_SIDE_LEFT     0x02
+
+static const char *ntt_key_side_str(uint8_t side)
 {
-	uint8_t action = 0;
-	CALL_STATE_E call_state = app_bt_get_call_state();
-	//TRACE(0, "%s call_state=%d",  __func__, call_state);
-	
+    return (side == NTT_KEY_SIDE_LEFT) ? "LEFT" : "RIGHT";
+}
+
+static uint8_t ntt_get_key_side_snapshot(void)
+{
+    uint8_t *bt_local_addr = NULL;
+    uint8_t local_side = NTT_KEY_SIDE_RIGHT;
+    uint8_t key_side = NTT_KEY_SIDE_RIGHT;
+
+    bt_local_addr = (uint8_t *)bt_get_local_address();
+
+    /*
+     * Original project rule:
+     * bt_local_addr[0] odd  -> LEFT  = 0x02
+     * bt_local_addr[0] even -> RIGHT = 0x01
+     */
+    local_side = (bt_local_addr[0] & 0x01) ? NTT_KEY_SIDE_LEFT : NTT_KEY_SIDE_RIGHT;
+    key_side = local_side;
+
+    /*
+     * key_event_is_left means key event comes from peer side.
+     * Convert local side to peer side.
+     */
+    if (key_event_is_left == 1)
+    {
+        key_side = (local_side == NTT_KEY_SIDE_LEFT) ?
+                    NTT_KEY_SIDE_RIGHT :
+                    NTT_KEY_SIDE_LEFT;
+    }
+
+    TRACE(0,
+          "[KEYSIDE] local_addr_lsb=0x%02X local=%s key_event_is_left=%d resolved=%s",
+          bt_local_addr[0],
+          ntt_key_side_str(local_side),
+          key_event_is_left,
+          ntt_key_side_str(key_side));
+
+    return key_side;
+}
+
+#ifdef SUPPORT_SIRI
+
+static bool ntt_voice_assist_is_active(void)
+{
+    for (uint8_t i = 0; i < BT_DEVICE_NUM; i++)
+    {
+        struct BT_DEVICE_T *curr_device = app_bt_get_device(i);
+
+        if ((curr_device != NULL) &&
+            curr_device->hf_conn_flag &&
+            btif_hf_is_voice_rec_active(curr_device->hf_channel))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void ntt_voice_assist_close(void)
+{
+    for (uint8_t i = 0; i < BT_DEVICE_NUM; i++)
+    {
+        struct BT_DEVICE_T *curr_device = app_bt_get_device(i);
+
+        if ((curr_device != NULL) &&
+            curr_device->hf_conn_flag &&
+            btif_hf_is_voice_rec_active(curr_device->hf_channel))
+        {
+            TRACE(0,
+                  "[ACTION] VOICE_ASSIST_CLOSE dev=%d",
+                  i);
+
+            btif_hf_enable_voice_recognition(
+                curr_device->hf_channel,
+                false);
+        }
+    }
+}
+
+#endif
+
+ void handle_key_event(click_type_t click, uint8_t key_side)
+{
+    uint8_t action = 0;
+    uint8_t action_er = 0;
+    function_t func;
+    CALL_STATE_E call_state = app_bt_get_call_state();
+
     if (call_state == CALL_STATE_IDLE)
     {
-       //bt_key_handle_music_playback();
-       action = 0x00;
+        action = 0x00;
     }
-	else
-	{
-		action = 0x01;
-	}
-	#if 0
-	uint8_t *bt_local_addr = NULL;
-	bt_local_addr = (uint8_t *)bt_get_local_address();
-    uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?0x02:0x01;
-	#else
-	uint8_t *bt_local_addr = NULL;
-	bt_local_addr = (uint8_t *)bt_get_local_address();
-    uint8_t isLeftEarbuds = bt_local_addr[0]&0x01?0x02:0x01;
-	if(key_event_is_left == 1)
-	{
-		if(isLeftEarbuds == 0x02)
-			isLeftEarbuds = 0x01;
-		else
-			isLeftEarbuds = 0x02;
-		//key_event_is_left = 0;
-	}
+    else
+    {
+        action = 0x01;
+    }
 
-	#endif
-   uint8_t action_er = (action * 4)  | isLeftEarbuds;
-   //action_er = action_er << 2;
-    //printf("Key event: action=0x%02X, click=0x%02X\n", action_er, click);
-    function_t func = keymap_lookup(action_er, click,isLeftEarbuds);
-    //printf("  -> function code: 0x%02X\n", func);
+    action_er = (action << 2) | key_side;
+
+    TRACE(0,
+          "[KEYMAP] call_state=%d state=%s side=%s click=%d action_er=0x%02X",
+          call_state,
+          (action == 0) ? "IDLE/MUSIC" : "CALL",
+          ntt_key_side_str(key_side),
+          click,
+          action_er);
+
+    func = keymap_lookup(action_er, click, key_side);
+
+    TRACE(0, "[KEYMAP] lookup func=0x%02X", func);
+
     key_function_execute(func);
 }
 
+/*
+void handle_key_event(click_type_t click)
+{
+    uint8_t action = 0;
+    CALL_STATE_E call_state = app_bt_get_call_state();
+
+    if (call_state == CALL_STATE_IDLE)
+    {
+        action = 0x00;
+    }
+    else
+    {
+        action = 0x01;
+    }
+
+    uint8_t *bt_local_addr = (uint8_t *)bt_get_local_address();
+
+    uint8_t local_side = (bt_local_addr[0] & 0x01) ? 0x02 : 0x01;
+    uint8_t isLeftEarbuds = local_side;
+
+    if (key_event_is_left == 1)
+    {
+        isLeftEarbuds = (local_side == 0x02) ? 0x01 : 0x02;
+    }
+
+    uint8_t action_er = (action << 2) | isLeftEarbuds;
+
+    TRACE(0,
+        "[KEYMAP] call_state=%d state=%s local_side=%s key_event_is_left=%d resolved_side=%s click=%d action_er=0x%02X",
+        call_state,
+        (action == 0) ? "IDLE/MUSIC" : "CALL",
+        (local_side == 0x02) ? "LEFT" : "RIGHT",
+        key_event_is_left,
+        (isLeftEarbuds == 0x02) ? "LEFT" : "RIGHT",
+        click,
+        action_er);
+
+    function_t func = keymap_lookup(action_er, click, isLeftEarbuds);
+
+    TRACE(0, "[KEYMAP] lookup func=0x%02X", func);
+
+    key_function_execute(func);
+}
+*/
 
 /***********************************************/
 void aparraw_set_key_event_left(uint8 status)
@@ -1563,22 +1722,38 @@ void aparraw_set_key_event_left(uint8 status)
 }
 
 /*************************************************/
+static uint8_t g_button_hold_side = NTT_KEY_SIDE_RIGHT;
+
 static void double_hold_idle_timeout_callback(void const *argument)
 {
-    //DBGPRINT("UART idle timeout detected! No data received for %dms\n", DOUBLE_HOLD_IDLE_TIMEOUT_MS);
-	if(button_hold_type != 0xff){
-		if(button_hold_type == CLICK_DOUBLE_HOLD)
-			handle_key_event(CLICK_DOUBLE_HOLD);
-		else if(button_hold_type == CLICK_HOLD_2S)
-			handle_key_event(CLICK_HOLD_2S);
-		if(double_hold_idle_timer_id)
-		{
-			osTimerStart(double_hold_idle_timer_id, DOUBLE_HOLD_IDLE_TIMEOUT_MS);
-		}
-	}
-    // 调用其他函数
-    //call_other_function();
+    if (button_hold_type == 0xFF)
+    {
+        return;
+    }
+
+    if (button_hold_type == CLICK_DOUBLE_HOLD)
+    {
+        TRACE(0, "[KEYMAP] TIMER CLICK_DOUBLE_HOLD side=%s",
+              ntt_key_side_str(g_button_hold_side));
+
+        handle_key_event(CLICK_DOUBLE_HOLD, g_button_hold_side);
+
+        if (double_hold_idle_timer_id)
+        {
+            osTimerStart(double_hold_idle_timer_id, DOUBLE_HOLD_IDLE_TIMEOUT_MS);
+        }
+    }
+    else if (button_hold_type == CLICK_HOLD_2S)
+    {
+        /*
+         * HOLD_2S already executed when key event arrived.
+         * Do not execute it again in timer.
+         */
+        TRACE(0, "[KEYMAP] TIMER ignore CLICK_HOLD_2S");
+        button_hold_type = 0xFF;
+    }
 }
+
 void double_hold_idle_detection_init(void)
 {
     // 创建空闲定时器
@@ -1603,55 +1778,105 @@ static void delete_double_hold_time(void)
 	}
 }
 /************************************************/
+
 void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 {
-	uint8_t  keyEventNotify[3];
-	keyEventNotify[0] = 0xB0;
-	keyEventNotify[1] = 0x04;
-	keyEventNotify[2] = kick_type;
-	TRACE(0, "%s kick_type=%d enterKeyClickTestMode=%d",  __func__, kick_type, enterKeyClickTestMode);
-	if( enterKeyClickTestMode && app_sparraw_env.notifyEnable)
-	{
-		ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
-	}
-	if((er_inbox == 1) && (key_event_is_left == 0))
-	{
-		return;
-	}
-	switch(kick_type)
-	{
-		case KEY_CLICK:
-		{
-			handle_key_event(CLICK_SINGLE);
-		}break;
-		case KEY_DOUBLE_CLICK:
-		{
-			handle_key_event(CLICK_DOUBLE);
-		}break;
-		case KEY_TRIPLE_CLICK:
-		{
-			handle_key_event(CLICK_TRIPLE);
-		}break;
-		case KEY_DOUBLE_HOLD_CLICK:
-		{
-			handle_key_event(CLICK_DOUBLE_HOLD);
-			double_hold_idle_detection_init();
-			button_hold_type = CLICK_DOUBLE_HOLD;
-		}break;
-		case KEY_HOLD_CLICK:
-		{
-			handle_key_event(CLICK_HOLD_2S);
-			double_hold_idle_detection_init();
-			button_hold_type = CLICK_HOLD_2S;
-		}break;
-		case KEY_UP:
-		{
-			delete_double_hold_time();
-			aparraw_set_key_event_left(0);
-			button_hold_type = 0xff;
-		}break;
-		default:break;
-	}
+    uint8_t keyEventNotify[3];
+    uint8_t key_side = NTT_KEY_SIDE_RIGHT;
+
+    keyEventNotify[0] = 0xB0;
+    keyEventNotify[1] = 0x04;
+    keyEventNotify[2] = kick_type;
+
+    key_side = ntt_get_key_side_snapshot();
+
+    TRACE(0,
+          "[KEY] kick=%d test=%d left_flag=%d inbox=%d side=%s",
+          kick_type,
+          enterKeyClickTestMode,
+          key_event_is_left,
+          er_inbox,
+          ntt_key_side_str(key_side));
+
+    if (enterKeyClickTestMode && app_sparraw_env.notifyEnable)
+    {
+        ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
+    }
+
+    if ((er_inbox == 1) && (key_event_is_left == 0))
+    {
+        TRACE(0, "[KEY] ignore key event, earbud in charging case");
+        return;
+    }
+
+    switch (kick_type)
+    {
+        case KEY_CLICK:
+        {
+            TRACE(0, "[KEYMAP] CLICK_SINGLE");
+            handle_key_event(CLICK_SINGLE, key_side);
+        }
+        break;
+
+        case KEY_DOUBLE_CLICK:
+        {
+        #ifdef SUPPORT_SIRI
+            if (ntt_voice_assist_is_active())
+            {
+                TRACE(0, "[KEY] DOUBLE_CLICK -> CLOSE_VOICE_ASSIST");
+                ntt_voice_assist_close();
+                break;
+            }
+        #endif
+
+            TRACE(0, "[KEYMAP] CLICK_DOUBLE");
+            handle_key_event(CLICK_DOUBLE, key_side);
+        }
+        break;
+
+        case KEY_TRIPLE_CLICK:
+        {
+            TRACE(0, "[KEYMAP] CLICK_TRIPLE");
+            handle_key_event(CLICK_TRIPLE, key_side);
+        }
+        break;
+
+        case KEY_DOUBLE_HOLD_CLICK:
+        {
+            TRACE(0, "[KEYMAP] CLICK_DOUBLE_HOLD");
+            handle_key_event(CLICK_DOUBLE_HOLD, key_side);
+
+            g_button_hold_side = key_side;
+            double_hold_idle_detection_init();
+            button_hold_type = CLICK_DOUBLE_HOLD;
+        }
+        break;
+
+        case KEY_HOLD_CLICK:
+        {
+            TRACE(0, "[KEYMAP] CLICK_HOLD_2S");
+            handle_key_event(CLICK_HOLD_2S, key_side);
+
+            button_hold_type = 0xFF;
+        }
+        break;
+
+        case KEY_UP:
+        {
+            TRACE(0, "[KEYMAP] KEY_UP");
+
+            delete_double_hold_time();
+            aparraw_set_key_event_left(0);
+            button_hold_type = 0xFF;
+        }
+        break;
+
+        default:
+        {
+            TRACE(0, "[KEYMAP] UNKNOWN kick=%d", kick_type);
+        }
+        break;
+    }
 }
 
 //#if need_send_data_by_notify
