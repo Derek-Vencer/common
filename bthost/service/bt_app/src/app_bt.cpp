@@ -47,6 +47,7 @@
 #include "intersyshci.h"
 #include "app_utils.h"
 #include "ecc_p192.h"
+#include "app_battery.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -191,6 +192,7 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (2)
 #define APP_BT_PROFILE_RECONNECT_RETRY_LIMIT_CNT (15)
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
+#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (30000)
 
 static void app_bt_profile_reconnect_timehandler(void const *param);
 static void app_bt_accessmode_timehandler(void const *param);
@@ -208,32 +210,89 @@ osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 osTimerDef (BT_PROFILE_CONNECT_TIMER2, app_bt_profile_reconnect_timehandler);
 #endif
 
+extern bool ntt_open_case_idle_reboot_needed;
 //fixed added disconnected keep alive 5 min
 //20260308
 static void app_bt_disconnected_keepAlinve_timeouthandler(void const *param)
 {
     int activeCons = 0;
     int activeSourceCons = 0;
+
     activeCons = app_bt_get_active_cons();
     (void)activeCons;
+
     uint8_t active_cons_phone = app_bt_count_mobile_link();
     activeSourceCons = btif_me_get_source_activeCons();
-    DEBUG_INFO(0,"%s activeCons==%d activeSourceCons=%d %d\n", __func__, activeCons, activeSourceCons, active_cons_phone);
+    int8_t charging = app_battery_is_charging();
 
-    if(active_cons_phone == 0 && activeSourceCons == 0) {
-    	DEBUG_INFO(0,"!!!bt_disconnected_keep_alive_timer CloseEarphone\n");
+    DEBUG_INFO(0,
+        "%s activeCons=%d activeSourceCons=%d active_cons_phone=%d charging=%d",
+        __func__,
+        activeCons,
+        activeSourceCons,
+        active_cons_phone,
+        charging);
+
+    if (active_cons_phone == 0 && activeSourceCons == 0)
+    {
+        /*
+         * Case close:
+         * 合蓋後允許正常 shutdown。
+         */
+        if (charging)
+        {
+            DEBUG_INFO(0,
+                "[NTT_KEEPALIVE] timeout, case closed -> shutdown");
+
 #ifdef IBRT
-		if (bts_tws_if_is_tws_link_connected())
-		{
-			//app_ibrt_customif_cmd_sync_poweroff_shutdown(true);
-			uint8_t cmd_sync_poweroff_shutdown[1];
-			cmd_sync_poweroff_shutdown[0] = 1;
-			DEBUG_INFO(2, "[UITWS]%s poweroff_flag %d",__func__, 1);
-			tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_poweroff_shutdown, 1);
-			osDelay(100);
-		}
+            if (bts_tws_if_is_tws_link_connected())
+            {
+                uint8_t cmd_sync_poweroff_shutdown[1];
+
+                cmd_sync_poweroff_shutdown[0] = 1;
+
+                DEBUG_INFO(2,
+                    "[UITWS]%s poweroff_flag %d",
+                    __func__,
+                    1);
+
+                tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+                                  cmd_sync_poweroff_shutdown,
+                                  1);
+
+                osDelay(100);
+            }
 #endif
-        app_shutdown();
+
+            app_shutdown();
+            return;
+        }
+
+        /*
+         * Case open + earbuds still on pogo pin:
+         * 開蓋且耳機仍在盒內，timeout 不 shutdown。
+         * 讓系統進 idle/sleep，等待離開 pogo pin 後喚醒並回連手機。
+         */
+        if (charging == 0)
+        {
+            DEBUG_INFO(0,
+                "[NTT_KEEPALIVE] timeout, case open + in box -> skip shutdown, enter idle/sleep");
+
+            ntt_open_case_idle_reboot_needed = true;
+            app_bt_set_access_mode(BTIF_BAM_NOT_ACCESSIBLE);
+
+            return;
+        }
+
+        /*
+         * Case open + earbuds out of box:
+         * 已離盒，不 shutdown，也不要強制 sleep。
+         * 保留給 reconnect / auto power off 流程處理。
+         */
+        DEBUG_INFO(0,
+            "[NTT_KEEPALIVE] timeout, case open + out box -> skip shutdown, wait reconnect");
+
+        return;
     }
 }
 
@@ -467,10 +526,8 @@ void app_bt_reset_delay_power_off(void)
     {
     	DEBUG_INFO(2, "app_bt_reset_delay_power_off");
 		osTimerStop(bt_disconnected_keep_alive_timer_id);
-		osTimerStart(bt_disconnected_keep_alive_timer_id, (5*60*1000)); //ms
-    }
-
-	
+		osTimerStart(bt_disconnected_keep_alive_timer_id, NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS); //ms
+    }	
 }
 
 void app_bt_manager_init(void)
@@ -514,7 +571,8 @@ void app_bt_manager_init(void)
     }
 
 	osTimerStop(bt_disconnected_keep_alive_timer_id);
-	osTimerStart(bt_disconnected_keep_alive_timer_id, (5*60*1000)); //ms
+    // 初始化
+	osTimerStart(bt_disconnected_keep_alive_timer_id, NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS); //ms
 					   
 
     initialize_list_head(&app_bt_manager.poweron_reconnect_list);
@@ -3987,6 +4045,31 @@ bool app_bt_is_in_reconnecting(void)
     return false;
 }
 
+static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
+{
+    static const uint8_t zero_addr[6] = {0};
+    static const uint8_t ff_addr[6] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
+
+    if (addr == NULL)
+    {
+        return true;
+    }
+
+    if (memcmp(addr->address, zero_addr, 6) == 0)
+    {
+        return true;
+    }
+
+    if (memcmp(addr->address, ff_addr, 6) == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
     int ret;
@@ -3994,57 +4077,90 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     btif_device_record_t record2;
     btdevice_profile *btdevice_plf_p;
     int find_invalid_record_cnt;
+    bool reconnect_added = false;
 
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
-    if(!bt_host_cfg->bt_sink_enable)
+    if (!bt_host_cfg->bt_sink_enable)
     {
-        return ;
+        return;
     }
 
     if (BT_DEVICE_NUM == 1 && app_bt_get_active_cons() != 0)
     {
-        DEBUG_INFO(0,"bt link disconnect not complete,ignore this time reconnect");
+        DEBUG_INFO(0, "bt link disconnect not complete,ignore this time reconnect");
         return;
     }
+
+    memset(&record1, 0, sizeof(record1));
+    memset(&record2, 0, sizeof(record2));
 
     do
     {
         find_invalid_record_cnt = 0;
-        ret = nv_record_enum_latest_two_paired_dev(&record1,&record2);
-        if(ret == 1)
+        ret = nv_record_enum_latest_two_paired_dev(&record1, &record2);
+
+        if (ret >= 1)
         {
-            btdevice_plf_p = (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
-            if (!(btdevice_plf_p->hfp_act)&&!(btdevice_plf_p->a2dp_act))
+            if (ntt_bt_addr_is_invalid(&record1.bdAddr))
             {
+                DEBUG_INFO(0, "[NTT_RECONNECT] delete record1 local/peer");
                 nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
                 find_invalid_record_cnt++;
+            }
+            else
+            {
+                btdevice_plf_p =
+                    (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
+
+                if (!(btdevice_plf_p->hfp_act) && !(btdevice_plf_p->a2dp_act))
+                {
+                    DEBUG_INFO(0, "[NTT_RECONNECT] delete record1 inactive profile");
+                    nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
+                    find_invalid_record_cnt++;
+                }
             }
         }
-        else if(ret == 2)
+#if 0
+        if (ret >= 2)
         {
-            btdevice_plf_p = (btdevice_profile *)app_bt_profile_active_store_ptr_get(record1.bdAddr.address);
-            if (!(btdevice_plf_p->hfp_act)&&!(btdevice_plf_p->a2dp_act))
+            if (ntt_bt_addr_is_invalid(&record2.bdAddr))
             {
-                nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
-                find_invalid_record_cnt++;
-            }
-            btdevice_plf_p = (btdevice_profile *)app_bt_profile_active_store_ptr_get(record2.bdAddr.address);
-            if (!(btdevice_plf_p->hfp_act)&&!(btdevice_plf_p->a2dp_act))
-            {
+                DEBUG_INFO(0, "[NTT_RECONNECT] delete record2 local/peer");
                 nv_record_ddbrec_delete((bt_bdaddr_t *)&record2.bdAddr);
                 find_invalid_record_cnt++;
             }
+            else
+            {
+                btdevice_plf_p =
+                    (btdevice_profile *)app_bt_profile_active_store_ptr_get(record2.bdAddr.address);
+
+                if (!(btdevice_plf_p->hfp_act) && !(btdevice_plf_p->a2dp_act))
+                {
+                    DEBUG_INFO(0, "[NTT_RECONNECT] delete record2 inactive profile");
+                    nv_record_ddbrec_delete((bt_bdaddr_t *)&record2.bdAddr);
+                    find_invalid_record_cnt++;
+                }
+            }
         }
+#endif
     }
-    while(find_invalid_record_cnt);
+    while (find_invalid_record_cnt);
 
-    DEBUG_INFO(1,"!!!app_bt_opening_reconnect: devices %d\n", ret);
-    DUMP8("%02x ", &record1.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
-    DUMP8("%02x ", &record2.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
+    DEBUG_INFO(1, "!!!app_bt_opening_reconnect: devices %d", ret);
 
-    if(ret > 0)
+    if (ret >= 1)
     {
-        DEBUG_INFO(0,"!!!start reconnect first device\n");
+        DUMP8("%02x ", &record1.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
+    }
+
+    if (ret >= 2)
+    {
+        DUMP8("%02x ", &record2.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
+    }
+
+    if (ret > 0)
+    {
+        DEBUG_INFO(0, "!!!start reconnect devices");
 
 #if defined(FREEMAN_ENABLED_STERO)
 #ifdef IBRT_UI
@@ -4053,36 +4169,64 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #else
         if (btif_me_get_pendCons() == 0)
         {
+            if (ret >= 1 && !ntt_bt_addr_is_invalid(&record1.bdAddr))
+            {
+                DEBUG_INFO(0, "[NTT_RECONNECT] append phone1");
+
 #ifdef BT_SOURCE
-            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record1.bdAddr, record1.for_bt_source);
+                app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
+                                                &record1.bdAddr,
+                                                record1.for_bt_source);
 #else
-            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record1.bdAddr, false);
+                app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
+                                                &record1.bdAddr,
+                                                false);
 #endif
+                reconnect_added = true;
+            }
+
+#if defined(BT_SOURCE)
+            if (ret >= 2 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1 &&
+                !ntt_bt_addr_is_invalid(&record2.bdAddr))
+#else
+            if (ret >= 2 && BT_DEVICE_NUM > 1 &&
+                !ntt_bt_addr_is_invalid(&record2.bdAddr))
+#endif
+            {
+                DEBUG_INFO(0, "[NTT_RECONNECT] append phone2");
+
+#ifdef BT_SOURCE
+                app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
+                                                &record2.bdAddr,
+                                                record2.for_bt_source);
+#else
+                app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
+                                                &record2.bdAddr,
+                                                false);
+#endif
+                reconnect_added = true;
+            }
+        }
+        else
+        {
+            DEBUG_INFO(0, "[NTT_RECONNECT] pending connection exists, skip reconnect");
         }
 
-        //Only connect last devices,so comment it
-        //fixed 20250308
-#if 0
-#ifdef BT_SOURCE
-        if(ret > 1 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1)
-#else
-        if(ret > 1 && BT_DEVICE_NUM > 1)
-#endif
+        if (reconnect_added)
         {
-#ifdef BT_SOURCE
-            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record2.bdAddr, record2.for_bt_source);
-#else
-            app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting, &record2.bdAddr, false);
-#endif
+            app_bt_start_poweron_reconnect();
         }
-#endif
-        app_bt_start_poweron_reconnect();
+        else
+        {
+            DEBUG_INFO(0, "[NTT_RECONNECT] no valid phone record, skip reconnect");
+        }
 #endif
     }
     else
     {
-        DEBUG_INFO(0,"!!!go to pairing\n");
-		set_er_discover_connectable_status(1);
+        DEBUG_INFO(0, "!!!go to pairing");
+        set_er_discover_connectable_status(1);
+
 #ifdef FREEMAN_ENABLED_STERO
 #error FREEMAN_ENABLED_STERO
         app_ibrt_internal_enter_freeman_pairing();
@@ -4092,20 +4236,13 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #else
 #ifdef __EARPHONE_STAY_BOTH_SCAN__
 #error __EARPHONE_STAY_BOTH_SCAN__
-        //app_bt_accessmode_set_req(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR);
-		//app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
-		app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
-
-
+        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
 #else
-        //app_bt_accessmode_set_req(BTIF_BAM_CONNECTABLE_ONLY);
-		//app_bt_accessmode_set_req(BTIF_BAM_GENERAL_ACCESSIBLE);
-		app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
 #endif
 #endif
     }
 }
-
 
 void app_bt_resume_sniff_mode(uint8_t deviceId)
 {
@@ -4366,7 +4503,8 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
                 {
                    DEBUG_INFO(2,"%s bt_disconnected_keep_alive_timer_id start hfp disconnected",__func__);
                    osTimerStop(bt_disconnected_keep_alive_timer_id);
-                   osTimerStart(bt_disconnected_keep_alive_timer_id, 5*60*1000);
+                   // HFP disconnected
+                   osTimerStart(bt_disconnected_keep_alive_timer_id, NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS);
                 }
 
                 profile_mgr->hfp_connect = bt_profile_connect_status_failure;
@@ -4684,7 +4822,8 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
                 {
                    DEBUG_INFO(2,"%s bt_disconnected_keep_alive_timer_id start a2dp",__func__);
                    osTimerStop(bt_disconnected_keep_alive_timer_id);
-                   osTimerStart(bt_disconnected_keep_alive_timer_id, (5*60*1000)); //ms
+                   // A2DP disconnected
+                   osTimerStart(bt_disconnected_keep_alive_timer_id, NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS); //ms
                 }
 
                 profile_mgr->a2dp_connect = bt_profile_connect_status_failure;

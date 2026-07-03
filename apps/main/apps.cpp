@@ -1884,6 +1884,41 @@ WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 
 }
 
+static bt_bdaddr_t ntt_local_bt_addr;
+static bt_bdaddr_t ntt_peer_bt_addr;
+static bool ntt_local_peer_addr_valid = false;
+
+extern "C" void ntt_set_local_peer_bt_addr(const bt_bdaddr_t *local,
+                                           const bt_bdaddr_t *peer)
+{
+    if (local && peer)
+    {
+        memcpy(&ntt_local_bt_addr, local, sizeof(bt_bdaddr_t));
+        memcpy(&ntt_peer_bt_addr, peer, sizeof(bt_bdaddr_t));
+        ntt_local_peer_addr_valid = true;
+    }
+}
+
+extern "C" bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr)
+{
+    if (!addr || !ntt_local_peer_addr_valid)
+    {
+        return false;
+    }
+
+    if (memcmp(addr->address, ntt_local_bt_addr.address, 6) == 0)
+    {
+        return true;
+    }
+
+    if (memcmp(addr->address, ntt_peer_bt_addr.address, 6) == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 void app_ibrt_init(void)
 {
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
@@ -1973,6 +2008,8 @@ void app_ibrt_init(void)
             config.peer_addr.address[0], config.peer_addr.address[1],
             config.peer_addr.address[2], config.peer_addr.address[3],
             config.peer_addr.address[4], config.peer_addr.address[5]);
+            
+        ntt_set_local_peer_bt_addr(&config.local_addr, &config.peer_addr);
 
         if (record_count >= 1)
         {

@@ -89,6 +89,7 @@ bool ntt_case_open_pending = false;
 static void wired_uart_remove_all_phone_paired_list(void);
 extern void handleSetEqIndex(uint8_t index);
 extern "C" void ntt_audio_output_mute_refresh(void);
+bool ntt_open_case_idle_reboot_needed = false;
 //static void box_battery_nv_reset(void);
 bool ntt_first_no_mobile_pair_mode = false;
 #ifdef DISABLE_GOC_UART_LOG
@@ -1361,47 +1362,76 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
     return 0;
 }
 
-
 /**
  * @brief 串口空闲超时回调函数
  * @param argument 回调参数（未使用）
  */
 static void uart_idle_timeout_callback(void const *argument)
 {
-    DBGPRINT("UART idle timeout detected! No data received for %dms\n", UART_IDLE_TIMEOUT_MS);
+    DBGPRINT("UART idle timeout detected! No data received for %dms\n",
+             UART_IDLE_TIMEOUT_MS);
+
     aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
-	ntt_audio_output_mute_refresh();
-    #ifdef IBRT
+    ntt_audio_output_mute_refresh();
+
+#ifdef IBRT
+    /*
+     * NTT:
+     * UART idle means earbud is out of pogo / out of box.
+     * Update UI box state first, otherwise slave may stay in IN_BOX_OPEN.
+     */
+    app_ui_set_local_box_state(IBRT_OUT_BOX);
+    app_ui_sync_box_state(IBRT_OUT_BOX);
+
+    DBGPRINT("[NTT_OUTBOX] set local box state to IBRT_OUT_BOX and sync peer");
+
     EARBUDS_TRACE(3,
-    "[NTT_PAIR] first_no_mobile=%d tws_connected=%d mobile_connected=%d",
-    ntt_first_no_mobile_pair_mode,
-    bts_tws_if_is_tws_link_connected(),
-    app_bt_ibrt_has_mobile_link_connected());
-    
+        "[NTT_PAIR] first_no_mobile=%d tws_connected=%d mobile_connected=%d",
+        ntt_first_no_mobile_pair_mode,
+        bts_tws_if_is_tws_link_connected(),
+        app_bt_ibrt_has_mobile_link_connected());
+
+    /*
+     * First pair mode:
+     * No mobile record case.
+     * Out case for 2 seconds:
+     * Do not shutdown. Only leave pairing / discoverable mode.
+     */
     if (ntt_first_no_mobile_pair_mode &&
         bts_tws_if_is_tws_link_connected() &&
         !app_bt_ibrt_has_mobile_link_connected())
-        {
-            DBGPRINT("[NTT_PAIR] uart idle + no mobile record + tws connected + out case -> exit pairing mode");
+    {
+        DBGPRINT("[NTT_PAIR] uart idle + no mobile record + tws connected + out case -> exit pairing mode");
 
-            /*
-            * Out case for 2 seconds:
-            * Do not shutdown.
-            * Only leave pairing / discoverable mode.
-            */
-            app_bt_set_access_mode(BTIF_BAM_NOT_ACCESSIBLE);
+        app_bt_set_access_mode(BTIF_BAM_NOT_ACCESSIBLE);
 
-            /*
-            * Clear first-pair flag to avoid entering this flow again.
-            */
-            ntt_first_no_mobile_pair_mode = false;
-        }
-    #endif
-	osTimerDelete(uart_idle_timer_id);
-	uart_idle_timer_id = NULL;
-    // 调用其他函数
-    //call_other_function();
+        ntt_first_no_mobile_pair_mode = false;
+
+        goto exit;
+    }
+
+    /*
+     * Normal out case:
+     * If no mobile connected, only master starts mobile reconnect.
+     */
+    if (ntt_open_case_idle_reboot_needed)
+    {
+        DBGPRINT("[NTT_OUTBOX] idle flag detected -> reboot to recover normal reconnect");
+
+        ntt_open_case_idle_reboot_needed = false;
+
+        osDelay(100);
+
+        pmu_reboot();
+
+        return;
+    }
+#endif
+
+exit:
+    osTimerDelete(uart_idle_timer_id);
+    uart_idle_timer_id = NULL;
 }
 
 /**

@@ -39,6 +39,8 @@
 extern bool bts_tws_if_is_tws_addr(const uint8_t* pBdAddr);
 #endif
 
+extern bool ntt_first_no_mobile_pair_mode;
+
 #ifdef RAM_NV_RECORD
 #define MAX_RECORD_NUM     3
 nvrec_btdevicerecord g_fpga_ram_record[MAX_RECORD_NUM];
@@ -589,7 +591,14 @@ bt_status_t nv_record_add(SECTIONS_ADP_ENUM type, void *record)
 #else
             retstatus = ram_record_ddbrec_add(record);
 #endif
+
+            if (retstatus == BT_STS_SUCCESS)
+            {
+                ntt_first_no_mobile_pair_mode = false;
+            }
+
             break;
+
         default:
             break;
     }
