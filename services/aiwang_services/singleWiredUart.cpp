@@ -24,6 +24,7 @@
 #include "app_media_player.h"
 #include "bt_common_define.h"
 #include "audio_cfg.h"
+#include "btapp.h"
 
 #ifdef IBRT
 #include "app_ibrt_internal.h"
@@ -197,7 +198,7 @@ static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
 
-#define NTT_OUTBOX_RECONNECT_CHECK_MS   5000
+#define NTT_OUTBOX_RECONNECT_CHECK_MS   2000
 
 static osTimerId ntt_outbox_reconnect_check_timer_id = NULL;
 
@@ -208,23 +209,26 @@ static void ntt_outbox_reconnect_check_timer_handler(void const *param)
     if (bts_tws_if_is_tws_link_connected() &&
         !app_bt_ibrt_has_mobile_link_connected())
     {
-        DBGPRINT("[NTT_RECONNECT_CHECK] TWS connected but mobile not connected -> reboot");
+        DBGPRINT("[NTT_RECONNECT_CHECK] TWS connected but mobile not connected -> pmu_reboot");
 
         if (!app_ibrt_middleware_is_ui_slave())
         {
-            uint8_t cmd_sync_poweroff_shutdown[1];
+            DBGPRINT("[NTT_RECONNECT_CHECK] master send pmu_reboot/shutdown sync to peer");
+            //uint8_t cmd_sync_poweroff_shutdown[1];
 
-            cmd_sync_poweroff_shutdown[0] = 1;
+            //cmd_sync_poweroff_shutdown[0] = 1;
 
-            DBGPRINT("[NTT_RECONNECT_CHECK] master send reboot/shutdown sync to peer");
+            DEBUG_INFO(2,
+                "[UITWS]%s poweroff_flag %d",
+                __func__,
+                1);
 
-            tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-                              cmd_sync_poweroff_shutdown,
-                              1);
+            //tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+            //                    cmd_sync_poweroff_shutdown,
+            //                    1);
 
-            osDelay(100);
-
-            pmu_reboot();
+            //osDelay(100);
+            //pmu_reboot();
         }
         else
         {
@@ -1245,7 +1249,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1347,7 +1351,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
             app_bt_reset_delay_power_off();
 
-            aiWang_disconnet_phone_enter_pairmode();
+            //aiWang_disconnet_phone_enter_pairmode();
         }
         break;
     }
@@ -1492,7 +1496,6 @@ static void uart_idle_timeout_callback(void const *argument)
         osDelay(100);
 
         pmu_reboot();
-
         return;
     }
 #endif

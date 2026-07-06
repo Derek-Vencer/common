@@ -1197,7 +1197,7 @@ static const char * const aud_id_str[] =
     "[BT_CALL_HUNG_UP]",
     "[BT_CALL_INCOMING_CALL]",
     "[BT_CALL_INCOMING_NUMBER]",
-    "[BT_CHARGE_PLEASE]",
+    "[BT_BATTERY_LOW]",
     "[BT_CHARGE_FINISH]",
     "[BT_CLEAR_SUCCESS]",
     "[BT_CLEAR_FAIL]",

@@ -80,7 +80,7 @@ int app_voice_report_handler(APP_STATUS_INDICATION_T status, uint8_t device_id, 
             id = AUD_ID_EQ_OFF;
             break;
         case APP_STATUS_INDICATION_BATTERY_LOW:
-            id = AUD_ID_BT_CHARGE_PLEASE;
+            id = AUD_ID_BT_BATTERY_LOW;
             break;
         case APP_STATUS_INDICATION_PAIRING_MODE:
             id = AUD_ID_BT_PAIRING;

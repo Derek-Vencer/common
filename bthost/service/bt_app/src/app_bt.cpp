@@ -192,7 +192,7 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (2)
 #define APP_BT_PROFILE_RECONNECT_RETRY_LIMIT_CNT (15)
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
-#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (30000)
+#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000)
 
 static void app_bt_profile_reconnect_timehandler(void const *param);
 static void app_bt_accessmode_timehandler(void const *param);
@@ -1308,52 +1308,97 @@ int bes_bt_a2dp_set_last_paused_device(int device_id)
     return prev_device;
 }
 
-struct BT_DEVICE_RECONNECT_T *app_bt_append_to_reconnect_list(bt_profile_reconnect_mode reconnect_mode, bt_bdaddr_t *remote, bool is_for_source_device)
+struct BT_DEVICE_RECONNECT_T *app_bt_append_to_reconnect_list(bt_profile_reconnect_mode reconnect_mode,
+                                                              bt_bdaddr_t *remote,
+                                                              bool is_for_source_device)
 {
     list_entry_t *head = NULL;
     list_entry_t *curr = NULL;
     struct BT_DEVICE_RECONNECT_T *node = NULL;
     struct BT_DEVICE_RECONNECT_T *new_node = NULL;
 
+    DEBUG_INFO(8,
+        "%s mode=%d remote=%02x:%02x:%02x:%02x:%02x:%02x source=%d",
+        __func__,
+        reconnect_mode,
+        remote->address[5], remote->address[4], remote->address[3],
+        remote->address[2], remote->address[1], remote->address[0],
+        is_for_source_device);
+
     if (reconnect_mode == bt_profile_reconnect_openreconnecting)
     {
         head = &app_bt_manager.poweron_reconnect_list;
+        DEBUG_INFO(1, "%s use poweron_reconnect_list", __func__);
     }
     else if (reconnect_mode == bt_profile_reconnect_reconnecting)
     {
         head = &app_bt_manager.linkloss_reconnect_list;
+        DEBUG_INFO(1, "%s use linkloss_reconnect_list", __func__);
     }
 
     if (!head)
     {
-        DEBUG_INFO(1, "%s no reconnect list", __func__);
+        DEBUG_INFO(2, "%s no reconnect list, mode=%d", __func__, reconnect_mode);
         return NULL;
     }
 
     for (curr = head->Flink; curr != head; curr = curr->Flink)
     {
         node = (struct BT_DEVICE_RECONNECT_T *)curr;
+
+        DEBUG_INFO(8,
+            "%s check exist node remote=%02x:%02x:%02x:%02x:%02x:%02x inuse=%d",
+            __func__,
+            node->rmt_addr.address[5], node->rmt_addr.address[4], node->rmt_addr.address[3],
+            node->rmt_addr.address[2], node->rmt_addr.address[1], node->rmt_addr.address[0],
+            node->inuse);
+
         if (memcmp(&node->rmt_addr, remote, sizeof(bt_bdaddr_t)) == 0)
         {
-            return node; // the device is already in the list
+            DEBUG_INFO(7,
+                "%s already in reconnect list remote=%02x:%02x:%02x:%02x:%02x:%02x",
+                __func__,
+                remote->address[5], remote->address[4], remote->address[3],
+                remote->address[2], remote->address[1], remote->address[0]);
+
+            return node;
         }
     }
+
 #ifdef BT_SOURCE
     for (int i = 0; i < (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM); i += 1)
 #else
     for (int i = 0; i < BT_DEVICE_NUM; i += 1)
 #endif
     {
-        if (!app_bt_manager.reconnect_node[i].inuse && app_bt_manager.reconnect_node[i].for_source_device == is_for_source_device)
+        DEBUG_INFO(4,
+            "%s node[%d] inuse=%d source=%d",
+            __func__,
+            i,
+            app_bt_manager.reconnect_node[i].inuse,
+            app_bt_manager.reconnect_node[i].for_source_device);
+
+        if (!app_bt_manager.reconnect_node[i].inuse &&
+            app_bt_manager.reconnect_node[i].for_source_device == is_for_source_device)
         {
             new_node = &app_bt_manager.reconnect_node[i];
+
+            DEBUG_INFO(3,
+                "%s allocate node[%d] source=%d",
+                __func__,
+                i,
+                is_for_source_device);
+
             break;
         }
     }
 
     if (new_node == NULL)
     {
-        DEBUG_INFO(1, "%s no resource", __func__);
+        DEBUG_INFO(2,
+            "%s no resource, source=%d",
+            __func__,
+            is_for_source_device);
         return NULL;
     }
 
@@ -1361,7 +1406,17 @@ struct BT_DEVICE_RECONNECT_T *app_bt_append_to_reconnect_list(bt_profile_reconne
     new_node->reconnect_mode = reconnect_mode;
     new_node->acl_reconnect_cnt = 0;
     new_node->rmt_addr = *remote;
+
     insert_tail_list(head, &new_node->node);
+
+    DEBUG_INFO(8,
+        "%s append done mode=%d remote=%02x:%02x:%02x:%02x:%02x:%02x source=%d",
+        __func__,
+        reconnect_mode,
+        new_node->rmt_addr.address[5], new_node->rmt_addr.address[4], new_node->rmt_addr.address[3],
+        new_node->rmt_addr.address[2], new_node->rmt_addr.address[1], new_node->rmt_addr.address[0],
+        is_for_source_device);
+
     return new_node;
 }
 
@@ -4045,6 +4100,38 @@ bool app_bt_is_in_reconnecting(void)
     return false;
 }
 
+void ntt_bt_reconnect_context_reset(void)
+{
+    uint8_t i = 0;
+
+    DEBUG_INFO(0, "[NTT_RECONNECT] reset reconnect context");
+
+    initialize_list_head(&app_bt_manager.poweron_reconnect_list);
+    initialize_list_head(&app_bt_manager.linkloss_reconnect_list);
+
+#ifdef BT_SOURCE
+    for (i = 0; i < (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM); i++)
+#else
+    for (i = 0; i < BT_DEVICE_NUM; i++)
+#endif
+    {
+        DEBUG_INFO(4,
+            "[NTT_RECONNECT] clear node[%d] inuse=%d source=%d mode=%d",
+            i,
+            app_bt_manager.reconnect_node[i].inuse,
+            app_bt_manager.reconnect_node[i].for_source_device,
+            app_bt_manager.reconnect_node[i].reconnect_mode);
+
+        app_bt_manager.reconnect_node[i].inuse = false;
+        app_bt_manager.reconnect_node[i].reconnect_mode =
+            bt_profile_reconnect_openreconnecting;
+        app_bt_manager.reconnect_node[i].acl_reconnect_cnt = 0;
+        memset(&app_bt_manager.reconnect_node[i].rmt_addr, 0, sizeof(bt_bdaddr_t));
+
+        initialize_list_head(&app_bt_manager.reconnect_node[i].node);
+    }
+}
+
 static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
 {
     static const uint8_t zero_addr[6] = {0};
@@ -4079,6 +4166,18 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     int find_invalid_record_cnt;
     bool reconnect_added = false;
 
+    DEBUG_INFO(0, "[NTT_RECONNECT] opening reconnect enter");
+
+    if (!btif_me_get_pendCons())
+    {
+        ntt_bt_reconnect_context_reset();
+    }
+    else
+    {
+        DEBUG_INFO(0,
+            "[NTT_RECONNECT] skip reconnect context reset, pending connection exists");
+    }
+    
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
     if (!bt_host_cfg->bt_sink_enable)
     {
@@ -4173,37 +4272,21 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
             {
                 DEBUG_INFO(0, "[NTT_RECONNECT] append phone1");
 
-#ifdef BT_SOURCE
-                app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
-                                                &record1.bdAddr,
-                                                record1.for_bt_source);
-#else
+
                 app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
                                                 &record1.bdAddr,
                                                 false);
-#endif
                 reconnect_added = true;
             }
 
-#if defined(BT_SOURCE)
-            if (ret >= 2 && (BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM) > 1 &&
-                !ntt_bt_addr_is_invalid(&record2.bdAddr))
-#else
             if (ret >= 2 && BT_DEVICE_NUM > 1 &&
                 !ntt_bt_addr_is_invalid(&record2.bdAddr))
-#endif
             {
                 DEBUG_INFO(0, "[NTT_RECONNECT] append phone2");
 
-#ifdef BT_SOURCE
-                app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
-                                                &record2.bdAddr,
-                                                record2.for_bt_source);
-#else
                 app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,
                                                 &record2.bdAddr,
                                                 false);
-#endif
                 reconnect_added = true;
             }
         }

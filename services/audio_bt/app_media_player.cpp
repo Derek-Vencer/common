@@ -307,7 +307,7 @@ enum sound_id {
     BT_ANSWER,
     BT_HUNG_UP,
     BT_INCOMING_CALL,
-    CHARGE_PLEASE,
+    BATTERY_LOW,
     CHARGE_FINISH,
     BT_CONNECTED,
     BT_DIS_CONNECT,
@@ -395,7 +395,7 @@ static const media_sound_map_t media_sound_map_cn[] =
     SOUND_ITEM_DEF(CN_, BT_ANSWER),
     SOUND_ITEM_DEF(CN_, BT_HUNG_UP),
     SOUND_ITEM_DEF(CN_, BT_INCOMING_CALL),
-    SOUND_ITEM_DEF(CN_, CHARGE_PLEASE),
+    SOUND_ITEM_DEF(CN_, BATTERY_LOW),
     SOUND_ITEM_DEF(CN_, CHARGE_FINISH),
     SOUND_ITEM_DEF(CN_, BT_CONNECTED),
     SOUND_ITEM_DEF(CN_, BT_DIS_CONNECT),
@@ -451,7 +451,7 @@ static const media_sound_map_t media_sound_map_en[] =
     SOUND_ITEM_DEF(EN_, BT_ANSWER),
     SOUND_ITEM_DEF(EN_, BT_HUNG_UP),
     SOUND_ITEM_DEF(EN_, BT_INCOMING_CALL),
-    SOUND_ITEM_DEF(EN_, CHARGE_PLEASE),
+    SOUND_ITEM_DEF(EN_, BATTERY_LOW),
     SOUND_ITEM_DEF(EN_, CHARGE_FINISH),
     SOUND_ITEM_DEF(EN_, BT_CONNECTED),
     SOUND_ITEM_DEF(EN_, BT_DIS_CONNECT),
@@ -1646,8 +1646,8 @@ void media_runtime_audio_prompt_update(uint16_t id, uint8_t** ptr, uint32_t* len
 #endif
         get_sound_id_info(BT_INCOMING_CALL, &sound_data, &length);
         break;
-    case AUD_ID_BT_CHARGE_PLEASE:
-        get_sound_id_info(CHARGE_PLEASE, &sound_data, &length);
+    case AUD_ID_BT_BATTERY_LOW:
+        get_sound_id_info(BATTERY_LOW, &sound_data, &length);
         break;
     case AUD_ID_BT_CHARGE_FINISH:
         get_sound_id_info(CHARGE_FINISH, &sound_data, &length);

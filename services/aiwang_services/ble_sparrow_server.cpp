@@ -174,7 +174,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.1.6" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.0" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -410,11 +410,76 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
 #endif
 }
 
+#define NTT_BT_NAME_MAX_LEN             45
+#define NTT_BT_NAME_DELAY_WRITE_MS      10000
+
+static uint8_t ntt_bt_name_sync_buf[NTT_BT_NAME_MAX_LEN + 1] = {0};
+static uint16_t ntt_bt_name_sync_len = 0;
+static bool ntt_bt_name_pending = false;
+static osTimerId ntt_bt_name_write_timer = NULL;
+
+static void ntt_bt_name_write_timer_handler(void const *param);
+
+osTimerDef(NTT_BT_NAME_WRITE_TIMER, ntt_bt_name_write_timer_handler);
+
+static void ntt_bt_name_delay_write_start(void)
+{
+    if (ntt_bt_name_write_timer == NULL)
+    {
+        ntt_bt_name_write_timer =
+            osTimerCreate(osTimer(NTT_BT_NAME_WRITE_TIMER),
+                          osTimerOnce,
+                          NULL);
+    }
+
+    if (ntt_bt_name_write_timer)
+    {
+        osTimerStop(ntt_bt_name_write_timer);
+        osTimerStart(ntt_bt_name_write_timer, NTT_BT_NAME_DELAY_WRITE_MS);
+    }
+}
+
+static void ntt_bt_name_write_timer_handler(void const *param)
+{
+    if (!ntt_bt_name_pending)
+    {
+        return;
+    }
+
+    if ((ntt_bt_name_sync_len == 0) ||
+        (ntt_bt_name_sync_len > sizeof(ntt_bt_name_sync_buf)))
+    {
+        TRACE(1, "[SET_NAME] invalid pending len=%d", ntt_bt_name_sync_len);
+        ntt_bt_name_pending = false;
+        return;
+    }
+
+    TRACE(2,
+          "[SET_NAME] delayed factory write name=%s len=%d",
+          ntt_bt_name_sync_buf,
+          ntt_bt_name_sync_len);
+
+    if (factory_section_set_bt_name((char *)ntt_bt_name_sync_buf,
+                                    ntt_bt_name_sync_len))
+    {
+        TRACE(0, "[SET_NAME] delayed factory_section_set_bt_name failed");
+        ntt_bt_name_delay_write_start();
+        return;
+    }
+
+    TRACE(0, "[SET_NAME] delayed factory write done");
+
+    app_ibrt_customif_cmd_sync_bt_name(ntt_bt_name_sync_buf,
+                                       ntt_bt_name_sync_len);
+
+    ntt_bt_name_pending = false;
+}
+
 void handleSetDeviceName(const uint8_t *data, uint16_t len)
 {
     TRACE(0, "%s.", __func__);
 
-    char nameBuffer[45 + 1] = {0};
+    char nameBuffer[NTT_BT_NAME_MAX_LEN + 1] = {0};
 
     if ((data == NULL) || (len < 4))
     {
@@ -432,7 +497,7 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
         return;
     }
 
-    if (name_len > 45)
+    if (name_len > NTT_BT_NAME_MAX_LEN)
     {
         bleCmdSet_status.set_name_status = 0x3B;
         ntt_api_send_error_notify(0x3B, API_ERR_TOO_LONG);
@@ -449,17 +514,22 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
     memcpy(nameBuffer, &data[3], name_len);
     nameBuffer[name_len] = 0;
 
-    if (factory_section_set_bt_name(nameBuffer, name_len + 1))
-    {
-        TRACE(0, "%s set bt name error", __func__);
-        bleCmdSet_status.set_name_status = 0x3B;
-        ntt_api_send_error_notify(0x3B, API_ERR_STORAGE_ERROR);
-        return;
-    }
+    TRACE(1, "[SET_NAME] New Name = %s", nameBuffer);
+
+    /*
+     * Do NOT call factory_section_set_bt_name() here.
+     * BLE command handler / music playback path may reboot.
+     */
+
+    memset(ntt_bt_name_sync_buf, 0, sizeof(ntt_bt_name_sync_buf));
+    memcpy(ntt_bt_name_sync_buf, nameBuffer, name_len + 1);
+
+    ntt_bt_name_sync_len = name_len + 1;
+    ntt_bt_name_pending = true;
+
+    ntt_bt_name_delay_write_start();
 
     bleCmdSet_status.set_name_status = 0x3A;
-
-    app_ibrt_customif_cmd_sync_bt_name((uint8_t *)nameBuffer, name_len + 1);
 
 #if need_send_data_by_notify
     sparraw_tx_msg(RSP_SET_DEVICE_NAME, (const uint8_t *)"", 0);
@@ -488,7 +558,7 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
     }
 
     uint8_t key_number = nvrecord_env->key_map_number;
-    uint8_t read_key_map_data[64] = {0};
+    uint8_t read_key_map_data[40] = {0};   // 20 keys * 2 bytes
     bool use_default_map = false;
     bool all_empty = true;
 
@@ -520,9 +590,6 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
         }
     }
 
-    read_key_map_data[0] = 0x00;
-    read_key_map_data[1] = key_number * 2;
-
     for (uint8_t i = 0; i < key_number; i++)
     {
         uint8_t action = 0;
@@ -542,20 +609,20 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
         TRACE(0, "[KEYMAP] i=%d action=0x%02X func=0x%02X",
               i, action, func);
 
-        read_key_map_data[i * 2 + 2] = action;
-        read_key_map_data[i * 2 + 3] = func;
+        read_key_map_data[i * 2]     = action;
+        read_key_map_data[i * 2 + 1] = func;
     }
 
     TRACE(0, "[KEYMAP] number=%d payload_len=%d source=%s",
           key_number,
-          key_number * 2 + 2,
+          key_number * 2,
           use_default_map ? "default" : "nv");
 
-    DUMP8("%02X ", read_key_map_data, key_number * 2 + 2);
+    DUMP8("%02X ", read_key_map_data, key_number * 2);
 
     sparraw_tx_msg(RSP_GET_KEY_MAPPING,
                    read_key_map_data,
-                   key_number * 2 + 2);
+                   key_number * 2);
 }
 
 void handleSetKeyMapping(const uint8_t *data, uint16_t len)

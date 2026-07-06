@@ -118,8 +118,8 @@ const uint8_t EN_BT_INCOMING_CALL [] = {
 #include "res/en/SOUND_INCOMING_CALL.txt"
 };
 
-const uint8_t EN_CHARGE_PLEASE[] = {
-#include "res/en/SOUND_CHARGE_PLEASE.txt"
+const uint8_t EN_BATTERY_LOW[] = {
+#include "res/en/SOUND_BATTERY_LOW.txt"
 };
 
 const uint8_t EN_CHARGE_FINISH[] = {

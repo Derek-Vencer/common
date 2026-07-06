@@ -624,7 +624,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #if defined(IBRT)
 
 #else
-            media_PlayAudio(AUD_ID_BT_CHARGE_PLEASE, 0);
+            media_PlayAudio(AUD_ID_BT_BATTERY_LOW, 0);
 #endif
 #endif
 #endif

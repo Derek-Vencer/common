@@ -65,6 +65,7 @@
 #include "nvrecord_env.h"
 #include "nvrecord_extension.h"
 #include "factory_section.h"
+#include "app_bt_stream.h"
 
 extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
@@ -82,6 +83,11 @@ extern "C" uint8_t ntt_color_code_nv_get(void);
 extern void ntt_ble_adv_refresh_data(void);
 
 extern bool ntt_color_code_is_valid(uint8_t color);
+#ifdef IBRT
+extern "C" bool app_ibrt_middleware_is_ui_slave(void);
+#endif
+
+extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
@@ -894,16 +900,51 @@ static void app_ibrt_customif_sync_set_reconnect_status_send(uint8_t *p_buff, ui
 	app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SET_OPENRECONNET_STATUS, p_buff, length);
 }
 
-static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
+static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rsp_seq,
+                                                                     uint8_t *p_buff,
+                                                                     uint16_t length)
 {
-	EARBUDS_TRACE(1, "[UITWS]%s", __func__);
-	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
-	DUMP8("%02x ",p_buff,length);
+    uint8_t device_id = 0;
+    uint8_t recon_status = 0;
 
-#ifdef  BESUI_TWS_EN
-    app_bt_mobile_set_openreconnect_info(p_buff[0], p_buff[1], false);
+    EARBUDS_TRACE(1, "[UITWS]%s", __func__);
+    EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
+    DUMP8("%02x ", p_buff, length);
+
+    if (length < 2)
+    {
+        EARBUDS_TRACE(1,
+            "[NTT_RECONNECT_SYNC] invalid length=%d",
+            length);
+        return;
+    }
+
+    device_id = p_buff[0];
+    recon_status = p_buff[1];
+
+#ifdef BESUI_TWS_EN
+    app_bt_mobile_set_openreconnect_info(device_id, recon_status, false);
 #endif
 
+#ifdef IBRT
+    if (recon_status == 1)
+    {
+        if (app_ibrt_middleware_is_ui_slave())
+        {
+            EARBUDS_TRACE(2,
+                "[NTT_RECONNECT_SYNC] slave start opening reconnect dev=%d status=%d",
+                device_id,
+                recon_status);
+
+            app_bt_profile_connect_manager_opening_reconnect();
+        }
+        else
+        {
+            EARBUDS_TRACE(0,
+                "[NTT_RECONNECT_SYNC] master recv sync, skip");
+        }
+    }
+#endif
 }
 
 void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code)
@@ -1271,13 +1312,93 @@ static void app_ibrt_customif_sync_bt_name_cmd_send(uint8_t *p_buff, uint16_t le
     EARBUDS_TRACE(1, "%s", __func__);
 }
 
+#define NTT_BT_NAME_MAX_LEN                 50
+#define NTT_BT_NAME_DELAY_WRITE_MS          10000
+
+static char ntt_pending_sync_bt_name[NTT_BT_NAME_MAX_LEN + 1] = {0};
+static uint16_t ntt_pending_sync_bt_name_len = 0;
+static bool ntt_pending_sync_bt_name_valid = false;
+static osTimerId ntt_sync_bt_name_write_timer = NULL;
+
+static void ntt_sync_bt_name_write_timer_handler(void const *param);
+
+osTimerDef(NTT_SYNC_BT_NAME_WRITE_TIMER,
+           ntt_sync_bt_name_write_timer_handler);
+
+static bool ntt_is_a2dp_streaming_now(void)
+{
+#ifdef MEDIA_PLAYER_SUPPORT
+    if (app_bt_stream_isrun(APP_BT_STREAM_A2DP_SBC))
+    {
+        return true;
+    }
+#endif
+
+    return false;
+}
+
+static void ntt_sync_bt_name_delay_write_start(void)
+{
+    if (ntt_sync_bt_name_write_timer == NULL)
+    {
+        ntt_sync_bt_name_write_timer =
+            osTimerCreate(osTimer(NTT_SYNC_BT_NAME_WRITE_TIMER),
+                          osTimerOnce,
+                          NULL);
+    }
+
+    if (ntt_sync_bt_name_write_timer)
+    {
+        osTimerStop(ntt_sync_bt_name_write_timer);
+        osTimerStart(ntt_sync_bt_name_write_timer,
+                     NTT_BT_NAME_DELAY_WRITE_MS);
+    }
+}
+
+static void ntt_sync_bt_name_write_timer_handler(void const *param)
+{
+    if (!ntt_pending_sync_bt_name_valid)
+    {
+        return;
+    }
+
+    if (ntt_is_a2dp_streaming_now())
+    {
+        EARBUDS_TRACE(0,
+            "[BT_NAME_SYNC] A2DP streaming, delay factory write again");
+
+        ntt_sync_bt_name_delay_write_start();
+        return;
+    }
+
+    EARBUDS_TRACE(2,
+        "[BT_NAME_SYNC] factory write name=%s len=%d",
+        ntt_pending_sync_bt_name,
+        ntt_pending_sync_bt_name_len);
+
+    if (factory_section_set_bt_name(ntt_pending_sync_bt_name,
+                                    ntt_pending_sync_bt_name_len))
+    {
+        EARBUDS_TRACE(0,
+            "[BT_NAME_SYNC] factory_section_set_bt_name failed");
+
+        ntt_sync_bt_name_delay_write_start();
+        return;
+    }
+
+    ntt_pending_sync_bt_name_valid = false;
+
+    EARBUDS_TRACE(0,
+        "[BT_NAME_SYNC] factory write done");
+}
+
 static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq,
                                                             uint8_t *p_buff,
                                                             uint16_t length)
 {
     EARBUDS_TRACE(1, "%s,length:%d", __func__, length);
 
-    char nameBuffer[50 + 1] = {0};
+    char nameBuffer[NTT_BT_NAME_MAX_LEN + 1] = {0};
     uint16_t name_len = 0;
 
     if (p_buff == NULL || length == 0)
@@ -1286,7 +1407,9 @@ static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq,
         return;
     }
 
-    name_len = (length > 50) ? 50 : length;
+    name_len = (length > NTT_BT_NAME_MAX_LEN) ?
+               NTT_BT_NAME_MAX_LEN : length;
+
     memcpy(nameBuffer, p_buff, name_len);
     nameBuffer[name_len] = '\0';
 
@@ -1301,11 +1424,17 @@ static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq,
     }
 
     EARBUDS_TRACE(2,
-        "[BT_NAME_SYNC] update name: old=%s new=%s",
+        "[BT_NAME_SYNC] pending update name: old=%s new=%s",
         old_name ? old_name : "NULL",
         nameBuffer);
 
-    factory_section_set_bt_name(nameBuffer, name_len);
+    memset(ntt_pending_sync_bt_name, 0, sizeof(ntt_pending_sync_bt_name));
+    memcpy(ntt_pending_sync_bt_name, nameBuffer, name_len + 1);
+
+    ntt_pending_sync_bt_name_len = name_len + 1;
+    ntt_pending_sync_bt_name_valid = true;
+
+    ntt_sync_bt_name_delay_write_start();
 }
 
 void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length)

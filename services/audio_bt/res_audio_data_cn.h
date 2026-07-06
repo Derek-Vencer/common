@@ -109,8 +109,8 @@ const uint8_t CN_BT_DIS_CONNECT [] = {
 #include "res/cn/SOUND_DIS_CONNECT.txt"
 };
 
-const uint8_t CN_CHARGE_PLEASE[] = {
-#include "res/cn/SOUND_CHARGE_PLEASE.txt"
+const uint8_t CN_BATTERY_LOW[] = {
+#include "res/cn/SOUND_BATTERY_LOW.txt"
 };
 
 const uint8_t CN_CHARGE_FINISH[] = {
