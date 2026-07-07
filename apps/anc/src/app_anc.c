@@ -64,6 +64,8 @@
 #define ANC_SMOOTH_SWITCH_GAIN_MS   (500)
 #define ANC_OPEN_DELAY_MS           (600)
 
+#define NTT_DISABLE_ANC_RUNTIME 1
+
 typedef struct {
     uint32_t id;
     uint32_t param0;
@@ -907,30 +909,31 @@ static void anc_thread(void const *argument)
 
 int32_t app_anc_switch(app_anc_mode_t mode)
 {
-    ANC_TRACE(0, "[%s] Mode: %d --> %d", __func__, g_app_anc_mode, mode);
-
-#if defined(ANC_BLOCK_ANC_SYNC_SWITCH_CMD)
-    _update_event_msg_list_with_mode(ANC_EVENT_SYNC_SWITCH_MODE, mode);
-#else
-    app_anc_post_msg(ANC_EVENT_SYNC_SWITCH_MODE, mode);
-#endif
-
+#if NTT_DISABLE_ANC_RUNTIME
+    ANC_TRACE(0, "[NTT_ANC] block app_anc_switch, force OFF");
+    app_anc_switch_locally(APP_ANC_MODE_OFF);
     return 0;
+#else
+    ANC_TRACE(0, "[%s] Mode: %d --> %d", __func__, g_app_anc_mode, mode);
+    app_anc_post_msg(ANC_EVENT_SYNC_SWITCH_MODE, mode);
+    return 0;
+#endif
 }
 
 int32_t app_anc_switch_locally(app_anc_mode_t mode)
 {
-    ANC_TRACE(0, "[%s] Mode: %d --> %d", __func__, g_app_anc_mode, mode);
-
-#if defined(ANC_BLOCK_ANC_SYNC_SWITCH_CMD)
-    _update_event_msg_list_with_mode(ANC_EVENT_SWITCH_MODE, mode);
-#else
-    app_anc_post_msg(ANC_EVENT_SWITCH_MODE, mode);
-#endif
-
+#if NTT_DISABLE_ANC_RUNTIME
+    ANC_TRACE(0, "[NTT_ANC] block app_anc_switch_locally, force OFF");
+    if (g_app_anc_mode != APP_ANC_MODE_OFF) {
+        app_anc_post_msg(ANC_EVENT_SWITCH_MODE, APP_ANC_MODE_OFF);
+    }
     return 0;
+#else
+    ANC_TRACE(0, "[%s] Mode: %d --> %d", __func__, g_app_anc_mode, mode);
+    app_anc_post_msg(ANC_EVENT_SWITCH_MODE, mode);
+    return 0;
+#endif
 }
-
 int32_t app_anc_switch_fir(app_anc_mode_t mode)
 {
     ANC_TRACE(0, "[%s] %d", __func__, mode);
@@ -980,10 +983,14 @@ int32_t app_anc_loop_switch(void)
         break;
     }
 #else
+#if NTT_DISABLE_ANC_RUNTIME
+    ANC_TRACE(0, "[NTT_ANC] ignore ANC UI loop switch");
+    app_anc_switch_locally(APP_ANC_MODE_OFF);
+#else
     static app_anc_mode_t mode = APP_ANC_MODE_OFF;
     mode = (mode + 1) % APP_ANC_MODE_QTY;
-
     app_anc_switch(mode);
+#endif
 #endif
 
     return 0;
@@ -994,8 +1001,9 @@ int32_t app_anc_init(void)
     ANC_TRACE(0, "[%s] ...", __func__);
 
     g_anc_init_flag = true;
-    g_enable_assist = true;
+    g_enable_assist = false;
     g_app_anc_mode = APP_ANC_MODE_OFF;
+    g_anc_work_status = ANC_STATUS_OFF;
 
 #if defined(ANC_BLOCK_ANC_SYNC_SWITCH_CMD)
     g_event_processing_flag = false;
