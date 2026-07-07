@@ -235,6 +235,7 @@ extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ
 #endif
 
 extern "C" uint8_t get_er_inbox_status(void);
+extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 
 void(*app_bt_stream_ext_sco_playback)(uint8_t *buf, uint32_t len) = NULL;
 uint32_t (*app_bt_stream_ext_sco_capture)(uint8_t *buf, uint32_t len) = NULL;
@@ -4463,6 +4464,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 			if((eq_index >=0) && (eq_index <= 5))
 			{
 				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+                ntt_audio_drc_apply_by_eq_index(eq_index);
 	
 			}
 			else
@@ -4471,6 +4473,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 				nvrecord_env->eq_index_data = eq_index;
 				nv_record_env_set(nvrecord_env);
 				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+                ntt_audio_drc_apply_by_eq_index(eq_index);
 			}
 			app_ibrt_customif_cmd_sync_music_eq(eq_index);
 		}

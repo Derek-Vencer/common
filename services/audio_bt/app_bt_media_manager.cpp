@@ -76,6 +76,7 @@
 #include "audio_policy.h"
 
 extern bool app_bt_stream_isrun(uint16_t player);
+extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 
 static int bt_audio_media_play(uint16_t stream_type, const Audio_device_t* device)
 {
@@ -804,6 +805,7 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
 		if((eq_index >=0) && (eq_index <= 5))
 		{
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+            ntt_audio_drc_apply_by_eq_index(eq_index);
 
 		}
 		else
@@ -812,6 +814,7 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
 			nvrecord_env->eq_index_data = eq_index;
 			nv_record_env_set(nvrecord_env);
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+            ntt_audio_drc_apply_by_eq_index(eq_index);
 		}
 	}
 #endif

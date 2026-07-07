@@ -88,6 +88,7 @@ extern "C" bool app_ibrt_middleware_is_ui_slave(void);
 #endif
 
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
+extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
@@ -1257,10 +1258,11 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
 			nvrecord_env->eq_index_data = eq_index;
 			nv_record_env_set(nvrecord_env);
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
+            ntt_audio_drc_apply_by_eq_index(eq_index);
 			
-			//EARBUDS_TRACE(1, "success_set_eq %s", __func__);
+			EARBUDS_TRACE(1, "success_set_eq %s", __func__);
 		}
-		//EARBUDS_TRACE(1, "%s,eq_index:%d", __func__,eq_index);
+		EARBUDS_TRACE(1, "%s,eq_index:%d", __func__,eq_index);
 	}
 			
 }

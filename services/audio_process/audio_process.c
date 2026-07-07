@@ -246,6 +246,9 @@ extern FIR_CFG_T audio_eq_hw_fir_adaptive_eq_cfg;
 extern const DrcConfig audio_drc_cfg;
 #endif
 
+#define AUDIO_DRC_CFG_LIST_NUM    5
+extern const DrcConfig * const audio_drc_cfg_list[AUDIO_DRC_CFG_LIST_NUM];
+
 #ifdef __AUDIO_DYNAMIC_BOOST__
 extern const DynamicBoostConfig audio_dynamic_boost_cfg;
 // Select dynamic boost using EQ type
@@ -3367,5 +3370,19 @@ POSSIBLY_UNUSED int32_t audio_eq_set_onoff(int32_t onoff, AUDIO_EQ_TYPE_T audio_
 #endif
     }
     return 0;
+}
+
+void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
+{
+    uint8_t drc_index = eq_index;
+
+    if (drc_index >= AUDIO_DRC_CFG_LIST_NUM)
+    {
+        drc_index = 0;
+    }
+
+    memcpy(&audio_process.drc_cfg,
+           audio_drc_cfg_list[drc_index],
+           sizeof(DrcConfig));
 }
 
