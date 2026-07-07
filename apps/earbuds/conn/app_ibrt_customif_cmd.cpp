@@ -1330,7 +1330,7 @@ osTimerDef(NTT_SYNC_BT_NAME_WRITE_TIMER,
 static bool ntt_is_a2dp_streaming_now(void)
 {
 #ifdef MEDIA_PLAYER_SUPPORT
-    if (app_bt_stream_isrun(APP_BT_STREAM_A2DP_SBC))
+    if (app_bt_stream_isrun(APP_BT_STREAM_A2DP_SBC) || app_bt_stream_isrun(APP_BT_STREAM_A2DP_AAC))
     {
         return true;
     }

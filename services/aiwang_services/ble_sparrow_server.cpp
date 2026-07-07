@@ -194,6 +194,10 @@ static void double_hold_idle_timeout_callback(void const *argument);
 // 定时器定义
 osTimerDef(DOUBLE_HOLD_IDLE_TIMER, double_hold_idle_timeout_callback);
 
+extern bool btapp_hfp_is_call_active(void);
+extern bool btapp_hfp_is_sco_active(void);
+extern uint8_t btapp_hfp_get_call_active(void);
+
 //button function
 /***********************************************/
 /***********************************************/
@@ -411,7 +415,9 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
 }
 
 #define NTT_BT_NAME_MAX_LEN             45
-#define NTT_BT_NAME_DELAY_WRITE_MS      10000
+#define NTT_BT_NAME_DELAY_WRITE_MS          10000
+#define NTT_BT_NAME_RETRY_WHEN_BUSY_MS      3000
+#define NTT_BT_NAME_MAX_RETRY_COUNT         20
 
 static uint8_t ntt_bt_name_sync_buf[NTT_BT_NAME_MAX_LEN + 1] = {0};
 static uint16_t ntt_bt_name_sync_len = 0;
@@ -421,6 +427,49 @@ static osTimerId ntt_bt_name_write_timer = NULL;
 static void ntt_bt_name_write_timer_handler(void const *param);
 
 osTimerDef(NTT_BT_NAME_WRITE_TIMER, ntt_bt_name_write_timer_handler);
+
+static uint8_t ntt_bt_name_retry_count = 0;
+
+static bool ntt_bt_name_is_audio_busy(void)
+{
+    uint8_t device_id = 0;
+
+    for (device_id = 0; device_id < BT_DEVICE_NUM; device_id++)
+    {
+        struct BT_DEVICE_T *curr_device = app_bt_get_device(device_id);
+
+        if (curr_device == NULL)
+        {
+            continue;
+        }
+
+        if (curr_device->a2dp_streamming)
+        {
+            TRACE(1, "[SET_NAME] busy: a2dp streaming device_id=%d", device_id);
+            return true;
+        }
+    }
+
+    if (btapp_hfp_is_call_active())
+    {
+        TRACE(0, "[SET_NAME] busy: hfp call active");
+        return true;
+    }
+
+    if (btapp_hfp_is_sco_active())
+    {
+        TRACE(0, "[SET_NAME] busy: hfp sco active");
+        return true;
+    }
+
+    if (btapp_hfp_get_call_active())
+    {
+        TRACE(0, "[SET_NAME] busy: hfp call setup/alert");
+        return true;
+    }
+
+    return false;
+}
 
 static void ntt_bt_name_delay_write_start(void)
 {
@@ -454,6 +503,15 @@ static void ntt_bt_name_write_timer_handler(void const *param)
         return;
     }
 
+    if (ntt_bt_name_is_audio_busy())
+    {
+        TRACE(0, "[SET_NAME] audio busy, delay factory write");
+
+        osTimerStop(ntt_bt_name_write_timer);
+        osTimerStart(ntt_bt_name_write_timer, 3000);
+        return;
+    }
+
     TRACE(2,
           "[SET_NAME] delayed factory write name=%s len=%d",
           ntt_bt_name_sync_buf,
@@ -463,7 +521,9 @@ static void ntt_bt_name_write_timer_handler(void const *param)
                                     ntt_bt_name_sync_len))
     {
         TRACE(0, "[SET_NAME] delayed factory_section_set_bt_name failed");
-        ntt_bt_name_delay_write_start();
+
+        osTimerStop(ntt_bt_name_write_timer);
+        osTimerStart(ntt_bt_name_write_timer, NTT_BT_NAME_DELAY_WRITE_MS);
         return;
     }
 
@@ -526,7 +586,7 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 
     ntt_bt_name_sync_len = name_len + 1;
     ntt_bt_name_pending = true;
-
+    ntt_bt_name_retry_count = 0;
     ntt_bt_name_delay_write_start();
 
     bleCmdSet_status.set_name_status = 0x3A;
