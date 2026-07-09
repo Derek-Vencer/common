@@ -2835,6 +2835,13 @@ find_complete:
                             device_id,
                             codec->codecType,
                             app_bt_a2dp_get_all_device_streaming_state());
+            DEBUG_INFO(5,
+                "[NTT_A2DP_START] dev=%d event=%d ui_slave=%d tws=%d profile_exchanged=%d",
+                device_id,
+                Info->event,
+                app_ibrt_middleware_is_ui_slave(),
+                bts_tws_if_is_tws_link_connected(),
+                bts_ibrt_conn_is_profile_exchanged(&curr_device->remote));
 
             a2dp_event_handle(Info->event == BTIF_A2DP_EVENT_STREAM_STARTED ? APP_BT_AUDIO_EVENT_A2DP_STREAM_START : APP_BT_AUDIO_EVENT_A2DP_STREAM_MOCK_START, device_id);
 #if (A2DP_DECODER_VER == 2)

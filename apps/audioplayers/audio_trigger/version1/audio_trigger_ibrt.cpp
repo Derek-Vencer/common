@@ -218,6 +218,13 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(uint8_t device_id, bti
                                 app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote),
                                 bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote));
             AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip profile_exchanged sync_a2dp_status_onporcess\n");
+            AUDIOPLAYERS_TRACE(0,
+                "[NTT_AUTO_SYNC][MASTER] ibrt_onprocess:%d sync_a2dp:%d profile:%d a2dp_profile:%d, force retrigger",
+                        app_ibrt_if_start_ibrt_onprocess(&curr_device->remote),
+                        app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote),
+                        bts_ibrt_if_is_profile_exchanged(&curr_device->remote),
+                        bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote));
+
             return 0;
         }else{
             if (p_ibrt_ctrl->tws_mode == IBRT_SNIFF_MODE    ||

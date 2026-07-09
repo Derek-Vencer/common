@@ -90,9 +90,16 @@ bool ntt_case_open_pending = false;
 static void wired_uart_remove_all_phone_paired_list(void);
 extern void handleSetEqIndex(uint8_t index);
 extern "C" void ntt_audio_output_mute_refresh(void);
-bool ntt_open_case_idle_reboot_needed = false;
+
 //static void box_battery_nv_reset(void);
 bool ntt_first_no_mobile_pair_mode = false;
+extern void app_ibrt_start_power_on_tws_pairing(void);
+extern void app_bt_profile_connect_manager_opening_reconnect_do(void);
+extern void ntt_case_open_reconnect_mobile_start(void);
+#define NTT_TWS_PAIRING_RETRY_INTERVAL_MS 5000
+static uint32_t case_open_status_disconnected = 0;
+static uint32_t ntt_last_tws_pairing_tick = 0;
+
 #ifdef DISABLE_GOC_UART_LOG
 
 #undef printf
@@ -209,11 +216,11 @@ static void ntt_outbox_reconnect_check_timer_handler(void const *param)
     if (bts_tws_if_is_tws_link_connected() &&
         !app_bt_ibrt_has_mobile_link_connected())
     {
-        DBGPRINT("[NTT_RECONNECT_CHECK] TWS connected but mobile not connected -> pmu_reboot");
+        //DBGPRINT("[NTT_RECONNECT_CHECK] TWS connected but mobile not connected -> pmu_reboot");
 
         if (!app_ibrt_middleware_is_ui_slave())
         {
-            DBGPRINT("[NTT_RECONNECT_CHECK] master send pmu_reboot/shutdown sync to peer");
+            //DBGPRINT("[NTT_RECONNECT_CHECK] master send pmu_reboot/shutdown sync to peer");
             //uint8_t cmd_sync_poweroff_shutdown[1];
 
             //cmd_sync_poweroff_shutdown[0] = 1;
@@ -1356,13 +1363,46 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         break;
     }
     case CMD_SEND_BOX_BATTERY_LEVEL:
+    {
+        if (operateLeftOrRight == isRightEarbuds)
         {
-            if (operateLeftOrRight == isRightEarbuds)
+            wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+
+    #ifdef IBRT
+            DEBUG_INFO(0,
+                    "[NTT_TWS] bts_tws_if_is_tws_link_connected(%d)",bts_tws_if_is_tws_link_connected());
+            if (!bts_tws_if_is_tws_link_connected())
             {
-                wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+                uint32_t now = hal_sys_timer_get();
+
+                if ((ntt_last_tws_pairing_tick == 0) ||
+                    (TICKS_TO_MS(now - ntt_last_tws_pairing_tick) >
+                    NTT_TWS_PAIRING_RETRY_INTERVAL_MS))
+                {
+                    ntt_last_tws_pairing_tick = now;
+
+                    DEBUG_INFO(0,
+                        "[NTT_TWS] TWS not connected, start power on tws pairing");
+
+                    app_ibrt_start_power_on_tws_pairing();
+                }
+                else
+                {
+                    DEBUG_INFO(0,
+                        "[NTT_TWS] TWS pairing already triggered, skip");
+                }
             }
-            break;
+            else
+            {
+                ntt_last_tws_pairing_tick = 0;
+
+                DEBUG_INFO(0,
+                    "[NTT_TWS] TWS already connected, reset pairing guard");
+            }
+    #endif
         }
+        break;
+    }
     case CMD_SEND_DUT_MODE:
         {
             if (operateLeftOrRight == isRightEarbuds)
@@ -1464,6 +1504,17 @@ static void uart_idle_timeout_callback(void const *argument)
         bts_tws_if_is_tws_link_connected(),
         app_bt_ibrt_has_mobile_link_connected());
 
+    if (ntt_first_no_mobile_pair_mode == 0 &&
+        bts_tws_if_is_tws_link_connected() == 1 &&
+        app_bt_ibrt_has_mobile_link_connected() == 0)
+    {
+        case_open_status_disconnected = 1;
+        //app_ibrt_if_init_open_box_state_for_evb();
+        //osDelay(300);
+        app_bt_profile_connect_manager_opening_reconnect_do();
+        //ntt_case_open_reconnect_mobile_start();
+    }
+
     /*
      * First pair mode:
      * No mobile record case.
@@ -1481,22 +1532,6 @@ static void uart_idle_timeout_callback(void const *argument)
         ntt_first_no_mobile_pair_mode = false;
 
         goto exit;
-    }
-
-    /*
-     * Normal out case:
-     * If no mobile connected, only master starts mobile reconnect.
-     */
-    if (ntt_open_case_idle_reboot_needed)
-    {
-        DBGPRINT("[NTT_OUTBOX] idle flag detected -> reboot to recover normal reconnect");
-
-        ntt_open_case_idle_reboot_needed = false;
-
-        osDelay(100);
-
-        pmu_reboot();
-        return;
     }
 #endif
 
