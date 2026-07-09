@@ -389,31 +389,6 @@ void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
     sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray));
 }
 
-void handleGetDeviceName(const uint8_t *data, uint16_t len)
-{
-    TRACE(0,"%s.", __func__);
-
-    if ((data == NULL) || (len == 0))
-    {
-        ntt_api_send_error_notify(0x37, API_ERR_INVALID_PARAM);
-        return;
-    }
-
-    uint8_t *localname = factory_section_get_bt_name();
-
-    if ((localname == NULL) || (strlen((char *)localname) == 0))
-    {
-        ntt_api_send_error_notify(0x37, API_ERR_STORAGE_ERROR);
-        return;
-    }
-
-#if need_send_data_by_notify
-    sparraw_tx_msg(RSP_GET_DEVICE_NAME,
-                   localname,
-                   strlen((char *)localname) + 1);
-#endif
-}
-
 #define NTT_BT_NAME_MAX_LEN             45
 #define NTT_BT_NAME_DELAY_WRITE_MS          10000
 #define NTT_BT_NAME_RETRY_WHEN_BUSY_MS      3000
@@ -429,6 +404,55 @@ static void ntt_bt_name_write_timer_handler(void const *param);
 osTimerDef(NTT_BT_NAME_WRITE_TIMER, ntt_bt_name_write_timer_handler);
 
 static uint8_t ntt_bt_name_retry_count = 0;
+
+void handleGetDeviceName(const uint8_t *data, uint16_t len)
+{
+    TRACE(0, "%s.", __func__);
+
+    const uint8_t *localname = NULL;
+    uint16_t name_len = 0;
+
+    if ((data == NULL) || (len == 0))
+    {
+        ntt_api_send_error_notify(0x37, API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    /*
+     * If device name was just set but not written to flash yet,
+     * return the RAM pending name first.
+     */
+    if (ntt_bt_name_pending &&
+        (ntt_bt_name_sync_len > 1) &&
+        (ntt_bt_name_sync_len <= sizeof(ntt_bt_name_sync_buf)) &&
+        (ntt_bt_name_sync_buf[0] != 0))
+    {
+        localname = ntt_bt_name_sync_buf;
+        name_len = ntt_bt_name_sync_len;
+
+        TRACE(1, "[GET_NAME] return pending RAM name: %s", localname);
+    }
+    else
+    {
+        localname = factory_section_get_bt_name();
+
+        if ((localname == NULL) || (strlen((char *)localname) == 0))
+        {
+            ntt_api_send_error_notify(0x37, API_ERR_STORAGE_ERROR);
+            return;
+        }
+
+        name_len = strlen((char *)localname) + 1;
+
+        TRACE(1, "[GET_NAME] return flash name: %s", localname);
+    }
+
+#if need_send_data_by_notify
+    sparraw_tx_msg(RSP_GET_DEVICE_NAME,
+                   localname,
+                   name_len);
+#endif
+}
 
 static bool ntt_bt_name_is_audio_busy(void)
 {
