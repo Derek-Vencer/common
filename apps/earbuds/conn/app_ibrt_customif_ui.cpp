@@ -104,7 +104,6 @@ uint32_t app_ibrt_customif_set_profile_delaytime_on_spp_connect(const uint8_t *u
 extern void ntt_master_sync_all_user_settings_to_peer(void);
 extern bool app_ui_user_role_switch(bool switch2master);
 extern "C" void btif_hfp_ibrt_role_switch_handle(const bt_bdaddr_t *remote);
-extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
 
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
@@ -455,7 +454,6 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             }
             break;
         case IBRT_CONN_A2DP_CODEC_CONFIGURED:
-            ntt_tws_reconnect_after_mobile_profiles_ready_check();
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
             break;
         case IBRT_CONN_A2DP_STREAMING:
@@ -665,15 +663,11 @@ void besui_tws_state_event(ibrt_conn_tws_conn_state_event *state, uint8_t reason
             besui_bt_msg_put(TWS_DISCONNECTED_EVENT, reason_code, BT_DEVICE_NUM);
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_tws_state_event IBRT_CONN_ACL_PROFILES_CONNECTED ");
 #ifdef USER_TOTA_SPP_SYNC_KEY_EN
             if(app_ibrt_if_is_ui_master())
                 tota_spp_aeskey_to_slave();
 #endif
             besui_bt_msg_put(TWS_CONNECTED_EVENT, 0xff, BT_DEVICE_NUM);
-            break;
-        case IBRT_CONN_ACL_AUTH_COMPLETE:
-                EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_tws_state_event IBRT_CONN_ACL_AUTH_COMPLETE ");
             break;
         default:
             break;
@@ -764,7 +758,6 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
         case IBRT_CONN_ACL_CONNECTED:
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
 #ifdef IBRT
         if (!app_ibrt_middleware_is_ui_slave())
         {
@@ -774,9 +767,6 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
         }
 #endif
         break;
-        case IBRT_CONN_ACL_AUTH_COMPLETE:
-                EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
-            break;
         case IBRT_CONN_ACL_DISCONNECTED:
             break;
         case IBRT_CONN_ACL_CONNECTING_CANCELED:
@@ -955,19 +945,8 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
         }
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
             break;
         case IBRT_CONN_ACL_AUTH_COMPLETE:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
-#ifdef IBRT
-            if (!app_ibrt_middleware_is_ui_slave())
-            {
-                DEBUG_INFO(0,
-                    "[NTT_CASE_OPEN_RECONN] mobile profiles connected, check tws/mobile info sync");
-
-                ntt_tws_reconnect_after_mobile_profiles_ready_check();
-            }
-#endif
             break;
         case IBRT_CONN_ACL_DISCONNECTING:
             break;

@@ -96,9 +96,10 @@ bool ntt_first_no_mobile_pair_mode = false;
 extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void app_bt_profile_connect_manager_opening_reconnect_do(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
-#define NTT_TWS_PAIRING_RETRY_INTERVAL_MS 5000
 
-static uint32_t ntt_last_tws_pairing_tick = 0;
+#define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
+
+static uint32_t ntt_last_box_battery_case_tick = 0;
 
 #ifdef DISABLE_GOC_UART_LOG
 
@@ -1293,43 +1294,48 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         }
         break;
     }
+
     case CMD_SEND_BOX_BATTERY_LEVEL:
     {
-        if (operateLeftOrRight == isRightEarbuds)
+        uint32_t now = hal_sys_timer_get();
+
+        if (ntt_last_box_battery_case_tick != 0)
+        {
+            uint32_t diff_ms = TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
+
+            if (diff_ms < NTT_BOX_BATTERY_CASE_INTERVAL_MS)
+            {
+                break;
+            }
+        }
+
+        ntt_last_box_battery_case_tick = now;
+
+        DBGPRINT("CMD_SEND_BOX_BATTERY_LEVEL crc dat 0x%04x %s",
+                crc_dat, isRightEarbuds ? "Right" : "Left");
+
+        DBGPRINT("[NTT_TWS] CMD_SEND_BOX_BATTERY_LEVEL operateLeftOrRight=%d RIGHT_BUDS=%d LEFT_BUDS=%d isRightEarbuds=%d",
+                operateLeftOrRight, RIGHT_BUDS, LEFT_BUDS, isRightEarbuds);
+
+        if (isRightEarbuds == RIGHT_BUDS)
         {
             wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
 
-            DEBUG_INFO(0,
-                    "[NTT_TWS] bts_tws_if_is_tws_link_connected(%d)",bts_tws_if_is_tws_link_connected());
+            DBGPRINT("[NTT_TWS] bts_tws_if_is_tws_link_connected(%d)",
+                    bts_tws_if_is_tws_link_connected());
+
             if (!bts_tws_if_is_tws_link_connected())
             {
-                uint32_t now = hal_sys_timer_get();
+                DBGPRINT("[NTT_TWS] TWS not connected, start power on tws pairing");
 
-                if ((ntt_last_tws_pairing_tick == 0) ||
-                    (TICKS_TO_MS(now - ntt_last_tws_pairing_tick) >
-                    NTT_TWS_PAIRING_RETRY_INTERVAL_MS))
-                {
-                    ntt_last_tws_pairing_tick = now;
-
-                    DEBUG_INFO(0,
-                        "[NTT_TWS] TWS not connected, start power on tws pairing");
-
-                    app_ibrt_start_power_on_tws_pairing();
-                }
-                else
-                {
-                    DEBUG_INFO(0,
-                        "[NTT_TWS] TWS pairing already triggered, skip");
-                }
+                app_ibrt_start_power_on_tws_pairing();
             }
             else
             {
-                ntt_last_tws_pairing_tick = 0;
-
-                DEBUG_INFO(0,
-                    "[NTT_TWS] TWS already connected, reset pairing guard");
+                DBGPRINT("[NTT_TWS] TWS already connected");
             }
         }
+
         break;
     }
     case CMD_SEND_DUT_MODE:
@@ -1422,6 +1428,8 @@ static void uart_idle_timeout_callback(void const *argument)
     app_ui_set_local_box_state(IBRT_OUT_BOX);
     app_ui_sync_box_state(IBRT_OUT_BOX);
 
+    //ntt_outbox_reconnect_check_start();
+
     DBGPRINT("[NTT_OUTBOX] set local box state to IBRT_OUT_BOX and sync peer");
 
     EARBUDS_TRACE(3,
@@ -1429,16 +1437,6 @@ static void uart_idle_timeout_callback(void const *argument)
         ntt_first_no_mobile_pair_mode,
         bts_tws_if_is_tws_link_connected(),
         app_bt_ibrt_has_mobile_link_connected());
-
-    if (ntt_first_no_mobile_pair_mode == 0 &&
-        bts_tws_if_is_tws_link_connected() == 1 &&
-        app_bt_ibrt_has_mobile_link_connected() == 0)
-    {
-        //app_ibrt_if_init_open_box_state_for_evb();
-        //osDelay(300);
-        app_bt_profile_connect_manager_opening_reconnect_do();
-        //ntt_case_open_reconnect_mobile_start();
-    }
 
     /*
      * First pair mode:
