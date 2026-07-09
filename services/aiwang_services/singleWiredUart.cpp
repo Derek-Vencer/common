@@ -206,6 +206,70 @@ static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
 
+#define NTT_OUTBOX_RECONNECT_CHECK_MS   2000
+
+static osTimerId ntt_outbox_reconnect_check_timer_id = NULL;
+
+
+static void ntt_outbox_reconnect_check_timer_handler(void const *param)
+{
+    if (bts_tws_if_is_tws_link_connected() &&
+        !app_bt_ibrt_has_mobile_link_connected())
+    {
+        DBGPRINT("[NTT_RECONNECT_CHECK] TWS connected but mobile not connected -> reconnect mobile");
+
+        if (!app_ibrt_middleware_is_ui_slave())
+        {
+            DBGPRINT("[NTT_RECONNECT_CHECK] master send reconnect");
+            //uint8_t cmd_sync_poweroff_shutdown[1];
+
+            //cmd_sync_poweroff_shutdown[0] = 1;
+
+            DEBUG_INFO(2,
+                "[UITWS]%s poweroff_flag %d",__func__,1);
+
+            app_bt_profile_connect_manager_opening_reconnect_do();
+            //tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
+            //                    cmd_sync_poweroff_shutdown,
+            //                    1);
+
+            //osDelay(100);
+            //pmu_reboot();
+        }
+        else
+        {
+            DBGPRINT("[NTT_RECONNECT_CHECK] slave wait master sync");
+        }
+
+        return;
+    }
+
+    DBGPRINT("[NTT_RECONNECT_CHECK] condition not match, skip reboot");
+}
+
+osTimerDef(NTT_OUTBOX_RECONNECT_CHECK_TIMER,
+           ntt_outbox_reconnect_check_timer_handler);
+           
+static void ntt_outbox_reconnect_check_start(void)
+{
+    if (ntt_outbox_reconnect_check_timer_id == NULL)
+    {
+        ntt_outbox_reconnect_check_timer_id =
+            osTimerCreate(osTimer(NTT_OUTBOX_RECONNECT_CHECK_TIMER),
+                          osTimerOnce,
+                          NULL);
+    }
+
+    if (ntt_outbox_reconnect_check_timer_id)
+    {
+        osTimerStop(ntt_outbox_reconnect_check_timer_id);
+        osTimerStart(ntt_outbox_reconnect_check_timer_id,
+                     NTT_OUTBOX_RECONNECT_CHECK_MS);
+
+        DBGPRINT("[NTT_RECONNECT_CHECK] start 5s timer");
+    }
+}
+
 /**
  * @brief 初始化 Pogo Pin 检测引脚
  * @return true - 初始化成功，false - 初始化失败
@@ -1428,8 +1492,6 @@ static void uart_idle_timeout_callback(void const *argument)
     app_ui_set_local_box_state(IBRT_OUT_BOX);
     app_ui_sync_box_state(IBRT_OUT_BOX);
 
-    //ntt_outbox_reconnect_check_start();
-
     DBGPRINT("[NTT_OUTBOX] set local box state to IBRT_OUT_BOX and sync peer");
 
     EARBUDS_TRACE(3,
@@ -1437,6 +1499,17 @@ static void uart_idle_timeout_callback(void const *argument)
         ntt_first_no_mobile_pair_mode,
         bts_tws_if_is_tws_link_connected(),
         app_bt_ibrt_has_mobile_link_connected());
+
+    if (ntt_first_no_mobile_pair_mode == 0 &&
+        bts_tws_if_is_tws_link_connected() == 1 &&
+        app_bt_ibrt_has_mobile_link_connected() == 0)
+    {
+        //app_ibrt_if_init_open_box_state_for_evb();
+        //osDelay(300);
+        //app_bt_profile_connect_manager_opening_reconnect_do();
+        //ntt_case_open_reconnect_mobile_start();
+        ntt_outbox_reconnect_check_start();
+    }
 
     /*
      * First pair mode:
