@@ -105,7 +105,7 @@ extern void ntt_master_sync_all_user_settings_to_peer(void);
 extern bool app_ui_user_role_switch(bool switch2master);
 extern "C" void btif_hfp_ibrt_role_switch_handle(const bt_bdaddr_t *remote);
 extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
-extern void ntt_case_open_reconnect_stop(void);
+
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
 #endif
@@ -964,8 +964,6 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
             {
                 DEBUG_INFO(0,
                     "[NTT_CASE_OPEN_RECONN] mobile profiles connected, check tws/mobile info sync");
-
-                ntt_case_open_reconnect_stop();
 
                 ntt_tws_reconnect_after_mobile_profiles_ready_check();
             }

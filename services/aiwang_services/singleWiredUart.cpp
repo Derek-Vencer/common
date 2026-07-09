@@ -90,14 +90,14 @@ bool ntt_case_open_pending = false;
 static void wired_uart_remove_all_phone_paired_list(void);
 extern void handleSetEqIndex(uint8_t index);
 extern "C" void ntt_audio_output_mute_refresh(void);
-
+bool ntt_open_case_idle_reboot_needed = false;
 //static void box_battery_nv_reset(void);
 bool ntt_first_no_mobile_pair_mode = false;
 extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void app_bt_profile_connect_manager_opening_reconnect_do(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
 #define NTT_TWS_PAIRING_RETRY_INTERVAL_MS 5000
-static uint32_t case_open_status_disconnected = 0;
+
 static uint32_t ntt_last_tws_pairing_tick = 0;
 
 #ifdef DISABLE_GOC_UART_LOG
@@ -204,75 +204,6 @@ static osThreadId pogo_monitor_thread_id = NULL;
 static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
-
-#define NTT_OUTBOX_RECONNECT_CHECK_MS   2000
-
-static osTimerId ntt_outbox_reconnect_check_timer_id = NULL;
-
-
-static void ntt_outbox_reconnect_check_timer_handler(void const *param)
-{
-#ifdef IBRT
-    if (bts_tws_if_is_tws_link_connected() &&
-        !app_bt_ibrt_has_mobile_link_connected())
-    {
-        //DBGPRINT("[NTT_RECONNECT_CHECK] TWS connected but mobile not connected -> pmu_reboot");
-
-        if (!app_ibrt_middleware_is_ui_slave())
-        {
-            //DBGPRINT("[NTT_RECONNECT_CHECK] master send pmu_reboot/shutdown sync to peer");
-            //uint8_t cmd_sync_poweroff_shutdown[1];
-
-            //cmd_sync_poweroff_shutdown[0] = 1;
-
-            DEBUG_INFO(2,
-                "[UITWS]%s poweroff_flag %d",
-                __func__,
-                1);
-
-            //tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-            //                    cmd_sync_poweroff_shutdown,
-            //                    1);
-
-            //osDelay(100);
-            //pmu_reboot();
-        }
-        else
-        {
-            DBGPRINT("[NTT_RECONNECT_CHECK] slave wait master sync");
-        }
-
-        return;
-    }
-
-    DBGPRINT("[NTT_RECONNECT_CHECK] condition not match, skip reboot");
-#endif
-}
-
-osTimerDef(NTT_OUTBOX_RECONNECT_CHECK_TIMER,
-           ntt_outbox_reconnect_check_timer_handler);
-           
-static void ntt_outbox_reconnect_check_start(void)
-{
-#ifdef IBRT
-    if (ntt_outbox_reconnect_check_timer_id == NULL)
-    {
-        ntt_outbox_reconnect_check_timer_id =
-            osTimerCreate(osTimer(NTT_OUTBOX_RECONNECT_CHECK_TIMER),
-                          osTimerOnce,
-                          NULL);
-    }
-
-    if (ntt_outbox_reconnect_check_timer_id)
-    {
-        osTimerStop(ntt_outbox_reconnect_check_timer_id);
-        osTimerStart(ntt_outbox_reconnect_check_timer_id,
-                     NTT_OUTBOX_RECONNECT_CHECK_MS);
-
-        DBGPRINT("[NTT_RECONNECT_CHECK] start 5s timer");
-    }
-#endif
-}
 
 /**
  * @brief 初始化 Pogo Pin 检测引脚
@@ -1368,7 +1299,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
             wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
 
-    #ifdef IBRT
             DEBUG_INFO(0,
                     "[NTT_TWS] bts_tws_if_is_tws_link_connected(%d)",bts_tws_if_is_tws_link_connected());
             if (!bts_tws_if_is_tws_link_connected())
@@ -1399,7 +1329,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                 DEBUG_INFO(0,
                     "[NTT_TWS] TWS already connected, reset pairing guard");
             }
-    #endif
         }
         break;
     }
@@ -1485,7 +1414,6 @@ static void uart_idle_timeout_callback(void const *argument)
     set_er_inbox_status(0);
     ntt_audio_output_mute_refresh();
 
-#ifdef IBRT
     /*
      * NTT:
      * UART idle means earbud is out of pogo / out of box.
@@ -1493,8 +1421,6 @@ static void uart_idle_timeout_callback(void const *argument)
      */
     app_ui_set_local_box_state(IBRT_OUT_BOX);
     app_ui_sync_box_state(IBRT_OUT_BOX);
-
-    ntt_outbox_reconnect_check_start();
 
     DBGPRINT("[NTT_OUTBOX] set local box state to IBRT_OUT_BOX and sync peer");
 
@@ -1508,7 +1434,6 @@ static void uart_idle_timeout_callback(void const *argument)
         bts_tws_if_is_tws_link_connected() == 1 &&
         app_bt_ibrt_has_mobile_link_connected() == 0)
     {
-        case_open_status_disconnected = 1;
         //app_ibrt_if_init_open_box_state_for_evb();
         //osDelay(300);
         app_bt_profile_connect_manager_opening_reconnect_do();
@@ -1533,7 +1458,6 @@ static void uart_idle_timeout_callback(void const *argument)
 
         goto exit;
     }
-#endif
 
 exit:
     osTimerDelete(uart_idle_timer_id);

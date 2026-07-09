@@ -140,7 +140,7 @@ void app_bt_audio_hfp_recon_timeout_handler(void const *param);
 osTimerDef (APP_HFP_GET_CLCC_TIMER, app_bt_audio_hfp_get_clcc_timeout_handler);
 osTimerDef (APP_HFP_RECONN_TIMER0, app_bt_audio_hfp_recon_timeout_handler);
 osTimerDef (APP_HFP_RECONN_TIMER1, app_bt_audio_hfp_recon_timeout_handler);
-extern void app_ibrt_start_power_on_tws_pairing(void);
+
 #define APP_BT_HFP_HF_CB(event,param) \
     do { \
         if (g_app_bt_hfp_hf_cb != NULL) \
@@ -1516,14 +1516,6 @@ void app_hfp_event_callback(uint8_t device_id, btif_hf_channel_t* chan, struct h
 #if defined(APP_DEBUG_TOOL_BT_HFP_AT)
         app_debug_tool_hfp_at_cmd_receive(device_id, ctx->ptr);
 #endif
-
-        //if (!bts_tws_if_is_tws_link_connected())
-        //{
-        //    DEBUG_INFO(0,
-        //        "[NTT_TWS] TWS not connected, start tws pairing");
-
-        //    app_ibrt_start_power_on_tws_pairing();
-        //}
         break;
 
     case BTIF_HF_EVENT_REMOTE_NOT_SUPPORT:

@@ -192,7 +192,7 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (2)
 #define APP_BT_PROFILE_RECONNECT_RETRY_LIMIT_CNT (15)
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
-#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (30000)
+#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000)
 
 static void app_bt_profile_reconnect_timehandler(void const *param);
 static void app_bt_accessmode_timehandler(void const *param);
@@ -917,8 +917,8 @@ uint8_t app_bt_hfp_adjust_volume(uint8_t device_id, bool up, bool adjust_local_v
 }
 #endif /* BT_HFP_SUPPORT */
 
-#define NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS      200
-#define NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY     10
+#define NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS      400
+#define NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY     40
 
 static osTimerId ntt_tws_reconnect_after_profile_timer = NULL;
 static bool ntt_tws_reconnect_after_profile_pending = false;
@@ -937,7 +937,6 @@ static void ntt_tws_reconnect_after_profile_stop(void)
 
 static void ntt_tws_reconnect_after_profile_timer_handler(void const *param)
 {
-#ifdef IBRT
     if (app_ibrt_middleware_is_ui_slave())
     {
         DEBUG_INFO(0, "[NTT_TWS] stop retry: ui slave");
@@ -978,9 +977,6 @@ static void ntt_tws_reconnect_after_profile_timer_handler(void const *param)
 
     osTimerStart(ntt_tws_reconnect_after_profile_timer,
                  NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS);
-#else
-    ntt_tws_reconnect_after_profile_stop();
-#endif
 }
 
 osTimerDef(NTT_TWS_RECONNECT_AFTER_PROFILE_TIMER,
@@ -988,7 +984,6 @@ osTimerDef(NTT_TWS_RECONNECT_AFTER_PROFILE_TIMER,
 
 void ntt_tws_reconnect_after_mobile_profiles_ready_check(void)
 {
-#ifdef IBRT
     if (app_ibrt_middleware_is_ui_slave())
     {
         return;
@@ -1026,7 +1021,6 @@ void ntt_tws_reconnect_after_mobile_profiles_ready_check(void)
         osTimerStart(ntt_tws_reconnect_after_profile_timer,
                      NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS);
     }
-#endif
 }
 
 uint8_t app_bt_a2dp_hfp_adjust_volume(uint8_t device_id, uint8_t stream_player, uint8_t vol)
@@ -4281,7 +4275,7 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
     return false;
 }
 
-#define NTT_OPENING_RECONNECT_WAIT_SLAVE_DISC_MS 800
+#define NTT_OPENING_RECONNECT_WAIT_SLAVE_DISC_MS 20
 
 static osTimerId ntt_opening_reconnect_timer = NULL;
 
@@ -4346,111 +4340,6 @@ void app_bt_profile_connect_manager_opening_reconnect_do(void)
     }
 }
 
-#define NTT_CASE_OPEN_RECONNECT_DELAY_MS        500
-#define NTT_CASE_OPEN_RECONNECT_RETRY_MS        1000
-#define NTT_CASE_OPEN_RECONNECT_MAX_RETRY       8
-
-static osTimerId ntt_case_open_reconnect_timer = NULL;
-static bool ntt_case_open_reconnect_pending = false;
-static uint8_t ntt_case_open_reconnect_retry_cnt = 0;
-
-void ntt_case_open_reconnect_stop(void)
-{
-    ntt_case_open_reconnect_pending = false;
-    ntt_case_open_reconnect_retry_cnt = 0;
-
-    if (ntt_case_open_reconnect_timer)
-    {
-        osTimerStop(ntt_case_open_reconnect_timer);
-    }
-}
-
-static void ntt_case_open_reconnect_timer_handler(void const *param)
-{
-#ifdef IBRT
-    if (app_ibrt_middleware_is_ui_slave())
-    {
-        DEBUG_INFO(0, "[NTT_CASE_OPEN_RECONN] stop: ui slave");
-        ntt_case_open_reconnect_stop();
-        return;
-    }
-
-    if (app_bt_ibrt_has_mobile_link_connected())
-    {
-        DEBUG_INFO(0, "[NTT_CASE_OPEN_RECONN] stop: mobile already connected");
-        ntt_case_open_reconnect_stop();
-        return;
-    }
-
-    if (ntt_case_open_reconnect_retry_cnt >= NTT_CASE_OPEN_RECONNECT_MAX_RETRY)
-    {
-        DEBUG_INFO(1,
-            "[NTT_CASE_OPEN_RECONN] stop: max retry %d reached",
-            NTT_CASE_OPEN_RECONNECT_MAX_RETRY);
-        ntt_case_open_reconnect_stop();
-        return;
-    }
-
-    ntt_case_open_reconnect_retry_cnt++;
-
-    DEBUG_INFO(2,
-        "[NTT_CASE_OPEN_RECONN] reconnect mobile retry %d/%d",
-        ntt_case_open_reconnect_retry_cnt,
-        NTT_CASE_OPEN_RECONNECT_MAX_RETRY);
-
-    /*
-     * 這裡不要斷 TWS peer。
-     * 讓 IBRT 使用類似 power reconnect 的方式去回連 mobile。
-     */
-    app_bt_profile_connect_manager_opening_reconnect();
-
-    osTimerStart(ntt_case_open_reconnect_timer,
-                 NTT_CASE_OPEN_RECONNECT_RETRY_MS);
-#endif
-}
-
-osTimerDef(NTT_CASE_OPEN_RECONNECT_TIMER,
-           ntt_case_open_reconnect_timer_handler);
-
-void ntt_case_open_reconnect_mobile_start(void)
-{
-#ifdef IBRT
-    if (app_ibrt_middleware_is_ui_slave())
-    {
-        DEBUG_INFO(0, "[NTT_CASE_OPEN_RECONN] skip: ui slave");
-        return;
-    }
-
-    if (app_bt_ibrt_has_mobile_link_connected())
-    {
-        DEBUG_INFO(0, "[NTT_CASE_OPEN_RECONN] skip: mobile already connected");
-        return;
-    }
-
-    if (!ntt_case_open_reconnect_timer)
-    {
-        ntt_case_open_reconnect_timer =
-            osTimerCreate(osTimer(NTT_CASE_OPEN_RECONNECT_TIMER),
-                          osTimerOnce,
-                          NULL);
-    }
-
-    if (!ntt_case_open_reconnect_pending)
-    {
-        ntt_case_open_reconnect_pending = true;
-        ntt_case_open_reconnect_retry_cnt = 0;
-
-        DEBUG_INFO(2,
-            "[NTT_CASE_OPEN_RECONN] start mobile reconnect, tws=%d delay=%d",
-            bts_tws_if_is_tws_link_connected(),
-            NTT_CASE_OPEN_RECONNECT_DELAY_MS);
-
-        osTimerStart(ntt_case_open_reconnect_timer,
-                     NTT_CASE_OPEN_RECONNECT_DELAY_MS);
-    }
-#endif
-}
-
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
     int ret;
@@ -4465,7 +4354,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     if (app_ibrt_middleware_is_ui_slave())
     {
         DEBUG_INFO(0, "[NTT_RECONNECT] UI slave skip opening reconnect do");
-        //ntt_bt_reconnect_context_reset();
+
         return;
     }
 
@@ -4473,8 +4362,6 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
         !app_bt_ibrt_has_mobile_link_connected())
     {
         DEBUG_INFO(0, "[NTT_RECONNECT] reset reconnect context");
-
-        //ntt_bt_reconnect_context_reset();
     }
     else
     {
