@@ -58,7 +58,7 @@
 #include "bts_tws_if.h"
 #include "bts_core_if.h"
 #include "app_hfp.h"
-
+#include "app_bt.h"
 #include "hw_codec_iir_process.h"
 #include "audio_process.h"
 #include "nvrecord_bt.h"
@@ -89,6 +89,7 @@ extern "C" bool app_ibrt_middleware_is_ui_slave(void);
 
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
 
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
@@ -1237,6 +1238,16 @@ static void app_ibrt_customif_test2_cmd_send_rsp_handler(uint16_t rsp_seq, uint8
 static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, uint16_t rsp_seq, uint8_t *ptrParam, uint16_t paramLen)
 {
     EARBUDS_TRACE(1, "%s", __func__);
+
+    EARBUDS_TRACE(0,
+        "[NTT_TWS] role=%s ui_slave=%d tws_connected=%d mobile_connected=%d",
+        app_ibrt_middleware_is_ui_slave() ? "SLAVE" : "MASTER",
+        app_ibrt_middleware_is_ui_slave(),
+        bts_tws_if_is_tws_link_connected(),
+        app_bt_ibrt_has_mobile_link_connected());
+
+    ntt_tws_reconnect_after_mobile_profiles_ready_check();
+
 }
 
 static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length)

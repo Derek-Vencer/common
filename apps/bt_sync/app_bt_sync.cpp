@@ -572,7 +572,7 @@ static bool app_bt_sync_process(uint32_t opCode, uint8_t extra_len, uint8_t *p_e
             ret = -4;
             break;
         }
-
+        BT_SYNC_TRACE(1, "app_bt_sync_process btif_me_get_remote_device_role");
         /**
         * Step3: Calculate trigger time and get available channel
         *

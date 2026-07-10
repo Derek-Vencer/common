@@ -206,7 +206,7 @@ static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
 
-#define NTT_OUTBOX_RECONNECT_CHECK_MS   2000
+#define NTT_OUTBOX_RECONNECT_CHECK_MS   500
 
 static osTimerId ntt_outbox_reconnect_check_timer_id = NULL;
 
@@ -221,20 +221,8 @@ static void ntt_outbox_reconnect_check_timer_handler(void const *param)
         if (!app_ibrt_middleware_is_ui_slave())
         {
             DBGPRINT("[NTT_RECONNECT_CHECK] master send reconnect");
-            //uint8_t cmd_sync_poweroff_shutdown[1];
-
-            //cmd_sync_poweroff_shutdown[0] = 1;
-
-            DEBUG_INFO(2,
-                "[UITWS]%s poweroff_flag %d",__func__,1);
-
-            app_bt_profile_connect_manager_opening_reconnect_do();
-            //tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC,
-            //                    cmd_sync_poweroff_shutdown,
-            //                    1);
-
-            //osDelay(100);
-            //pmu_reboot();
+            //app_bt_profile_connect_manager_opening_reconnect_do();
+            app_bt_profile_connect_manager_opening_reconnect();
         }
         else
         {
@@ -1504,10 +1492,6 @@ static void uart_idle_timeout_callback(void const *argument)
         bts_tws_if_is_tws_link_connected() == 1 &&
         app_bt_ibrt_has_mobile_link_connected() == 0)
     {
-        //app_ibrt_if_init_open_box_state_for_evb();
-        //osDelay(300);
-        //app_bt_profile_connect_manager_opening_reconnect_do();
-        //ntt_case_open_reconnect_mobile_start();
         ntt_outbox_reconnect_check_start();
     }
 

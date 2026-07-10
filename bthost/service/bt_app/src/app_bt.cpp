@@ -49,6 +49,7 @@
 #include "app_utils.h"
 #include "ecc_p192.h"
 #include "app_battery.h"
+#include "me_common_define.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -920,7 +921,7 @@ uint8_t app_bt_hfp_adjust_volume(uint8_t device_id, bool up, bool adjust_local_v
 #endif /* BT_HFP_SUPPORT */
 
 #define NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS      200
-#define NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY     20
+#define NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY     1
 
 static osTimerId ntt_tws_reconnect_after_profile_timer = NULL;
 static bool ntt_tws_reconnect_after_profile_pending = false;
@@ -987,19 +988,22 @@ osTimerDef(NTT_TWS_RECONNECT_AFTER_PROFILE_TIMER,
 
 void ntt_tws_reconnect_after_mobile_profiles_ready_check(void)
 {
+    DEBUG_INFO(0, "[NTT_TWS] ntt_tws_reconnect_after_mobile_profiles_ready_check");
     if (app_ibrt_middleware_is_ui_slave())
     {
+        DEBUG_INFO(0, "[NTT_TWS] app_ibrt_middleware_is_ui_slave return");
         return;
     }
 
     if (bts_tws_if_is_tws_link_connected())
-    {
+    {   DEBUG_INFO(0, "[NTT_TWS] bts_tws_if_is_tws_link_connected return");
         ntt_tws_reconnect_after_profile_stop();
         return;
     }
 
     if (!app_bt_ibrt_has_mobile_link_connected())
     {
+        DEBUG_INFO(0, "[NTT_TWS] app_bt_ibrt_has_mobile_link_disconnected return");
         return;
     }
 
@@ -1249,7 +1253,7 @@ static void app_bt_device_report_acl_disconnected(uint8_t errcode, btif_remote_d
     }
 
     app_ibrt_internal_link_disconnected();
-#endif
+#endif    
 }
 
 static void app_bt_device_report_authenticated(uint8_t errcode, btif_remote_device_t *rem_dev)
@@ -2022,7 +2026,7 @@ bool app_bt_checker_print_link_state(const char* tag, btif_remote_device_t *btm_
         remote = btif_me_get_remote_device_bdaddr(btm_conn);
         uint16_t conhdl = btif_me_get_acl_conn_handle(remote);
         int8_t tx_power_id = 0;
-
+        //ntt_tws_reconnect_after_mobile_profiles_ready_check();
         DEBUG_INFO(13, "link_state: %s [d%x] %02x:%02x:%02x:%02x:%02x:%02x hdl %x state %d role %d mode %d  interv %d",
               tag ? tag : "",
               btif_me_get_device_id_from_rdev(btm_conn),
@@ -2928,6 +2932,7 @@ void app_bt_role_manager_process(const btif_event_t *Event)
 
 void app_bt_switch_role_if_needed(const bt_bdaddr_t *remote)
 {
+    DEBUG_INFO(1,"app_bt_switch_role_if_needed\n");
 #if defined(IBRT)
     return;
 #else
@@ -8106,12 +8111,56 @@ void app_bt_notify_global_callback(const btif_event_t *event)
     }
 }
 
+static const char *ntt_profile_id_to_str(int profile_id)
+{
+    switch (profile_id)
+    {
+        case APP_IBRT_A2DP_PROFILE_ID:
+            return "A2DP";
+
+        case APP_IBRT_HFP_PROFILE_ID:
+            return "HFP";
+
+        case APP_IBRT_AVRCP_PROFILE_ID:
+            return "AVRCP";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
 void app_bt_rs_profile_protect_ind(uint8_t device_id, int profile_id, uint8_t enable, bool is_connect_profile)
 {
-    if (bts_cb.bts_ibrt_cbs)
+    DEBUG_INFO(0,
+        "[NTT_RS_PROTECT] dev=%d profile=%s(%d) enable=%d type=%s",
+        device_id,
+        ntt_profile_id_to_str(profile_id),
+        profile_id,
+        enable,
+        is_connect_profile ? "CONNECT" : "DISCONNECT");
+
+    DEBUG_INFO(0,
+        "[NTT_RS_PROTECT] dev=%d profile=%d enable=%d type=%s cb=%p",
+        device_id,
+        profile_id,
+        enable,
+        is_connect_profile ? "CONNECT" : "DISCONNECT",
+        bts_cb.bts_ibrt_cbs ?
+            bts_cb.bts_ibrt_cbs->rs_profile_protect : NULL);
+
+    if (bts_cb.bts_ibrt_cbs &&
+        bts_cb.bts_ibrt_cbs->rs_profile_protect)
     {
-        if (bts_cb.bts_ibrt_cbs->rs_profile_protect)
-            bts_cb.bts_ibrt_cbs->rs_profile_protect(device_id, profile_id, enable, is_connect_profile);
+        bts_cb.bts_ibrt_cbs->rs_profile_protect(
+            device_id,
+            profile_id,
+            enable,
+            is_connect_profile);
+    }
+    else
+    {
+        DEBUG_INFO(0,
+            "[NTT_RS_PROTECT] callback missing");
     }
 }
 
