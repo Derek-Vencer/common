@@ -109,7 +109,7 @@ extern uint8_t out_of_case_reconnect;
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
 #endif
-
+extern uint8_t out_of_case_reconnect;
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
 void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *buffer, uint8_t length)
@@ -246,80 +246,7 @@ EARBUDS_TRACE(0,
         ibrt_mgr_status_changed_client_cb->ibrt_mgr_pairing_mode_entry_hook();
     }
 }
-/*
-static void ntt_dump_profile_connection_state(void)
-{
-    DEBUG_INFO(1,
-        "[ROLE_SWITCH][CHECK] anyConnecting=%d",
-        app_bt_is_in_connecting_profiles_state());
 
-    for (uint8_t dev_id = 0; dev_id < BT_DEVICE_NUM; dev_id++)
-    {
-        struct BT_DEVICE_T *dev = app_bt_get_device(dev_id);
-
-        if (dev == NULL)
-        {
-            DEBUG_INFO(1,
-                "[ROLE_SWITCH][CHECK] dev=%d NULL",
-                dev_id);
-            continue;
-        }
-
-        DEBUG_INFO(6,
-            "[ROLE_SWITCH][CHECK] dev=%d connectingState=%d a2dp=%d hfp=%d avrcp=%d stream=%d",
-            dev_id,
-            dev->profile_mgr.connectingState,
-            dev->a2dp_conn_flag,
-            app_bt_is_hfp_connected(dev_id),
-            dev->avrcp_conn_flag,
-            dev->a2dp_streamming);
-    }
-}
-    */
-/*
-static void ntt_clear_all_rs_profile_protect(uint8_t device_id)
-{
-    EARBUDS_TRACE(0,
-        "[ROLE_SWITCH][TEST] clear all profile protect dev=%d",
-        device_id);
-
-    app_bt_rs_profile_protect_ind(
-        device_id,
-        APP_IBRT_A2DP_PROFILE_ID,
-        false,
-        true);
-
-    app_bt_rs_profile_protect_ind(
-        device_id,
-        APP_IBRT_A2DP_PROFILE_ID,
-        false,
-        false);
-
-    app_bt_rs_profile_protect_ind(
-        device_id,
-        APP_IBRT_HFP_PROFILE_ID,
-        false,
-        true);
-
-    app_bt_rs_profile_protect_ind(
-        device_id,
-        APP_IBRT_HFP_PROFILE_ID,
-        false,
-        false);
-
-    app_bt_rs_profile_protect_ind(
-        device_id,
-        APP_IBRT_AVRCP_PROFILE_ID,
-        false,
-        true);
-
-    app_bt_rs_profile_protect_ind(
-        device_id,
-        APP_IBRT_AVRCP_PROFILE_ID,
-        false,
-        false);
-}
-*/
 #define NTT_ROLE_SWITCH_DELAY_MS 3000
 
 static osTimerId ntt_role_switch_delay_timer = NULL;
@@ -353,9 +280,7 @@ static void ntt_role_switch_delay_start(void)
 
 static void ntt_role_switch_delay_handler(void const *param)
 {
-    //int ret;
-
-    EARBUDS_TRACE(0,
+     EARBUDS_TRACE(0,
         "[ROLE_SWITCH][OUT_OF_CASE] timeout role=%d tws=%d mobile=%d",
         app_ibrt_if_get_ui_role(),
         bts_tws_if_is_tws_link_connected(),
@@ -385,23 +310,9 @@ static void ntt_role_switch_delay_handler(void const *param)
     EARBUDS_TRACE(0,
         "[ROLE_SWITCH][OUT_OF_CASE] request master to slave");
 
-    //ntt_clear_all_rs_profile_protect(0);
-
-    //osDelay(10);
-    //ntt_dump_profile_connection_state();
-
-    osDelay(30);    
+       osDelay(30);    
     bts_tws_if_disconnect_acl_link();
 
-    //osDelay(30);    
-    
-   // bts_tws_if_connect_acl_link(1000);
-
-    //ret = app_ui_user_role_switch(false);
-
-    //EARBUDS_TRACE(0,
-    //    "[ROLE_SWITCH][OUT_OF_CASE] request ret=%d",
-    //    ret);
 }
 /*****************************************************************************
  Prototype    : app_ibrt_customif_pairing_mode_exit
@@ -621,14 +532,16 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
                 EARBUDS_TRACE(0,
                     "[ROLE_SWITCH][OUT_OF_CASE] master switch to slave by UI API");
 
-                    //app_ui_user_role_switch(false);
+                if (out_of_case_reconnect)   
+                {
                     ntt_role_switch_delay_start();
+                }                    
             }
             break;
         case IBRT_CONN_A2DP_CODEC_CONFIGURED:
             if (out_of_case_reconnect)
             {
-                ntt_tws_reconnect_after_mobile_profiles_ready_check();
+                //ntt_tws_reconnect_after_mobile_profiles_ready_check();
             }
 
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
@@ -1142,7 +1055,7 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
 
                 if (out_of_case_reconnect)
                 {
-                    ntt_tws_reconnect_after_mobile_profiles_ready_check();
+                    //ntt_tws_reconnect_after_mobile_profiles_ready_check();
                 }
             }
 #endif

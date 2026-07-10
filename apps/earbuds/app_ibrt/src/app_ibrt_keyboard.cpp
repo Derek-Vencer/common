@@ -45,6 +45,7 @@
 #include "communication_svr.h"
 #include "ble_aiwang_srv.h"
 extern void app_bt_profile_connect_manager_opening_reconnect_do(void);
+extern uint8_t out_of_case_reconnect;
 #if defined(IBRT)
 #ifdef TILE_DATAPATH
 extern "C" void app_tile_key_handler(APP_KEY_STATUS *status, void *param);
@@ -344,6 +345,7 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
 
             if (conn_devices == 0)
             {
+                out_of_case_reconnect = 1;
                 //app_bt_profile_connect_manager_opening_reconnect_do();
                 app_bt_profile_connect_manager_opening_reconnect();
             }

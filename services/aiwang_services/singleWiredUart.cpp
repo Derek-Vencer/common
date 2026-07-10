@@ -205,7 +205,7 @@ static osThreadId pogo_monitor_thread_id = NULL;
 static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
-
+extern uint8_t out_of_case_reconnect;
 #define NTT_OUTBOX_RECONNECT_CHECK_MS   500
 
 static osTimerId ntt_outbox_reconnect_check_timer_id = NULL;
@@ -220,6 +220,7 @@ static void ntt_outbox_reconnect_check_timer_handler(void const *param)
 
         if (!app_ibrt_middleware_is_ui_slave())
         {
+            out_of_case_reconnect = 1;
             DBGPRINT("[NTT_RECONNECT_CHECK] master send reconnect");
             //app_bt_profile_connect_manager_opening_reconnect_do();
             app_bt_profile_connect_manager_opening_reconnect();

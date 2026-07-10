@@ -90,7 +90,7 @@ extern "C" bool app_ibrt_middleware_is_ui_slave(void);
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
-
+extern uint8_t out_of_case_reconnect;
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
     return g_tws_peer_battery_valid ? g_tws_peer_battery_level : 0xFF;
@@ -1246,7 +1246,10 @@ static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, u
         bts_tws_if_is_tws_link_connected(),
         app_bt_ibrt_has_mobile_link_connected());
 
-    ntt_tws_reconnect_after_mobile_profiles_ready_check();
+        if (out_of_case_reconnect)
+        {
+            ntt_tws_reconnect_after_mobile_profiles_ready_check();
+        }
 
 }
 
