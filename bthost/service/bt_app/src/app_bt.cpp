@@ -53,6 +53,7 @@
 #include "bts_bt_conn.h"
 #include "app_tws_ibrt_cmd_handler.h"
 #include "bts_ibrt_if.h"
+#include "audio_trigger_a2dp.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -455,6 +456,26 @@ bool app_bt_ntt_request_ibrt_link(uint8_t device_id)
         device_id;
 
     return false;
+#endif
+}
+
+void ntt_profile_recovery_local_fallback(uint8_t device_id)
+{
+    AUDIOPLAYERS_TRACE(
+        0,
+        "[NTT_PROFILE_RECOVERY][FALLBACK] "
+        "start local audio dev=%d",
+        device_id);
+
+    a2dp_audio_detect_next_packet_callback_register(NULL);
+    a2dp_audio_detect_store_packet_callback_register(NULL);
+
+#ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
+    app_bt_stream_trigger_start(
+        device_id,
+        A2DP_PLAYER_PLAYBACK_WATER_LINE);
+#else
+    app_bt_stream_trigger_start(device_id,0);
 #endif
 }
 

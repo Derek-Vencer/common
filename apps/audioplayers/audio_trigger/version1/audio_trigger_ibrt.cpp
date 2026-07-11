@@ -171,8 +171,8 @@ void app_bt_stream_ibrt_auto_synchronize_initsync_start(uint8_t device_id, APP_T
     }
 }
 
-    #define NTT_PROFILE_RECOVERY_CHECK_MS        500
-    #define NTT_PROFILE_RECOVERY_MAX_COUNT       20
+    #define NTT_PROFILE_RECOVERY_CHECK_MS        100
+    #define NTT_PROFILE_RECOVERY_MAX_COUNT       10
 
     static osTimerId ntt_profile_recovery_timer = NULL;
 
@@ -327,17 +327,23 @@ static void ntt_profile_recovery_timer_handler(void const *param)
     if (ntt_profile_recovery_count >=
         NTT_PROFILE_RECOVERY_MAX_COUNT)
     {
+        uint8_t fallback_device_id = ntt_profile_recovery_device_id;
+
         AUDIOPLAYERS_TRACE(
             0,
             "[NTT_PROFILE_RECOVERY][TIMEOUT] "
             "dev=%d count=%d "
-            "profile=%d a2dp=%d",
-            device_id,
+            "profile=%d a2dp=%d, "
+            "fallback local trigger",
+            fallback_device_id,
             ntt_profile_recovery_count,
             profile_exchanged,
             a2dp_profile_exchanged);
 
         ntt_profile_recovery_stop();
+
+        ntt_profile_recovery_local_fallback(fallback_device_id);
+
         return;
     }
 
@@ -496,39 +502,47 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         ntt_profile_exchange_wait_count[BT_DEVICE_NUM] = {0};
 
 
-    int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
-        uint8_t device_id,
-        btif_media_header_t *header,
-        unsigned char *buf,
-        unsigned int len)
-    {
-    #ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
-        A2DP_AUDIO_SYNCFRAME_INFO_T sync_info;
-        A2DP_AUDIO_HEADFRAME_INFO_T headframe_info;
-    #endif
+int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
+    uint8_t device_id,
+    btif_media_header_t *header,
+    unsigned char *buf,
+    unsigned int len)
+{
+#ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
+    A2DP_AUDIO_SYNCFRAME_INFO_T sync_info;
+    A2DP_AUDIO_HEADFRAME_INFO_T headframe_info;
+#endif
+
+#if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
+    uint8_t codec_type =
+        bta_get_curr_a2dp_codec_type();
+#endif
 
     /*
      * 目前 callback 沒有直接使用這些參數。
      * 避免某些編譯設定產生 unused parameter warning。
      */
-    POSSIBLY_UNUSED btif_media_header_t *unused_header = header;
-    POSSIBLY_UNUSED unsigned char *unused_buf = buf;
-    POSSIBLY_UNUSED unsigned int unused_len = len;
+    POSSIBLY_UNUSED btif_media_header_t *unused_header =
+        header;
+
+    POSSIBLY_UNUSED unsigned char *unused_buf =
+        buf;
+
+    POSSIBLY_UNUSED unsigned int unused_len =
+        len;
 
     if (app_bt_stream_trigger_stauts_get() ==
         BT_STREAM_TRIGGER_STATUS_INIT)
     {
-        ibrt_ctrl_t *p_ibrt_ctrl =
-            app_tws_ibrt_get_bt_ctrl_ctx();
+        ibrt_ctrl_t *p_ibrt_ctrl = NULL;
+        struct BT_DEVICE_T *curr_device = NULL;
 
         int32_t dma_buffer_samples =
             app_bt_stream_get_dma_buffer_samples() / 2;
 
-        struct BT_DEVICE_T *curr_device =
-            app_bt_get_device(device_id);
-
         /*
-         * 基本參數防呆。
+         * 必須先檢查 device_id，
+         * 再呼叫 app_bt_get_device()。
          */
         if (device_id >= BT_DEVICE_NUM)
         {
@@ -542,6 +556,9 @@ static void ntt_profile_recovery_timer_handler(void const *param)
             goto exit;
         }
 
+        curr_device =
+            app_bt_get_device(device_id);
+
         if (curr_device == NULL)
         {
             AUDIOPLAYERS_TRACE(
@@ -551,6 +568,21 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 device_id);
 
             ntt_profile_exchange_wait_count[device_id] = 0;
+
+            goto exit;
+        }
+
+        p_ibrt_ctrl =
+            app_tws_ibrt_get_bt_ctrl_ctx();
+
+        if (p_ibrt_ctrl == NULL)
+        {
+            AUDIOPLAYERS_TRACE(
+                0,
+                "[NTT_DUAL_PHONE_TRIGGER][ERROR] "
+                "ibrt ctrl NULL dev=%d",
+                device_id);
+
             goto exit;
         }
 
@@ -628,51 +660,68 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         /*
          * Profile Exchange 尚未完成。
          *
-         * 原始 SDK 在這裡直接啟動 Master local trigger：
+         * 不再先啟動 Master local trigger。
          *
-         *     app_bt_stream_trigger_start(device_id, 0);
+         * 舊流程會造成：
          *
-         * 這會造成 Master 有聲，但 Slave 因為沒有收到
-         * APP_TWS_CMD_SET_TRIGGER_TIME 而無聲。
+         * Master 先播放約 0.3～0.6 秒
+         *      ↓
+         * Profile Ready
+         *      ↓
+         * force retrigger 關閉 Master Player
+         *      ↓
+         * 雙耳重新同步播放
          *
-         * 現在先保留 callback，等待下一個 A2DP packet，
-         * 再次檢查 Profile Exchange 狀態。
+         * 新流程改為：
+         *
+         * 先等待 IBRT/Profile Recovery
+         *      ↓
+         * Profile Ready
+         *      ↓
+         * force retrigger
+         *      ↓
+         * 直接進入 TWS_INITIAL_SYNC
+         *      ↓
+         * 雙耳同時播放
          */
         else if (!profile_exchanged &&
-                !start_ibrt_onprocess &&
-                !sync_a2dp_onprocess)
+                 !start_ibrt_onprocess &&
+                 !sync_a2dp_onprocess)
         {
             AUDIOPLAYERS_TRACE(
                 0,
                 "[NTT_DUAL_PHONE_TRIGGER] "
-                "branch=PROFILE_NOT_READY_LOCAL_TRIGGER "
-                "dev=%d profile=%d a2dp=%d",
+                "branch=WAIT_PROFILE_RECOVERY "
+                "dev=%d profile=%d a2dp=%d "
+                "mobile=%d ibrt=%d",
                 device_id,
                 profile_exchanged,
-                a2dp_profile_exchanged);
+                a2dp_profile_exchanged,
+                mobile_link_connected,
+                ibrt_link_connected);
 
             /*
-            * 不再等待數百個 packet。
-            * 先啟動 Master local trigger，避免雙耳長時間無聲。
-            */
-            a2dp_audio_detect_next_packet_callback_register(NULL);
-            a2dp_audio_detect_store_packet_callback_register(NULL);
-
-        #ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
-            app_bt_stream_trigger_start(
-                device_id,
-                A2DP_PLAYER_PLAYBACK_WATER_LINE);
-        #else
-            app_bt_stream_trigger_start(
-                device_id,
-                0);
-        #endif
+             * 啟動 application recovery。
+             *
+             * Recovery 會依序：
+             * 1. 確認／建立手機 IBRT link；
+             * 2. 執行 Profile Exchange；
+             * 3. Profile Ready 後 force retrigger；
+             * 4. 重新進入本函數的 TWS_INITIAL_SYNC。
+             */
+            ntt_profile_recovery_start(device_id);
 
             /*
-            * 另外啟動 application recovery。
-            */
-            ntt_profile_recovery_start(
-                device_id);
+             * 不註銷 packet callback，
+             * 也不呼叫 app_bt_stream_trigger_start()。
+             *
+             * 清除目前 cached packet，
+             * 回到 first-packet detect 狀態。
+             */
+            a2dp_audio_synchronize_dest_packet_mut(0);
+            a2dp_audio_detect_first_packet();
+
+            return 0;
         }
         /*
          * IBRT Profile Exchange 或 A2DP status sync 正在處理，
@@ -712,7 +761,7 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         }
         /*
          * Profile Exchange 已完成。
-         * 執行原本正常的 Master/Slave Initial Sync。
+         * 執行正常的 Master/Slave Initial Sync。
          */
         else
         {
@@ -724,8 +773,10 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 "branch=TWS_INITIAL_SYNC dev=%d",
                 device_id);
 
-            if ((p_ibrt_ctrl->tws_mode == IBRT_SNIFF_MODE) ||
-                (mobile_link_mode == IBRT_SNIFF_MODE))
+            if ((p_ibrt_ctrl->tws_mode ==
+                 IBRT_SNIFF_MODE) ||
+                (mobile_link_mode ==
+                 IBRT_SNIFF_MODE))
             {
                 a2dp_audio_synchronize_dest_packet_mut(0);
                 a2dp_audio_detect_first_packet();
@@ -767,10 +818,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 &headframe_info);
 
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            uint8_t codec_type =
-                bta_get_curr_a2dp_codec_type();
-
-            if (codec_type == BT_A2DP_CODEC_TYPE_LHDC)
+            if (codec_type ==
+                BT_A2DP_CODEC_TYPE_LHDC)
             {
                 sync_info.sequenceNumber =
                     headframe_info.sequenceNumber;
@@ -796,7 +845,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
 
 #ifdef A2DP_CP_ACCEL
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type == BT_A2DP_CODEC_TYPE_LHDC)
+            if (codec_type ==
+                BT_A2DP_CODEC_TYPE_LHDC)
             {
                 app_bt_stream_trigger_start(
                     device_id,
@@ -818,16 +868,35 @@ static void ntt_profile_recovery_timer_handler(void const *param)
 #endif
 
             APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T sync_trigger;
-            A2DP_AUDIO_HEADFRAME_INFO_T trigger_headframe_info;
-            A2DP_AUDIO_LASTFRAME_INFO_T lastframe_info;
+            A2DP_AUDIO_HEADFRAME_INFO_T
+                trigger_headframe_info;
+            A2DP_AUDIO_LASTFRAME_INFO_T
+                lastframe_info;
 
-            memset(&sync_trigger,0,sizeof(APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T));
-            memset(&trigger_headframe_info,0,sizeof(A2DP_AUDIO_HEADFRAME_INFO_T));
-            memset(&lastframe_info,0,sizeof(A2DP_AUDIO_LASTFRAME_INFO_T));
-            sync_trigger.trigger_time = tg_acl_trigger_time;
+            memset(
+                &sync_trigger,
+                0,
+                sizeof(
+                    APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T));
+
+            memset(
+                &trigger_headframe_info,
+                0,
+                sizeof(
+                    A2DP_AUDIO_HEADFRAME_INFO_T));
+
+            memset(
+                &lastframe_info,
+                0,
+                sizeof(
+                    A2DP_AUDIO_LASTFRAME_INFO_T));
+
+            sync_trigger.trigger_time =
+                tg_acl_trigger_time;
 
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type == BT_A2DP_CODEC_TYPE_LHDC)
+            if (codec_type ==
+                BT_A2DP_CODEC_TYPE_LHDC)
             {
                 sync_trigger.trigger_skip_frame =
                     APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC -
@@ -841,7 +910,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                     a2dp_audio_frame_delay_get();
             }
 
-            sync_trigger.trigger_type = APP_TWS_IBRT_AUDIO_TRIGGER_TYPE_INIT_SYNC;
+            sync_trigger.trigger_type =
+                APP_TWS_IBRT_AUDIO_TRIGGER_TYPE_INIT_SYNC;
 
             if (a2dp_audio_lastframe_info_get(
                     &lastframe_info) < 0)
@@ -855,9 +925,11 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 goto exit;
             }
 
-            a2dp_audio_decoder_headframe_info_get(&trigger_headframe_info);
+            a2dp_audio_decoder_headframe_info_get(
+                &trigger_headframe_info);
 
-            sync_trigger.sequenceNumberStart = trigger_headframe_info.sequenceNumber;
+            sync_trigger.sequenceNumberStart =
+                trigger_headframe_info.sequenceNumber;
 
             AUDIOPLAYERS_TRACE(
                 0,
@@ -867,7 +939,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 sync_trigger.sequenceNumberStart);
 
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type == BT_A2DP_CODEC_TYPE_LHDC)
+            if (codec_type ==
+                BT_A2DP_CODEC_TYPE_LHDC)
             {
                 sync_trigger.audio_info.sequenceNumber =
                     lastframe_info.sequenceNumber +
@@ -913,11 +986,23 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 }
             }
 
-            sync_trigger.audio_info.curSubSequenceNumber = lastframe_info.curSubSequenceNumber;
-            sync_trigger.audio_info.totalSubSequenceNumber = lastframe_info.totalSubSequenceNumber;
-            sync_trigger.audio_info.frame_samples = lastframe_info.frame_samples;
-            sync_trigger.factor_reference = a2dp_audio_get_output_config()-> factor_reference;
-            sync_trigger.a2dp_session = bta_tws_a2dp_get_ibrt_session(device_id);
+            sync_trigger.audio_info.curSubSequenceNumber =
+                lastframe_info.curSubSequenceNumber;
+
+            sync_trigger.audio_info.totalSubSequenceNumber =
+                lastframe_info.totalSubSequenceNumber;
+
+            sync_trigger.audio_info.frame_samples =
+                lastframe_info.frame_samples;
+
+            sync_trigger.factor_reference =
+                a2dp_audio_get_output_config()->
+                    factor_reference;
+
+            sync_trigger.a2dp_session =
+                bta_tws_a2dp_get_ibrt_session(
+                    device_id);
+
             sync_trigger.handler_cnt = 0;
 
 #if defined(IBRT_UI)
@@ -934,9 +1019,6 @@ static void ntt_profile_recovery_timer_handler(void const *param)
 
             /*
              * 傳送 Trigger 前再次確認狀態。
-             *
-             * 防止建立 sync_trigger 的過程中，
-             * 手機或 Profile 狀態已發生變化。
              */
             bool send_mobile_link_connected =
                 bts_bt_if_is_dev_link_connected(
@@ -946,7 +1028,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 bts_ibrt_if_is_profile_exchanged(
                     &curr_device->remote);
 
-            if (send_mobile_link_connected && send_profile_exchanged)
+            if (send_mobile_link_connected &&
+                send_profile_exchanged)
             {
                 AUDIOPLAYERS_TRACE(
                     0,
@@ -980,7 +1063,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
     }
     else
     {
-        if (app_bt_stream_trigger_stauts_get() == BT_STREAM_TRIGGER_STATUS_NULL)
+        if (app_bt_stream_trigger_stauts_get() ==
+            BT_STREAM_TRIGGER_STATUS_NULL)
         {
             AUDIOPLAYERS_TRACE(
                 0,
@@ -995,7 +1079,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
                 "unhandle status:%d",
                 app_bt_stream_trigger_stauts_get());
 
-            app_ibrt_if_force_audio_retrigger(RETRIGGER_BY_UNKNOW);
+            app_ibrt_if_force_audio_retrigger(
+                RETRIGGER_BY_UNKNOW);
         }
     }
 
