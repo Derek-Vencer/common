@@ -68,6 +68,8 @@ typedef enum
     APP_TWS_CMD_SYNC_BUTTON_MAP  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x16,
     APP_TWS_CMD_SYNC_BT_NAME     = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x17,
     APP_TWS_CMD_SYNC_COLOR_CODE  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x18,
+    APP_TWS_CMD_SYNC_CASE_STATE  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x19,
+    APP_TWS_CMD_KEY_RECONNECT_REQUEST = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1A,
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -92,6 +94,47 @@ enum{
 
     TWS_SYNC_WEAR_MAX       = 0xFF,
 };
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum
+{
+    NTT_CASE_STATE_UNKNOWN = 0,
+    NTT_CASE_STATE_IN_CASE = 1,
+    NTT_CASE_STATE_OUT_CASE = 2,
+} NTT_CASE_STATE_E;
+
+/*
+ * Battery/Pogo debounce 完成後呼叫。
+ *
+ * in_case:
+ *   true  = PLUGIN，耳機入盒
+ *   false = PLUGOUT，耳機離盒
+ */
+void ntt_case_state_sync_local_update(bool in_case);
+
+/*
+ * TWS link 建立後可呼叫，將目前狀態重新送給 Peer。
+ */
+void ntt_case_state_sync_resend(void);
+
+/*
+ * 查詢狀態。
+ */
+NTT_CASE_STATE_E ntt_case_state_get_local(void);
+NTT_CASE_STATE_E ntt_case_state_get_peer(void);
+
+bool ntt_case_state_is_local_out(void);
+bool ntt_case_state_is_peer_out(void);
+bool ntt_case_state_are_both_out(void);
+
+void ntt_key_request_mobile_reconnect(void);
+
+#ifdef __cplusplus
+}
 #endif
 
 #ifdef BESUI_TWS_EN

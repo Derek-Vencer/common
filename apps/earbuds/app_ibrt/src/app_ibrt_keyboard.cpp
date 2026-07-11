@@ -44,6 +44,7 @@
 #include "app_factory.h"
 #include "communication_svr.h"
 #include "ble_aiwang_srv.h"
+#include "app_ibrt_customif_cmd.h"
 extern uint8_t out_of_case_reconnect;
 #if defined(IBRT)
 #ifdef TILE_DATAPATH
@@ -335,17 +336,12 @@ void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
         case APP_KEY_EVENT_CLICK:
         {
             conn_devices = app_bt_count_connected_device();
-
-            EARBUDS_TRACE(0,
-                "[KEY] CLICK conn=%d",
-                conn_devices);
-
+            EARBUDS_TRACE(0,"[KEY] CLICK conn=%d",conn_devices);
             sparraw_tx_key_click_notify_msg(KEY_CLICK);
 
             if (conn_devices == 0)
             {
-                out_of_case_reconnect = 1;
-                app_bt_profile_connect_manager_opening_reconnect();
+                ntt_key_request_mobile_reconnect();
             }
         }
         break;

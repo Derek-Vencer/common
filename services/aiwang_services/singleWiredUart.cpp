@@ -95,6 +95,7 @@ bool ntt_open_case_idle_reboot_needed = false;
 bool ntt_first_no_mobile_pair_mode = false;
 extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
+extern "C" void ntt_case_state_sync_local_update(bool in_case);
 
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
@@ -1641,6 +1642,32 @@ static void uart_idle_timeout_callback(void const *argument)
     set_er_inbox_status(0);
     ntt_audio_output_mute_refresh();
 
+        /*
+     * NTT：
+     * 1-wire UART idle 作為唯一的 OUT_CASE 判斷來源。
+     *
+     * false = OUT_CASE
+     *
+     * 這個 API 會：
+     * 1. 更新本機 local case state
+     * 2. 呼叫 local callback
+     * 3. 透過 APP_TWS_CMD_SYNC_CASE_STATE 同步另一耳
+     */
+
+    ntt_case_state_sync_local_update(false);
+
+    DBGPRINT(
+        "[NTT_OUTBOX] UART idle -> local OUT_CASE and sync peer");
+
+    EARBUDS_TRACE(
+        5,
+        "[NTT_OUTBOX] uart_idle=%d local=%d peer=%d tws=%d mobile=%d",
+        UART_IDLE_TIMEOUT_MS,
+        ntt_case_state_get_local(),
+        ntt_case_state_get_peer(),
+        bts_tws_if_is_tws_link_connected(),
+        app_bt_ibrt_has_mobile_link_connected());
+
     /*
      * NTT:
      * UART idle means earbud is out of pogo / out of box.
@@ -1661,7 +1688,7 @@ static void uart_idle_timeout_callback(void const *argument)
         bts_tws_if_is_tws_link_connected() == 1 &&
         app_bt_ibrt_has_mobile_link_connected() == 0)
     {
-        ntt_outbox_reconnect_check_start();
+        //ntt_outbox_reconnect_check_start();
     }
 
     /*

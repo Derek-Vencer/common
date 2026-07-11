@@ -140,6 +140,12 @@ static void ntt_master_sync_keymap_to_peer(void);
 static void ntt_master_sync_bt_name_to_peer(void);
 void ntt_master_sync_all_user_settings_to_peer(void);
 
+static void ntt_case_state_sync_send_handler(uint8_t *p_buff,uint16_t length);
+static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
+static void ntt_key_reconnect_request_send_handler(uint8_t *p_buff,uint16_t length);
+
+static void ntt_key_reconnect_request_receive_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
+
 #if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
 static void app_ibrt_sync_tota_battery_level(uint8_t *p_buff, uint16_t length)
@@ -1184,6 +1190,22 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         app_ibrt_custom_cmd_tx_done_handler_null,
         APP_TWS_CMD_PRIO_0
     },
+    {
+        APP_TWS_CMD_SYNC_CASE_STATE,                        "SYNC_CASE_STATE",
+        ntt_case_state_sync_send_handler,
+        ntt_case_state_sync_receive_handler,                0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,       app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
+        APP_TWS_CMD_KEY_RECONNECT_REQUEST,                  "KEY_RECONNECT_REQUEST",
+        ntt_key_reconnect_request_send_handler,
+        ntt_key_reconnect_request_receive_handler,              0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,       app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
 };
 
 static app_tws_cmd_timer_instance_t *g_ibrt_custom_cmd_handler_var_table[ARRAY_SIZE(g_ibrt_custom_cmd_handler_table)];
@@ -1467,5 +1489,498 @@ void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length)
 	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_BT_NAME, cmd_sync_bt_name, length);
 }
 
+#define NTT_CASE_SYNC_VERSION       1
+#define NTT_CASE_SYNC_MAGIC         0xCA
+
+typedef struct __attribute__((packed))
+{
+    uint8_t magic;
+    uint8_t version;
+    uint8_t case_state;
+    uint8_t sequence;
+} NTT_CASE_SYNC_PACKET_T;
+
+static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
+static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
+static uint8_t g_ntt_case_state_sequence = 0;
+
+
+/*
+ * Optional callback。
+ *
+ * 可在 app_ibrt_customif_ui.cpp 提供強實作，
+ * 當本機 case state 改變時執行 reconnect、role switch 等流程。
+ */
+/*
+ * Optional callback.
+ *
+ * app_ibrt_customif_ui.cpp 可以提供同名 strong function。
+ */
+extern "C" void ntt_case_state_local_changed_callback(
+    NTT_CASE_STATE_E state) __attribute__((weak));
+
+extern "C" void ntt_case_state_peer_changed_callback(
+    NTT_CASE_STATE_E state) __attribute__((weak));
+
+
+extern "C" void ntt_case_state_local_changed_callback(
+    NTT_CASE_STATE_E state)
+{
+    EARBUDS_TRACE(1,"[NTT_CASE_SYNC][WEAK_LOCAL_CB] state=%d",state);
+}
+
+
+extern "C" void ntt_case_state_peer_changed_callback(
+    NTT_CASE_STATE_E state)
+{
+    EARBUDS_TRACE(1,"[NTT_CASE_SYNC][WEAK_PEER_CB] state=%d",state);
+}
+
+/*
+ * Optional callback。
+ *
+ * Peer 狀態更新時呼叫。
+ */
+
+static const char *ntt_case_state_to_string(NTT_CASE_STATE_E state)
+{
+    switch (state)
+    {
+        case NTT_CASE_STATE_IN_CASE:
+            return "IN_CASE";
+
+        case NTT_CASE_STATE_OUT_CASE:
+            return "OUT_CASE";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+
+static bool ntt_case_state_is_valid(uint8_t state)
+{
+    return state == NTT_CASE_STATE_IN_CASE || state == NTT_CASE_STATE_OUT_CASE;
+}
+
+
+/*
+ * 真正透過 IBRT link 傳送封包。
+ */
+static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state)
+{
+    NTT_CASE_SYNC_PACKET_T packet;
+
+    if (!ntt_case_state_is_valid((uint8_t)state))
+    {
+        EARBUDS_TRACE(1,"[NTT_CASE_SYNC] invalid send state=%d",state);
+        return false;
+    }
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(2,"[NTT_CASE_SYNC] TWS disconnected, save only state=%s(%d)",ntt_case_state_to_string(state),state);
+        return false;
+    }
+
+    packet.magic = NTT_CASE_SYNC_MAGIC;
+    packet.version = NTT_CASE_SYNC_VERSION;
+    packet.case_state = (uint8_t)state;
+    packet.sequence = ++g_ntt_case_state_sequence;
+
+    EARBUDS_TRACE(3,"[NTT_CASE_SYNC][TX] state=%s(%d) seq=%u",ntt_case_state_to_string(state),state,packet.sequence);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_CASE_STATE,(uint8_t *)&packet,sizeof(packet));
+    return true;
+}
+
+
+/*
+ * Battery debounce 完成後的主要入口。
+ */
+extern "C"
+void ntt_case_state_sync_local_update(bool in_case)
+{
+    NTT_CASE_STATE_E new_state = in_case ? NTT_CASE_STATE_IN_CASE : NTT_CASE_STATE_OUT_CASE;
+    NTT_CASE_STATE_E old_state = g_ntt_local_case_state;
+    if (old_state == new_state)
+    {
+        EARBUDS_TRACE(2,"[NTT_CASE_SYNC] duplicate local ignored state=%s(%d)",ntt_case_state_to_string(new_state),new_state);
+        /*
+         * 即使狀態未改變，若 TWS 剛恢復連線，
+         * resend() 會負責重新傳送。
+         */
+        return;
+    }
+
+    g_ntt_local_case_state = new_state;
+
+    EARBUDS_TRACE(
+        3,
+        "[NTT_CASE_SYNC] local changed %s(%d) -> %s(%d)",
+        ntt_case_state_to_string(old_state),
+        old_state,
+        ntt_case_state_to_string(new_state),
+        new_state);
+
+    /*
+     * 先執行本機流程。
+     */
+    ntt_case_state_local_changed_callback(new_state);
+
+    /*
+     * 再同步給另一耳。
+     */
+    ntt_case_state_send_to_peer(new_state);
+}
+
+
+/*
+ * TWS 連線建立後重新同步一次。
+ */
+extern "C"
+void ntt_case_state_sync_resend(void)
+{
+    NTT_CASE_STATE_E state = g_ntt_local_case_state;
+
+    EARBUDS_TRACE(
+        3,
+        "[NTT_CASE_SYNC] resend local=%s(%d) tws=%d",
+        ntt_case_state_to_string(state),
+        state,
+        bts_tws_if_is_tws_link_connected());
+
+    if (state == NTT_CASE_STATE_UNKNOWN)
+    {
+        EARBUDS_TRACE(0,"[NTT_CASE_SYNC] resend ignored: local unknown");
+        return;
+    }
+
+    ntt_case_state_send_to_peer(state);
+}
+
+
+/*
+ * Custom command 發送 handler。
+ *
+ * tws_ctrl_send_cmd() 最後會進到這裡。
+ */
+static void ntt_case_state_sync_send_handler(uint8_t *p_buff,uint16_t length)
+{
+    if (p_buff == NULL || length != sizeof(NTT_CASE_SYNC_PACKET_T))
+    {
+        EARBUDS_TRACE(2,"[NTT_CASE_SYNC][SEND] invalid buffer=%p length=%u",p_buff,length);
+        return;
+    }
+
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_CASE_STATE,p_buff,length);
+}
+
+
+/*
+ * Peer 收到命令後的 handler。
+ */
+static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
+{
+    NTT_CASE_SYNC_PACKET_T packet;
+    NTT_CASE_STATE_E new_peer_state;
+    NTT_CASE_STATE_E old_peer_state;
+
+    (void)rsp_seq;
+
+    if (p_buff == NULL || length != sizeof(NTT_CASE_SYNC_PACKET_T))
+    {
+        EARBUDS_TRACE(2,"[NTT_CASE_SYNC][RX] invalid buffer=%p length=%u",p_buff,length);
+        return;
+    }
+
+    memcpy(&packet,p_buff,sizeof(packet));
+
+    if (packet.magic != NTT_CASE_SYNC_MAGIC)
+    {
+        EARBUDS_TRACE(1,"[NTT_CASE_SYNC][RX] invalid magic=0x%02X",packet.magic);
+        return;
+    }
+
+    if (packet.version != NTT_CASE_SYNC_VERSION)
+    {
+        EARBUDS_TRACE(
+            2,
+            "[NTT_CASE_SYNC][RX] unsupported version=%u expected=%u",
+            packet.version,
+            NTT_CASE_SYNC_VERSION);
+
+        return;
+    }
+
+    if (!ntt_case_state_is_valid(packet.case_state))
+    {
+        EARBUDS_TRACE(1,"[NTT_CASE_SYNC][RX] invalid state=%u",packet.case_state);
+        return;
+    }
+
+    new_peer_state = (NTT_CASE_STATE_E)packet.case_state;
+    old_peer_state = g_ntt_peer_case_state;
+    EARBUDS_TRACE(
+        4,
+        "[NTT_CASE_SYNC][RX] peer state=%s(%d) seq=%u old=%s(%d)",
+        ntt_case_state_to_string(new_peer_state),
+        new_peer_state,
+        packet.sequence,
+        ntt_case_state_to_string(old_peer_state),
+        old_peer_state);
+
+    if (old_peer_state == new_peer_state)
+    {
+        EARBUDS_TRACE(1,"[NTT_CASE_SYNC][RX] duplicate peer ignored");
+        return;
+    }
+
+    g_ntt_peer_case_state = new_peer_state;
+    ntt_case_state_peer_changed_callback(new_peer_state);
+    EARBUDS_TRACE(
+        4,
+        "[NTT_CASE_SYNC] result local=%s(%d) peer=%s(%d)",
+        ntt_case_state_to_string(g_ntt_local_case_state),
+        g_ntt_local_case_state,
+        ntt_case_state_to_string(g_ntt_peer_case_state),
+        g_ntt_peer_case_state);
+}
+
+
+extern "C"
+NTT_CASE_STATE_E ntt_case_state_get_local(void)
+{
+    return g_ntt_local_case_state;
+}
+
+
+extern "C"
+NTT_CASE_STATE_E ntt_case_state_get_peer(void)
+{
+    return g_ntt_peer_case_state;
+}
+
+
+extern "C"
+bool ntt_case_state_is_local_out(void)
+{
+    return g_ntt_local_case_state == NTT_CASE_STATE_OUT_CASE;
+}
+
+
+extern "C"
+bool ntt_case_state_is_peer_out(void)
+{
+    return g_ntt_peer_case_state == NTT_CASE_STATE_OUT_CASE;
+}
+
+
+extern "C"
+bool ntt_case_state_are_both_out(void)
+{
+    return g_ntt_local_case_state == NTT_CASE_STATE_OUT_CASE && g_ntt_peer_case_state == NTT_CASE_STATE_OUT_CASE;
+}
+
+#define NTT_KEY_RECONNECT_LOCK_MS 3000
+
+static bool g_ntt_key_reconnect_running = false;
+
+static void ntt_key_reconnect_unlock_handler(
+    void const *param);
+
+osTimerDef(
+    NTT_KEY_RECONNECT_UNLOCK_TIMER,
+    ntt_key_reconnect_unlock_handler);
+
+static osTimerId g_ntt_key_reconnect_unlock_timer = NULL;
+
+static void ntt_key_reconnect_unlock_handler(
+    void const *param)
+{
+    (void)param;
+
+    g_ntt_key_reconnect_running = false;
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_KEY_RECONNECT] unlock");
+}
+
+static void ntt_key_reconnect_lock_start(void)
+{
+    if (g_ntt_key_reconnect_unlock_timer == NULL)
+    {
+        g_ntt_key_reconnect_unlock_timer =
+            osTimerCreate(
+                osTimer(
+                    NTT_KEY_RECONNECT_UNLOCK_TIMER),
+                osTimerOnce,
+                NULL);
+    }
+
+    if (g_ntt_key_reconnect_unlock_timer != NULL)
+    {
+        osTimerStop(
+            g_ntt_key_reconnect_unlock_timer);
+
+        osTimerStart(
+            g_ntt_key_reconnect_unlock_timer,
+            NTT_KEY_RECONNECT_LOCK_MS);
+    }
+}
+
+static void ntt_key_master_start_reconnect(void)
+{
+    uint8_t role =
+        app_ibrt_if_get_ui_role();
+
+    uint8_t conn_devices =
+        app_bt_count_connected_device();
+
+    EARBUDS_TRACE(
+        3,
+        "[NTT_KEY_RECONNECT] execute role=%d conn=%d running=%d",
+        role,
+        conn_devices,
+        g_ntt_key_reconnect_running);
+
+    if (role != TWS_UI_MASTER)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_RECONNECT] reject: not MASTER");
+
+        return;
+    }
+
+    if (conn_devices != 0)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_RECONNECT] reject: mobile connected");
+
+        return;
+    }
+
+    if (g_ntt_key_reconnect_running)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_RECONNECT] duplicate ignored");
+
+        return;
+    }
+
+    g_ntt_key_reconnect_running = true;
+
+    ntt_key_reconnect_lock_start();
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_KEY_RECONNECT] MASTER opening reconnect");
+
+    app_bt_profile_connect_manager_opening_reconnect();
+}
+
+static void ntt_key_reconnect_request_send_handler(
+    uint8_t *p_buff,
+    uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(
+        APP_TWS_CMD_KEY_RECONNECT_REQUEST,
+        p_buff,
+        length);
+}
+
+static void ntt_key_reconnect_request_receive_handler(
+    uint16_t rsp_seq,
+    uint8_t *p_buff,
+    uint16_t length)
+{
+    (void)rsp_seq;
+    (void)p_buff;
+    (void)length;
+
+    EARBUDS_TRACE(
+        2,
+        "[NTT_KEY_RECONNECT][RX] role=%d",
+        app_ibrt_if_get_ui_role());
+
+    /*
+     * 只有 Master 處理 Slave 的回連要求。
+     */
+    if (app_ibrt_if_get_ui_role() != TWS_UI_MASTER)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_RECONNECT][RX] ignore: not MASTER");
+
+        return;
+    }
+
+    ntt_key_master_start_reconnect();
+}
+
+extern "C"
+void ntt_key_request_mobile_reconnect(void)
+{
+    uint8_t role =
+        app_ibrt_if_get_ui_role();
+
+    uint8_t conn_devices =
+        app_bt_count_connected_device();
+
+    EARBUDS_TRACE(
+        3,
+        "[NTT_KEY_RECONNECT] request role=%d conn=%d tws=%d",
+        role,
+        conn_devices,
+        bts_tws_if_is_tws_link_connected());
+
+    if (conn_devices != 0)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_RECONNECT] mobile already connected");
+
+        return;
+    }
+
+    /*
+     * Master 本機按鍵，直接執行。
+     */
+    if (role == TWS_UI_MASTER)
+    {
+        ntt_key_master_start_reconnect();
+        return;
+    }
+
+    /*
+     * Slave 按鍵，通知 Master。
+     */
+    if (bts_tws_if_is_tws_link_connected())
+    {
+        uint8_t request = 1;
+
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_RECONNECT] SLAVE send request to MASTER");
+
+        tws_ctrl_send_cmd(
+            APP_TWS_CMD_KEY_RECONNECT_REQUEST,
+            &request,
+            sizeof(request));
+
+        return;
+    }
+
+    /*
+     * Slave 且沒有 TWS：
+     * 目前不允許直接連手機，避免雙耳競爭。
+     */
+    EARBUDS_TRACE(
+        0,
+        "[NTT_KEY_RECONNECT] SLAVE no TWS, request ignored");
+}
 
 #endif /* IBRT */

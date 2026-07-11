@@ -194,6 +194,8 @@ struct APP_BATTERY_MEASURE_T
     APP_BATTERY_CB_T user_cb;
 };
 
+static enum APP_BATTERY_CHARGER_T g_ntt_last_case_state = APP_BATTERY_CHARGER_QTY;
+
 #ifdef IS_BES_BATTERY_MANAGER_ENABLED
 
 static enum APP_BATTERY_CHARGER_T app_battery_charger_forcegetstatus(void);
@@ -208,7 +210,10 @@ static uint32_t app_battery_pluginout_debounce_cnt = 0;
 extern "C" void ntt_case_close_role_switch_reset(void);
 extern "C" bool ntt_case_close_role_switch_can_shutdown(void);
 #endif
-
+#ifdef IBRT
+extern "C" void ntt_case_state_sync_local_update(
+    bool in_case);
+#endif
 #ifndef MORE_THAN_ONE_TYPE_OF_CHARGER
 const
 #endif
@@ -1187,78 +1192,128 @@ static void app_battery_pluginout_debounce_start(void)
 static void app_battery_pluginout_debounce_handler(void const *param)
 {
     enum APP_BATTERY_CHARGER_T status_charger = app_battery_charger_forcegetstatus();
+
 #ifdef BESUI_TWS_EN
     bool factory_flag = false;
 #endif
-    if(app_battery_pluginout_debounce_ctx == (uint32_t) status_charger){
+
+    (void)param;
+
+    if (app_battery_pluginout_debounce_ctx == (uint32_t)status_charger)
+    {
         app_battery_pluginout_debounce_cnt++;
     }
     else
     {
-        BATTERY_TRACE(2,"%s dithering cnt %u", __func__, app_battery_pluginout_debounce_cnt);
-        app_battery_pluginout_debounce_cnt = 0;
+        BATTERY_TRACE(2,"%s dithering cnt %u",__func__,app_battery_pluginout_debounce_cnt);
+
+        /*
+         * 新狀態這次已經讀到一次，
+         * 所以建議從 1 開始。
+         */
+        app_battery_pluginout_debounce_cnt = 1;
         app_battery_pluginout_debounce_ctx = (uint32_t)status_charger;
     }
+
 #ifdef BESUI_TWS_EN
-    BATTERY_TRACE(1, "[UIBAT]%s cnt %d", __func__, app_battery_pluginout_debounce_cnt);
+    BATTERY_TRACE(2,"[UIBAT]%s cnt=%u",__func__,app_battery_pluginout_debounce_cnt);
+
 #ifdef BESUI_1WIRE_EN
-    if(status_charger == APP_BATTERY_CHARGER_PLUGOUT)
+    if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
     {
         communication_uart_function_enable(true);
     }
 #endif
 #endif
 
-	if(status_charger == APP_BATTERY_CHARGER_PLUGOUT)
-	{
-		//communication_stop();
-		BATTERY_TRACE(2,"@communication_stop");
-	}
-	else
-	{
-		//communication_init();
-		BATTERY_TRACE(2,"@communication_init");
-	}
+    if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
+    {
+        BATTERY_TRACE(0,"@communication_stop");
+    }
+    else
+    {
+        BATTERY_TRACE(0,"@communication_init");
+    }
 
-    if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT){
-        BATTERY_TRACE(2,"%s %s", __func__, status_charger == APP_BATTERY_CHARGER_PLUGOUT ? "PLUGOUT" : "PLUGIN");
+    if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT)
+    {
+        BATTERY_TRACE(2,"%s %s",__func__,status_charger == APP_BATTERY_CHARGER_PLUGOUT ?"PLUGOUT" :"PLUGIN");
+        /*
+         * ==================================================
+         * NTT 左右耳 Case State 同步入口
+         * 必須放在 debounce 穩定確認之後。
+         * ==================================================
+         */
+        BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] current=%d last=%d",status_charger,g_ntt_last_case_state);
+        if (status_charger != g_ntt_last_case_state)
+        {
+            BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] state changed %d -> %d",g_ntt_last_case_state,status_charger);
+            g_ntt_last_case_state = status_charger;
+            if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
+            {
+                BATTERY_TRACE(0,"[NTT_CASE_HW] confirmed PLUGIN -> IN_CASE");
+                ntt_case_state_sync_local_update(true);
+            }
+            else if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
+            {
+                BATTERY_TRACE(0,"[NTT_CASE_HW] PMU PLUGOUT ignored; wait UART idle");
+                //BATTERY_TRACE(0,"[NTT_CASE_HW] confirmed PLUGOUT -> OUT_CASE");
+                //ntt_case_state_sync_local_update(false);
+            }
+        }
+        else
+        {
+            BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] duplicate ignored state=%d",status_charger);
+        }
+
+        /*
+         * ==================================================
+         * 原本 PLUGIN / PLUGOUT 處理流程
+         * ==================================================
+         */
         if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
         {
-                    /*
-            * Pogo pin is confirmed inserted.
-            * Pause music if A2DP is streaming.
-            */
+            /*
+             * Pogo pin confirmed inserted.
+             * Pause music if A2DP is streaming.
+             */
             app_key_handle_pause_music_on_pogo_in();
 
 #ifndef BESUI_TWS_EN
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
             {
-                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_OUT, 0);
+                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_enable_cfg.pin,HAL_GPIO_DIR_OUT,0);
             }
-#endif           
+#endif
+
 #ifdef BESUI_TWS_EN
             factory_flag = app_charge_fast_exit_factory_mode();
 
-            if(factory_flag)
+            if (factory_flag)
             {
+                pmu_charger_set_irq_handler(app_battery_charger_handler);
+                osTimerStop(app_battery_pluginout_debounce_timer);
                 return;
             }
 #endif
-#ifdef BESUI_CHARGE_EN
 
-            if(!besui_bat_charge_sta_get())
+#ifdef BESUI_CHARGE_EN
+            if (!besui_bat_charge_sta_get())
             {
                 BATTERY_TRACE(0,"close box charging");
                 besui_bat_charge_sta_set(true);
-                if(uicom.poweron_bat_det_flag)
+                if (uicom.poweron_bat_det_flag)
                 {
                     app_charge_putinout_ui_post_msg(CHARGE_PLUGIN);
                 }
             }
 #endif
+
             app_battery_measure.start_time = hal_sys_timer_get();
+
 #ifdef BESUI_STEREO_EN
-            if ((!app_ui_charging_io_read((enum HAL_GPIO_PIN_T)HAL_IOMUX_PIN_P1_7)) && app_get_charging_status() ) {
+            if ((!app_ui_charging_io_read((enum HAL_GPIO_PIN_T)HAL_IOMUX_PIN_P1_7)) && app_get_charging_status())
+            {
                 BATTERY_TRACE(0,"close box charging -2");
                 app_shutdown();
             }
@@ -1271,19 +1326,20 @@ static void app_battery_pluginout_debounce_handler(void const *param)
 #else
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
             {
-                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_OUT, 1);
+                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_enable_cfg.pin,HAL_GPIO_DIR_OUT,1);
             }
 #endif
+
 #ifdef BESUI_CHARGE_EN
 #ifdef BESUI_NTC_EN
-            if(!ntc_charger_status())
+            if (!ntc_charger_status())
 #endif
             {
-                if(besui_bat_charge_sta_get())
+                if (besui_bat_charge_sta_get())
                 {
                     BATTERY_TRACE(0,"charging open box");
                     besui_bat_charge_sta_set(false);
-                    if(uicom.poweron_bat_det_flag)
+                    if (uicom.poweron_bat_det_flag)
                     {
                         app_charge_putinout_ui_post_msg(CHARGE_PLUGOUT);
                     }
@@ -1291,11 +1347,14 @@ static void app_battery_pluginout_debounce_handler(void const *param)
             }
 #endif
         }
-        app_battery_event_process(APP_BATTERY_STATUS_CHARGING, status_charger);
+
+        app_battery_event_process(APP_BATTERY_STATUS_CHARGING,status_charger);
         pmu_charger_set_irq_handler(app_battery_charger_handler);
         osTimerStop(app_battery_pluginout_debounce_timer);
-    }else{
-        osTimerStart(app_battery_pluginout_debounce_timer, CHARGER_PLUGINOUT_DEBOUNCE_MS);
+    }
+    else
+    {
+        osTimerStart(app_battery_pluginout_debounce_timer,CHARGER_PLUGINOUT_DEBOUNCE_MS);
     }
 }
 
