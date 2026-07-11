@@ -449,6 +449,10 @@ bool app_bt_ntt_request_ibrt_link(uint8_t device_id)
      * true 只代表 request 已送出，
      * 下一次 Recovery Timer 還要再次檢查。
      */
+         // 關閉 debug log 後，避免 unused warning
+    //disable debug log
+    (void)ibrt_handle;
+    (void)status;
     return true;
 
 #else
@@ -963,6 +967,16 @@ bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
         (uint32_t)
             mobile_info->tx_profile_update);
 
+            
+    (void)any_basic_profile_established;
+    (void)avrcp_before;
+    (void)a2dp_conn_flag;
+    (void)a2dp_stream_state;
+    (void)a2dp_streaming;
+    (void)avrcp_conn_flag;
+    (void)avrcp_play_status;
+    (void)delay_before;
+    (void)dev_constate;
     return true;
 }
 
