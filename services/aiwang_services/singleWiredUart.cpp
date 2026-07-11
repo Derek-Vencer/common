@@ -220,7 +220,7 @@ static void ntt_outbox_reconnect_check_timer_handler(void const *param)
 
         if (!app_ibrt_middleware_is_ui_slave())
         {
-            out_of_case_reconnect = 1;
+            //out_of_case_reconnect = 1;
             DBGPRINT("[NTT_RECONNECT_CHECK] master send reconnect");
             //app_bt_profile_connect_manager_opening_reconnect_do();
             app_bt_profile_connect_manager_opening_reconnect();

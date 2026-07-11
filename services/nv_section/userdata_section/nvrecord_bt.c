@@ -881,6 +881,42 @@ void nv_record_btdevicerecord_set_hfp_vol(nvrec_btdevicerecord* pRecord, int8_t 
     nv_record_post_write_operation(lock);
 }
 
+bool nv_record_btdevicerecord_set_cod(nvrec_btdevicerecord *pRecord,const uint8_t cod[3])
+{
+    uint32_t lock;
+
+    if ((pRecord == NULL) || (cod == NULL))
+    {
+        NV_SECTION_TRACE(0,"[NTT_REMOTE_COD][ERROR] invalid param");
+        return false;
+    }
+
+    if ((pRecord->record.cod[0] == cod[0]) &&
+        (pRecord->record.cod[1] == cod[1]) &&
+        (pRecord->record.cod[2] == cod[2]))
+    {
+        NV_SECTION_TRACE(0,"[NTT_REMOTE_COD] unchanged %02x:%02x:%02x",cod[0],cod[1],cod[2]);
+        return true;
+    }
+
+    lock = nv_record_pre_write_operation();
+
+    /*
+     * 通知 NV runtime data 已修改。
+     * 後續由 SDK 原本的 NV flush 機制寫入 Flash。
+     */
+    nv_record_update_runtime_userdata();
+
+    pRecord->record.cod[0] = cod[0];
+    pRecord->record.cod[1] = cod[1];
+    pRecord->record.cod[2] = cod[2];
+
+    nv_record_post_write_operation(lock);
+
+    NV_SECTION_TRACE(0,"[NTT_REMOTE_COD][SET] cod=%02x:%02x:%02x",cod[0],cod[1],cod[2]);
+    return true;
+}
+
 void nv_record_btdevicevolume_set_a2dp_vol(btdevice_volume* device_vol, int8_t vol)
 {
     uint32_t lock = nv_record_pre_write_operation();

@@ -210,8 +210,7 @@ void app_bt_stream_ibrt_auto_synchronize_initsync_start(uint8_t device_id, APP_T
         ntt_profile_recovery_running = false;
     }
 
-static void ntt_profile_recovery_timer_handler(
-    void const *param)
+static void ntt_profile_recovery_timer_handler(void const *param)
 {
     POSSIBLY_UNUSED const void *unused_param = param;
 
@@ -355,9 +354,30 @@ static void ntt_profile_recovery_timer_handler(
     if ((ntt_profile_recovery_count == 1) ||
         ((ntt_profile_recovery_count % 4) == 0))
     {
-        bool recovery_started =
-            app_bt_ntt_restart_profile_exchange(
+        bool ibrt_connected =bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote);
+
+    if (!ibrt_connected)
+    {
+        bool request_result =
+            app_bt_ntt_request_ibrt_link(
                 device_id);
+
+        AUDIOPLAYERS_TRACE(
+            0,
+            "[NTT_PROFILE_RECOVERY] "
+            "IBRT not ready dev=%d request=%d",
+            device_id,
+            request_result);
+
+        if (ntt_profile_recovery_running &&
+            ntt_profile_recovery_timer != NULL)
+        {
+            osTimerStart(ntt_profile_recovery_timer,NTT_PROFILE_RECOVERY_CHECK_MS);
+        }
+
+        return;
+    }
+        bool recovery_started = app_bt_ntt_restart_profile_exchange(device_id);
 
         AUDIOPLAYERS_TRACE(
             0,

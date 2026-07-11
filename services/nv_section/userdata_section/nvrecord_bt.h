@@ -31,6 +31,8 @@ typedef enum {
     NEW_DEVICE_CB_NUM,
 } NEW_DEVICE_CB_E;
 
+bool nv_record_btdevicerecord_set_cod(nvrec_btdevicerecord *pRecord,const uint8_t cod[3]);
+
 typedef void (*nv_record_btdevice_new_device_paired_func_t)(const uint8_t* btAddr);
 typedef void (*NEWDEVICE_PAIRED_CB_T)(const uint8_t* btAddr);
 

@@ -52,6 +52,7 @@
 #include "me_common_define.h"
 #include "bts_bt_conn.h"
 #include "app_tws_ibrt_cmd_handler.h"
+#include "bts_ibrt_if.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -214,6 +215,248 @@ osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 osTimerDef (BT_PROFILE_CONNECT_TIMER2, app_bt_profile_reconnect_timehandler);
 #endif
 
+static bool app_bt_ntt_fix_empty_phone_cod(uint8_t device_id)
+{
+    struct BT_DEVICE_T *curr_device = NULL;
+    nvrec_btdevicerecord *record = NULL;
+
+    uint8_t fixed_cod[3] = {0x00,0x04,0x00};
+
+    if (device_id >= BT_DEVICE_NUM)
+    {
+        DEBUG_INFO(0,"[NTT_REMOTE_COD][ERROR] invalid dev=%d",device_id);
+        return false;
+    }
+
+    curr_device = app_bt_get_device(device_id);
+
+    if (curr_device == NULL)
+    {
+        DEBUG_INFO(0,"[NTT_REMOTE_COD][ERROR] device NULL dev=%d",device_id);
+        return false;
+    }
+
+    if (!curr_device->acl_is_connected)
+    {
+        DEBUG_INFO(0,"[NTT_REMOTE_COD] ACL disconnected dev=%d",device_id);
+        return false;
+    }
+
+    /*
+     * 僅對已確認具備手機音訊 Profile 的裝置修正。
+     *
+     * 避免把鍵盤、電腦或其他 BR/EDR 裝置
+     * 誤當成手機。
+     */
+    if (!curr_device->a2dp_conn_flag ||
+        !curr_device->avrcp_conn_flag ||
+        !curr_device->hf_conn_flag)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_REMOTE_COD] "
+            "profile not ready dev=%d "
+            "a2dp=%d avrcp=%d hfp=%d",
+            device_id,
+            curr_device->a2dp_conn_flag,
+            curr_device->avrcp_conn_flag,
+            curr_device->hf_conn_flag);
+
+        return false;
+    }
+
+    if (nv_record_btdevicerecord_find(&curr_device->remote,&record) != 0)
+    {
+        DEBUG_INFO(0,"[NTT_REMOTE_COD][ERROR] NV record not found dev=%d",device_id);
+        return false;
+    }
+
+    if (record == NULL)
+    {
+        DEBUG_INFO(0,"[NTT_REMOTE_COD][ERROR] NV record NULL dev=%d",device_id);
+        return false;
+    }
+
+    /*
+     * 只處理完全為零的 CoD。
+     * 已有有效 CoD 時絕不覆蓋。
+     */
+    if ((record->record.cod[0] != 0) ||
+        (record->record.cod[1] != 0) ||
+        (record->record.cod[2] != 0))
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_REMOTE_COD] "
+            "already exists dev=%d "
+            "cod=%02x:%02x:%02x",
+            device_id,
+            record->record.cod[0],
+            record->record.cod[1],
+            record->record.cod[2]);
+
+        return true;
+    }
+
+    DEBUG_INFO(
+        0,
+        "[NTT_REMOTE_COD][FIX] "
+        "empty COD dev=%d "
+        "a2dp=%d avrcp=%d hfp=%d "
+        "set=%02x:%02x:%02x",
+        device_id,
+        curr_device->a2dp_conn_flag,
+        curr_device->avrcp_conn_flag,
+        curr_device->hf_conn_flag,
+        fixed_cod[0],
+        fixed_cod[1],
+        fixed_cod[2]);
+
+    return nv_record_btdevicerecord_set_cod(record,fixed_cod);
+}
+
+bool app_bt_ntt_request_ibrt_link(uint8_t device_id)
+{
+#ifdef IBRT
+    struct BT_DEVICE_T *curr_device = NULL;
+
+    bool tws_connected;
+    bool mobile_connected;
+    bool ibrt_connected;
+
+    uint8_t role;
+    uint16_t ibrt_handle;
+
+    if (device_id >= BT_DEVICE_NUM)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_IBRT_RECOVERY][ERROR] "
+            "invalid dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    curr_device =
+        app_bt_get_device(device_id);
+
+    if (curr_device == NULL)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_IBRT_RECOVERY][ERROR] "
+            "device NULL dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    role =
+        app_ibrt_if_get_ui_role();
+
+    tws_connected =
+        bts_tws_if_is_tws_link_connected();
+
+    mobile_connected =
+        bts_bt_if_is_dev_link_connected(
+            &curr_device->remote);
+
+    ibrt_connected =
+        bts_ibrt_if_is_ibrt_link_connected(
+            &curr_device->remote);
+
+    ibrt_handle =
+        bts_ibrt_if_get_dev_ibrt_handle(
+            &curr_device->remote);
+
+    DEBUG_INFO(
+        0,
+        "[NTT_IBRT_RECOVERY][CHECK] "
+        "dev=%d role=%d tws=%d "
+        "mobile=%d ibrt=%d handle=0x%x",
+        device_id,
+        role,
+        tws_connected,
+        mobile_connected,
+        ibrt_connected,
+        ibrt_handle);
+
+    /*
+     * 只允許 Master 主動建立指定手機的 IBRT link。
+     */
+    if (role != IBRT_MASTER)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_IBRT_RECOVERY][BLOCKED] "
+            "not master dev=%d role=%d",
+            device_id,
+            role);
+
+        return false;
+    }
+
+    if (!tws_connected)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_IBRT_RECOVERY][BLOCKED] "
+            "TWS disconnected dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    if (!mobile_connected)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_IBRT_RECOVERY][BLOCKED] "
+            "mobile ACL disconnected dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    if (ibrt_connected)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_IBRT_RECOVERY] "
+            "already connected dev=%d "
+            "handle=0x%x",
+            device_id,
+            ibrt_handle);
+
+        return true;
+    }
+
+    ibrt_status_t status =
+        bts_ibrt_if_dev_connect_ibrt_link(
+            &curr_device->remote);
+
+    DEBUG_INFO(
+        0,
+        "[NTT_IBRT_RECOVERY] "
+        "connect request dev=%d status=%d",
+        device_id,
+        status);
+
+    /*
+     * API 為非同步。
+     * true 只代表 request 已送出，
+     * 下一次 Recovery Timer 還要再次檢查。
+     */
+    return true;
+
+#else
+    POSSIBLY_UNUSED uint8_t unused_device_id =
+        device_id;
+
+    return false;
+#endif
+}
 
 bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
 {
@@ -221,9 +464,41 @@ bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
     struct BT_DEVICE_T *curr_device = NULL;
     ibrt_mobile_info_t *mobile_info = NULL;
 
+    bool mobile_connected;
+    bool basic_profiles_established;
+    bool any_basic_profile_established;
+
+    bool profile_before;
+    bool a2dp_before;
+    bool avrcp_before;
+    bool wait_before;
+    bool exchange_stuck;
+
+    bool remote_cod_valid;
+    bool remote_cod_bit10;
+    bool mobile_state_ready;
+    bool immediate_sync_allowed;
+
+    uint8_t remote_cod[3] = {0};
+
+    uint8_t a2dp_conn_flag;
+    uint8_t a2dp_stream_state;
+    uint8_t a2dp_streaming;
+    uint8_t avrcp_conn_flag;
+    uint8_t avrcp_play_status;
+
+    uint16_t state_before;
+    uint32_t delay_before;
+    uint32_t dev_constate;
+
+    uint64_t mobile_constate;
+    uint64_t rx_before;
+    uint64_t tx_before;
+
     if (device_id >= BT_DEVICE_NUM)
     {
-        DEBUG_INFO(0,
+        DEBUG_INFO(
+            0,
             "[NTT_PROFILE_RECOVERY][ERROR] "
             "invalid device_id=%d max=%d",
             device_id,
@@ -236,9 +511,25 @@ bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
 
     if (curr_device == NULL)
     {
-        DEBUG_INFO(0,
+        DEBUG_INFO(
+            0,
             "[NTT_PROFILE_RECOVERY][ERROR] "
             "curr_device NULL dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    mobile_connected =
+        bts_bt_if_is_dev_link_connected(
+            &curr_device->remote);
+
+    if (!mobile_connected)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PROFILE_RECOVERY][ERROR] "
+            "mobile link disconnected dev=%d",
             device_id);
 
         return false;
@@ -250,7 +541,8 @@ bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
 
     if (mobile_info == NULL)
     {
-        DEBUG_INFO(0,
+        DEBUG_INFO(
+            0,
             "[NTT_PROFILE_RECOVERY][ERROR] "
             "mobile_info NULL dev=%d",
             device_id);
@@ -258,31 +550,404 @@ bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
         return false;
     }
 
-    DEBUG_INFO(0,
-        "[NTT_PROFILE_RECOVERY] "
-        "restart dev=%d info=%p "
-        "wait=%d state=0x%x "
-        "profile=%d a2dp=%d avrcp=%d "
-        "rx=0x%llx tx=0x%llx",
+    /*
+     * 取得 Profile Exchange context。
+     */
+    wait_before =
+        mobile_info->wait_profile;
+
+    state_before =
+        mobile_info->profile_exchange_state;
+
+    delay_before =
+        mobile_info->profile_exchange_delay;
+
+    profile_before =
+        mobile_info->profile_exchanged;
+
+    a2dp_before =
+        mobile_info->a2dp_profile_exchanged;
+
+    avrcp_before =
+        mobile_info->avrcp_profile_exchanged;
+
+    mobile_constate =
+        mobile_info->mobile_constate;
+
+    rx_before =
+        mobile_info->rx_profile_update;
+
+    tx_before =
+        mobile_info->tx_profile_update;
+
+    basic_profiles_established =
+        app_ibrt_basic_profiles_established(
+            mobile_info);
+
+    any_basic_profile_established =
+        app_ibrt_any_basic_profiles_established(
+            mobile_info);
+
+    dev_constate =
+        bts_bt_conn_get_dev_constate(
+            &curr_device->remote);
+
+    /*
+     * 取得手機 Remote Class of Device。
+     *
+     * Library app_ibrt_sync_profile_immediate()
+     * 會檢查：
+     *
+     * 1. CoD 是否有效；
+     * 2. remote_cod[1] bit2 是否為 1；
+     * 3. mobile_constate bit1、bit2 是否都為 1。
+     */
+    remote_cod_valid = app_bt_get_remote_cod_by_addr(&curr_device->remote,remote_cod);
+    bool remote_cod_empty =(remote_cod[0] == 0) && (remote_cod[1] == 0) && (remote_cod[2] == 0);
+
+    /*
+    * NV record 存在但 CoD 為空。
+    *
+    * 若已確認 A2DP / AVRCP / HFP 都連線，
+    * 補上 Library immediate profile sync 所需的 bit。
+    */
+    if (!remote_cod_valid || remote_cod_empty)
+    {
+        bool cod_fixed = app_bt_ntt_fix_empty_phone_cod(device_id);
+
+        DEBUG_INFO(
+            0,
+            "[NTT_REMOTE_COD] "
+            "fix request dev=%d "
+            "valid=%d empty=%d result=%d",
+            device_id,
+            remote_cod_valid,
+            remote_cod_empty,
+            cod_fixed);
+
+        if (cod_fixed)
+        {
+            remote_cod[0] = 0;
+            remote_cod[1] = 0;
+            remote_cod[2] = 0;
+
+            remote_cod_valid =
+                app_bt_get_remote_cod_by_addr(
+                    &curr_device->remote,
+                    remote_cod);
+
+            remote_cod_empty =
+                (remote_cod[0] == 0) &&
+                (remote_cod[1] == 0) &&
+                (remote_cod[2] == 0);
+        }
+    }
+    remote_cod_bit10 =
+        remote_cod_valid &&
+        ((remote_cod[1] & 0x04) != 0);
+
+    mobile_state_ready =
+        ((mobile_constate & 0x06ULL) ==
+         0x06ULL);
+
+    immediate_sync_allowed =
+        remote_cod_valid &&
+        remote_cod_bit10 &&
+        mobile_state_ready;
+
+    /*
+     * 取得本機 A2DP / AVRCP 狀態。
+     */
+    a2dp_conn_flag =
+        curr_device->a2dp_conn_flag;
+
+    a2dp_stream_state = 0xFF;
+
+    if (curr_device->a2dp_connected_stream != NULL)
+    {
+        a2dp_stream_state =
+            btif_a2dp_get_stream_state(
+                curr_device->a2dp_connected_stream);
+    }
+
+    a2dp_streaming =
+        curr_device->a2dp_streamming;
+
+    avrcp_conn_flag =
+        curr_device->avrcp_conn_flag;
+
+    avrcp_play_status =
+        curr_device->avrcp_playback_status;
+
+    /*
+     * wait=1、state/rx/tx 全為 0，
+     * 表示 SDK 尚未真正開始傳送 Profile Data。
+     */
+    exchange_stuck =
+        wait_before &&
+        (state_before == 0) &&
+        (rx_before == 0) &&
+        (tx_before == 0) &&
+        !profile_before &&
+        !a2dp_before;
+
+    DEBUG_INFO(
+        0,
+        "[NTT_PROFILE_RECOVERY][CHECK] "
+        "dev=%d mobile=%d "
+        "basic=%d any_basic=%d "
+        "wait=%d state=0x%x delay=%u "
+        "profile=%d a2dp_ex=%d avrcp_ex=%d "
+        "a2dp_conn=%d a2dp_state=%d "
+        "streaming=%d "
+        "avrcp_conn=%d avrcp_play=%d "
+        "cod_valid=%d cod=%02x:%02x:%02x "
+        "cod_bit10=%d mobile_ready=%d "
+        "immediate=%d stuck=%d "
+        "mobile_cs=%08x:%08x "
+        "dev_constate=0x%x "
+        "rx=%08x:%08x tx=%08x:%08x",
         device_id,
-        mobile_info,
+        mobile_connected,
+        basic_profiles_established,
+        any_basic_profile_established,
+        wait_before,
+        state_before,
+        delay_before,
+        profile_before,
+        a2dp_before,
+        avrcp_before,
+        a2dp_conn_flag,
+        a2dp_stream_state,
+        a2dp_streaming,
+        avrcp_conn_flag,
+        avrcp_play_status,
+        remote_cod_valid,
+        remote_cod[0],
+        remote_cod[1],
+        remote_cod[2],
+        remote_cod_bit10,
+        mobile_state_ready,
+        immediate_sync_allowed,
+        exchange_stuck,
+        (uint32_t)(mobile_constate >> 32),
+        (uint32_t)mobile_constate,
+        dev_constate,
+        (uint32_t)(rx_before >> 32),
+        (uint32_t)rx_before,
+        (uint32_t)(tx_before >> 32),
+        (uint32_t)tx_before);
+
+    /*
+     * Profile 已交換完成，不需要 Recovery。
+     */
+    if (profile_before &&
+        a2dp_before)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PROFILE_RECOVERY] "
+            "already ready dev=%d",
+            device_id);
+
+        return true;
+    }
+
+    /*
+     * Basic Profile 尚未完成。
+     */
+    if (!basic_profiles_established)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PROFILE_RECOVERY][BLOCKED] "
+            "basic profiles not established "
+            "dev=%d any_basic=%d "
+            "a2dp_conn=%d a2dp_state=%d "
+            "streaming=%d avrcp_conn=%d "
+            "cod_valid=%d cod_bit10=%d "
+            "mobile_ready=%d "
+            "mobile_cs=%08x:%08x "
+            "dev_constate=0x%x",
+            device_id,
+            any_basic_profile_established,
+            a2dp_conn_flag,
+            a2dp_stream_state,
+            a2dp_streaming,
+            avrcp_conn_flag,
+            remote_cod_valid,
+            remote_cod_bit10,
+            mobile_state_ready,
+            (uint32_t)(mobile_constate >> 32),
+            (uint32_t)mobile_constate,
+            dev_constate);
+
+        return false;
+    }
+
+    /*
+     * Library 的 immediate profile sync 條件未成立。
+     *
+     * 此時呼叫 app_ibrt_send_profiles()，
+     * 只會進入 wait profile connecting，
+     * 不會真正開始送 Profile Data。
+     */
+    if (!immediate_sync_allowed)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PROFILE_RECOVERY][BLOCKED] "
+            "immediate profile sync not allowed "
+            "dev=%d "
+            "cod_valid=%d cod=%02x:%02x:%02x "
+            "cod_bit10=%d mobile_ready=%d "
+            "mobile_cs=%08x:%08x "
+            "a2dp_conn=%d a2dp_state=%d "
+            "streaming=%d avrcp_conn=%d",
+            device_id,
+            remote_cod_valid,
+            remote_cod[0],
+            remote_cod[1],
+            remote_cod[2],
+            remote_cod_bit10,
+            mobile_state_ready,
+            (uint32_t)(mobile_constate >> 32),
+            (uint32_t)mobile_constate,
+            a2dp_conn_flag,
+            a2dp_stream_state,
+            a2dp_streaming,
+            avrcp_conn_flag);
+
+        return false;
+    }
+
+    /*
+     * SDK 已進入 wait_profile，但 Profile Data 尚未開始。
+     *
+     * CoD 與 mobile state 現在已符合 immediate 條件，
+     * 但先不反覆 cancel/reset，避免破壞 SDK timer。
+     */
+    if (exchange_stuck)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PROFILE_RECOVERY][BLOCKED] "
+            "SDK wait stuck but immediate ready "
+            "dev=%d wait=%d state=0x%x "
+            "cod=%02x:%02x:%02x "
+            "mobile_cs=%08x:%08x",
+            device_id,
+            wait_before,
+            state_before,
+            remote_cod[0],
+            remote_cod[1],
+            remote_cod[2],
+            (uint32_t)(mobile_constate >> 32),
+            (uint32_t)mobile_constate);
+
+        /*
+         * 保留 SDK 自己的 delay timer。
+         */
+        return false;
+    }
+
+    /*
+     * Exchange 已開始進行。
+     */
+    if (wait_before)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PROFILE_RECOVERY] "
+            "exchange in progress dev=%d "
+            "state=0x%x "
+            "rx=%08x:%08x tx=%08x:%08x",
+            device_id,
+            state_before,
+            (uint32_t)(rx_before >> 32),
+            (uint32_t)rx_before,
+            (uint32_t)(tx_before >> 32),
+            (uint32_t)tx_before);
+
+        app_ibrt_wait_profile_exchange_complete_timer(
+            mobile_info);
+
+        return true;
+    }
+
+    /*
+     * Basic Profile、CoD 與 mobile state 都 Ready，
+     * 且 SDK 尚未處於 wait 狀態，才主動送出 Profile。
+     */
+    DEBUG_INFO(
+        0,
+        "[NTT_PROFILE_RECOVERY] "
+        "send profiles dev=%d "
+        "basic=%d any=%d "
+        "cod=%02x:%02x:%02x "
+        "cod_bit10=%d mobile_ready=%d "
+        "a2dp_conn=%d a2dp_state=%d "
+        "streaming=%d avrcp_conn=%d",
+        device_id,
+        basic_profiles_established,
+        any_basic_profile_established,
+        remote_cod[0],
+        remote_cod[1],
+        remote_cod[2],
+        remote_cod_bit10,
+        mobile_state_ready,
+        a2dp_conn_flag,
+        a2dp_stream_state,
+        a2dp_streaming,
+        avrcp_conn_flag);
+
+    app_ibrt_send_profiles(
+        mobile_info);
+
+    app_ibrt_wait_profile_exchange_complete_timer(
+        mobile_info);
+
+    DEBUG_INFO(
+        0,
+        "[NTT_PROFILE_RECOVERY][AFTER] "
+        "dev=%d "
+        "wait=%d state=0x%x delay=%u "
+        "profile=%d a2dp_ex=%d avrcp_ex=%d "
+        "cod_valid=%d cod=%02x:%02x:%02x "
+        "cod_bit10=%d mobile_ready=%d "
+        "mobile_cs=%08x:%08x "
+        "rx=%08x:%08x tx=%08x:%08x",
+        device_id,
         mobile_info->wait_profile,
         mobile_info->profile_exchange_state,
+        mobile_info->profile_exchange_delay,
         mobile_info->profile_exchanged,
         mobile_info->a2dp_profile_exchanged,
         mobile_info->avrcp_profile_exchanged,
-        mobile_info->rx_profile_update,
-        mobile_info->tx_profile_update);
-
-    /*
-     * 第一版使用保守流程：
-     * 不取消 SDK 現有 profile procedure，
-     * 只重新要求送出 profile 並啟動完成檢查。
-     */
+        remote_cod_valid,
+        remote_cod[0],
+        remote_cod[1],
+        remote_cod[2],
+        remote_cod_bit10,
+        mobile_state_ready,
+        (uint32_t)(
+            mobile_info->mobile_constate >> 32),
+        (uint32_t)
+            mobile_info->mobile_constate,
+        (uint32_t)(
+            mobile_info->rx_profile_update >> 32),
+        (uint32_t)
+            mobile_info->rx_profile_update,
+        (uint32_t)(
+            mobile_info->tx_profile_update >> 32),
+        (uint32_t)
+            mobile_info->tx_profile_update);
 
     return true;
+
 #else
-    POSSIBLY_UNUSED uint8_t unused_device_id = device_id;
+    POSSIBLY_UNUSED uint8_t unused_device_id =
+        device_id;
 
     return false;
 #endif
@@ -7303,15 +7968,38 @@ void app_bt_get_remote_cod(uint8_t *cod0, uint8_t *cod1)
 #endif
 }
 
-bool app_bt_get_remote_cod_by_addr(const bt_bdaddr_t *bd_ddr, uint8_t *cod)
+bool app_bt_get_remote_cod_by_addr(const bt_bdaddr_t *bd_addr,uint8_t *cod)
 {
     nvrec_btdevicerecord *record = NULL;
-    if (!nv_record_btdevicerecord_find(bd_ddr, &record)) {
-        memcpy(cod, record->record.cod, 3);
-        return true;
-    } else {
+
+    if ((bd_addr == NULL) || (cod == NULL))
+    {
         return false;
     }
+
+    cod[0] = 0;
+    cod[1] = 0;
+    cod[2] = 0;
+
+    if (nv_record_btdevicerecord_find(bd_addr,&record) != 0)
+    {
+        return false;
+    }
+
+    if (record == NULL)
+    {
+        return false;
+    }
+
+    memcpy(cod,record->record.cod,3);
+
+    if ((cod[0] == 0) && (cod[1] == 0) && (cod[2] == 0))
+    {
+        DEBUG_INFO(0,"[NTT_REMOTE_COD][INVALID] empty COD");
+        return false;
+    }
+
+    return true;
 }
 
 bool app_bt_is_remote_device_support_le_audio(const bt_bdaddr_t *p_addr)
