@@ -2534,16 +2534,14 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 				peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
 				boxBattery   = getBoxChargerBattery();
 				twsConnected = bts_tws_if_is_tws_link_connected();
+                peerValid = twsConnected && (peerBattery != 0xFF) && (peerBattery <= 100);
+                if (!peerValid)
+                {
+                    peerBattery = 0xFF;
+                }
 
-				if ((peerBattery != 0xFF) && (peerBattery <= 100))
-				{
-						peerValid = true;
-				}
-				else
-				{
-						peerValid = false;
-						peerBattery = 0;
-				}
+                leftBattery  = 0xFF;
+                rightBattery = 0xFF;
 
 				TRACE(0, "[BAT32][READ_REQ] GET_BATTERY_LEVEL");
 				TRACE(0,
@@ -2554,11 +2552,10 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 					twsConnected,
 					boxBattery);
 
-		#ifdef IBRT
 				if (app_ibrt_if_is_right_side())
 				{
-						rightBattery = localBattery;
-						leftBattery  = peerValid ? peerBattery : 0;
+                        rightBattery = localBattery;
+                        leftBattery  = peerBattery;
 
 						TRACE(0,
 							"[BAT32][ROLE] RIGHT local=%d tws_peer=%d valid=%d",
@@ -2568,8 +2565,8 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 				}
 				else
 				{
-						leftBattery  = localBattery;
-						rightBattery = peerValid ? peerBattery : 0;
+                            leftBattery  = localBattery;
+                            rightBattery = peerBattery;
 
 						TRACE(0,
 							"[BAT32][ROLE] LEFT local=%d tws_peer=%d valid=%d",
@@ -2577,10 +2574,7 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 							peerBattery,
 							peerValid);
 				}
-		#else
-				leftBattery  = localBattery;
-				rightBattery = peerValid ? peerBattery : 0;
-		#endif
+
 
 				batteryArray[0] = leftBattery;
 				batteryArray[1] = rightBattery;

@@ -177,7 +177,7 @@ extern void aiWangSetBoxVersion(uint8_t *data, uint8_t len);
 
 extern void earBudsCloseOff_PogonIn_StartTimer(void);
 extern void earBudsCloseOff_PogonIn_StopTimer(void);
-extern void ntt_outbox_reconnect_check_start(void);
+
 #define LEFT_BUDS  0
 #define RIGHT_BUDS 1
 #define MAX_RX_SIZE  64
@@ -205,228 +205,6 @@ static osThreadId pogo_monitor_thread_id = NULL;
 static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
-extern uint8_t out_of_case_reconnect;
-
-
-extern uint8_t out_of_case_reconnect;
-
-/*
- * 第一次離盒後，延遲檢查 TWS / Mobile 狀態。
- */
-#define NTT_OUTBOX_RECONNECT_CHECK_MS            500
-
-/*
- * Role Switch 過程中的重新檢查間隔。
- */
-#define NTT_OUTBOX_ROLE_CHECK_INTERVAL_MS        500
-
-/*
- * 成為 Master 後，需要連續確認幾次才允許 reconnect。
- *
- * 5 次、每次 200 ms：
- * 第一次只計數，之後再檢查 4 次，約等待 800 ms。
- *
- * 這個等待時間是為了處理雙耳離盒時間差小於 100 ms 的情況。
- */
-#define NTT_OUTBOX_MASTER_STABLE_COUNT            5
-
-/*
- * Role Switch 最多等待次數。
- *
- * 15 × 200 ms = 3000 ms。
- */
-#define NTT_OUTBOX_ROLE_CHECK_MAX_COUNT           15
-
-static osTimerId ntt_outbox_reconnect_check_timer_id = NULL;
-
-/*
- * 本機是否已經發出 Role Switch request。
- */
-static bool ntt_outbox_role_switch_requested = false;
-
-/*
- * Role Switch / reconnect 總檢查次數。
- */
-static uint8_t ntt_outbox_role_check_count = 0;
-
-/*
- * 本機連續保持 Master 的確認次數。
- */
-static uint8_t ntt_outbox_master_stable_count = 0;
-
-/*
- * 防止同一次離盒流程重複執行 opening reconnect。
- */
-static bool ntt_outbox_reconnect_sent = false;
-
-
-static void ntt_outbox_reconnect_check_reset(void)
-{
-    ntt_outbox_role_switch_requested = false;
-    ntt_outbox_role_check_count = 0;
-    ntt_outbox_master_stable_count = 0;
-    ntt_outbox_reconnect_sent = false;
-}
-
-
-static void ntt_outbox_reconnect_check_restart(uint32_t delay_ms)
-{
-    if (ntt_outbox_reconnect_check_timer_id == NULL)
-    {
-        DBGPRINT(
-            "[NTT_RECONNECT_CHECK] restart failed: timer null");
-        return;
-    }
-
-    osTimerStop(ntt_outbox_reconnect_check_timer_id);
-    osStatus status = osTimerStart(ntt_outbox_reconnect_check_timer_id,delay_ms);
-
-    DBGPRINT("[NTT_RECONNECT_CHECK] restart delay=%d status=%d",delay_ms,status);
-}
-
-
-static void ntt_outbox_reconnect_check_timer_handler( void const *param)
-{
-    uint8_t role;
-    bool tws_connected;
-    bool mobile_connected;
-
-    tws_connected = bts_tws_if_is_tws_link_connected();
-    mobile_connected = app_bt_ibrt_has_mobile_link_connected();
-    role = app_ibrt_if_get_ui_role();
-
-    DBGPRINT("[NTT_RECONNECT_CHECK] enter role=%d tws=%d mobile=%d switch_req=%d check=%d stable=%d sent=%d",
-        role,
-        tws_connected,
-        mobile_connected,
-        ntt_outbox_role_switch_requested,
-        ntt_outbox_role_check_count,
-        ntt_outbox_master_stable_count,
-        ntt_outbox_reconnect_sent);
-
-    if (!tws_connected)
-    {
-        DBGPRINT("[NTT_RECONNECT_CHECK] TWS not connected, stop");
-        ntt_outbox_reconnect_check_reset();
-        return;
-    }
-
-    if (mobile_connected)
-    {
-        DBGPRINT("[NTT_RECONNECT_CHECK] mobile already connected, stop");
-        ntt_outbox_reconnect_check_reset();
-        return;
-    }
-
-    if (ntt_outbox_reconnect_sent)
-    {
-        DBGPRINT("[NTT_RECONNECT_CHECK] reconnect already sent");
-        return;
-    }
-
-    /*
-     * Slave 不可以強制自己切成 Master。
-     *
-     * 使用盒狀態策略決定角色。
-     * 後離盒耳機通常應保持 Slave。
-     */
-    if (role != TWS_UI_MASTER)
-    {
-        ntt_outbox_master_stable_count = 0;
-
-        if (!ntt_outbox_role_switch_requested)
-        {
-            DBGPRINT("[NTT_RECONNECT_CHECK] slave trigger role decision by box state");
-            ntt_outbox_role_switch_requested = true;
-            app_ui_user_role_switch(true);
-            osDelay(50);
-            app_bt_profile_connect_manager_opening_reconnect();
-        }
-        else
-        {
-            DBGPRINT("[NTT_RECONNECT_CHECK] slave wait current master");
-        }
-
-        /*
-         * 不再 restart timer。
-         * Slave 不負責手機 reconnect。
-         */
-        return;
-    }
-
-    /*
-     * 只有 Master 可以執行手機 reconnect。
-     */
-    ntt_outbox_role_check_count++;
-
-    if (ntt_outbox_role_check_count >= NTT_OUTBOX_ROLE_CHECK_MAX_COUNT)
-    {
-        DBGPRINT("[NTT_RECONNECT_CHECK] timeout, stop");
-
-        ntt_outbox_reconnect_check_reset();
-        return;
-    }
-
-    ntt_outbox_master_stable_count++;
-
-    DBGPRINT( "[NTT_RECONNECT_CHECK] master stable=%d/%d",ntt_outbox_master_stable_count,NTT_OUTBOX_MASTER_STABLE_COUNT);
-
-    if (ntt_outbox_master_stable_count < NTT_OUTBOX_MASTER_STABLE_COUNT)
-    {
-        ntt_outbox_reconnect_check_restart(NTT_OUTBOX_ROLE_CHECK_INTERVAL_MS);
-        return;
-    }
-
-    /*
-     * 最後再確認狀態。
-     */
-    role = app_ibrt_if_get_ui_role();
-    tws_connected = bts_tws_if_is_tws_link_connected();
-    mobile_connected = app_bt_ibrt_has_mobile_link_connected();
-
-    if (role != TWS_UI_MASTER || !tws_connected || mobile_connected)
-    {
-        DBGPRINT("[NTT_RECONNECT_CHECK] final changed role=%d tws=%d mobile=%d",role,tws_connected,mobile_connected);
-        ntt_outbox_reconnect_check_reset();
-        return;
-    }
-
-    ntt_outbox_reconnect_sent = true;
-    DBGPRINT("[NTT_RECONNECT_CHECK] stable master, send opening reconnect");
-    app_bt_profile_connect_manager_opening_reconnect();
-}
-
-
-osTimerDef(
-    NTT_OUTBOX_RECONNECT_CHECK_TIMER,
-    ntt_outbox_reconnect_check_timer_handler);
-
-
-void ntt_outbox_reconnect_check_start(void)
-{
-    if (ntt_outbox_reconnect_check_timer_id == NULL)
-    {
-        ntt_outbox_reconnect_check_timer_id =
-            osTimerCreate(
-                osTimer(NTT_OUTBOX_RECONNECT_CHECK_TIMER),
-                osTimerOnce,
-                NULL);
-    }
-
-    if (ntt_outbox_reconnect_check_timer_id == NULL)
-    {
-        DBGPRINT("[NTT_RECONNECT_CHECK] create timer failed");
-        return;
-    }
-
-    /*
-     * 每次新的離盒 reconnect 流程都要清除舊狀態。
-     */
-    ntt_outbox_reconnect_check_reset();
-    osTimerStop(ntt_outbox_reconnect_check_timer_id);
-    osStatus status = osTimerStart(ntt_outbox_reconnect_check_timer_id,NTT_OUTBOX_RECONNECT_CHECK_MS);
-    DBGPRINT("[NTT_RECONNECT_CHECK] start %dms timer status=%d", NTT_OUTBOX_RECONNECT_CHECK_MS,status);
-}
 
 /**
  * @brief 初始化 Pogo Pin 检测引脚
@@ -1641,32 +1419,10 @@ static void uart_idle_timeout_callback(void const *argument)
     aiwang_box_battery_update_enable(false);
     set_er_inbox_status(0);
     ntt_audio_output_mute_refresh();
-
-        /*
-     * NTT：
-     * 1-wire UART idle 作為唯一的 OUT_CASE 判斷來源。
-     *
-     * false = OUT_CASE
-     *
-     * 這個 API 會：
-     * 1. 更新本機 local case state
-     * 2. 呼叫 local callback
-     * 3. 透過 APP_TWS_CMD_SYNC_CASE_STATE 同步另一耳
-     */
-
     ntt_case_state_sync_local_update(false);
 
     DBGPRINT(
         "[NTT_OUTBOX] UART idle -> local OUT_CASE and sync peer");
-
-    EARBUDS_TRACE(
-        5,
-        "[NTT_OUTBOX] uart_idle=%d local=%d peer=%d tws=%d mobile=%d",
-        UART_IDLE_TIMEOUT_MS,
-        ntt_case_state_get_local(),
-        ntt_case_state_get_peer(),
-        bts_tws_if_is_tws_link_connected(),
-        app_bt_ibrt_has_mobile_link_connected());
 
     /*
      * NTT:
@@ -1675,22 +1431,6 @@ static void uart_idle_timeout_callback(void const *argument)
      */
     app_ui_set_local_box_state(IBRT_OUT_BOX);
     app_ui_sync_box_state(IBRT_OUT_BOX);
-
-    DBGPRINT("[NTT_OUTBOX] set local box state to IBRT_OUT_BOX and sync peer");
-
-    EARBUDS_TRACE(3,
-        "[NTT_PAIR] first_no_mobile=%d tws_connected=%d mobile_connected=%d",
-        ntt_first_no_mobile_pair_mode,
-        bts_tws_if_is_tws_link_connected(),
-        app_bt_ibrt_has_mobile_link_connected());
-
-    if (ntt_first_no_mobile_pair_mode == 0 &&
-        bts_tws_if_is_tws_link_connected() == 1 &&
-        app_bt_ibrt_has_mobile_link_connected() == 0)
-    {
-        //ntt_outbox_reconnect_check_start();
-    }
-
     /*
      * First pair mode:
      * No mobile record case.
