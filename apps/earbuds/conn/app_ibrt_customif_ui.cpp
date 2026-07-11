@@ -530,7 +530,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
                     app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
             {
                 EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][OUT_OF_CASE] master switch to slave by UI API");
+                    "[ROLE_SWITCH][OUT_OF_CASE] A2DP open role master");
 
                 if (out_of_case_reconnect)   
                 {
@@ -549,7 +549,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
                     app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
             {
                 EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][OUT_OF_CASE] master switch to slave by UI API");
+                    "[ROLE_SWITCH][OUT_OF_CASE] A2DP codec configured role master");
 
                 if (out_of_case_reconnect)   
                 {

@@ -481,7 +481,6 @@ void ntt_profile_recovery_local_fallback(uint8_t device_id)
 
 bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
 {
-#ifdef IBRT
     struct BT_DEVICE_T *curr_device = NULL;
     ibrt_mobile_info_t *mobile_info = NULL;
 
@@ -965,13 +964,6 @@ bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
             mobile_info->tx_profile_update);
 
     return true;
-
-#else
-    POSSIBLY_UNUSED uint8_t unused_device_id =
-        device_id;
-
-    return false;
-#endif
 }
 
 //fixed added disconnected keep alive 5 min
@@ -4979,74 +4971,6 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
     return false;
 }
 
-#define NTT_OPENING_RECONNECT_WAIT_SLAVE_DISC_MS 20
-
-static osTimerId ntt_opening_reconnect_timer = NULL;
-
-
-void app_bt_profile_connect_manager_opening_reconnect_do(void);
-
-static void ntt_opening_reconnect_timer_handler(void const *param)
-{
-    DEBUG_INFO(0,
-        "[NTT_RECONNECT] slave disconnect wait done, start opening reconnect");
-
-    app_bt_profile_connect_manager_opening_reconnect();
-}
-
-osTimerDef(NTT_OPENING_RECONNECT_TIMER, ntt_opening_reconnect_timer_handler);
-
-void app_bt_profile_connect_manager_opening_reconnect_do(void)
-{
-    DEBUG_INFO(0, "[NTT_RECONNECT] opening reconnect enter");
-
-    if (app_ibrt_middleware_is_ui_slave())
-    {
-        DEBUG_INFO(0, "[NTT_RECONNECT] UI slave skip opening reconnect");
-        //ntt_bt_reconnect_context_reset();
-        //return;
-    }
-
-    out_of_case_reconnect = 1;
-
-    if (ntt_opening_reconnect_timer == NULL)
-    {
-        ntt_opening_reconnect_timer =
-            osTimerCreate(osTimer(NTT_OPENING_RECONNECT_TIMER), osTimerOnce, NULL);
-    }
-
-    osTimerStop(ntt_opening_reconnect_timer);
-
-    if (bts_tws_if_is_tws_link_connected())
-    {
-        DEBUG_INFO(0,
-            "[NTT_RECONNECT] TWS connected, master disconnect slave first");
-
-        /*
-         * 如果這個 API 編譯找不到，請依你的 SDK 實際 API 替換。
-         * 可 grep：
-         * grep -R "tws_disconnect" apps services bthost -n
-         * grep -R "disconnect_tws" apps services bthost -n
-         */
-        //app_ibrt_if_tws_disconnect();
-        bts_tws_if_disconnect_acl_link();
-
-        DEBUG_INFO(1,
-            "[NTT_RECONNECT] wait %d ms before reconnect mobile master",
-            NTT_OPENING_RECONNECT_WAIT_SLAVE_DISC_MS);
-
-        osTimerStart(ntt_opening_reconnect_timer,
-                     NTT_OPENING_RECONNECT_WAIT_SLAVE_DISC_MS);
-    }
-    else
-    {
-        DEBUG_INFO(0,
-            "[NTT_RECONNECT] TWS not connected, start reconnect directly");
-
-        app_bt_profile_connect_manager_opening_reconnect();
-    }
-}
-
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
     int ret;
@@ -5058,12 +4982,12 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
     DEBUG_INFO(0, "[NTT_RECONNECT] opening reconnect enter");
 
-    if (app_ibrt_middleware_is_ui_slave())
-    {
-        DEBUG_INFO(0, "[NTT_RECONNECT] UI slave skip opening reconnect do");
+    //if (app_ibrt_middleware_is_ui_slave())
+    //{
+        //DEBUG_INFO(0, "[NTT_RECONNECT] UI slave skip opening reconnect do");
 
         //return;
-    }
+    //}
 
     if (!btif_me_get_pendCons() &&
         !app_bt_ibrt_has_mobile_link_connected())
@@ -8897,34 +8821,8 @@ void app_bt_notify_global_callback(const btif_event_t *event)
     }
 }
 
-static const char *ntt_profile_id_to_str(int profile_id)
-{
-    switch (profile_id)
-    {
-        case APP_IBRT_A2DP_PROFILE_ID:
-            return "A2DP";
-
-        case APP_IBRT_HFP_PROFILE_ID:
-            return "HFP";
-
-        case APP_IBRT_AVRCP_PROFILE_ID:
-            return "AVRCP";
-
-        default:
-            return "UNKNOWN";
-    }
-}
-
 void app_bt_rs_profile_protect_ind(uint8_t device_id, int profile_id, uint8_t enable, bool is_connect_profile)
 {
-    DEBUG_INFO(0,
-        "[NTT_RS_PROTECT] dev=%d profile=%s(%d) enable=%d type=%s",
-        device_id,
-        ntt_profile_id_to_str(profile_id),
-        profile_id,
-        enable,
-        is_connect_profile ? "CONNECT" : "DISCONNECT");
-
     DEBUG_INFO(0,
         "[NTT_RS_PROTECT] dev=%d profile=%d enable=%d type=%s cb=%p",
         device_id,
