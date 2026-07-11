@@ -521,7 +521,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
                 app_bt_get_remote_device_name(addr);
             }
             EARBUDS_TRACE(0,
-                "[NTT_MOBILE_INFO] A2DP codec configured, role=%d tws=%d mobile=%d",
+                "[NTT_MOBILE_INFO] A2DP open, role=%d tws=%d mobile=%d",
                 app_ibrt_if_get_ui_role(),
                 bts_tws_if_is_tws_link_connected(),
                 app_bt_ibrt_has_mobile_link_connected());
@@ -539,11 +539,23 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             }
             break;
         case IBRT_CONN_A2DP_CODEC_CONFIGURED:
-            if (out_of_case_reconnect)
-            {
-                //ntt_tws_reconnect_after_mobile_profiles_ready_check();
-            }
+            EARBUDS_TRACE(0,
+                "[NTT_MOBILE_INFO] A2DP codec configured, role=%d tws=%d mobile=%d",
+                app_ibrt_if_get_ui_role(),
+                bts_tws_if_is_tws_link_connected(),
+                app_bt_ibrt_has_mobile_link_connected());
 
+            if (bts_tws_if_is_tws_link_connected() &&
+                    app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+            {
+                EARBUDS_TRACE(0,
+                    "[ROLE_SWITCH][OUT_OF_CASE] master switch to slave by UI API");
+
+                if (out_of_case_reconnect)   
+                {
+                    ntt_role_switch_delay_start();
+                }                    
+            }
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
             break;
         case IBRT_CONN_A2DP_STREAMING:
@@ -1051,7 +1063,7 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
             if (!app_ibrt_middleware_is_ui_slave())
             {
                 DEBUG_INFO(0,
-                    "[NTT_CASE_OPEN_RECONN] mobile profiles connected, check tws/mobile info sync");
+                    "[NTT_CASE_OPEN_RECONN] mobile ACL auth complete");
 
                 if (out_of_case_reconnect)
                 {

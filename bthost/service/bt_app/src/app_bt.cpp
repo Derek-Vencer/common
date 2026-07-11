@@ -50,6 +50,8 @@
 #include "ecc_p192.h"
 #include "app_battery.h"
 #include "me_common_define.h"
+#include "bts_bt_conn.h"
+#include "app_tws_ibrt_cmd_handler.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -211,6 +213,80 @@ osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 #if BT_DEVICE_NUM > 2
 osTimerDef (BT_PROFILE_CONNECT_TIMER2, app_bt_profile_reconnect_timehandler);
 #endif
+
+
+bool app_bt_ntt_restart_profile_exchange(uint8_t device_id)
+{
+#ifdef IBRT
+    struct BT_DEVICE_T *curr_device = NULL;
+    ibrt_mobile_info_t *mobile_info = NULL;
+
+    if (device_id >= BT_DEVICE_NUM)
+    {
+        DEBUG_INFO(0,
+            "[NTT_PROFILE_RECOVERY][ERROR] "
+            "invalid device_id=%d max=%d",
+            device_id,
+            BT_DEVICE_NUM);
+
+        return false;
+    }
+
+    curr_device = app_bt_get_device(device_id);
+
+    if (curr_device == NULL)
+    {
+        DEBUG_INFO(0,
+            "[NTT_PROFILE_RECOVERY][ERROR] "
+            "curr_device NULL dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    mobile_info =
+        bts_bt_sink_conn_get_mobile_info_by_addr(
+            &curr_device->remote);
+
+    if (mobile_info == NULL)
+    {
+        DEBUG_INFO(0,
+            "[NTT_PROFILE_RECOVERY][ERROR] "
+            "mobile_info NULL dev=%d",
+            device_id);
+
+        return false;
+    }
+
+    DEBUG_INFO(0,
+        "[NTT_PROFILE_RECOVERY] "
+        "restart dev=%d info=%p "
+        "wait=%d state=0x%x "
+        "profile=%d a2dp=%d avrcp=%d "
+        "rx=0x%llx tx=0x%llx",
+        device_id,
+        mobile_info,
+        mobile_info->wait_profile,
+        mobile_info->profile_exchange_state,
+        mobile_info->profile_exchanged,
+        mobile_info->a2dp_profile_exchanged,
+        mobile_info->avrcp_profile_exchanged,
+        mobile_info->rx_profile_update,
+        mobile_info->tx_profile_update);
+
+    /*
+     * 第一版使用保守流程：
+     * 不取消 SDK 現有 profile procedure，
+     * 只重新要求送出 profile 並啟動完成檢查。
+     */
+
+    return true;
+#else
+    POSSIBLY_UNUSED uint8_t unused_device_id = device_id;
+
+    return false;
+#endif
+}
 
 //fixed added disconnected keep alive 5 min
 //20260308
@@ -920,7 +996,7 @@ uint8_t app_bt_hfp_adjust_volume(uint8_t device_id, bool up, bool adjust_local_v
 }
 #endif /* BT_HFP_SUPPORT */
 
-#define NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS      200
+#define NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS      400
 #define NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY     1
 
 static osTimerId ntt_tws_reconnect_after_profile_timer = NULL;
@@ -4300,13 +4376,14 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     {
         DEBUG_INFO(0, "[NTT_RECONNECT] UI slave skip opening reconnect do");
 
-        return;
+        //return;
     }
 
     if (!btif_me_get_pendCons() &&
         !app_bt_ibrt_has_mobile_link_connected())
     {
         DEBUG_INFO(0, "[NTT_RECONNECT] reset reconnect context");
+        ntt_bt_reconnect_context_reset();
     }
     else
     {
@@ -4366,7 +4443,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
 #if 1
         if (ret >= 2)
-        {
+        {           
             if (ntt_bt_addr_is_invalid(&record2.bdAddr))
             {
                 DEBUG_INFO(0, "[NTT_RECONNECT] delete record2 local/peer");

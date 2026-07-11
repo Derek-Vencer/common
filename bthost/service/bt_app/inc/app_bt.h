@@ -171,6 +171,16 @@ bool app_bt_get_tx_power_idx(uint16_t handle, int8_t *tx_power_idx);
 
 bool app_bt_update_tx_power_idx(uint16_t handle, int8_t tx_power_idx);
 
+/**
+ * @brief Restart IBRT profile exchange for the specified mobile device.
+ *
+ * @param device_id Bluetooth mobile device index.
+ *
+ * @return true if the profile recovery procedure was started.
+ * @return false if the device or mobile context could not be found.
+ */
+bool app_bt_ntt_restart_profile_exchange(uint8_t device_id);
+
 #ifdef BT_AVRCP_SUPPORT
 bt_status_t app_bt_avrcp_key_operation(const bt_bdaddr_t *remote, avrcp_panel_operation_t key, bool is_press);
 #endif
