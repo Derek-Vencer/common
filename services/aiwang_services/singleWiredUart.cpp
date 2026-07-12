@@ -1413,16 +1413,38 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
  */
 static void uart_idle_timeout_callback(void const *argument)
 {
-    DBGPRINT("UART idle timeout detected! No data received for %dms\n",
-             UART_IDLE_TIMEOUT_MS);
+    int8_t charging = app_battery_is_charging();
+
+    DBGPRINT(
+        "UART idle timeout detected! No data received for %dms, charging=%d",
+        UART_IDLE_TIMEOUT_MS,
+        charging);
 
     aiwang_box_battery_update_enable(false);
+
+    /*
+     * UART idle does not mean out of case.
+     * When still charging, keep the current state and do not trigger
+     * IBRT/UI state callbacks during early charging boot.
+     */
+    if (charging)
+    {
+        DBGPRINT(
+            "[NTT_INBOX] UART idle but still charging, "
+            "ignore OUT_CASE");
+
+        set_er_inbox_status(1);        
+
+        goto exit;
+    }
+
     set_er_inbox_status(0);
     ntt_audio_output_mute_refresh();
     ntt_case_state_sync_local_update(false);
 
     DBGPRINT(
-        "[NTT_OUTBOX] UART idle -> local OUT_CASE and sync peer");
+        "[NTT_OUTBOX] UART idle + charging=0 "
+        "-> local OUT_CASE and sync peer");
 
     /*
      * NTT:

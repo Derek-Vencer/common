@@ -239,14 +239,17 @@ extern bool  aiWangIsNeedOpenEarBuds(void);
 extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void);
 #endif
 void earBudsCloseOff_PogonIn_StartTimer(void);
+extern bool ntt_charging_pwron_pending_shutdown;
 
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     int8_t charging = app_battery_is_charging();
 
+    BATTERY_TRACE(2,"[POWER_OFF] PogonIn handler charging=%d pending=%d",charging,ntt_charging_pwron_pending_shutdown);
+
     if (charging)
     {
-        BATTERY_TRACE(0, "[POWER_OFF] charging=1 -> check role switch");
+        BATTERY_TRACE(0,"[POWER_OFF] charging=1 -> check role switch");
 
 #ifdef IBRT
         static bool s_role_switch_requested = false;
@@ -256,41 +259,35 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         {
             if (ntt_case_close_role_switch_can_shutdown())
             {
-                BATTERY_TRACE(0,
-                    "[POWER_OFF] role switch done by timer check, shutdown now");
-
+                BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
                 s_role_switch_requested = false;
                 s_role_switch_wait_cnt = 0;
+                ntt_charging_pwron_pending_shutdown = false;
+
                 app_shutdown();
                 return;
             }
 
             s_role_switch_wait_cnt++;
-
-            BATTERY_TRACE(1,
-                "[POWER_OFF] wait role switch callback/timer cnt=%d",
-                s_role_switch_wait_cnt);
-
+            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",s_role_switch_wait_cnt);
             if (s_role_switch_wait_cnt < 10)
             {
                 earBudsCloseOff_PogonIn_StartTimer();
                 return;
             }
 
-            BATTERY_TRACE(0,
-                "[POWER_OFF] role switch timeout, fallback shutdown");
-
+            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout, shutdown");
             s_role_switch_requested = false;
             s_role_switch_wait_cnt = 0;
+            ntt_charging_pwron_pending_shutdown = false;
+
             app_shutdown();
             return;
         }
 
         if (ntt_case_close_try_role_switch_before_shutdown())
         {
-            BATTERY_TRACE(0,
-                "[POWER_OFF] role switch requested, start fallback timer");
-
+            BATTERY_TRACE(0,"[POWER_OFF] role switch requested");
             s_role_switch_requested = true;
             s_role_switch_wait_cnt = 0;
 
@@ -300,6 +297,8 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
 #endif
 
         BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
+        ntt_charging_pwron_pending_shutdown = false;
+
         app_shutdown();
         return;
     }
@@ -308,7 +307,9 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
     ntt_case_close_role_switch_reset();
 #endif
 
-    BATTERY_TRACE(0, "[POWER_OFF] charging=0 -> keep power on");
+    ntt_charging_pwron_pending_shutdown = false;
+
+    BATTERY_TRACE(0,"[POWER_OFF] charging=0 -> cancel shutdown, keep power on");
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
@@ -328,34 +329,26 @@ void earBudsCloseOff_PogonIn_StopTimer(void)
     {
         osTimerStop(pogonPinCloseTimer);
     }
-
-    BATTERY_TRACE(0,
-        "[CASE_OPEN] stop close-case power off timer");
+    BATTERY_TRACE(0,"[CASE_OPEN] stop close-case power off timer");
 }
 
 void earBudsCloseOff_PowerOff_StartTimer(void)
 {
     if (NULL == pogonPinCloseTimer)
     {
-        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER),
-                                           osTimerOnce,
-                                           NULL);
+        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER),osTimerOnce,NULL);
     }
 
     osTimerStop(pogonPinCloseTimer);
     osTimerStart(pogonPinCloseTimer, 1600);
-
-    BATTERY_TRACE(0,
-                  "[POWER_OFF] start 1.6s charger check timer");
+    BATTERY_TRACE(0,"[POWER_OFF] start 1.6s charger check timer");
 }
 
 //-------------------------------------------------------------------------------------------
 
 
 extern "C" void aw_ntc_detect_process(uint16_t ad_volt);
-
 static int app_battery_charger_handle_process(void);
-
 static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
 	static const int battery_table_level[11] = {4130,4040,3940,3880,3830,3790,3750,3720,3660,3580,3100}; //unit:mv
 	uint8_t level = 0;
@@ -1253,6 +1246,7 @@ static void app_battery_pluginout_debounce_handler(void const *param)
             {
                 BATTERY_TRACE(0,"[NTT_CASE_HW] confirmed PLUGIN -> IN_CASE");
                 ntt_case_state_sync_local_update(true);
+                app_key_handle_pause_music_on_pogo_in();
             }
             else if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
             {
@@ -1277,7 +1271,7 @@ static void app_battery_pluginout_debounce_handler(void const *param)
              * Pogo pin confirmed inserted.
              * Pause music if A2DP is streaming.
              */
-            app_key_handle_pause_music_on_pogo_in();
+            //app_key_handle_pause_music_on_pogo_in();
 
 #ifndef BESUI_TWS_EN
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)

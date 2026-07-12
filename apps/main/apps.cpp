@@ -413,7 +413,7 @@ extern void sparraw_service_init(void);
 extern bool aiWangBoxIsUsed(void);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
 //extern void charger_manager_start(void);
-
+extern void earBudsCloseOff_PogonIn_StartTimer(void);
 #ifdef IBRT
 #include "app_ibrt_customif_cmd.h"
 #endif
@@ -480,7 +480,7 @@ void app_pair_timerout(void);
 void app_poweroff_timerout(void);
 void CloseEarphone(void);
 void wired_uart_communication_modual_init(void);
-
+bool ntt_charging_pwron_pending_shutdown = false;
 typedef struct
 {
     uint8_t timer_id;
@@ -2616,27 +2616,58 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
                 break;
             case APP_BATTERY_OPEN_MODE_CHARGING_PWRON:
-                MAIN_TRACE(0,"CHARGING PWRON!");
-#ifdef IBRT_SEARCH_UI
-                is_charging_poweron=true;
-#endif
-#if defined(BT_USB_AUDIO_DUAL_MODE)
-                usb_plugin = 1;
-#endif
-                  need_check_key = false;
-                //need_check_key = true;
-                //MAIN_TRACE(0,"test keep poweroff!");
-                //nRet = 0;
-                //goto  exit;
+            {
+                int8_t charging = app_battery_is_charging();
 
-#ifdef BESUI_CHARGE_EN
+                MAIN_TRACE(0, "CHARGING PWRON!");
+                MAIN_TRACE(1,"[POWER_OFF] CHARGING_PWRON charging=%d",charging);
+
+            #ifdef IBRT_SEARCH_UI
+                is_charging_poweron = true;
+            #endif
+
+            #if defined(BT_USB_AUDIO_DUAL_MODE)
+                usb_plugin = 1;
+            #endif
+
+                need_check_key = false;
+
+            #ifdef BESUI_CHARGE_EN
                 besui_bat_charge_sta_set(true);
-#endif
-#ifdef MSD_MODE
+            #endif
+
+            #ifdef MSD_MODE
                 pwron_case = APP_BATTERY_OPEN_MODE_CHARGING_PWRON;
                 goto exit;
-#endif
+            #endif
+
+                if (charging)
+                {
+                    /*
+                    * 系統仍在 early boot，先記錄待關機。
+                    * 等 main/app 初始化完成後再執行 app_shutdown()。
+                    */
+                    ntt_charging_pwron_pending_shutdown = true;
+
+                    MAIN_TRACE(0,
+                            "[POWER_OFF] still charging, "
+                            "mark pending shutdown");
+
+                    /*
+                    * 這裡要繼續完成必要的系統初始化，
+                    * 因此不要 nRet=0，也不要 goto exit。
+                    */
+                    break;
+                }
+
+                ntt_charging_pwron_pending_shutdown = false;
+
+                MAIN_TRACE(0,
+                        "[POWER_OFF] charging removed, "
+                        "continue normal power-on");
+
                 break;
+            }
             case APP_BATTERY_OPEN_MODE_INVALID:
             default:
             	MAIN_TRACE(0,"APP_BATTERY_OPEN_MODE_INVALID!");
@@ -2961,6 +2992,42 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
     app_application_ready_to_start_callback();
+
+    /*
+    * NTT:
+    * Charging power-on 時先讓 app/audio/BT/UI 初始化完成。
+    * 到這裡系統已經 ready，再啟動 PogonIn 關機檢查。
+    */
+    if (ntt_charging_pwron_pending_shutdown)
+    {
+        int8_t charging = app_battery_is_charging();
+
+        MAIN_TRACE(
+            2,
+            "[POWER_OFF] application ready, pending=%d charging=%d",
+            ntt_charging_pwron_pending_shutdown,
+            charging);
+
+        if (charging)
+        {
+            MAIN_TRACE(
+                0,
+                "[POWER_OFF] application ready and still charging, "
+                "start PogonIn shutdown timer");
+
+            earBudsCloseOff_PogonIn_StartTimer();
+        }
+        else
+        {
+            MAIN_TRACE(
+                0,
+                "[POWER_OFF] application ready but charging removed, "
+                "cancel pending shutdown");
+
+            ntt_charging_pwron_pending_shutdown = false;
+        }
+    }
+
     if (pwron_case == APP_POWERON_CASE_REBOOT) {
     	 MAIN_TRACE_IMM(0,"APP_POWERON_CASE_REBOOT!!!");
 #ifdef BESUI_STEREO_EN

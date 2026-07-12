@@ -49,6 +49,7 @@
 #include "bes_gap_api.h"
 #include "hfp_api.h"
 #include "app_ibrt_customif_cmd.h"
+
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -114,6 +115,10 @@ extern uint8_t out_of_case_reconnect;
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
+/*
+ * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
+ */
+extern void app_key_handle_pause_music_on_pogo_in(void);
 
 void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *buffer, uint8_t length)
 {
@@ -2262,12 +2267,9 @@ static bool g_ntt_first_out_reconnect_started = false;
 
 static uint8_t g_ntt_first_out_role_check_count = 0;
 
-static void ntt_first_out_role_check_handler(
-    void const *param);
+static void ntt_first_out_role_check_handler(void const *param);
 
-osTimerDef(
-    NTT_FIRST_OUT_ROLE_CHECK_TIMER,
-    ntt_first_out_role_check_handler);
+osTimerDef(NTT_FIRST_OUT_ROLE_CHECK_TIMER,ntt_first_out_role_check_handler);
 
 static osTimerId g_ntt_first_out_role_check_timer = NULL;
 
@@ -2296,8 +2298,7 @@ static void ntt_first_out_role_check_stop(void)
 {
     if (g_ntt_first_out_role_check_timer != NULL)
     {
-        osTimerStop(
-            g_ntt_first_out_role_check_timer);
+        osTimerStop(g_ntt_first_out_role_check_timer);
     }
 
     g_ntt_first_out_role_check_count = 0;
@@ -2311,29 +2312,17 @@ static void ntt_first_out_role_check_start(void)
 {
     if (g_ntt_first_out_role_check_timer == NULL)
     {
-        g_ntt_first_out_role_check_timer =
-            osTimerCreate(
-                osTimer(
-                    NTT_FIRST_OUT_ROLE_CHECK_TIMER),
-                osTimerOnce,
-                NULL);
+        g_ntt_first_out_role_check_timer = osTimerCreate(osTimer(NTT_FIRST_OUT_ROLE_CHECK_TIMER),osTimerOnce,NULL);
     }
 
     if (g_ntt_first_out_role_check_timer == NULL)
     {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] create role timer failed");
-
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] create role timer failed");
         return;
     }
 
-    osTimerStop(
-        g_ntt_first_out_role_check_timer);
-
-    osTimerStart(
-        g_ntt_first_out_role_check_timer,
-        NTT_FIRST_OUT_ROLE_CHECK_MS);
+    osTimerStop(g_ntt_first_out_role_check_timer);
+    osTimerStart(g_ntt_first_out_role_check_timer,NTT_FIRST_OUT_ROLE_CHECK_MS);
 }
 
 
@@ -2345,9 +2334,7 @@ static void ntt_first_out_start_mobile_reconnect(void)
 {
     if (!g_ntt_first_out_owner)
     {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect denied: not owner");
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: not owner");
 
         return;
     }
@@ -2418,8 +2405,7 @@ static void ntt_first_out_start_mobile_reconnect(void)
 /*
  * Slave 呼叫 role switch 後，由 timer 等待角色真正變成 Master。
  */
-static void ntt_first_out_role_check_handler(
-    void const *param)
+static void ntt_first_out_role_check_handler(void const *param)
 {
     (void)param;
 
@@ -2495,7 +2481,7 @@ static void ntt_first_out_role_check_handler(
         ntt_first_out_role_check_stop();
         return;
     }
-
+    EARBUDS_TRACE(0,"[NTT_FIRST_OUT] ntt_first_out_role_check_start");
     ntt_first_out_role_check_start();
 }
 
@@ -2560,7 +2546,7 @@ void ntt_first_out_take_master_and_reconnect(void)
 
         app_ui_user_role_switch(true);
     }
-
+    EARBUDS_TRACE(0,"[NTT_FIRST_OUT] ntt_first_out_role_check_start");
     ntt_first_out_role_check_start();
 }
 
@@ -2635,6 +2621,7 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     if (state == NTT_CASE_STATE_IN_CASE)
     {
         EARBUDS_TRACE(0,"[NTT_CASE_CB][LOCAL] IN_CASE");
+        app_key_handle_pause_music_on_pogo_in();
         ntt_first_out_reset_local();
         return;
     }
@@ -2744,17 +2731,11 @@ void ntt_case_state_peer_changed_callback(NTT_CASE_STATE_E state)
     {
         if (g_ntt_first_out_owner)
         {
-            /*
-             * 本機先離盒，之後 Peer 才離盒。
-             * 本機仍保留 owner 身分，繼續 Master/reconnect 流程。
-             */
-            EARBUDS_TRACE(0,"[NTT_FIRST_OUT] BOTH OUT, local keeps owner");
+            EARBUDS_TRACE(1,"[NTT_FIRST_OUT] BOTH OUT, local keeps owner tws=%d",bts_tws_if_is_tws_link_connected());
+            ntt_first_out_start_mobile_reconnect();
         }
         else
         {
-            /*
-             * 本機不是 owner，維持 Slave。
-             */
             EARBUDS_TRACE(0,"[NTT_FIRST_OUT] BOTH OUT, local stays follower");
         }
     }
