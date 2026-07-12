@@ -1297,7 +1297,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
     case CMD_SEND_BOX_BATTERY_LEVEL:
     {
-        uint32_t now = hal_sys_timer_get();
+        uint32_t now = hal_sys_timer_get();       
 
         if (ntt_last_box_battery_case_tick != 0)
         {
@@ -1309,6 +1309,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             }
         }
 
+        ntt_case_state_sync_local_update(true);
+        
         ntt_last_box_battery_case_tick = now;
 
         DBGPRINT("CMD_SEND_BOX_BATTERY_LEVEL crc dat 0x%04x %s",
@@ -1319,7 +1321,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
         if (isRightEarbuds == RIGHT_BUDS)
         {
-            wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+            wired_uart_get_box_battery(&uart_cmd_dat[4], 6);            
 
             DBGPRINT("[NTT_TWS] bts_tws_if_is_tws_link_connected(%d)",
                     bts_tws_if_is_tws_link_connected());
@@ -1332,7 +1334,26 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             }
             else
             {
-                DBGPRINT("[NTT_TWS] TWS already connected");
+                DBGPRINT("[NTT_TWS] TWS already connected, sync local case state to peer");
+
+                /*
+                * 將目前本機保存的 IN_CASE / OUT_CASE
+                * 再傳送給 Peer。
+                */
+                ntt_case_state_sync_resend();
+            }
+        }
+        else 
+        {
+            /*
+            * 左耳若也需要在收到盒子 UART 資料時，
+            * 主動同步自己的 case state，
+            * 同樣可在 TWS 已連線時呼叫 resend。
+            */
+            if (bts_tws_if_is_tws_link_connected())
+            {
+                DBGPRINT("[NTT_TWS] LEFT TWS connected, sync local case state to peer");
+                ntt_case_state_sync_resend();
             }
         }
 
