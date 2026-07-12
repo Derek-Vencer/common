@@ -521,7 +521,7 @@ static void app_battery_event_process(enum APP_BATTERY_STATUS_T status, APP_BATT
     uint32_t app_battevt;
     APP_MESSAGE_BLOCK msg;
 
-    BATTERY_TRACE(3,"%s %d,%d",__func__, status, volt);
+    BATTERY_TRACE(3,"%s %d,Voltage : %dmV",__func__, status, volt);
     msg.mod_id = APP_MODULE_BATTERY;
 #if defined(USE_BASIC_THREADS)
     msg.mod_level = APP_MOD_LEVEL_0;

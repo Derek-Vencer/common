@@ -1210,7 +1210,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             * Note: Do not call besui_app_clear_all_nvrecord() here,
             * because it cannot be linked from this module.
             */
-            nv_record_rebuild(NV_REBUILD_SDK_ONLY);
+            //nv_record_rebuild(NV_REBUILD_SDK_ONLY);
 
             /*
             * Restore EQ preset 0.
@@ -1310,7 +1310,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         }
 
         ntt_case_state_sync_local_update(true);
-        
+
         ntt_last_box_battery_case_tick = now;
 
         DBGPRINT("CMD_SEND_BOX_BATTERY_LEVEL crc dat 0x%04x %s",
