@@ -13,7 +13,7 @@
  * trademark and other intellectual property rights.
  *
  ****************************************************************************/
-#ifdef BT_SPP_SUPPORT
+//#ifdef BT_SPP_SUPPORT
 #include <stdio.h>
 #include "cmsis_os.h"
 #include "hal_uart.h"
@@ -194,40 +194,74 @@ static bt_sdp_record_attr_t TotaSppSdpAttributes2[] = { // list attr id in ascen
 extern bool sparrow_spp_api_is_cmd(const uint8_t *data, uint16_t len);
 extern void sparrow_spp_api_rx_handler(const uint8_t *data, uint16_t len);
 
-static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote,
-                                           bt_spp_event_t event,
-                                           bt_spp_callback_param_t *param)
+static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote,bt_spp_event_t event,bt_spp_callback_param_t *param)
 {
-    uint8_t *pData = (uint8_t *)param->rx_data_ptr;
-    uint16_t dataLen = param->rx_data_len;
+    uint8_t *pData;
+    uint16_t dataLen;
 
-    TOTA_V2_TRACE(1, "spp tota v2 rx:%d", dataLen);
-    DUMP8("%02X ", pData, dataLen);
+    (void)remote;
+    (void)event;
+
+    /*
+     * RX_DATA event 必須具有有效的：
+     * 1. callback param
+     * 2. SPP channel
+     * 3. RX data pointer
+     * 4. RX data length
+     */
+    if ((param == NULL) || (param->spp_chan == NULL) || (param->rx_data_ptr == NULL) || (param->rx_data_len == 0))
+    {
+        TOTA_V2_TRACE(
+            0,
+            "[SPP_RX] invalid param=%p chan=%p data=%p len=%u",
+            (void *)param,
+            (param != NULL) ?
+                (void *)param->spp_chan : NULL,
+            (param != NULL) ?
+                (void *)param->rx_data_ptr : NULL,
+            (unsigned int)((param != NULL) ?
+                param->rx_data_len : 0));
+
+        return -1;
+    }
+
+    pData = (uint8_t *)param->rx_data_ptr;
+    dataLen = param->rx_data_len;
+    TOTA_V2_TRACE(1,"spp tota v2 rx:%u",(unsigned int)dataLen);
+    DUMP8("%02X ",pData,dataLen);
 
 #ifdef SPP_DEBUG_TOOL
     /*
-     * HAL CMD (EQ Tuning)
+     * HAL CMD / EQ Tuning
+     *
      * Header:
      * 7B 00 00 00 7B 00 00 00 ...
      */
-    if (app_spp_debug_cmd_check(pData, dataLen))
+    if (app_spp_debug_cmd_check(pData,dataLen))
     {
-        uint8_t *ret_buf = app_spp_debug_cmd_process(pData, dataLen, &dataLen);
+        uint8_t *ret_buf;
 
-        if (ret_buf != NULL)
+        ret_buf = app_spp_debug_cmd_process(pData,dataLen,&dataLen);
+
+        if ((ret_buf != NULL) && (dataLen > 0))
         {
-            bta_spp_write(param->spp_chan->rfcomm_handle,
-                          ret_buf,
-                          dataLen);
+            bt_status_t ret;
+            ret = bta_spp_write(param->spp_chan->rfcomm_handle,ret_buf,dataLen);
+            TOTA_V2_TRACE(1,"[SPP_DEBUG] write ret=%d len=%u",(int)ret,(unsigned int)dataLen);
+        }
+        else
+        {
+            TOTA_V2_TRACE(0,"[SPP_DEBUG] invalid response buf=%p len=%u",(void *)ret_buf,(unsigned int)dataLen);
         }
 
-        TOTA_V2_TRACE(0, "[%s] HAL CMD handled.", __func__);
+        TOTA_V2_TRACE(0,"[%s] HAL CMD handled.",__func__);
         return 0;
     }
 #endif
 
     /*
      * Sparrow API
+     *
      * 0x30 Get Battery
      * 0x34 Get Device Name
      * 0x3C Get Key Mapping
@@ -238,73 +272,138 @@ static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote,
      * 0x50 Color Code
      * ...
      */
-    if (sparrow_spp_api_is_cmd(pData, dataLen))
+    if (sparrow_spp_api_is_cmd(pData,dataLen))
     {
-        TOTA_V2_TRACE(1,
-                      "[SPARROW_API] cmd=0x%02X",
-                      pData[0]);
-
-        sparrow_spp_api_rx_handler(pData, dataLen);
-
+        TOTA_V2_TRACE(1,"[SPARROW_API] cmd=0x%02X len=%u",(unsigned int)pData[0],(unsigned int)dataLen);
+        sparrow_spp_api_rx_handler(pData,dataLen);
         return 0;
     }
 
     /*
-     * Original TOTA v2
+     * Original TOTA v2 data path.
      */
-    tota_spp_ctl.callBack->rx_cb(pData, dataLen);
-
+    if ((tota_spp_ctl.callBack != NULL) && (tota_spp_ctl.callBack->rx_cb != NULL))
+    {
+        tota_spp_ctl.callBack->rx_cb(pData,dataLen);
+    }
+    else
+    {
+        TOTA_V2_TRACE(0,"[SPP_RX] original TOTA rx callback is NULL");
+    }
     return 0;
 }
 
 
-static int spp_tota_callback(const bt_bdaddr_t *remote, bt_spp_event_t event, bt_spp_callback_param_t *param)
+static int spp_tota_callback(const bt_bdaddr_t *remote,bt_spp_event_t event,bt_spp_callback_param_t *param)
 {
     switch (event)
     {
-    case BT_SPP_EVENT_OPENED:
-        TOTA_V2_TRACE(0, "spp_tota_callback v2 ::BTIF_SPP_EVENT_REMDEV_CONNECTED");
-        tota_spp_ctl.isConnected = true;
-        tota_spp_ctl.pSppDevice = param->spp_chan;
+        case BT_SPP_EVENT_OPENED:
+        {
+            TOTA_V2_TRACE(0,"spp_tota_callback v2 :: BTIF_SPP_EVENT_REMDEV_CONNECTED");
+            if ((param == NULL) || (param->spp_chan == NULL))
+            {
+                /*
+                 * OPENED event 資料異常。
+                 * 不可對外公布 connected 狀態。
+                 */
+                tota_spp_ctl.isConnected = false;
+
+                tota_spp_ctl.pSppDevice = NULL;
+
+                TOTA_V2_TRACE(0,"[SPP_OPEN] invalid param=%p chan=%p",(void *)param,(param != NULL) ?(void *)param->spp_chan : NULL);
+                break;
+            }
+
+            /*
+             * 必須先設定實際 channel，
+             * 最後才設定 isConnected。
+             *
+             * 避免其他 thread 看到 isConnected=true 時，
+             * pSppDevice 還是舊值或 NULL。
+             */
+            tota_spp_ctl.pSppDevice = param->spp_chan;
+
+            tota_spp_ctl.isConnected = true;
+
+            TOTA_V2_TRACE(0,"[SPP_OPEN] connected chan=%p handle=0x%08X",(void *)tota_spp_ctl.pSppDevice,(unsigned int)tota_spp_ctl.pSppDevice->rfcomm_handle);
 #if defined(OTA_OVER_TOTA_ENABLED)
-        bes_ota_event_param_t otaParam;
-        otaParam.pathType = DATA_PATH_SPP;
-        memcpy(otaParam.param.address, (uint8_t*)&param->spp_chan->remote, sizeof(otaParam.param.address));
-        otaParam.event = BES_OTA_CONN;
-        app_ota_push_rx_data(SPP_RX_DATA_SELF_OTA_OVER_TOTA, &otaParam);
+            {
+                bes_ota_event_param_t otaParam;
+                memset(&otaParam,0,sizeof(otaParam));
+                otaParam.pathType = DATA_PATH_SPP;
+                memcpy(otaParam.param.address,(uint8_t *)&param->spp_chan->remote,sizeof(otaParam.param.address));
+                otaParam.event = BES_OTA_CONN;
+                app_ota_push_rx_data(SPP_RX_DATA_SELF_OTA_OVER_TOTA,&otaParam);
+            }
 #endif
-        if (tota_spp_ctl.callBack->connected_cb)
-        {
-            tota_spp_ctl.callBack->connected_cb();
+
+            if ((tota_spp_ctl.callBack != NULL) && (tota_spp_ctl.callBack->connected_cb != NULL))
+            {
+                tota_spp_ctl.callBack->connected_cb();
+            }
+            else
+            {
+                TOTA_V2_TRACE(0,"[SPP_OPEN] connected callback is NULL");
+            }
+            break;
         }
-        break;
-    case BT_SPP_EVENT_CLOSED:
-        TOTA_V2_TRACE(0, "spp_tota_callback v2 ::BTIF_SPP_EVENT_REMDEV_DISCONNECTED");
-        tota_spp_ctl.isConnected = false;
+
+        case BT_SPP_EVENT_CLOSED:
+        {
+            TOTA_V2_TRACE(0,"spp_tota_callback v2 :: BTIF_SPP_EVENT_REMDEV_DISCONNECTED");
+            /*
+             * 先禁止 TX，再清除 channel。
+             */
+            tota_spp_ctl.isConnected = false;
+            tota_spp_ctl.pSppDevice = NULL;
 #if defined(OTA_OVER_TOTA_ENABLED)
-        otaParam.pathType = DATA_PATH_SPP;
-        otaParam.event = BES_OTA_DISCONN;
-        app_ota_push_rx_data(SPP_RX_DATA_SELF_OTA_OVER_TOTA, &otaParam);
+            {
+                bes_ota_event_param_t otaParam;
+                memset(&otaParam,0,sizeof(otaParam));
+                otaParam.pathType = DATA_PATH_SPP;
+                otaParam.event = BES_OTA_DISCONN;
+                app_ota_push_rx_data(SPP_RX_DATA_SELF_OTA_OVER_TOTA,&otaParam);
+            }
 #endif
-        if (tota_spp_ctl.callBack->disconnected_cb)
-        {
-            tota_spp_ctl.callBack->disconnected_cb();
+
+            if ((tota_spp_ctl.callBack != NULL) && (tota_spp_ctl.callBack->disconnected_cb != NULL))
+            {
+                tota_spp_ctl.callBack->disconnected_cb();
+            }
+            break;
         }
-        break;
-    case BT_SPP_EVENT_TX_DONE:
-        TOTA_V2_TRACE(0, "spp_tota_callback v2 ::BTIF_SPP_EVENT_DATA_SENT");
-        //osSemaphoreRelease(tota_spp_ctl.txSem);
-        if (tota_spp_ctl.callBack->tx_done_cb)
+
+        case BT_SPP_EVENT_TX_DONE:
         {
-            tota_spp_ctl.callBack->tx_done_cb();
+            TOTA_V2_TRACE(0,"spp_tota_callback v2 :: BTIF_SPP_EVENT_DATA_SENT");
+            if ((tota_spp_ctl.callBack != NULL) && (tota_spp_ctl.callBack->tx_done_cb != NULL))
+            {
+                tota_spp_ctl.callBack->tx_done_cb();
+            }
+
+            break;
         }
-        break;
-    case BT_SPP_EVENT_RX_DATA:
-        tota_spp_handle_data_event_func(remote, event, param);
-        break;
-    default:
-        break;
+
+        case BT_SPP_EVENT_RX_DATA:
+        {
+            if (param == NULL)
+            {
+                TOTA_V2_TRACE(0,"[SPP_RX] callback param is NULL");
+                break;
+            }
+
+            (void)tota_spp_handle_data_event_func(remote,event,param);
+            break;
+        }
+
+        default:
+        {
+            TOTA_V2_TRACE(1,"[SPP] unknown event=%d",(int)event);
+            break;
+        }
     }
+
     return 0;
 }
 
@@ -324,39 +423,59 @@ void app_spp_tota_init(const tota_callback_func_t *tota_callback_func)
 }
 
 /* this func is safe in thread */
-bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length)
+/* this func is safe in thread */
+bool app_spp_tota_send_data(uint8_t *ptrData,uint16_t length)
 {
-    bt_status_t ret = BT_STS_SUCCESS;
+    bt_status_t ret;
+    bt_spp_channel_t *sppDevice;
+    uint32_t rfcommHandle;
+
+    if ((ptrData == NULL) || (length == 0))
+    {
+        TOTA_V2_TRACE(0,"[SPP_TX] invalid data=%p len=%u",(void *)ptrData,(unsigned int)length);
+        return false;
+    }
 
     if (!tota_spp_ctl.isConnected)
     {
+        TOTA_V2_TRACE(0,"[SPP_TX] not connected len=%u",(unsigned int)length);
         return false;
     }
 
-    /**
-     * app_spp_tota_send_data may be called in bt thread, as same the thread who
-     * send TX_DONE. in this case, app_spp_tota_send_data will lock the bt thread
-     * forever due to TX_DONE is no change to reported, becuase the bt thread is
-     * already locked.
-     *
+    /*
+     * 先將 global channel 指標保存為區域變數。
      */
+    sppDevice = tota_spp_ctl.pSppDevice;
 
-    //osMutexWait(tota_spp_ctl.txMutex, osWaitForever);
-    //osSemaphoreWait(tota_spp_ctl.txSem, osWaitForever);
-
-    TOTA_V2_TRACE(1, "spp tx:%d", length);
-    ret = bta_spp_write(tota_spp_ctl.pSppDevice->rfcomm_handle, ptrData, length);
-
-    //osMutexRelease(tota_spp_ctl.txMutex);
-
-    if (BT_STS_SUCCESS != ret)
+    if (sppDevice == NULL)
     {
+        TOTA_V2_TRACE( 0,"[SPP_TX] device is NULL len=%u",(unsigned int)length);
         return false;
     }
-    else
+
+    /*
+     * rfcomm_handle 是 uint32_t，不是 pointer。
+     * 因此必須使用 %X，不能使用 %p。
+     */
+    rfcommHandle = sppDevice->rfcomm_handle;
+
+    if (rfcommHandle == 0)
     {
-        return true;
+        TOTA_V2_TRACE(0,"[SPP_TX] invalid rfcomm handle len=%u",(unsigned int)length);
+        return false;
     }
+
+    TOTA_V2_TRACE(1,"[SPP_TX] len=%u handle=0x%08X data=%p",(unsigned int)length,(unsigned int)rfcommHandle,(void *)ptrData);
+    ret = bta_spp_write(rfcommHandle,ptrData,length);
+
+    if (ret != BT_STS_SUCCESS)
+    {
+        TOTA_V2_TRACE( 1,"[SPP_TX] write failed ret=%d len=%u handle=0x%08X",(int)ret,(unsigned int)length,(unsigned int)rfcommHandle);
+        return false;
+    }
+
+    TOTA_V2_TRACE(1,"[SPP_TX] write accepted len=%u handle=0x%08X",(unsigned int)length,(unsigned int)rfcommHandle);
+    return true;
 }
 
 // static inline void _update_tx_buf(void)
@@ -369,4 +488,4 @@ bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length)
 //     return (tota_spp_ctl.txBuff + tota_spp_ctl.txIndex*MAX_SPP_PACKET_SIZE);
 // }
 
-#endif /* BT_SPP_SUPPORT */
+//#endif /* BT_SPP_SUPPORT */
