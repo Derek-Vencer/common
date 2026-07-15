@@ -410,6 +410,9 @@ static int32_t ntt_speech_tx_sample_rate = 0;
 
 #endif
 
+static CompexpConfig ntt_tx_compexp_cfg;
+static bool ntt_tx_compexp_cache_init = false;
+
 static bool dualmic_enable = true;
 
 #if defined(SPEECH_TX_EQ)
@@ -764,6 +767,94 @@ int ntt_speech_tx_eq_set_band(NTT_SPEECH_EQ_MODE_T mode,const NTT_SPEECH_TX_EQ_B
     (void)band;
     return -10;
 #endif
+}
+
+int ntt_speech_tx_compexp_get(NTT_SPEECH_TX_COMPEXP_CFG_T *cfg)
+{
+    if (!cfg)
+        return -1;
+
+    if (!ntt_tx_compexp_cache_init)
+        return -2;
+
+    cfg->bypass = ntt_tx_compexp_cfg.bypass;
+
+    cfg->type = ntt_tx_compexp_cfg.type;
+
+    cfg->comp_threshold_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.comp_threshold * 1000);
+
+    cfg->comp_ratio_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.comp_ratio * 1000);
+
+    cfg->expand_threshold_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.expand_threshold * 1000);
+
+    cfg->expand_ratio_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.expand_ratio * 1000);
+
+    cfg->attack_time_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.attack_time * 1000);
+
+    cfg->release_time_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.release_time * 1000);
+
+    cfg->makeup_gain_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.makeup_gain * 1000);
+
+    cfg->delay =
+        ntt_tx_compexp_cfg.delay;
+
+    cfg->tav_x1000 =
+        (int32_t)(ntt_tx_compexp_cfg.tav * 1000);
+
+    return 0;
+}
+
+int ntt_speech_tx_compexp_set(const NTT_SPEECH_TX_COMPEXP_CFG_T *cfg)
+{
+    if (!cfg)
+        return -1;
+
+    ntt_tx_compexp_cfg.bypass = cfg->bypass;
+
+    ntt_tx_compexp_cfg.type = cfg->type;
+
+    ntt_tx_compexp_cfg.comp_threshold =
+        cfg->comp_threshold_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.comp_ratio =
+        cfg->comp_ratio_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.expand_threshold =
+        cfg->expand_threshold_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.expand_ratio =
+        cfg->expand_ratio_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.attack_time =
+        cfg->attack_time_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.release_time =
+        cfg->release_time_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.makeup_gain =
+        cfg->makeup_gain_x1000 / 1000.f;
+
+    ntt_tx_compexp_cfg.delay =
+        cfg->delay;
+
+    ntt_tx_compexp_cfg.tav =
+        cfg->tav_x1000 / 1000.f;
+
+    memcpy(&speech_cfg->tx_compexp,&ntt_tx_compexp_cfg,sizeof(CompexpConfig));
+
+    if (speech_tx_compexp_st)
+    {
+        compexp_set_config(speech_tx_compexp_st,&speech_cfg->tx_compexp);
+    }
+
+    return 0;
 }
 
 void switch_dualmic_status(void)
@@ -1279,7 +1370,11 @@ int speech_init2(int tx_sample_rate, int rx_sample_rate,
     // and call in apps.cpp: app_init()
     speech_cfg = (SpeechConfig *)speech_calloc(1, sizeof(SpeechConfig));
     speech_store_config(&speech_cfg_default);
+
     ntt_speech_tx_eq_init_cache();
+    memcpy(&ntt_tx_compexp_cfg,&speech_cfg->tx_compexp,sizeof(CompexpConfig));
+    ntt_tx_compexp_cache_init = true;
+
     AUDIOPLAYERS_TRACE(1,"[SCO_EQ] load speech_cfg_default");
 
     if (ntt_dut_speech_tx_1mic_ns_bypass_get())

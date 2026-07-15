@@ -792,6 +792,127 @@ static void ntt_handle_set_speech_tx_eq_band(const uint8_t *data,uint16_t len)
         sizeof(rsp));
 }
 
+static void ntt_handle_get_speech_tx_compexp(
+    const uint8_t *data,
+    uint16_t len)
+{
+    NTT_SPEECH_TX_COMPEXP_CFG_T cfg;
+    uint8_t rsp[43] = {0};
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_GET_SPEECH_TX_COMPEXP,
+            0))
+    {
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_GET_SPEECH_TX_COMPEXP,
+            rsp,
+            sizeof(rsp));
+        return;
+    }
+
+    memset(&cfg, 0, sizeof(cfg));
+
+    ret = ntt_speech_tx_compexp_get(&cfg);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    if (ret == 0)
+    {
+        rsp[1] = cfg.bypass;
+        rsp[2] = cfg.type;
+
+        ntt_write_le32(&rsp[3],  (uint32_t)cfg.comp_threshold_x1000);
+        ntt_write_le32(&rsp[7],  (uint32_t)cfg.comp_ratio_x1000);
+        ntt_write_le32(&rsp[11], (uint32_t)cfg.expand_threshold_x1000);
+        ntt_write_le32(&rsp[15], (uint32_t)cfg.expand_ratio_x1000);
+        ntt_write_le32(&rsp[19], (uint32_t)cfg.attack_time_x1000);
+        ntt_write_le32(&rsp[23], (uint32_t)cfg.release_time_x1000);
+        ntt_write_le32(&rsp[27], (uint32_t)cfg.makeup_gain_x1000);
+        ntt_write_le32(&rsp[31], cfg.delay);
+        ntt_write_le32(&rsp[35], (uint32_t)cfg.tav_x1000);
+    }
+
+    TRACE(0,
+        "[COMPEXP][GET] bypass=%d type=%d comp=%d ratio=%d makeup=%d",
+        cfg.bypass,
+        cfg.type,
+        cfg.comp_threshold_x1000,
+        cfg.comp_ratio_x1000,
+        cfg.makeup_gain_x1000);
+
+    sparraw_tx_msg(
+        RSP_GET_SPEECH_TX_COMPEXP,
+        rsp,
+        39);
+}
+
+static void ntt_handle_set_speech_tx_compexp(
+    const uint8_t *data,
+    uint16_t len)
+{
+    NTT_SPEECH_TX_COMPEXP_CFG_T cfg;
+    uint8_t rsp[2] = {0};
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_SET_SPEECH_TX_COMPEXP,
+            38))
+    {
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_SET_SPEECH_TX_COMPEXP,
+            rsp,
+            sizeof(rsp));
+
+        return;
+    }
+
+    memset(&cfg, 0, sizeof(cfg));
+
+    cfg.bypass = data[3];
+    cfg.type   = data[4];
+
+    cfg.comp_threshold_x1000   = (int32_t)ntt_read_le32(&data[5]);
+    cfg.comp_ratio_x1000       = (int32_t)ntt_read_le32(&data[9]);
+    cfg.expand_threshold_x1000 = (int32_t)ntt_read_le32(&data[13]);
+    cfg.expand_ratio_x1000     = (int32_t)ntt_read_le32(&data[17]);
+    cfg.attack_time_x1000      = (int32_t)ntt_read_le32(&data[21]);
+    cfg.release_time_x1000     = (int32_t)ntt_read_le32(&data[25]);
+    cfg.makeup_gain_x1000      = (int32_t)ntt_read_le32(&data[29]);
+    cfg.delay                  = ntt_read_le32(&data[33]);
+    cfg.tav_x1000              = (int32_t)ntt_read_le32(&data[37]);
+
+    ret = ntt_speech_tx_compexp_set(&cfg);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    rsp[1] = cfg.bypass;
+    
+    TRACE(0,
+        "[COMPEXP][SET] bypass=%d type=%d comp=%d ratio=%d makeup=%d ret=%d",
+        cfg.bypass,
+        cfg.type,
+        cfg.comp_threshold_x1000,
+        cfg.comp_ratio_x1000,
+        cfg.makeup_gain_x1000,
+        ret);
+
+    sparraw_tx_msg(
+        RSP_SET_SPEECH_TX_COMPEXP,
+        rsp,
+        sizeof(rsp));
+}
+
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
     uint8_t localBattery;
@@ -1643,6 +1764,9 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
         {REQ_GET_SPEECH_TX_EQ_BAND,     ntt_handle_get_speech_tx_eq_band},
         {REQ_SET_SPEECH_TX_EQ_GLOBAL,   ntt_handle_set_speech_tx_eq_global},
         {REQ_SET_SPEECH_TX_EQ_BAND,     ntt_handle_set_speech_tx_eq_band},
+
+        {REQ_GET_SPEECH_TX_COMPEXP,     ntt_handle_get_speech_tx_compexp},
+        {REQ_SET_SPEECH_TX_COMPEXP,     ntt_handle_set_speech_tx_compexp},
 
 		{GET_FW_VERSION,      handleGetFwVersion},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},

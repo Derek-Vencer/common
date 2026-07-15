@@ -54,24 +54,10 @@ typedef struct
 extern "C" {
 #endif
 
-int ntt_speech_tx_eq_get_info(
-    NTT_SPEECH_EQ_MODE_T mode,
-    NTT_SPEECH_TX_EQ_INFO_T *info);
-
-int ntt_speech_tx_eq_get_band(
-    NTT_SPEECH_EQ_MODE_T mode,
-    uint8_t index,
-    NTT_SPEECH_TX_EQ_BAND_T *band);
-
-int ntt_speech_tx_eq_set_global(
-    NTT_SPEECH_EQ_MODE_T mode,
-    uint8_t bypass,
-    int32_t master_gain_x1000,
-    uint8_t num);
-
-int ntt_speech_tx_eq_set_band(
-    NTT_SPEECH_EQ_MODE_T mode,
-    const NTT_SPEECH_TX_EQ_BAND_T *band);
+int ntt_speech_tx_eq_get_info(NTT_SPEECH_EQ_MODE_T mode,NTT_SPEECH_TX_EQ_INFO_T *info);
+int ntt_speech_tx_eq_get_band(NTT_SPEECH_EQ_MODE_T mode,uint8_t index,NTT_SPEECH_TX_EQ_BAND_T *band);
+int ntt_speech_tx_eq_set_global(NTT_SPEECH_EQ_MODE_T mode,uint8_t bypass,int32_t master_gain_x1000,uint8_t num);
+int ntt_speech_tx_eq_set_band(NTT_SPEECH_EQ_MODE_T mode,const NTT_SPEECH_TX_EQ_BAND_T *band);
 
     #ifdef __cplusplus
 }
@@ -82,6 +68,31 @@ int ntt_speech_tx_eq_set_band(
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct
+{
+    uint8_t bypass;
+    uint8_t type;
+
+    int32_t comp_threshold_x1000;
+    int32_t comp_ratio_x1000;
+
+    int32_t expand_threshold_x1000;
+    int32_t expand_ratio_x1000;
+
+    int32_t attack_time_x1000;
+    int32_t release_time_x1000;
+
+    int32_t makeup_gain_x1000;
+
+    uint32_t delay;
+
+    int32_t tav_x1000;
+
+} NTT_SPEECH_TX_COMPEXP_CFG_T;
+
+int ntt_speech_tx_compexp_get(NTT_SPEECH_TX_COMPEXP_CFG_T *cfg);
+int ntt_speech_tx_compexp_set(const NTT_SPEECH_TX_COMPEXP_CFG_T *cfg);
 
 /*
  * Init speech algorithm, init all related states and memory
@@ -94,15 +105,8 @@ extern "C" {
  *      buf:            buffer to be used for algorithms
  *      len:            buffer size
  */
-int speech_init(int tx_sample_rate, int rx_sample_rate,
-                     int tx_frame_ms, int rx_frame_ms,
-                     int sco_frame_ms,
-                     uint8_t *buf, int len);
-
-int speech_init2(int tx_sample_rate, int rx_sample_rate,
-                     int tx_frame_len, int rx_frame_len,
-                     int sco_frame_len,
-                     uint8_t *buf, int len);
+int speech_init(int tx_sample_rate, int rx_sample_rate,int tx_frame_ms, int rx_frame_ms,int sco_frame_ms,uint8_t *buf, int len);
+int speech_init2(int tx_sample_rate, int rx_sample_rate,int tx_frame_len, int rx_frame_len,int sco_frame_len,uint8_t *buf, int len);
 
 /*
  * Deinit speech algorithm, free all related states and memory
