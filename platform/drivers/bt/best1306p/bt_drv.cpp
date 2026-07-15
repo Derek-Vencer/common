@@ -579,12 +579,9 @@ void btdrv_start_bt(void)
 
     // Symbol init should be done before power on BTC
     bt_drv_reg_op_global_symbols_init();
-
-    //fixed disable btdrv_btc_fault_dump
-#if 0
     /*reg controller crash dump*/
     hal_trace_crash_dump_register(HAL_TRACE_CRASH_DUMP_MODULE_BT, btdrv_btc_fault_dump);
-#endif
+
     // power on BT CPU
     btdrv_poweron(BT_POWERON);
     // load BTC patch

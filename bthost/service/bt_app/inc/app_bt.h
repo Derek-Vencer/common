@@ -171,17 +171,6 @@ bool app_bt_get_tx_power_idx(uint16_t handle, int8_t *tx_power_idx);
 
 bool app_bt_update_tx_power_idx(uint16_t handle, int8_t tx_power_idx);
 
-/**
- * @brief Restart IBRT profile exchange for the specified mobile device.
- *
- * @param device_id Bluetooth mobile device index.
- *
- * @return true if the profile recovery procedure was started.
- * @return false if the device or mobile context could not be found.
- */
-bool app_bt_ntt_restart_profile_exchange(uint8_t device_id);
-bool app_bt_ntt_request_ibrt_link(uint8_t device_id);
-void ntt_profile_recovery_local_fallback(uint8_t device_id);
 #ifdef BT_AVRCP_SUPPORT
 bt_status_t app_bt_avrcp_key_operation(const bt_bdaddr_t *remote, avrcp_panel_operation_t key, bool is_press);
 #endif
@@ -549,11 +538,6 @@ void app_bt_pair_state_callback_deregister(void);
 bt_pair_state_change_cb_t app_bt_get_pair_state_callback(void);
 
 int bt_pairing_init(void);
-uint8_t get_pair_status(void);
-void set_pair_status(uint8_t status);
-uint8_t get_er_discover_connectable_status(void);
-void set_er_discover_connectable_status(uint8_t status);
-
 
 #ifdef NV_RECORD_DEV_NAME
 uint8_t *app_get_current_remote_device_name(void);
@@ -585,6 +569,8 @@ void app_bt_coex_audio_sink_event_ind(bt_bdaddr_t *addr, enum app_bt_audio_event
 
 void app_bt_coex_register_page_event_handle(void (*func)(uint8_t is_page));
 
+void app_bt_register_is_peer_addr_handle(bool (*func)(const uint8_t *addr));
+
 uint32_t app_bt_get_class_of_device_headset(void);
 
 uint32_t app_bt_get_class_of_device_watch(void);
@@ -604,7 +590,6 @@ typedef struct
     bool (*avrcp_notify_send_callback)(uint8_t event);
     void (*avrcp_notify_resp_callback)(uint8_t event);
     uint16_t (*get_ibrt_handle_callback)(const bt_bdaddr_t *bd_addr);
-    void (*acl_disconnected_callback)(const btif_event_t *event);
 } bts_bt_sink_cb_t;
 
 typedef struct
@@ -618,7 +603,6 @@ typedef struct
 {
     void (*global_callback)(const btif_event_t *event);
     void (*cmd_status_callback)(const void *para);
-    void (*acl_disconnected_callback)(const btif_event_t *event);
 } bts_tws_cb_t;
 
 typedef struct

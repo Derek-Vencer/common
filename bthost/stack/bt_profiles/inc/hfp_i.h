@@ -408,6 +408,7 @@ int8 hshf_connect_req (struct hshf_control *hshf_ctl, struct bdaddr_t *remote);
 int8 hshf_query_sdp_only(struct hshf_control *hshf_ctl, struct bdaddr_t *remote);
 int8 hshf_create_codec_connection(struct bdaddr_t *bdaddr, struct hshf_control *chan);
 int8 hf_createSCO(struct bdaddr_t *bdaddr, void *chan);
+int hsp_creat_channel(bool is_hsp_ag);
 void hfp_init(hfp_callback_t callback,
         struct hshf_control* (*accept)(uint8_t device_id, const bt_bdaddr_t* addr, uint8 server_channel),
         struct hshf_control* (*search)(uint8_t device_id));
@@ -538,6 +539,35 @@ void hfp_ag_send_service_status(struct hshf_control *hfp, bool enabled);
 void hfp_ag_send_mobile_signal_level(struct hshf_control *hfp, uint8 level);
 void hfp_ag_send_mobile_roam_status(struct hshf_control *hfp, bool enabled);
 bool hfp_ag_send_mobile_battery_level(struct hshf_control *hfp, uint8 level);
+
+// only support to fill receive at_cmd header
+#define HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_NUMBER 5
+#define HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_LENGTH 20
+typedef struct {
+    char cmd_str[HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_LENGTH+1]; // final is '\0'
+    uint8_t len;
+} hfp_need_fix_custom_at_cmd;
+
+typedef struct {
+    hfp_need_fix_custom_at_cmd at_cmds[HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_NUMBER];
+    uint8_t number;
+    bool is_init;
+} hfp_need_fix_received_custom_at_cmd_list;
+
+/**
+ * @brief Register a custom AT command that needs front header fixing
+ *
+ * This function registers an AT command to the global list so that when it's received,
+ * the HFP module will know to fix its front header. The command is stored with proper
+ * bounds checking to prevent buffer overflow.
+ *
+ * @param at_cmd      Pointer to the AT command string to register, shuold include '\0'
+ * @param at_cmd_len  Length of the AT command string, don't include '\0' —— like strlen(at_cmd)
+ *
+ * @note The AT command will be truncated if it exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_LENGTH
+ * @note If the list is full (exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_NUMBER), the command is discarded
+ */
+void hfp_register_received_custom_at_cmd_to_fill_front_header(const char* at_cmd, uint8_t at_cmd_len);
 
 #if defined(__cplusplus)
 }

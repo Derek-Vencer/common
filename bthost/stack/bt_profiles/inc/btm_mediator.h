@@ -49,6 +49,7 @@ typedef enum {
 typedef struct {
     struct bdaddr_t bdaddr;
     uint16_t pageTimeout;
+    uint32_t timeToNextPage;
 } btm_page_para_t;
 
 typedef struct {
@@ -91,6 +92,8 @@ typedef struct {
 } btm_activity_mediator_t;
 
 void btm_coex_register_page_event_handle(void (*func)(uint8_t is_page));
+
+void btm_register_is_peer_addr_handle(bool (*func)(const uint8_t *addr));
 
 void btm_me_mediator_init(void);
 

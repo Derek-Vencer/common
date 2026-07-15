@@ -52,19 +52,9 @@ bt_status_t ddbif_close(void)
     return BT_STS_SUCCESS;
 }
 
-extern bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr);
-
 bt_status_t ddbif_add_record(btif_device_record_t *record)
 {
-    if (record && ntt_is_local_or_peer_bt_addr(&record->bdAddr))
-    {
-        DEBUG_INFO(0,
-            "[NTT_DDB] reject local/peer bt record");
-
-        return BT_STS_FAILED;
-    }
-
-    return nv_record_add(section_usrdata_ddbrecord, (void *)record);
+    return nv_record_add(section_usrdata_ddbrecord,(void *)record);
 }
 
 bt_status_t ddbif_change_records_order(const btif_device_record_t *record, uint8_t index)

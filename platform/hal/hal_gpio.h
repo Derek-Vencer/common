@@ -22,7 +22,6 @@ extern "C" {
 
 #include "plat_types.h"
 #include "hal_iomux.h"
-#include "best1306p/hal_iomux_best1306p.h"
 
 enum HAL_GPIO_DIR_T {
     HAL_GPIO_DIR_IN = 0,

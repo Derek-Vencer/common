@@ -38,8 +38,6 @@ void app_tws_ibrt_avrcp_register_notify_resp_callback(uint8_t event);
 
 uint16_t app_tws_ibrt_get_ibrt_handle_callback(const bt_bdaddr_t *bd_addr);
 
-void bts_bt_sink_conn_disconnect_callback(const btif_event_t *event);
-
 void bts_bt_conn_acl_state_changed(const bt_bdaddr_t *addr,ibrt_conn_acl_state state,uint8_t reason_code);
 
 #endif

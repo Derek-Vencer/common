@@ -1753,13 +1753,13 @@ void btdrv_ble_modem_config(void)
 
     /* BLE RADIOTXRXTIM0 */
     ble_radiotxrxtim0_pack(/*uint8_t rfrxtmda0*/   0,
-                           /*uint8_t rxpathdly0*/  4,
-                           /*uint8_t txpathdly0*/  10);
+                           /*uint8_t rxpathdly0*/  9,
+                           /*uint8_t txpathdly0*/  5);
 
     /* BLE RADIOTXRXTIM1 */
     ble_radiotxrxtim1_pack(/*uint8_t rfrxtmda0*/   0,
-                           /*uint8_t rxpathdly0*/  2,
-                           /*uint8_t txpathdly0*/  10);
+                           /*uint8_t rxpathdly0*/  8,
+                           /*uint8_t txpathdly0*/  4);
 }
 
 void btdrv_bt_modem_config(void)

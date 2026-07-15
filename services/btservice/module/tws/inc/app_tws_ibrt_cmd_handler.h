@@ -61,7 +61,7 @@
 #define IBRT_BESAUD_TX_BUFF_SIZE                (0)
 #endif
 #define IBRT_TIMEOUT_INVALID                    (0)
-#define app_ibrt_cmd_rsp_timeout_handler_null   (0)
+// #define app_ibrt_cmd_rsp_timeout_handler_null   (0)
 #define app_ibrt_sync_dts_coc_data_handler_null (0)
 #define app_ibrt_cmd_rsp_handler_null           (0)
 #define app_ibrt_cmd_rx_handler_null            (0)
@@ -78,6 +78,8 @@
 #define APP_TWS_CMD_PRIO_15      (0xF)
 
 typedef int (*TWS_CMD_HANDLER_T)(void **cmd_tbl, void ***cmd_var_tbl, uint16_t *cmd_size);
+
+void app_ibrt_cmd_rsp_timeout_handler_null(uint16_t a, uint8_t* b, uint16_t c);
 
 enum CMD_ID_T
 {

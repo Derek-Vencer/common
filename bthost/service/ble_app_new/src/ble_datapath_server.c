@@ -206,8 +206,6 @@ static bool app_datapath_server_get_tx_ntf_en_by_conidx(uint8_t conidx)
 
 void app_datapath_server_send_data_via_notification(uint8_t conidx, uint8_t* data, uint32_t len)
 {
-    uint8_t con_idx = gap_zero_based_conidx_to_ble_conidx(conidx);
-
     gatt_char_notify_t val_ntf=
     {
         .character = g_ble_datapath_tx_character,
@@ -216,20 +214,18 @@ void app_datapath_server_send_data_via_notification(uint8_t conidx, uint8_t* dat
         .dummy = (uint32_t *)(uint32_t)data[0],
     };
 
-    gatts_send_value_notification(gap_conn_bf(con_idx), &val_ntf, data, (uint16_t)len);
+    gatts_send_value_notification(gap_conn_bf(conidx), &val_ntf, data, (uint16_t)len);
 }
 
 void app_datapath_server_send_data_via_indication(uint8_t conidx, uint8_t* data, uint32_t len)
 {
-    uint8_t con_idx = gap_zero_based_conidx_to_ble_conidx(conidx);
-
     gatt_char_notify_t val_ind=
     {
         .character = g_ble_datapath_tx_character,
         .service = g_ble_datapath_service,
     };
 
-    gatts_send_value_indication(gap_conn_bf(con_idx), &val_ind, data, (uint16_t)len);
+    gatts_send_value_indication(gap_conn_bf(conidx), &val_ind, data, (uint16_t)len);
 }
 
 
@@ -243,10 +239,8 @@ void app_datapath_server_register_event_callback(app_datapath_event_cb cb)
     dp_event_callback = cb;
 }
 
-static void app_datapath_server_mtu_exchanged(uint8_t con_idx, uint16_t connhdl, uint16_t mtu)
+static void app_datapath_server_mtu_exchanged(uint8_t conidx, uint16_t connhdl, uint16_t mtu)
 {
-    uint8_t conidx = gap_zero_based_conidx(con_idx);
-
     if (NULL != mtuexchanged_done_callback)
     {
         mtuexchanged_done_callback(conidx, mtu);
@@ -285,10 +279,8 @@ static void app_datapath_server_connected(uint8_t conidx, uint16_t connhdl)
     }
 }
 
-static void app_datapath_server_disconnected(uint8_t con_idx, uint16_t connhdl)
+static void app_datapath_server_disconnected(uint8_t conidx, uint16_t connhdl)
 {
-    uint8_t conidx = gap_zero_based_conidx(con_idx);
-
     if (app_datapath_server_free_con_info_by_conidx(conidx) == BT_STS_SUCCESS)
     {
         DEBUG_INFO(0,"app datapath server dis-connected.");
@@ -311,10 +303,8 @@ static void app_datapath_server_disconnected(uint8_t con_idx, uint16_t connhdl)
     }
 }
 
-static void app_datapath_server_tx_ccc_changed(uint8_t con_idx, uint16_t connhdl, bool notify_enabled)
+static void app_datapath_server_tx_ccc_changed(uint8_t conidx, uint16_t connhdl, bool notify_enabled)
 {
-    uint8_t conidx = gap_zero_based_conidx(con_idx);
-
     if (notify_enabled)
     {
         app_datapath_server_connected(conidx, connhdl);
@@ -325,7 +315,7 @@ static void app_datapath_server_tx_ccc_changed(uint8_t con_idx, uint16_t connhdl
     }
 }
 
-static void app_datapath_server_tx_data_sent(uint8_t con_idx, uint16_t connhdl, const uint32_t *dummy)
+static void app_datapath_server_tx_data_sent(uint8_t conidx, uint16_t connhdl, const uint32_t *dummy)
 {
     DEBUG_INFO(0, "%s dummy = %d", __func__, (uint32_t)dummy);
 
@@ -340,9 +330,8 @@ static void app_datapath_server_tx_data_sent(uint8_t con_idx, uint16_t connhdl, 
     }
 }
 
-static void app_datapath_server_rx_data_received(uint8_t con_idx, uint16_t connhdl, const uint8_t *data, uint16_t len)
+static void app_datapath_server_rx_data_received(uint8_t conidx, uint16_t connhdl, const uint8_t *data, uint16_t len)
 {
-    uint8_t conidx = gap_zero_based_conidx(con_idx);
     // loop back the received data
     if (app_datapath_server_get_tx_ntf_en_by_conidx(conidx))
     {
@@ -386,8 +375,6 @@ static void ble_datapath_send_desc_read_response(uint16_t connhdl, uint32_t toke
 
 static bool ble_datapath_server_callback(gatt_svc_t *svc, gatt_server_event_t event, gatt_server_callback_param_t param)
 {
-    uint8_t conidx = gap_zero_based_conidx(svc->con_idx);
-
     switch (event)
     {
         case GATT_SERV_EVENT_CHAR_WRITE:
@@ -414,7 +401,7 @@ static bool ble_datapath_server_callback(gatt_svc_t *svc, gatt_server_event_t ev
 
             // Here for validate async call write rsp
             bt_thread_call_func_3(app_datapath_server_read_latest_cmd_received,
-                                                                bt_fixed_param(conidx),
+                                                                bt_fixed_param(svc->con_idx),
                                                                 bt_fixed_param(svc->connhdl),
                                                                 bt_fixed_param(p->token));
             return true;
@@ -460,7 +447,7 @@ static bool ble_datapath_server_callback(gatt_svc_t *svc, gatt_server_event_t ev
             if ((uint8_t *)p->desc_attr->attr_data == g_ble_datapath_tx_cccd)
             {
                 uint16_t cccd_config = co_host_to_uint16_le(
-                app_datapath_server_get_tx_ntf_en_by_conidx(conidx) ? 0x0001 : 0x0000);
+                app_datapath_server_get_tx_ntf_en_by_conidx(svc->con_idx) ? 0x0001 : 0x0000);
                 gatts_send_read_rsp(p->conn->connhdl, p->token, 0, (uint8_t *)&cccd_config, sizeof(cccd_config));
                 return true;
             }
@@ -603,8 +590,6 @@ uint32_t ble_datapath_restore_ctx(uint8_t conidx, uint8_t *buf, uint32_t buf_len
     BTIF_CTX_INIT(buf);
 
     BTIF_CTX_LDR_VAL8(cmd_code)
-
-    con_idx = gap_zero_based_conidx_to_ble_conidx(conidx);
 
     if (cmd_code != 0xFF)
     {

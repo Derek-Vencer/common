@@ -775,14 +775,6 @@ static HWTIMER_ID ntc_monitor_timer = NULL;
 #endif
 #endif
 
-#ifndef NO_VBAT_OCP
-// Used for VBAT_OCP
-static HWTIMER_ID charger_1622_timer = NULL;
-#endif
-
-// Used for ACIN2VSYS LDO soft start
-static HWTIMER_ID charger_1622_timer_2 = NULL;
-
 #if defined(_AUTO_TEST_)
 static bool at_skip_shutdown = false;
 
@@ -4641,18 +4633,6 @@ void pmu_charger_init(void)
     int_unlock(lock);
 }
 
-#ifndef NO_VBAT_OCP
-static void pmu_charger_1622_timer_handler(void *param)
-{
-    charger_plug_conig(PMU_CHARGER_PLUGOUT);
-}
-#endif
-
-static void pmu_charger_1622_timer_2_handler(void *param)
-{
-    charger_acin2vsys_ldo_soft_start_enable(true);
-}
-
 static void pmu_charger_irq_handler(PMU_IRQ_HDLR_PARAM)
 {
     enum PMU_CHARGER_STATUS_T status = PMU_CHARGER_UNKNOWN;
@@ -4682,39 +4662,6 @@ static void pmu_charger_irq_handler(PMU_IRQ_HDLR_PARAM)
     }
 
     status = pmu_charger_get_status();
-    if (charger_get_charger_type() == CHARGER_CHIP_TYPE_1622) {
-        if (status == PMU_CHARGER_PLUGIN) {
-#ifndef NO_VBAT_OCP
-            if (charger_1622_timer) {
-                hwtimer_stop(charger_1622_timer);
-            }
-            charger_plug_conig(PMU_CHARGER_PLUGIN);
-#endif
-            // Resume ACIN2VSYS LDO soft startup to avoid VSYS and ACIN voltages being equally high.
-            if (charger_1622_timer_2 == NULL) {
-                charger_1622_timer_2 = hwtimer_alloc(pmu_charger_1622_timer_2_handler, 0);
-            }
-            if (charger_1622_timer_2) {
-                hwtimer_stop(charger_1622_timer_2);
-                hwtimer_start(charger_1622_timer_2, MS_TO_TICKS(20));
-            }
-        } else {
-#ifndef NO_VBAT_OCP
-            if (charger_1622_timer == NULL) {
-                charger_1622_timer = hwtimer_alloc(pmu_charger_1622_timer_handler, 0);
-            }
-            if (charger_1622_timer) {
-                hwtimer_stop(charger_1622_timer);
-                hwtimer_start(charger_1622_timer, MS_TO_TICKS(100));
-            }
-#endif
-            // Disable ACIN2VSYS LDO soft startup to avoid VSYS drop.
-            if (charger_1622_timer_2) {
-                hwtimer_stop(charger_1622_timer_2);
-            }
-            charger_acin2vsys_ldo_soft_start_enable(false);
-        }
-    }
 
     if (charger_irq_handler) {
         charger_irq_handler(status);
@@ -4725,17 +4672,12 @@ void pmu_charger_set_irq_handler(PMU_CHARGER_IRQ_HANDLER_T handler)
 {
     uint32_t lock;
     uint16_t val;
-    bool charger_1622 = false;
-
-    if (charger_get_charger_type() == CHARGER_CHIP_TYPE_1622) {
-        charger_1622 = true;
-    }
 
     charger_irq_handler = handler;
 
     lock = int_lock();
     pmu_read(PMU_REG_CHARGER_CFG, &val);
-    if (handler || charger_1622) {
+    if (handler) {
         val |= REG_CHARGE_IN_INTR_MSK | REG_CHARGE_OUT_INTR_MSK;
     } else {
         val &= ~(REG_CHARGE_IN_INTR_MSK | REG_CHARGE_OUT_INTR_MSK);
@@ -4743,13 +4685,9 @@ void pmu_charger_set_irq_handler(PMU_CHARGER_IRQ_HANDLER_T handler)
     pmu_write(PMU_REG_CHARGER_CFG, val);
 
 #ifdef PMU_IRQ_UNIFIED
-    if (charger_1622) {
-        pmu_set_irq_unified_handler(PMU_IRQ_TYPE_CHARGER, pmu_charger_irq_handler);
-    } else {
-        pmu_set_irq_unified_handler(PMU_IRQ_TYPE_CHARGER, handler ? pmu_charger_irq_handler : NULL);
-    }
+    pmu_set_irq_unified_handler(PMU_IRQ_TYPE_CHARGER, handler ? pmu_charger_irq_handler : NULL);
 #else
-    if (handler || charger_1622) {
+    if (handler) {
         NVIC_SetVector(CHARGER_IRQn, (uint32_t)pmu_charger_irq_handler);
         NVIC_SetPriority(CHARGER_IRQn, IRQ_PRIORITY_NORMAL);
         NVIC_ClearPendingIRQ(CHARGER_IRQn);

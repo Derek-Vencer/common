@@ -822,7 +822,7 @@ bt_status_t btif_me_send_data_to_peer_dev(uint16_t connHandle, uint8_t dataLen, 
 void btif_me_init_handler(btif_handler * handler);
 bt_status_t btif_me_dbg_sniffer_interface(uint16_t connHandle, uint8_t subCode);
 uint8_t *btif_me_get_remote_device_version(btif_remote_device_t * rdev);
-bt_status_t btif_create_acl_to_slave_with_page_timeout(const bt_bdaddr_t * bdAddr, uint16_t page_timeout);
+bt_status_t btif_create_acl_to_slave_with_page_timeout(const bt_bdaddr_t * bdAddr, uint32_t page_timeout, uint32_t time_to_next_page);
 bt_status_t btif_create_acl_to_slave(const bt_bdaddr_t * bdAddr);
 void btif_me_unregister_globa_handler(btif_handler * handler);
 void btif_me_set_inquiry_mode(uint8_t mode);
@@ -847,6 +847,7 @@ uint8_t btif_me_get_device_id_from_addr(const bt_bdaddr_t *addr);
 uint8_t btif_me_get_device_id_from_rdev(btif_remote_device_t *rdev);
 BTIF_BT_ACTIVITY_STOP_E  btif_me_stop_pending_page_activity(const bt_bdaddr_t* addr);
 void btif_me_coex_register_page_event_handle(void (*func)(uint8_t is_page));
+void btif_register_is_peer_addr_handle(bool (*func)(const uint8_t *addr));
 
 void  btif_me_event_report(me_event_t *event);
 

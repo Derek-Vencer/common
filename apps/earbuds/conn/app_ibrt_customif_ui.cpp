@@ -47,8 +47,6 @@
 #endif
 #include "ble_core_common.h"
 #include "bes_gap_api.h"
-#include "hfp_api.h"
-#include "app_ibrt_customif_cmd.h"
 
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
@@ -95,30 +93,13 @@
 #include "app_tota_conn.h"
 #endif
 
-extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
-
 extern ibrt_link_status_changed_cb_t* ibrt_link_status_changed_client_cb;
 extern ibrt_mgr_status_changed_cb_t *ibrt_mgr_status_changed_client_cb;
 extern ibrt_ext_conn_policy_cb_t *ibrt_ext_conn_policy_client_cb;
 
 uint32_t app_ibrt_customif_set_profile_delaytime_on_spp_connect(const uint8_t *uuid_data_ptr, uint8_t uuid_len);
-extern void ntt_master_sync_all_user_settings_to_peer(void);
-extern bool app_ui_user_role_switch(bool switch2master);
-extern "C" void btif_hfp_ibrt_role_switch_handle(const bt_bdaddr_t *remote);
-extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
-extern uint8_t out_of_case_reconnect;
-#ifdef IBRT
-static bool g_ntt_case_close_wait_poweroff = false;
-extern void earBudsCloseOff_PogonIn_StopTimer(void);
-#endif
-extern uint8_t out_of_case_reconnect;
-static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
-extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
-/*
- * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
- */
-extern void app_key_handle_pause_music_on_pogo_in(void);
+static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
 void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *buffer, uint8_t length)
 {
@@ -186,26 +167,7 @@ void app_ibrt_customif_pairing_mode_entry()
     uint8_t select_a2dp_device = app_bt_audio_get_curr_playing_a2dp();
     struct BT_DEVICE_T *curr_device = NULL;
 
-EARBUDS_TRACE(0,
-    "custom_ui pairing mode entry: disc_sco_during_paring %d",
-    p_app_ui_config->pairing_with_disc_hf_cfg);
-
-#ifdef BT_HFP_SUPPORT
-    uint8_t hfp_dev = app_bt_audio_get_hfp_device_for_user_action();
-
-    EARBUDS_TRACE(2,
-        "[NTT_HFP_PAIR] pairing entry check curr_sco=%d hfp_dev=%d",
-        select_sco_device,
-        hfp_dev);
-
-    if ((select_sco_device != BT_DEVICE_INVALID_ID) ||
-        (hfp_dev != BT_DEVICE_INVALID_ID))
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_HFP_PAIR] call active, reject mobile pairing mode");
-        return;
-    }
-#endif
+    EARBUDS_TRACE(0,"custom_ui pairing mode entry: disc_sco_during_paring %d", p_app_ui_config->pairing_with_disc_hf_cfg);
 
 #ifdef BESUI_BTMSG_EN
     besui_bt_msg_put(ENTER_PAIRMODE_EVENT, 0xff, BT_DEVICE_NUM);
@@ -255,73 +217,6 @@ EARBUDS_TRACE(0,
     }
 }
 
-#define NTT_ROLE_SWITCH_DELAY_MS 3000
-
-static osTimerId ntt_role_switch_delay_timer = NULL;
-
-static void ntt_role_switch_delay_handler(void const *param);
-
-osTimerDef(NTT_ROLE_SWITCH_DELAY_TIMER,
-           ntt_role_switch_delay_handler);
-
-static void ntt_role_switch_delay_start(void)
-{
-    if (ntt_role_switch_delay_timer == NULL)
-    {
-        ntt_role_switch_delay_timer =
-            osTimerCreate(osTimer(NTT_ROLE_SWITCH_DELAY_TIMER),
-                          osTimerOnce,
-                          NULL);
-    }
-
-    if (ntt_role_switch_delay_timer != NULL)
-    {
-        osTimerStop(ntt_role_switch_delay_timer);
-        osTimerStart(ntt_role_switch_delay_timer,
-                     NTT_ROLE_SWITCH_DELAY_MS);
-
-        EARBUDS_TRACE(0,
-            "[ROLE_SWITCH][OUT_OF_CASE] delay role switch %d ms",
-            NTT_ROLE_SWITCH_DELAY_MS);
-    }
-}
-
-static void ntt_role_switch_delay_handler(void const *param)
-{
-     EARBUDS_TRACE(0,
-        "[ROLE_SWITCH][OUT_OF_CASE] timeout role=%d tws=%d mobile=%d",
-        app_ibrt_if_get_ui_role(),
-        bts_tws_if_is_tws_link_connected(),
-        app_bt_ibrt_has_mobile_link_connected());
-
-    if (!bts_tws_if_is_tws_link_connected())
-    {
-        EARBUDS_TRACE(0,
-            "[ROLE_SWITCH][OUT_OF_CASE] cancel: tws disconnected");
-        return;
-    }
-
-    if (app_ibrt_if_get_ui_role() != TWS_UI_MASTER)
-    {
-        EARBUDS_TRACE(0,
-            "[ROLE_SWITCH][OUT_OF_CASE] cancel: not master");
-        return;
-    }
-
-    if (!app_bt_ibrt_has_mobile_link_connected())
-    {
-        EARBUDS_TRACE(0,
-            "[ROLE_SWITCH][OUT_OF_CASE] cancel: mobile disconnected");
-        return;
-    }
-
-    EARBUDS_TRACE(0,
-        "[ROLE_SWITCH][OUT_OF_CASE] request master to slave");
-
-       osDelay(30);    
-    bts_tws_if_disconnect_acl_link();
-
-}
 /*****************************************************************************
  Prototype    : app_ibrt_customif_pairing_mode_exit
  Description  : indicate custom ui TWS pairing state exit
@@ -528,42 +423,8 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             {
                 app_bt_get_remote_device_name(addr);
             }
-            EARBUDS_TRACE(0,
-                "[NTT_MOBILE_INFO] A2DP open, role=%d tws=%d mobile=%d",
-                app_ibrt_if_get_ui_role(),
-                bts_tws_if_is_tws_link_connected(),
-                app_bt_ibrt_has_mobile_link_connected());
-
-            if (bts_tws_if_is_tws_link_connected() &&
-                    app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
-            {
-                EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][OUT_OF_CASE] A2DP open role master");
-
-                if (out_of_case_reconnect)   
-                {
-                    ntt_role_switch_delay_start();
-                }                    
-            }
             break;
         case IBRT_CONN_A2DP_CODEC_CONFIGURED:
-            EARBUDS_TRACE(0,
-                "[NTT_MOBILE_INFO] A2DP codec configured, role=%d tws=%d mobile=%d",
-                app_ibrt_if_get_ui_role(),
-                bts_tws_if_is_tws_link_connected(),
-                app_bt_ibrt_has_mobile_link_connected());
-
-            if (bts_tws_if_is_tws_link_connected() &&
-                    app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
-            {
-                EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][OUT_OF_CASE] A2DP codec configured role master");
-
-                if (out_of_case_reconnect)   
-                {
-                    ntt_role_switch_delay_start();
-                }                    
-            }
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
             break;
         case IBRT_CONN_A2DP_STREAMING:
@@ -744,7 +605,7 @@ void app_ibrt_customif_tws_on_paring_state_changed(ibrt_conn_pairing_state state
 #ifndef BESUI_TWS_EN
             if (app_ibrt_if_is_ui_slave() && (bes_bt_tws_besaud_is_connected()))
             {
-                //media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
+                media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
             }
 #endif
 #endif
@@ -773,81 +634,15 @@ void besui_tws_state_event(ibrt_conn_tws_conn_state_event *state, uint8_t reason
             besui_bt_msg_put(TWS_DISCONNECTED_EVENT, reason_code, BT_DEVICE_NUM);
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_tws_state_event IBRT_CONN_ACL_PROFILES_CONNECTED ");
 #ifdef USER_TOTA_SPP_SYNC_KEY_EN
             if(app_ibrt_if_is_ui_master())
                 tota_spp_aeskey_to_slave();
 #endif
             besui_bt_msg_put(TWS_CONNECTED_EVENT, 0xff, BT_DEVICE_NUM);
             break;
-        case IBRT_CONN_ACL_AUTH_COMPLETE:
-                EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_tws_state_event IBRT_CONN_ACL_AUTH_COMPLETE ");
-            break;
         default:
             break;
     }
-}
-#endif
-
-#ifdef IBRT
-#define NTT_USER_SETTING_SYNC_DELAY_MS    2000
-
-static osTimerId ntt_user_setting_sync_timer = NULL;
-static bool ntt_user_setting_synced_once = false;
-
-static void ntt_user_setting_sync_timer_handler(void const *param)
-{
-    if (ntt_user_setting_synced_once)
-    {
-        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip, already synced once");
-        return;
-    }
-
-    if (!app_ibrt_middleware_is_ui_slave())
-    {
-        EARBUDS_TRACE(0, "[NTT_USER_SYNC] delayed sync user settings");
-
-        ntt_user_setting_synced_once = true;
-        ntt_master_sync_all_user_settings_to_peer();
-    }
-    else
-    {
-        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip, role is slave");
-    }
-}
-
-osTimerDef(NTT_USER_SETTING_SYNC_TIMER,
-           ntt_user_setting_sync_timer_handler);
-
-static void ntt_user_setting_sync_delay_start(void)
-{
-    if (ntt_user_setting_synced_once)
-    {
-        EARBUDS_TRACE(0, "[NTT_USER_SYNC] skip start, already synced once");
-        return;
-    }
-
-    if (ntt_user_setting_sync_timer == NULL)
-    {
-        ntt_user_setting_sync_timer =
-            osTimerCreate(osTimer(NTT_USER_SETTING_SYNC_TIMER),
-                          osTimerOnce,
-                          NULL);
-    }
-
-    if (ntt_user_setting_sync_timer == NULL)
-    {
-        EARBUDS_TRACE(0, "[NTT_USER_SYNC] delay timer create failed");
-        return;
-    }
-
-    osTimerStop(ntt_user_setting_sync_timer);
-    osTimerStart(ntt_user_setting_sync_timer,
-                 NTT_USER_SETTING_SYNC_DELAY_MS);
-
-    EARBUDS_TRACE(0,
-        "[NTT_USER_SYNC] delay start %d ms",
-        NTT_USER_SETTING_SYNC_DELAY_MS);
 }
 #endif
 
@@ -870,20 +665,6 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
     switch (state->state.acl_state)
     {
         case IBRT_CONN_ACL_CONNECTED:
-            break;
-        case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
-#ifdef IBRT
-        if (!app_ibrt_middleware_is_ui_slave())
-        {
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] TWS profiles connected, skip early profile sync test");
-            ntt_user_setting_sync_delay_start();
-        }
-#endif
-        break;
-        case IBRT_CONN_ACL_AUTH_COMPLETE:
-                EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
             break;
         case IBRT_CONN_ACL_DISCONNECTED:
             break;
@@ -1063,22 +844,8 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
         }
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
             break;
         case IBRT_CONN_ACL_AUTH_COMPLETE:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
-#ifdef IBRT
-            if (!app_ibrt_middleware_is_ui_slave())
-            {
-                DEBUG_INFO(0,
-                    "[NTT_CASE_OPEN_RECONN] mobile ACL auth complete");
-
-                if (out_of_case_reconnect)
-                {
-                    //ntt_tws_reconnect_after_mobile_profiles_ready_check();
-                }
-            }
-#endif
             break;
         case IBRT_CONN_ACL_DISCONNECTING:
             break;
@@ -1191,24 +958,13 @@ void app_ibrt_customif_on_ibrt_state_changed(const bt_bdaddr_t *addr, ibrt_conne
 #endif
             break;
         case IBRT_CONN_IBRT_CONNECTED:
-        {
-            uint8_t local_level = app_battery_current_level();
-
-            EARBUDS_TRACE(1,
-                "[BAT_SYNC][IBRT_CONNECTED] local=%d role=%d",
-                local_level,
-                role);
-
-            app_ibrt_customif_cmd_sync_battery_level(local_level);
-
-            if (IBRT_SLAVE == role)
+            if(IBRT_SLAVE == role)
             {
             #ifdef BT_DIP_SUPPORT
                 btif_dip_set_state(addr, DIP_CTRL_ST_IDLE);
             #endif
             }
             break;
-        }
         case IBRT_CONN_IBRT_START_FAIL:
             break;
         case IBRT_CONN_IBRT_ACL_CONNECTED:
@@ -1312,6 +1068,16 @@ bool app_ibrt_customif_disallow_tws_role_switch_callback()
         return ibrt_ext_conn_policy_client_cb->disallow_tws_role_switch_hook();
     }
     return false;
+}
+
+void app_ibrt_customif_set_page_para_callback(app_ui_page_para_t *page_para)
+{
+    EARBUDS_TRACE(0,"custom_ui:set page para");
+
+    if (ibrt_ext_conn_policy_client_cb && ibrt_ext_conn_policy_client_cb->set_page_para_hook) {
+        ibrt_ext_conn_policy_client_cb->set_page_para_hook(page_para);
+    }
+    return;
 }
 
 /*****************************************************************************
@@ -1418,56 +1184,14 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
 {
     if (!errCode)
     {
-        EARBUDS_TRACE(0,
-            "custom_ui:switch ibrt role to %d run complete",
-            current_role);
+        EARBUDS_TRACE(0,"custom_ui:switch ibrt role to %d run complete", current_role);
     }
     else
     {
-        EARBUDS_TRACE(0,
-            "custom_ui:exist device doing ibrt role switch to %d failed",
-            current_role);
+        EARBUDS_TRACE(0,"custom_ui:exist device doing ibrt role switch to %d failed", current_role);
     }
-
-#ifdef IBRT
-    if (g_ntt_case_close_wait_poweroff)
-    {
-        EARBUDS_TRACE(2,
-            "[ROLE_SWITCH][CASE_CLOSE] complete role=%d err=%d",
-            current_role,
-            errCode);
-
-        if (!errCode)
-        {
-            if (current_role == TWS_UI_SLAVE)
-            {
-                EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][CASE_CLOSE] old master switched to slave, wait timer shutdown");
-
-                g_ntt_case_close_wait_poweroff = false;
-            }
-            else if (current_role == TWS_UI_MASTER)
-            {
-                EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][CASE_CLOSE] new master ready");
-            }
-        }
-        else
-        {
-            EARBUDS_TRACE(0,
-                "[ROLE_SWITCH][CASE_CLOSE] role switch failed");
-
-            g_ntt_case_close_wait_poweroff = false;
-        }
-    }
-#endif
-
-    if (ibrt_mgr_status_changed_client_cb &&
-        ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook)
-    {
-        ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook(
-            current_role,
-            errCode);
+    if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook) {
+        ibrt_mgr_status_changed_client_cb->ibrt_mgr_tws_role_switch_comp_hook(current_role, errCode);
     }
 }
 
@@ -1477,18 +1201,6 @@ void app_ibrt_customif_peer_box_state_update_callback(bud_box_state box_state)
     user_set_peer_box_sta(box_state);
 #endif
     EARBUDS_TRACE(0,"custom_ui:peer box state update=%s", app_ui_box_state_to_string(box_state));
-
-    if (box_state == IBRT_IN_BOX_OPEN)
-    {
-        uint8_t local_percent = app_battery_current_level();
-
-        EARBUDS_TRACE(1,
-            "[BAT_SYNC][BOX_OPEN] local=%d",
-            local_percent);
-
-        app_ibrt_customif_cmd_sync_battery_level(local_percent);
-    }
-
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->peer_box_state_update_hook) {
         ibrt_mgr_status_changed_client_cb->peer_box_state_update_hook(box_state);
     }
@@ -1500,6 +1212,14 @@ void app_ibrt_customif_pre_handle_box_event_callback(app_ui_evt_t box_evt)
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->pre_handle_box_event_hook) {
         ibrt_mgr_status_changed_client_cb->pre_handle_box_event_hook(box_evt);
     }
+}
+/*
+* custom tws switch interface
+* tws switch cmd send sucess, return true, else return false
+*/
+void app_ibrt_customif_ui_tws_switch(void)
+{
+    app_ibrt_if_tws_role_switch_request();
 }
 
 /*
@@ -1639,6 +1359,7 @@ static ibrt_ext_conn_policy_cb_t conn_policy_cbs = {
     .disallow_start_reconnect_mob_hook  = app_ibrt_customif_custom_disallow_reconnect_mob_callback,
     .disallow_start_reconnect_tws_hook  = app_ibrt_customif_custom_disallow_reconnect_tws_callback,
     .disallow_tws_role_switch_hook      = app_ibrt_customif_disallow_tws_role_switch_callback,
+    .set_page_para_hook                 = app_ibrt_customif_set_page_para_callback,
 };
 
 #if BLE_AUDIO_ENABLED
@@ -1869,17 +1590,17 @@ int app_ibrt_customif_ui_start(void)
 
     //passive enter pairing when no mobile record, the default should be false
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-    config.enter_pairing_on_empty_record            = false;
+    config.enter_pairing_on_empty_record            = true;
 #else
     config.enter_pairing_on_empty_record            = false;
 #endif
 
     //passive enter pairing when reconnect failed, the default should be false
 #ifdef FREEMAN_ENABLED_STERO
-    config.enter_pairing_on_reconnect_mobile_failed = false;
+    config.enter_pairing_on_reconnect_mobile_failed = true;
 #else
 #ifdef BESUI_TWS_EN
-    config.enter_pairing_on_reconnect_mobile_failed = false;
+    config.enter_pairing_on_reconnect_mobile_failed = true;
 #else
     config.enter_pairing_on_reconnect_mobile_failed = false;
 #endif
@@ -1887,7 +1608,7 @@ int app_ibrt_customif_ui_start(void)
 
     //passive enter pairing when mobile disconnect, the default should be false
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-    config.enter_pairing_on_mobile_disconnect       = false;
+    config.enter_pairing_on_mobile_disconnect       = true;
 #else
     config.enter_pairing_on_mobile_disconnect       = false;
 #endif
@@ -1909,7 +1630,7 @@ int app_ibrt_customif_ui_start(void)
     config.paring_with_disc_le_mob_num              = IBRT_PAIRING_DISC_NONE;
 
     //disconnect SCO or not when accepting phone connection in pairing mode
-    config.pairing_with_disc_hf_cfg                 = IBRT_PAIRING_DISC_NONE;
+    config.pairing_with_disc_hf_cfg                 = IBRT_PAIRING_HF_HUNGUP;
 
     //pause current music when entering pairing mode
     config.pairing_with_pause_music                 = true;
@@ -1918,7 +1639,7 @@ int app_ibrt_customif_ui_start(void)
     config.pairing_without_start_ibrt               = false;
 
     //set nv master to tws master for lea connection
-    config.pairing_with_set_nv_master_as_master     = false;
+    config.pairing_with_set_nv_master_as_master     = true;
 
     //accept new dev only in pairing state
     config.accept_new_dev_only_in_pairing           = false;
@@ -2098,96 +1819,9 @@ void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
 {
     app_ibrt_middleware_ui_role_updated_handler(newRole);
 
-    EARBUDS_TRACE(0,
-        "%s newRole=%d",
-        __func__,
-        newRole);
-
     extern int bt_sco_chain_set_master_role(bool is_master);
-    extern void bt_media_set_current_media(uint16_t stream_type);
-    extern void bt_media_set_media_type(uint16_t stream_type, uint8_t device_id);
-    extern int app_audio_sendrequest(uint8_t status, uint8_t op, uint32_t param);
-
     bt_sco_chain_set_master_role(newRole == TWS_UI_MASTER);
-
-#ifdef BT_HFP_SUPPORT
-    if (newRole == TWS_UI_MASTER)
-    {
-        uint8_t curr_sco = app_bt_audio_get_curr_playing_sco();
-        uint8_t device_id = curr_sco;
-
-        EARBUDS_TRACE(1,
-            "[ROLE_SWITCH][HFP] curr_sco=%d",
-            curr_sco);
-
-        if (device_id == BT_DEVICE_INVALID_ID)
-        {
-            device_id = app_bt_audio_get_hfp_device_for_user_action();
-
-            EARBUDS_TRACE(1,
-                "[ROLE_SWITCH][HFP] hfp_user_action_dev=%d",
-                device_id);
-        }
-
-        if (device_id != BT_DEVICE_INVALID_ID)
-        {
-            BT_DEVICE_T *curr_device = app_bt_get_device(device_id);
-
-            EARBUDS_TRACE(1,
-                "[ROLE_SWITCH][HFP] curr_device=%p",
-                curr_device);
-
-            if (curr_device)
-            {
-                if (!curr_device->acl_is_connected)
-                {
-                    EARBUDS_TRACE(1,
-                        "[ROLE_SWITCH][HFP] skip, mobile acl not connected device=%d",
-                        device_id);
-                    return;
-                }
-
-                if (!curr_device->hf_channel)
-                {
-                    EARBUDS_TRACE(1,
-                        "[ROLE_SWITCH][HFP] skip, hf_channel null device=%d",
-                        device_id);
-                    return;
-                }
-
-                EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][HFP] call hfp ibrt role switch handle");
-
-                btif_hfp_ibrt_role_switch_handle(&curr_device->remote);
-
-                EARBUDS_TRACE(0,
-                    "[ROLE_SWITCH][HFP] hfp role switch handle done");
-
-                if (curr_sco != BT_DEVICE_INVALID_ID)
-                {
-                    EARBUDS_TRACE(1,
-                        "[ROLE_SWITCH][HFP] sco active, restart hfp pcm device=%d",
-                        device_id);
-
-                    ntt_hfp_pcm_force_restart_after_role_switch(device_id);
-                }
-                else
-                {
-                    EARBUDS_TRACE(1,
-                        "[ROLE_SWITCH][HFP] no sco, create hfp audio link device=%d",
-                        device_id);
-
-                    app_ibrt_if_hf_create_audio_link(device_id);
-                }
-            }
-        }
-        else
-        {
-            EARBUDS_TRACE(0,
-                "[ROLE_SWITCH][HFP] no hfp device");
-        }
-    }
-#endif
+    // to add custom implementation here
 }
 
 bool app_ibrt_customif_disallow_pagescan()
@@ -2207,537 +1841,3 @@ bool app_ibrt_customif_disallow_reconnect_mobile()
 
     return false;
 }
-
-#ifdef IBRT
-
-extern "C" bool ntt_case_close_role_switch_can_shutdown(void)
-{
-#ifdef IBRT
-    if (!bts_tws_if_is_tws_link_connected())
-    {
-        return true;
-    }
-
-    return (app_ibrt_if_get_ui_role() != TWS_UI_MASTER);
-#else
-    return true;
-#endif
-}
-
-extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
-{
-    if (bts_tws_if_is_tws_link_connected() &&
-        app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
-    {
-        EARBUDS_TRACE(0,
-            "[ROLE_SWITCH][CASE_CLOSE] master switch to slave by UI API");
-
-        g_ntt_case_close_wait_poweroff = true;
-
-        return app_ui_user_role_switch(false);
-    }
-
-    return false;
-}
-
-extern "C" void ntt_case_close_role_switch_reset(void)
-{
-    g_ntt_case_close_wait_poweroff = false;
-}
-#endif
-
-#define NTT_FIRST_OUT_ROLE_CHECK_MS          100
-#define NTT_FIRST_OUT_ROLE_CHECK_MAX_COUNT   30
-
-/*
- * true：
- * 本機是先離盒者，允許成為 Master 並回連手機。
- */
-static bool g_ntt_first_out_owner = false;
-
-/*
- * 避免重複要求 role switch。
- */
-static bool g_ntt_first_out_role_switch_requested = false;
-
-/*
- * 避免重複執行 opening reconnect。
- */
-static bool g_ntt_first_out_reconnect_started = false;
-
-static uint8_t g_ntt_first_out_role_check_count = 0;
-
-static void ntt_first_out_role_check_handler(void const *param);
-
-osTimerDef(NTT_FIRST_OUT_ROLE_CHECK_TIMER,ntt_first_out_role_check_handler);
-
-static osTimerId g_ntt_first_out_role_check_timer = NULL;
-
-
-/*
- * 是否已經是 Master。
- *
- * 根據你目前的 log：
- * role=0 是 Master
- * role=1 是 Slave
- *
- * 建議仍使用 SDK enum，不要直接判斷 0。
- */
-static bool ntt_first_out_is_master(void)
-{
-    return
-        app_ibrt_if_get_ui_role() ==
-        TWS_UI_MASTER;
-}
-
-
-/*
- * 停止角色確認 timer。
- */
-static void ntt_first_out_role_check_stop(void)
-{
-    if (g_ntt_first_out_role_check_timer != NULL)
-    {
-        osTimerStop(g_ntt_first_out_role_check_timer);
-    }
-
-    g_ntt_first_out_role_check_count = 0;
-}
-
-
-/*
- * 啟動／重新啟動角色確認 timer。
- */
-static void ntt_first_out_role_check_start(void)
-{
-    if (g_ntt_first_out_role_check_timer == NULL)
-    {
-        g_ntt_first_out_role_check_timer = osTimerCreate(osTimer(NTT_FIRST_OUT_ROLE_CHECK_TIMER),osTimerOnce,NULL);
-    }
-
-    if (g_ntt_first_out_role_check_timer == NULL)
-    {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] create role timer failed");
-        return;
-    }
-
-    osTimerStop(g_ntt_first_out_role_check_timer);
-    osTimerStart(g_ntt_first_out_role_check_timer,NTT_FIRST_OUT_ROLE_CHECK_MS);
-}
-
-
-/*
- * 只有 first-out owner 且已經是 Master，
- * 才允許發起手機回連。
- */
-static void ntt_first_out_start_mobile_reconnect(void)
-{
-    if (!g_ntt_first_out_owner)
-    {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: not owner");
-
-        return;
-    }
-
-    if (g_ntt_first_out_reconnect_started)
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect already started");
-
-        return;
-    }
-
-    if (!ntt_case_state_is_local_out())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect denied: local not OUT_CASE");
-
-        return;
-    }
-
-    if (!bts_tws_if_is_tws_link_connected())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect denied: TWS disconnected");
-
-        return;
-    }
-
-    if (!ntt_first_out_is_master())
-    {
-        EARBUDS_TRACE(
-            1,
-            "[NTT_FIRST_OUT] reconnect wait: role=%d",
-            app_ibrt_if_get_ui_role());
-
-        return;
-    }
-
-    /*
-     * 已經有手機連線時，不需要再次 opening reconnect。
-     */
-    if (app_bt_ibrt_has_mobile_link_connected())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] mobile already connected");
-
-        g_ntt_first_out_reconnect_started = true;
-        return;
-    }
-
-    g_ntt_first_out_reconnect_started = true;
-
-    EARBUDS_TRACE(
-        3,
-        "[NTT_FIRST_OUT] MASTER reconnect mobile "
-        "local=%d peer=%d",
-        ntt_case_state_get_local(),
-        ntt_case_state_get_peer());
-
-    app_bt_profile_connect_manager_opening_reconnect();
-}
-
-
-/*
- * Slave 呼叫 role switch 後，由 timer 等待角色真正變成 Master。
- */
-static void ntt_first_out_role_check_handler(void const *param)
-{
-    (void)param;
-
-    EARBUDS_TRACE(
-        5,
-        "[NTT_FIRST_OUT] role check owner=%d role=%d "
-        "local=%d peer=%d cnt=%u",
-        g_ntt_first_out_owner,
-        app_ibrt_if_get_ui_role(),
-        ntt_case_state_get_local(),
-        ntt_case_state_get_peer(),
-        g_ntt_first_out_role_check_count);
-
-    /*
-     * 本機已經不是 first-out owner，停止流程。
-     */
-    if (!g_ntt_first_out_owner)
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] role check stop: owner cleared");
-
-        ntt_first_out_role_check_stop();
-        return;
-    }
-
-    /*
-     * 本機重新入盒時，停止角色切換與回連流程。
-     */
-    if (!ntt_case_state_is_local_out())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] role check stop: local IN_CASE");
-
-        ntt_first_out_role_check_stop();
-        return;
-    }
-
-    /*
-     * 已完成角色切換。
-     */
-    if (ntt_first_out_is_master())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] role switch completed -> MASTER");
-
-        g_ntt_first_out_role_switch_requested = false;
-
-        ntt_first_out_role_check_stop();
-
-        ntt_first_out_start_mobile_reconnect();
-        return;
-    }
-
-    g_ntt_first_out_role_check_count++;
-
-    if (g_ntt_first_out_role_check_count >=
-        NTT_FIRST_OUT_ROLE_CHECK_MAX_COUNT)
-    {
-        EARBUDS_TRACE(
-            2,
-            "[NTT_FIRST_OUT] role switch timeout role=%d cnt=%u",
-            app_ibrt_if_get_ui_role(),
-            g_ntt_first_out_role_check_count);
-
-        g_ntt_first_out_role_switch_requested = false;
-
-        /*
-         * 角色沒有切換成功，不能讓 Slave 回連手機。
-         */
-        ntt_first_out_role_check_stop();
-        return;
-    }
-    EARBUDS_TRACE(0,"[NTT_FIRST_OUT] ntt_first_out_role_check_start");
-    ntt_first_out_role_check_start();
-}
-
-
-/*
- * 先離盒者執行：
- *
- * 1. 標記為 owner。
- * 2. 已是 Master：直接回連手機。
- * 3. 是 Slave：要求切成 Master。
- * 4. timer 等待角色切換完成後再回連。
- */
-void ntt_first_out_take_master_and_reconnect(void)
-{
-    if (g_ntt_first_out_owner)
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] owner already set");
-
-        return;
-    }
-
-    g_ntt_first_out_owner = true;
-    g_ntt_first_out_reconnect_started = false;
-    g_ntt_first_out_role_check_count = 0;
-
-    EARBUDS_TRACE(
-        5,
-        "[NTT_FIRST_OUT] claim owner role=%d local=%d "
-        "peer=%d tws=%d mobile=%d",
-        app_ibrt_if_get_ui_role(),
-        ntt_case_state_get_local(),
-        ntt_case_state_get_peer(),
-        bts_tws_if_is_tws_link_connected(),
-        app_bt_ibrt_has_mobile_link_connected());
-
-    /*
-     * 本來就是 Master，不需 role switch。
-     */
-    if (ntt_first_out_is_master())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] already MASTER -> reconnect");
-
-        ntt_first_out_start_mobile_reconnect();
-        return;
-    }
-
-    /*
-     * 目前是 Slave，要求切成 Master。
-     */
-    if (!g_ntt_first_out_role_switch_requested)
-    {
-        g_ntt_first_out_role_switch_requested = true;
-
-        EARBUDS_TRACE(
-            1,
-            "[NTT_FIRST_OUT] request role switch role=%d",
-            app_ibrt_if_get_ui_role());
-
-        app_ui_user_role_switch(true);
-    }
-    EARBUDS_TRACE(0,"[NTT_FIRST_OUT] ntt_first_out_role_check_start");
-    ntt_first_out_role_check_start();
-}
-
-
-/*
- * 後離盒者執行：
- *
- * 不切 Master、不回連手機。
- */
-static void ntt_later_out_keep_slave(void)
-{
-    /*
-     * 後離盒者不能取得 reconnect owner。
-     */
-    g_ntt_first_out_owner = false;
-    g_ntt_first_out_role_switch_requested = false;
-    g_ntt_first_out_reconnect_started = false;
-
-    ntt_first_out_role_check_stop();
-
-    EARBUDS_TRACE(
-        4,
-        "[NTT_FIRST_OUT] later-out keep role=%d "
-        "local=%d peer=%d",
-        app_ibrt_if_get_ui_role(),
-        ntt_case_state_get_local(),
-        ntt_case_state_get_peer());
-
-    /*
-     * 不呼叫：
-     *
-     * app_ui_user_role_switch(true);
-     * app_bt_profile_connect_manager_opening_reconnect();
-     */
-}
-
-
-/*
- * 本機重新入盒時清除本輪 first-out 狀態。
- */
-static void ntt_first_out_reset_local(void)
-{
-    EARBUDS_TRACE(
-        4,
-        "[NTT_FIRST_OUT] reset owner=%d switch=%d reconnect=%d",
-        g_ntt_first_out_owner,
-        g_ntt_first_out_role_switch_requested,
-        g_ntt_first_out_reconnect_started);
-
-    g_ntt_first_out_owner = false;
-    g_ntt_first_out_role_switch_requested = false;
-    g_ntt_first_out_reconnect_started = false;
-
-    ntt_first_out_role_check_stop();
-}
-
-extern "C"
-void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
-{
-    NTT_CASE_STATE_E peer_state = ntt_case_state_get_peer();
-    EARBUDS_TRACE(
-        6,
-        "[NTT_CASE_CB][LOCAL] state=%d peer=%d "
-        "role=%d tws=%d mobile=%d owner=%d",
-        state,
-        peer_state,
-        app_ibrt_if_get_ui_role(),
-        bts_tws_if_is_tws_link_connected(),
-        app_bt_ibrt_has_mobile_link_connected(),
-        g_ntt_first_out_owner);
-
-    if (state == NTT_CASE_STATE_IN_CASE)
-    {
-        EARBUDS_TRACE(0,"[NTT_CASE_CB][LOCAL] IN_CASE");
-        app_key_handle_pause_music_on_pogo_in();
-        ntt_first_out_reset_local();
-        return;
-    }
-
-    if (state != NTT_CASE_STATE_OUT_CASE)
-    {
-        EARBUDS_TRACE(1,"[NTT_CASE_CB][LOCAL] invalid state=%d",state);
-        return;
-    }
-
-    EARBUDS_TRACE(0,"[NTT_CASE_CB][LOCAL] OUT_CASE");
-    /*
-     * 離盒後取消入盒關機 timer。
-     */
-    earBudsCloseOff_PogonIn_StopTimer();
-    /*
-     * 判斷是否為先離盒者。
-     *
-     * 本機已 OUT、Peer 仍 IN：
-     * 本機就是先離盒者。
-     */
-    if (peer_state == NTT_CASE_STATE_IN_CASE)
-    {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] local first OUT, peer still IN");
-        ntt_first_out_take_master_and_reconnect();
-        return;
-    }
-
-    /*
-     * Peer 已經 OUT：
-     * 表示 Peer 先離盒，本機是後離盒者。
-     */
-    if (peer_state == NTT_CASE_STATE_OUT_CASE)
-    {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] peer already OUT, local later OUT");
-        ntt_later_out_keep_slave();
-        return;
-    }
-
-    /*
-     * Peer UNKNOWN：
-     * 不應貿然搶 Master，避免兩耳同時回連。
-     *
-     * 正常情況下，兩耳在盒內收到有效 UART packet 後，
-     * peer 應該是 IN_CASE。
-     */
-    EARBUDS_TRACE(1,"[NTT_FIRST_OUT] peer UNKNOWN, wait peer state");
-    ntt_later_out_keep_slave();
-}
-
-extern "C"
-void ntt_case_state_peer_changed_callback(NTT_CASE_STATE_E state)
-{
-    NTT_CASE_STATE_E local_state = ntt_case_state_get_local();
-    EARBUDS_TRACE(
-        6,
-        "[NTT_CASE_CB][PEER] peer=%d local=%d "
-        "role=%d owner=%d both_out=%d",
-        state,
-        local_state,
-        app_ibrt_if_get_ui_role(),
-        g_ntt_first_out_owner,
-        ntt_case_state_are_both_out());
-
-    if (state == NTT_CASE_STATE_IN_CASE)
-    {
-        EARBUDS_TRACE(0,"[NTT_CASE_CB][PEER] peer IN_CASE");
-        /*
-         * 若本機已 OUT，而 Peer 現在明確是 IN，
-         * 表示本機是先離盒者。
-         *
-         * 這也處理 local OUT 時 peer 尚為 UNKNOWN 的情況。
-         */
-        if (local_state == NTT_CASE_STATE_OUT_CASE && !g_ntt_first_out_owner)
-        {
-            EARBUDS_TRACE(0,"[NTT_FIRST_OUT] local OUT + peer IN -> claim owner");
-            ntt_first_out_take_master_and_reconnect();
-        }
-
-        return;
-    }
-
-    if (state != NTT_CASE_STATE_OUT_CASE)
-    {
-        return;
-    }
-
-    EARBUDS_TRACE(0,"[NTT_CASE_CB][PEER] peer OUT_CASE");
-    /*
-     * Peer 先送來 OUT，而本機仍在盒內：
-     * 明確表示 Peer 是先離盒者。
-     *
-     * 本機之後離盒時必須保持 Slave、不回連。
-     */
-    if (local_state == NTT_CASE_STATE_IN_CASE)
-    {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] peer is first OUT, local remains IN");
-        g_ntt_first_out_owner = false;
-        g_ntt_first_out_role_switch_requested = false;
-        g_ntt_first_out_reconnect_started = false;
-
-        ntt_first_out_role_check_stop();
-        return;
-    }
-
-    if (local_state == NTT_CASE_STATE_OUT_CASE)
-    {
-        if (g_ntt_first_out_owner)
-        {
-            EARBUDS_TRACE(1,"[NTT_FIRST_OUT] BOTH OUT, local keeps owner tws=%d",bts_tws_if_is_tws_link_connected());
-            ntt_first_out_start_mobile_reconnect();
-        }
-        else
-        {
-            EARBUDS_TRACE(0,"[NTT_FIRST_OUT] BOTH OUT, local stays follower");
-        }
-    }
-}
-

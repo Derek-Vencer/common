@@ -33,6 +33,7 @@
 #define  IBRT_UI_SCAN_WINDOW_IN_A2DP_TWS_CONNECTED               (BTIF_BT_DEFAULT_PAGE_SCAN_WINDOW)
 
 int app_ibrt_customif_ui_start(void);
+void app_ibrt_customif_ui_tws_switch(void);
 void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole);
 
 #ifdef BESUI_APP_EN

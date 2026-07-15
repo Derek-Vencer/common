@@ -39,8 +39,6 @@
 extern bool bts_tws_if_is_tws_addr(const uint8_t* pBdAddr);
 #endif
 
-extern bool ntt_first_no_mobile_pair_mode;
-
 #ifdef RAM_NV_RECORD
 #define MAX_RECORD_NUM     3
 nvrec_btdevicerecord g_fpga_ram_record[MAX_RECORD_NUM];
@@ -591,14 +589,7 @@ bt_status_t nv_record_add(SECTIONS_ADP_ENUM type, void *record)
 #else
             retstatus = ram_record_ddbrec_add(record);
 #endif
-
-            if (retstatus == BT_STS_SUCCESS)
-            {
-                ntt_first_no_mobile_pair_mode = false;
-            }
-
             break;
-
         default:
             break;
     }
@@ -879,42 +870,6 @@ void nv_record_btdevicerecord_set_hfp_vol(nvrec_btdevicerecord* pRecord, int8_t 
     }
 
     nv_record_post_write_operation(lock);
-}
-
-bool nv_record_btdevicerecord_set_cod(nvrec_btdevicerecord *pRecord,const uint8_t cod[3])
-{
-    uint32_t lock;
-
-    if ((pRecord == NULL) || (cod == NULL))
-    {
-        NV_SECTION_TRACE(0,"[NTT_REMOTE_COD][ERROR] invalid param");
-        return false;
-    }
-
-    if ((pRecord->record.cod[0] == cod[0]) &&
-        (pRecord->record.cod[1] == cod[1]) &&
-        (pRecord->record.cod[2] == cod[2]))
-    {
-        NV_SECTION_TRACE(0,"[NTT_REMOTE_COD] unchanged %02x:%02x:%02x",cod[0],cod[1],cod[2]);
-        return true;
-    }
-
-    lock = nv_record_pre_write_operation();
-
-    /*
-     * 通知 NV runtime data 已修改。
-     * 後續由 SDK 原本的 NV flush 機制寫入 Flash。
-     */
-    nv_record_update_runtime_userdata();
-
-    pRecord->record.cod[0] = cod[0];
-    pRecord->record.cod[1] = cod[1];
-    pRecord->record.cod[2] = cod[2];
-
-    nv_record_post_write_operation(lock);
-
-    NV_SECTION_TRACE(0,"[NTT_REMOTE_COD][SET] cod=%02x:%02x:%02x",cod[0],cod[1],cod[2]);
-    return true;
 }
 
 void nv_record_btdevicevolume_set_a2dp_vol(btdevice_volume* device_vol, int8_t vol)

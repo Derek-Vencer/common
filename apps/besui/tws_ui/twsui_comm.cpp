@@ -573,7 +573,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
         uictl.case_open_flag = false;
         batt_last = level_buf;
         uicom.bat_curr_level = level_buf;
-        app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+        app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
         BESUI_TRACE(0,"[UIBAT]%s, case_open update!!!", __func__);
         goto CASE_OPEN_UPDATE;
     }
@@ -634,7 +634,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
             {
                 batt_last = level_buf;
                 uicom.bat_curr_level = level_buf;
-                app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+                app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
             }
             else
             {
@@ -657,7 +657,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
             {
                 batt_last = level_buf;
                 uicom.bat_curr_level = level_buf;
-                app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+                app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
             }
             else
             {
@@ -742,7 +742,7 @@ void app_battery_low_voice_play_process(void)
         uicom.bat_low_prompt_cnt++;        
         if(uicom.bat_low_prompt_cnt == 1)
         {
-            media_PlayAudio(AUD_ID_BT_BATTERY_LOW, 0);
+            media_PlayAudio_single_play(AUD_ID_BT_CHARGE_PLEASE, 0);
         }
         if(uicom.bat_low_prompt_cnt >= BAT_LOW_PROMPT_CNT)
             uicom.bat_low_prompt_cnt = 0;

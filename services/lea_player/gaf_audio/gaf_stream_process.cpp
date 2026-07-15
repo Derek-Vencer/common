@@ -36,6 +36,7 @@
 #include "audio_dump.h"
 // Algo process
 #include "bt_sco_chain.h"
+#include "bt_sco_chain_lea_reframe.h"
 #include "audio_process.h"
 #include "speech_memory.h"
 #include "arm_math_ex.h"
@@ -60,8 +61,10 @@ static uint8_t *g_playback_stream_buf = NULL;
 static uint32_t g_capture_stream_buf_size = 0;
 static uint32_t g_playback_stream_buf_size = 0;
 
+static bool g_call_algo_inited = false;
+
 #ifndef GAF_ENCODER_CROSS_CORE_USE_M55
-static uint8_t *g_aec_echo_buf = NULL;
+static POSSIBLY_UNUSED uint8_t *g_aec_echo_buf = NULL;
 static uint32_t g_capture_upsampling_factor = 1;
 static IirResampleState *g_capture_upsampling_st = NULL;
 #endif
@@ -127,7 +130,11 @@ uint32_t gaf_stream_process_need_capture_buf_size(uint16_t stream)
     if (0) {
 #ifndef GAF_ENCODER_CROSS_CORE_USE_M55
     } else if (gaf_stream_process_context_is_call(stream)) {
-        size = 1024 * 60;
+#ifdef GAF_CONVERSATIONAL_STREAM_PROCESS_ENABLE
+        size = 1024 * 150;
+#else
+        size = 1024 * 2;
+#endif
         LEA_PLAYER_TRACE(1, "[%s] FIXME: Check Call tx algo RAM usage", __func__);
 #endif
 #ifdef BINAURAL_RECORD_PROCESS
@@ -201,13 +208,19 @@ int32_t gaf_stream_process_capture_open(uint16_t stream, struct AF_STREAM_CONFIG
 #if defined(SPEECH_ALGO_DSP)
         speech_enable_mcpp(true);
 #endif
-        uint32_t rx_frame_len = g_playback_stream_cfg.data_size / g_playback_stream_cfg.channel_num / (g_playback_stream_cfg.bits <= AUD_BITS_16 ? 2 : 4) / 2;
+
+#ifdef GAF_CONVERSATIONAL_STREAM_PROCESS_ENABLE
         if (g_playback_stream_cfg.sample_rate != 0){
-            speech_init2(stream_cfg->sample_rate, g_playback_stream_cfg.sample_rate, frame_len, rx_frame_len, frame_len, g_capture_stream_buf, g_capture_stream_buf_size);
+            uint32_t rx_frame_len = g_playback_stream_cfg.data_size / g_playback_stream_cfg.channel_num / (g_playback_stream_cfg.bits <= AUD_BITS_16 ? 2 : 4) / 2;
+            bt_sco_chain_lea_reframe_open(stream_cfg->sample_rate, g_playback_stream_cfg.sample_rate, frame_len, rx_frame_len, frame_len, g_capture_stream_buf, g_capture_stream_buf_size);
         } else {
-            speech_init2(stream_cfg->sample_rate, stream_cfg->sample_rate, frame_len, rx_frame_len, frame_len, g_capture_stream_buf, g_capture_stream_buf_size);
+            bt_sco_chain_lea_reframe_open(stream_cfg->sample_rate, stream_cfg->sample_rate, frame_len, frame_len, frame_len, g_capture_stream_buf, g_capture_stream_buf_size);
         }
         g_aec_echo_buf = (uint8_t *)speech_calloc(frame_len, (stream_cfg->bits <= AUD_BITS_16 ? 2 : 4));
+#else
+        speech_heap_init(g_capture_stream_buf, g_capture_stream_buf_size);
+#endif
+        g_call_algo_inited = true;
 #endif
     } else if (gaf_stream_process_context_is_binaural_record(stream)) {
         LEA_PLAYER_TRACE(1, "[%s] Binaural Recording...", __func__);
@@ -278,8 +291,16 @@ int32_t gaf_stream_process_capture_close(void)
 
     if (gaf_stream_process_context_is_call(g_capture_stream)) {
 #ifndef GAF_ENCODER_CROSS_CORE_USE_M55
+#ifdef GAF_CONVERSATIONAL_STREAM_PROCESS_ENABLE
+        g_call_algo_inited = false;
         speech_free(g_aec_echo_buf);
-        speech_deinit();
+        bt_sco_chain_lea_reframe_close();
+#else
+        size_t total = 0, used = 0, max_used = 0;
+        speech_memory_info(&total, &used, &max_used);
+        LEA_PLAYER_TRACE(3,"SPEECH MALLOC MEM: total - %d, used - %d, max_used - %d.", total, used, max_used);
+        ASSERT(used == 0, "[%s] used != 0", __func__);
+#endif
 #endif
     } else if (gaf_stream_process_context_is_binaural_record(g_capture_stream)) {
         LEA_PLAYER_TRACE(1, "[%s] Binaural Recording...", __func__);
@@ -381,18 +402,24 @@ uint32_t gaf_stream_process_capture_run(uint8_t *buf, uint32_t len)
 
     if (gaf_stream_process_context_is_call(g_capture_stream)) {
 #ifndef GAF_ENCODER_CROSS_CORE_USE_M55
-        if (g_capture_stream_cfg.channel_num == (SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1)){
-            ASSERT(pcm_len % (SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1) == 0, "[%s] pcm_len(%d) should be divided by %d", __FUNCTION__, pcm_len, SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1);
-            if (g_capture_stream_cfg.bits == AUD_BITS_16){
-                gaf_stream_split_capture_data((int16_t *)buf, (int16_t *)g_aec_echo_buf, pcm_len);
-            } else if (g_capture_stream_cfg.bits == AUD_BITS_24){
-                gaf_stream_split_capture_data((int32_t *)buf, (int32_t *)g_aec_echo_buf, pcm_len);
-            }
-            pcm_len = pcm_len / (SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1) * SPEECH_CODEC_CAPTURE_CHANNEL_NUM;
+#ifdef GAF_CONVERSATIONAL_STREAM_PROCESS_ENABLE
+#ifdef SPEECH_TX_AEC_CODEC_REF
+        ASSERT(pcm_len % (SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1) == 0, "[%s] pcm_len(%d) should be divided by %d", __FUNCTION__, pcm_len, SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1);
+        if (g_capture_stream_cfg.bits == AUD_BITS_16){
+            gaf_stream_split_capture_data((int16_t *)buf, (int16_t *)g_aec_echo_buf, pcm_len);
+        } else if (g_capture_stream_cfg.bits == AUD_BITS_24){
+            gaf_stream_split_capture_data((int32_t *)buf, (int32_t *)g_aec_echo_buf, pcm_len);
         }
-
-        speech_tx_process(buf, g_aec_echo_buf, (int32_t *)&pcm_len);
+        pcm_len = pcm_len / (SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1) * SPEECH_CODEC_CAPTURE_CHANNEL_NUM;
+#endif
+        if (g_call_algo_inited) {
+            bt_sco_chain_lea_reframe_tx_process(buf, g_aec_echo_buf, (int32_t *)&pcm_len);
+            len = pcm_len * sample_bytes;
+        }
+#else
+        pcm_len = gaf_stream_process_capture_data_extraction(buf, (uint32_t *)&len, g_capture_stream_cfg.bits, g_capture_stream_cfg.channel_num);
         len = pcm_len * sample_bytes;
+#endif
 #endif
     } else if (gaf_stream_process_context_is_binaural_record(g_capture_stream)) {
 #ifdef BINAURAL_RECORD_PROCESS
@@ -511,6 +538,7 @@ int32_t gaf_stream_process_playback_open(uint16_t stream, struct AF_STREAM_CONFI
         // g_playback_stream = APP_BAP_CONTEXT_TYPE_CONVERSATIONAL;
 #ifdef GAF_ENCODER_CROSS_CORE_USE_M55
         speech_init(stream_cfg->sample_rate, stream_cfg->sample_rate, frame_len, frame_len, 0, g_playback_stream_buf, g_playback_stream_buf_size);
+        g_call_algo_inited = true;
 #endif
     } else if (stream == BES_BLE_GAF_CONTEXT_TYPE_MEDIA_BIT) {
         audio_process_open(stream_cfg->sample_rate,
@@ -536,6 +564,7 @@ int32_t gaf_stream_process_playback_close(void)
 
     if (gaf_stream_process_context_is_call(g_playback_stream)) {
 #ifdef GAF_ENCODER_CROSS_CORE_USE_M55
+        g_call_algo_inited = false;
         speech_deinit();
 #endif
     } else if (g_playback_stream == BES_BLE_GAF_CONTEXT_TYPE_MEDIA_BIT) {
@@ -560,8 +589,12 @@ uint32_t gaf_stream_process_playback_run(uint8_t *buf, uint32_t len)
 #else
     if ((gaf_stream_process_context_is_call(g_playback_stream)) && (gaf_stream_process_context_is_call(g_capture_stream))) {
 #endif
-        speech_rx_process(buf, (int32_t *)&pcm_len);
-        len = pcm_len * sample_bytes;
+#ifdef GAF_CONVERSATIONAL_STREAM_PROCESS_ENABLE
+        if (g_call_algo_inited) {
+            bt_sco_chain_lea_reframe_rx_process(buf, (int32_t *)&pcm_len);
+            len = pcm_len * sample_bytes;
+        }
+#endif
     } else if (g_playback_stream == BES_BLE_GAF_CONTEXT_TYPE_MEDIA_BIT) {
         audio_process_run(buf, len);
     }

@@ -99,12 +99,7 @@ subdir-ccflags-y += \
     -Imesh/adapter \
     -Imesh/system \
     -Imesh/stack \
-    -Iplatform/drivers/ana/best1700 \
-    -Iservices/nv_section/factory_section \
-    -Ibthost/adapter/inc/ble/common \
-    
-    
-    
+    -Iplatform/drivers/ana/best1700
 
 ifeq ($(CONFIG_BT_MESH_USES_EXTERNAL_PSA),1)
 ccflags-y += -Iutils/mbedtls/include \

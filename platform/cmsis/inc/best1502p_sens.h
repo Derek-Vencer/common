@@ -132,7 +132,7 @@ typedef enum IRQn
 
 #define TIMER10_IRQn            MCU_TIMER1_IRQn
 #define TIMER11_IRQn            MCU_TIMER1_IRQn
-#define WDT_IRQn                AON_WDT_IRQn
+#define WDT_IRQn                MCU_WDT_IRQn
 
 #endif
 

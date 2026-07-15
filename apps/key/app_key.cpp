@@ -106,8 +106,6 @@ static int app_key_handle_process(APP_MESSAGE_BODY *msg_body)
 
     if (key_handle != NULL && key_handle->function!= NULL)
         ((APP_KEY_HANDLE_CB_T)key_handle->function)(&key_status,key_handle->param);
-    else
-    	KEY_TRACE(0,"%s not handle_key",__func__);
 
     return 0;
 }
@@ -119,21 +117,18 @@ int app_key_handle_registration(const APP_KEY_HANDLE *key_handle)
 #endif
 
     APP_KEY_HANDLE *dest_key_handle = NULL;
-//    KEY_TRACE(1,"%s",__func__);
+    KEY_TRACE(1,"%s",__func__);
     dest_key_handle = app_key_handle_find(&(key_handle->key_status));
 
-//    KEY_TRACE(2,"%s dest handle:%p",__func__,dest_key_handle);
+    KEY_TRACE(2,"%s dest handle:%p",__func__,dest_key_handle);
     if (dest_key_handle == NULL){
         dest_key_handle = (APP_KEY_HANDLE *)osPoolCAlloc (app_key_handle_mempool);
-//        KEY_TRACE(2,"%s malloc:%p",__func__,dest_key_handle);
+        KEY_TRACE(2,"%s malloc:%p",__func__,dest_key_handle);
         list_append(app_key_conifg.key_list, dest_key_handle);
     }
     if (dest_key_handle == NULL)
-    {
-//    	KEY_TRACE(0,"%s not key_handle",__func__);
         return -1;
-    }
-//    KEY_TRACE(5,"%s set handle:%p code:%d event:%d function:%p",__func__,dest_key_handle, key_handle->key_status.code, key_handle->key_status.event, key_handle->function);
+    KEY_TRACE(5,"%s set handle:%p code:%d event:%d function:%p",__func__,dest_key_handle, key_handle->key_status.code, key_handle->key_status.event, key_handle->function);
     dest_key_handle->key_status.code = key_handle->key_status.code;
     dest_key_handle->key_status.event = key_handle->key_status.event;
     dest_key_handle->string = key_handle->string;
@@ -176,7 +171,6 @@ int app_key_close(void)
 #ifndef APP_KEY_ENABLE
     return 0;
 #endif
-    KEY_TRACE(2,"%s",__func__);
     hal_key_close();
     if (app_key_conifg.key_list != NULL)
         list_free(app_key_conifg.key_list);

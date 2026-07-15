@@ -14,7 +14,9 @@ BUILD_CUSTOMER_CFG="BES_OTA=1 OTA_BIN_COMPRESSED=1 BLE=1 SPEECH_TX_POST_GAIN=1 S
                     A2DP_LHDCV5_ON=1 A2DP_LDAC_ON=1\
                     ANC_ENABLE=1 TRACE_BUF_SIZE=32*1024\
                     LEA_ENABLE=1 AOB_CODEC_CP=1 LC3_IN_ROM_V2=1\
-                    A2DP_LHDC_ON=1 A2DP_LHDC_V3=1"
+                    A2DP_LHDC_ON=1 A2DP_LHDC_V3=1\
+                    ANC_ASSIST_ENABLED=1\
+                    ANC_ASSIST_ENABLE=1"
 
 if [[ "$COMMAND" == "clean" ]];
 then

@@ -25,13 +25,15 @@
 extern "C" {
 #endif
 
-void imusensor_init(void);
+void ht_init(void);
+
+void head_angle_reset(void);
 
 void head_track_algo_start(void);
 
 void head_track_algo_pause(void);
 
-void head_angle_reset(void);
+void ht_deinit(void);
 
 void imu_data_set(float ax, float ay, float az, float gx, float gy, float gz, unsigned int timeStamp);
 

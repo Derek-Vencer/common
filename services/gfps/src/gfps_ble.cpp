@@ -2122,11 +2122,11 @@ uint8_t gfps_conn = 0;
 void gfps_set_wait_connect_phone(uint8_t param)
 {
     gfps_conn = param;
-    GFPS_TRACE(2,"[UIGFPS][%s]gfps_conn = %d", __func__, gfps_conn);
+    TRACE(2,"[UIGFPS][%s]gfps_conn = %d", __func__, gfps_conn);
 }
 int gfps_get_wait_connect_phone(void)
 {
-	GFPS_TRACE(2,"[UIGFPS][%s]gfps_conn = %d", __func__, gfps_conn);
+    TRACE(2,"[UIGFPS][%s]gfps_conn = %d", __func__, gfps_conn);
     return gfps_conn;
 }
 #endif

@@ -129,15 +129,15 @@ uint32_t bts_tws_if_get_mtu_size(void);
 /******************************************************************************************
  * @brief Initial tws connection
  *
- * @param[in] isInPairingMode       Tws pairing state
- * @param[in] timeout               page_timeout (unit is 625us)
+ * @param[in] timeout               page_timeout (unit is slot --625us)
+ * @param[in] time_to_next_page     the idle time when page timeout before page next device (ms)
  *
  * @return An error status
  * <table>
  * <th>Description   replace api " void app_ibrt_if_conn_tws_connect_request(bool isInPairingMode, uint32_t timeout)"
  * </table>
  *****************************************************************************************/
-ibrt_status_t bts_tws_if_connect_acl_link(uint32_t timeout);
+ibrt_status_t bts_tws_if_connect_acl_link(uint32_t timeout, uint32_t time_to_next_page);
 
 /******************************************************************************************
  * @brief Disconnect tws link

@@ -87,6 +87,7 @@ extern const struct NORFLASH_CFG_T gd25d20c_cfg;
 
 // Puya
 extern const struct NORFLASH_CFG_T p25q256l_cfg;
+extern const struct NORFLASH_CFG_T py25q256lc_cfg;
 extern const struct NORFLASH_CFG_T p25q128l_cfg;
 extern const struct NORFLASH_CFG_T py25q128laa_cfg;
 extern const struct NORFLASH_CFG_T py25q128lac_cfg;
@@ -186,6 +187,9 @@ static const struct NORFLASH_CFG_T * const flash_list[] = {
     // ----------------------
 #if defined(__NORFLASH_P25Q256L__) //|| defined(__NORFLASH_ALL__)
     &p25q256l_cfg,
+#endif
+#if defined(__NORFLASH_PY25Q256LC__) || defined(__NORFLASH_ALL__)
+    &py25q256lc_cfg,
 #endif
 #if defined(__NORFLASH_P25Q128L__) || defined(__NORFLASH_ALL__)
     &p25q128l_cfg,

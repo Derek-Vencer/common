@@ -63,7 +63,7 @@ static void fpga_set_access_mode(uint32_t param) {
 
 static void fpga_tws_connect(uint32_t param)
 {
-    bts_tws_if_connect_acl_link(0);
+    bts_tws_if_connect_acl_link(0, 0);
 }
 
 static void fpga_tws_disconnect(uint32_t param)

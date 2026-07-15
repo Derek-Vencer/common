@@ -51,6 +51,12 @@
 #endif
 #define CLK_SUB(clock_a, clock_b)     ((uint32_t)(((clock_a) - (clock_b)) & MAX_SLOT_CLOCK))
 #define CLK_ADD_2(clock_a, clock_b)     ((uint32_t)(((clock_a) + (clock_b)) & MAX_SLOT_CLOCK))
+#ifdef MCU_WAKEUP_BT_V2
+static uint8_t s_bt_wakeup_msg[BT_DRV_OPER_BTCORE_MSG_LEN];
+static uint8_t s_bt_wakeup_cnt = 0;
+static bool s_is_bt_waking_up = false;
+static bool s_bt_wakeup_forced = false;
+#endif /* MCU_WAKEUP_BT_V2 */
 
 struct bt_cb_tag bt_drv_func_cb = {NULL};
 
@@ -1528,55 +1534,178 @@ void bt_tester_cmd_receive_evt_analyze(const unsigned char *data, unsigned int l
 }
 
 #ifdef MCU_WAKEUP_BT_V2
-static volatile uint32_t intersys1_tx_done_flag = INTERSYS_TX_DONE;
+__STATIC_FORCEINLINE bool bt_drv_oper_btcore_check(enum WAKEUP_BT_USER_T user, enum WAKEUP_BT_MSG_T msg)
+{
+    bool skip = false;
+    // Sanity check
+    if ((user >= WAKEUP_BT_USER_QTY) || (msg >= WAKEUP_BT_MSG_QTY) ||
+        (((MSG_ONLY_WAKEUP_BT == msg) || (MSG_WAKEUP_BT_AND_DIS_SLP == msg)) &&
+        (s_bt_wakeup_cnt >= UINT8_MAX)))
+    {
+        ASSERT(0, "%s, user:%d, msg:%d cnt:%d", __func__,
+            user, msg, s_bt_wakeup_cnt);
+    }
 
-void bt_intersys_oper_wait_bt_response(void)
+    switch (msg)
+    {
+        case MSG_WAKEUP_BT_AND_DIS_SLP:
+        {
+            uint32_t pre_cnt = s_bt_wakeup_cnt++;
+            skip = ((pre_cnt > 0) || s_bt_wakeup_forced);
+        } break;
+        case MSG_ONLY_WAKEUP_BT:
+        {
+            s_bt_wakeup_forced = true;
+            skip = (s_bt_wakeup_cnt > 0);
+        } break;
+        case MSG_WAKEUP_BT_AND_EN_SLP:
+        {
+            if (s_bt_wakeup_cnt > 0)
+            {
+                s_bt_wakeup_cnt--;
+            }
+            skip = ((s_bt_wakeup_cnt > 0) || s_bt_wakeup_forced);
+        } break;
+        default:
+        {
+        } break;
+    }
+
+    return skip;
+}
+
+__STATIC_FORCEINLINE int bt_drv_oper_btcore_wait_for_idle(uint32_t lock, uint32_t *new_lock)
 {
     uint32_t loop_cnt = 0;
+    uint32_t current_lock = lock;
 
-    // Check if the intersys wakeup flag is set
-    while(hal_intersys_get_wakeup_flag())
+    while (s_is_bt_waking_up && (loop_cnt < BT_DRV_OPER_BTCORE_RSP_MAX_RETRY_CNT))
     {
-        // If loop count exceeds the limit, trigger ASSERT
-        if (++loop_cnt >= 30)
-        {
-            ASSERT(0, "BT: Wake up BT fail,tx done=%d", intersys1_tx_done_flag);
-            break;
-        }
-        uint32_t wait_time = 10*loop_cnt;
-        hal_sys_timer_delay_us(wait_time);
-        //DRIVERS_TRACE(0, "cnt=%d, wait time=%d", loop_cnt,wait_time);
+        int_unlock(current_lock);
+        hal_sys_timer_delay_us(BT_DRV_OPER_BTCORE_BASE_DELAY_US * loop_cnt);
+        current_lock = int_lock();
+        loop_cnt++;
     }
-    //DRIVERS_TRACE(0, "%s", __func__);
-    intersys1_tx_done_flag = true;
+
+    *new_lock = current_lock;
+
+    return s_is_bt_waking_up ? -2 : 0;
 }
 
-static uint8_t bt_wakeup_send_msg[MCU_WAKEUP_BT_MSG_LEN];
-void bt_intersys_oper_btcore(enum WAKEUP_BT_USER_T user, enum WAKEUP_BT_MSG_T msg)
+__STATIC_FORCEINLINE int bt_drv_oper_btcore_send_message(uint32_t lock, uint32_t *new_lock)
 {
-    if (user >= WAKEUP_BT_USER_QTY || msg >= WAKEUP_BT_MSG_QTY)
+    int ret = 0;
+    uint32_t loop_cnt = 0;
+    uint32_t current_lock = lock;
+
+    do
     {
-        ASSERT(0, "%s, user=%d, msg=%d, flag=%d", __func__, user, msg, intersys1_tx_done_flag);
-    }
+        ret = hal_intersys_send(HAL_INTERSYS_ID_1, HAL_INTERSYS_MSG_HCI,
+                s_bt_wakeup_msg, BT_DRV_OPER_BTCORE_MSG_LEN);
 
-    if (intersys1_tx_done_flag == INTERSYS_WAIT_BTC_RESPONSE)
-    {
-        DRIVERS_TRACE(0, "%s fail", __func__);
-        return;
-    }
+        if (ret != 0)
+        {
+            int_unlock(current_lock);
+            int osRet = osThreadYield();
+            if (osRet != osOK)
+            {
+                loop_cnt = BT_DRV_OPER_BTCORE_IDLE_MAX_RETRY_CNT;
+            }
+            current_lock = int_lock();
+            loop_cnt++;
+        }
+    } while ((ret != 0) && (loop_cnt < BT_DRV_OPER_BTCORE_IDLE_MAX_RETRY_CNT));
 
-    uint32_t reg_op_user = user;
-    uint32_t reg_op_msg = msg;
+    *new_lock = current_lock;
 
-    // enum WAKEUP_BT_USER_T
-    co_write32(&bt_wakeup_send_msg[0], reg_op_user);
-    // bit 0 : wakeup BT and disable sleep
-    // bit 1 : disable sleep (0) / resume sleep (1)
-    // bit 2 : RFU
-    co_write32(&bt_wakeup_send_msg[4], reg_op_msg);
-
-    intersys1_tx_done_flag = INTERSYS_WAIT_BTC_RESPONSE;
-    hal_intersys_send(HAL_INTERSYS_ID_1, HAL_INTERSYS_MSG_HCI, bt_wakeup_send_msg, MCU_WAKEUP_BT_MSG_LEN);
-    //DRIVERS_TRACE(0, "%s user%d,msg=%d", __func__, user, msg);
+    return (ret == 0) ? 0 : -3;
 }
-#endif //MCU_WAKEUP_BT_V2
+
+__STATIC_FORCEINLINE int bt_drv_oper_btcore_polling_rsp(uint32_t lock, uint32_t *new_lock)
+{
+    uint32_t loop_cnt = 0;
+    uint32_t current_lock = lock;
+
+    while (hal_intersys_get_wakeup_flag())
+    {
+        if (++loop_cnt >= BT_DRV_OPER_BTCORE_RSP_MAX_RETRY_CNT)
+        {
+            ASSERT(0, "Wakeup BT timeout");
+            *new_lock = current_lock;
+            return -4;
+        }
+
+        int_unlock(current_lock);
+        hal_sys_timer_delay_us(BT_DRV_OPER_BTCORE_BASE_DELAY_US * loop_cnt);
+        current_lock = int_lock();
+    }
+
+    *new_lock = current_lock;
+    return 0;
+}
+
+/**
+ * @brief Perform BTC operation with response handling
+ * @param user The user who initiated the wakeup operation
+ * @param msg The wakeup message type
+ *
+ * This function handles the complete process of waking up the BT core,
+ * sending commands, and waiting for responses with proper locking mechanism.
+ */
+void bt_drv_oper_btcore_with_rsp(enum WAKEUP_BT_USER_T user, enum WAKEUP_BT_MSG_T msg)
+{
+#if BT_DRV_OPER_BTCORE_WAKE_UP_THD
+    uint32_t sTime = hal_sys_timer_get();
+    uint32_t elapsedTime = 0;
+#endif
+    int ret = 0;
+    uint32_t lock = int_lock();
+    uint32_t new_lock;  // Used to receive updated lock from sub-functions
+
+    // 1. Pre-operation check
+    if (bt_drv_oper_btcore_check(user, msg))
+    {
+        ret = -1;
+        goto exit;
+    }
+
+    // 2. Wait for BT core to be available
+    ret = bt_drv_oper_btcore_wait_for_idle(lock, &new_lock);
+    lock = new_lock;
+    if (ret != 0)
+    {
+        goto exit;
+    }
+
+    // 3. Set wakeup message parameters
+    s_is_bt_waking_up = true;
+    co_write32(&s_bt_wakeup_msg[0], user);   //@WAKEUP_BT_USER_T
+    co_write32(&s_bt_wakeup_msg[4], msg);    //@WAKEUP_BT_MSG_T
+
+    // 4. Send wakeup message to BT core
+    ret = bt_drv_oper_btcore_send_message(lock, &new_lock);
+    lock = new_lock;
+    if (ret != 0)
+    {
+        s_is_bt_waking_up = false;
+        goto exit;
+    }
+
+    // 5. Wait for response
+    ret = bt_drv_oper_btcore_polling_rsp(lock, &new_lock);
+    lock = new_lock;
+    s_is_bt_waking_up = false;
+
+exit:
+    int_unlock(lock);
+
+#if BT_DRV_OPER_BTCORE_WAKE_UP_THD
+    elapsedTime = TICKS_TO_US(hal_sys_timer_get() - sTime);
+    if ((ret < -1) || (elapsedTime > BT_DRV_OPER_BTCORE_WAKE_UP_THD))
+    {
+        TRACE(1, "%s exit, usr:%d msg:%d ret:%d elapsed:%d(us)",
+            __func__, user, msg, ret, elapsedTime);
+    }
+#endif
+}
+#endif /* MCU_WAKEUP_BT_V2 */

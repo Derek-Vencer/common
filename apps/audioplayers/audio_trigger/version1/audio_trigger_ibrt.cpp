@@ -14,7 +14,6 @@
 #include "audio_trigger_common.h"
 #include "audio_trigger_a2dp.h"
 #include "audioflinger.h"
-#include <string.h>
 
 #if defined(BT_SVC_MODULE_IBRT_ENABLED)
 #include "app_tws_ibrt_audio_analysis.h"
@@ -171,919 +170,177 @@ void app_bt_stream_ibrt_auto_synchronize_initsync_start(uint8_t device_id, APP_T
     }
 }
 
-    #define NTT_PROFILE_RECOVERY_CHECK_MS        100
-    #define NTT_PROFILE_RECOVERY_MAX_COUNT       10
-
-    static osTimerId ntt_profile_recovery_timer = NULL;
-
-    static uint8_t ntt_profile_recovery_device_id =
-        BT_DEVICE_INVALID_ID;
-
-    static uint8_t ntt_profile_recovery_count = 0;
-
-    static bool ntt_profile_recovery_running = false;
-    static void ntt_profile_recovery_timer_handler(
-        void const *param);
-
-    osTimerDef(
-        NTT_PROFILE_RECOVERY_TIMER,
-        ntt_profile_recovery_timer_handler);
-
-    static void ntt_profile_recovery_stop(void)
-    {
-        if (ntt_profile_recovery_timer != NULL)
-        {
-            osTimerStop(ntt_profile_recovery_timer);
-        }
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "stop dev=%d count=%d",
-            ntt_profile_recovery_device_id,
-            ntt_profile_recovery_count);
-
-        ntt_profile_recovery_device_id =
-            BT_DEVICE_INVALID_ID;
-
-        ntt_profile_recovery_count = 0;
-        ntt_profile_recovery_running = false;
-    }
-
-static void ntt_profile_recovery_timer_handler(void const *param)
-{
-    POSSIBLY_UNUSED const void *unused_param = param;
-
-    uint8_t device_id;
-    struct BT_DEVICE_T *curr_device;
-
-    bool mobile_connected;
-    bool profile_exchanged;
-    bool a2dp_profile_exchanged;
-
-    if (!ntt_profile_recovery_running)
-    {
-        return;
-    }
-
-    device_id = ntt_profile_recovery_device_id;
-
-    if (device_id >= BT_DEVICE_NUM)
-    {
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY][ERROR] "
-            "invalid dev=%d",
-            device_id);
-
-        ntt_profile_recovery_stop();
-        return;
-    }
-
-    curr_device = app_bt_get_device(device_id);
-
-    if (curr_device == NULL)
-    {
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY][ERROR] "
-            "curr_device NULL dev=%d",
-            device_id);
-
-        ntt_profile_recovery_stop();
-        return;
-    }
-
-    mobile_connected =
-        bts_bt_if_is_dev_link_connected(
-            &curr_device->remote);
-
-    profile_exchanged =
-        bts_ibrt_if_is_profile_exchanged(
-            &curr_device->remote);
-
-    a2dp_profile_exchanged =
-        bts_ibrt_if_a2dp_profile_is_exchanged(
-            &curr_device->remote);
-
-    AUDIOPLAYERS_TRACE(
-        0,
-        "[NTT_PROFILE_RECOVERY] "
-        "check dev=%d count=%d "
-        "mobile=%d profile=%d a2dp=%d",
-        device_id,
-        ntt_profile_recovery_count,
-        mobile_connected,
-        profile_exchanged,
-        a2dp_profile_exchanged);
-
-    /*
-     * 手機 ACL 已斷線，停止 recovery。
-     */
-    if (!mobile_connected)
-    {
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "mobile disconnected dev=%d",
-            device_id);
-
-        ntt_profile_recovery_stop();
-        return;
-    }
-
-    /*
-     * Profile Exchange 已完成。
-     * 停止 recovery，重新建立 Master/Slave audio sync。
-     */
-    if (profile_exchanged &&
-        a2dp_profile_exchanged)
-    {
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "profile ready dev=%d, force retrigger",
-            device_id);
-
-        ntt_profile_recovery_stop();
-
-        app_ibrt_if_force_audio_retrigger(
-            RETRIGGER_BY_UNKNOW);
-
-        return;
-    }
-
-    /*
-     * Profile 尚未完成，累計檢查次數。
-     */
-    if (ntt_profile_recovery_count < 0xFF)
-    {
-        ntt_profile_recovery_count++;
-    }
-
-    /*
-     * Recovery timeout。
-     */
-    if (ntt_profile_recovery_count >=
-        NTT_PROFILE_RECOVERY_MAX_COUNT)
-    {
-        uint8_t fallback_device_id = ntt_profile_recovery_device_id;
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY][TIMEOUT] "
-            "dev=%d count=%d "
-            "profile=%d a2dp=%d, "
-            "fallback local trigger",
-            fallback_device_id,
-            ntt_profile_recovery_count,
-            profile_exchanged,
-            a2dp_profile_exchanged);
-
-        ntt_profile_recovery_stop();
-
-        ntt_profile_recovery_local_fallback(fallback_device_id);
-
-        return;
-    }
-
-    /*
-     * 第一次以及每 4 次檢查，重新要求 SDK
-     * 對指定手機執行 Profile Exchange。
-     *
-     * 500 ms 一次檢查時，相當於：
-     * count 1  -> 約 0.5 秒
-     * count 4  -> 約 2 秒
-     * count 8  -> 約 4 秒
-     * count 12 -> 約 6 秒
-     */
-    if ((ntt_profile_recovery_count == 1) ||
-        ((ntt_profile_recovery_count % 4) == 0))
-    {
-        bool ibrt_connected =bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote);
-
-    if (!ibrt_connected)
-    {
-        bool request_result =
-            app_bt_ntt_request_ibrt_link(
-                device_id);
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "IBRT not ready dev=%d request=%d",
-            device_id,
-            request_result);
-
-        if (ntt_profile_recovery_running &&
-            ntt_profile_recovery_timer != NULL)
-        {
-            osTimerStart(ntt_profile_recovery_timer,NTT_PROFILE_RECOVERY_CHECK_MS);
-        }
-
-        return;
-    }
-        bool recovery_started = app_bt_ntt_restart_profile_exchange(device_id);
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "retry exchange dev=%d count=%d "
-            "result=%d",
-            device_id,
-            ntt_profile_recovery_count,
-            recovery_started);
-
-        /*
-         * Wrapper 無法取得 mobile context 時，
-         * 不必立即停止；下一次 timer 可以再次檢查，
-         * 因為 mobile_info 可能稍後才建立完成。
-         */
-    }
-
-    /*
-     * 使用 one-shot timer，因此每次 handler 結束前
-     * 重新啟動下一次檢查。
-     */
-    if (ntt_profile_recovery_running &&
-        ntt_profile_recovery_timer != NULL)
-    {
-        osTimerStart(
-            ntt_profile_recovery_timer,
-            NTT_PROFILE_RECOVERY_CHECK_MS);
-    }
-}
-
-    static void ntt_profile_recovery_start(
-        uint8_t device_id)
-    {
-        if (device_id >= BT_DEVICE_NUM)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_PROFILE_RECOVERY][ERROR] "
-                "start invalid dev=%d",
-                device_id);
-
-            return;
-        }
-
-        if (ntt_profile_recovery_timer == NULL)
-        {
-            ntt_profile_recovery_timer =
-                osTimerCreate(
-                    osTimer(
-                        NTT_PROFILE_RECOVERY_TIMER),
-                    osTimerOnce,
-                    NULL);
-
-            if (ntt_profile_recovery_timer == NULL)
-            {
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[NTT_PROFILE_RECOVERY][ERROR] "
-                    "create timer failed");
-
-                return;
-            }
-        }
-
-        /*
-        * 同一支手機已在 recovery，不重複啟動。
-        */
-        if (ntt_profile_recovery_running &&
-            ntt_profile_recovery_device_id ==
-                device_id)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_PROFILE_RECOVERY] "
-                "already running dev=%d count=%d",
-                device_id,
-                ntt_profile_recovery_count);
-
-            return;
-        }
-
-        if (ntt_profile_recovery_timer != NULL)
-        {
-            osTimerStop(ntt_profile_recovery_timer);
-        }
-
-        ntt_profile_recovery_device_id = device_id;
-        ntt_profile_recovery_count = 0;
-        ntt_profile_recovery_running = true;
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "start dev=%d",
-            device_id);
-
-        osTimerStart(
-            ntt_profile_recovery_timer,
-            10);
-    }
-
-
-    /*
-    * 等待第二支手機 Profile Exchange 完成的 packet 次數。
-    *
-    * 目的：
-    * Profile 尚未交換完成時，不要立即啟動 Master local trigger，
-    * 避免 Slave 收不到 APP_TWS_CMD_SET_TRIGGER_TIME 而無聲。
-    *
-    * 若等待超時，仍保留原本 local trigger fallback，
-    * 避免 Master 也永久無聲。
-    */
-    #define NTT_PROFILE_EXCHANGE_WAIT_MAX_PACKETS    400
-
-    static uint16_t
-        ntt_profile_exchange_wait_count[BT_DEVICE_NUM] = {0};
-
-
-int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
-    uint8_t device_id,
-    btif_media_header_t *header,
-    unsigned char *buf,
-    unsigned int len)
+int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(uint8_t device_id, btif_media_header_t * header, unsigned char *buf, unsigned int len)
 {
 #ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
     A2DP_AUDIO_SYNCFRAME_INFO_T sync_info;
     A2DP_AUDIO_HEADFRAME_INFO_T headframe_info;
 #endif
 
-#if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-    uint8_t codec_type =
-        bta_get_curr_a2dp_codec_type();
-#endif
+    if(app_bt_stream_trigger_stauts_get() == BT_STREAM_TRIGGER_STATUS_INIT){
+        ibrt_ctrl_t  *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+        int32_t dma_buffer_samples = app_bt_stream_get_dma_buffer_samples()/2;
+        POSSIBLY_UNUSED struct BT_DEVICE_T *curr_device = app_bt_get_device(device_id);
 
-    /*
-     * 目前 callback 沒有直接使用這些參數。
-     * 避免某些編譯設定產生 unused parameter warning。
-     */
-    POSSIBLY_UNUSED btif_media_header_t *unused_header =
-        header;
-
-    POSSIBLY_UNUSED unsigned char *unused_buf =
-        buf;
-
-    POSSIBLY_UNUSED unsigned int unused_len =
-        len;
-
-    if (app_bt_stream_trigger_stauts_get() ==
-        BT_STREAM_TRIGGER_STATUS_INIT)
-    {
-        ibrt_ctrl_t *p_ibrt_ctrl = NULL;
-        struct BT_DEVICE_T *curr_device = NULL;
-
-        int32_t dma_buffer_samples =
-            app_bt_stream_get_dma_buffer_samples() / 2;
-
-        /*
-         * 必須先檢查 device_id，
-         * 再呼叫 app_bt_get_device()。
-         */
-        if (device_id >= BT_DEVICE_NUM)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER][ERROR] "
-                "invalid device_id=%d max=%d",
-                device_id,
-                BT_DEVICE_NUM);
-
-            goto exit;
-        }
-
-        curr_device =
-            app_bt_get_device(device_id);
-
-        if (curr_device == NULL)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER][ERROR] "
-                "curr_device NULL dev=%d",
-                device_id);
-
-            ntt_profile_exchange_wait_count[device_id] = 0;
-
-            goto exit;
-        }
-
-        p_ibrt_ctrl =
-            app_tws_ibrt_get_bt_ctrl_ctx();
-
-        if (p_ibrt_ctrl == NULL)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER][ERROR] "
-                "ibrt ctrl NULL dev=%d",
-                device_id);
-
-            goto exit;
-        }
-
-        /*
-         * 將所有條件先讀取一次。
-         *
-         * 避免同一個 callback 裡重複呼叫 API 時，
-         * 因非同步狀態更新而得到不同結果。
-         */
-        bool ibrt_link_connected =
-            bts_ibrt_if_is_ibrt_link_connected(
-                &curr_device->remote);
-
-        bool mobile_link_connected =
-            bts_bt_if_is_dev_link_connected(
-                &curr_device->remote);
-
-        bool profile_exchanged =
-            bts_ibrt_if_is_profile_exchanged(
-                &curr_device->remote);
-
-        bool a2dp_profile_exchanged =
-            bts_ibrt_if_a2dp_profile_is_exchanged(
-                &curr_device->remote);
-
-        bool start_ibrt_onprocess =
-            app_ibrt_if_start_ibrt_onprocess(
-                &curr_device->remote);
-
-        bool sync_a2dp_onprocess =
-            app_ibrt_sync_a2dp_status_onprocess(
-                &curr_device->remote);
-
-        uint8_t mobile_link_mode =
-            bts_bt_if_get_dev_link_mode(
-                &curr_device->remote);
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_DUAL_PHONE_TRIGGER] "
-            "dev=%d profile=%d a2dp_profile=%d "
-            "start_ibrt=%d sync_a2dp=%d "
-            "mobile_link=%d ibrt_link=%d "
-            "link_mode=%d wait=%d status=%d",
-            device_id,
-            profile_exchanged,
-            a2dp_profile_exchanged,
-            start_ibrt_onprocess,
-            sync_a2dp_onprocess,
-            mobile_link_connected,
-            ibrt_link_connected,
-            mobile_link_mode,
-            ntt_profile_exchange_wait_count[device_id],
-            app_bt_stream_trigger_stauts_get());
-
-        /*
-         * 目前 mobile link 被判定為 IBRT link，
-         * 代表角色或 link context 不一致。
-         */
-        if (ibrt_link_connected)
-        {
-            ntt_profile_exchange_wait_count[device_id] = 0;
-
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER] "
-                "branch=ROLE_MISMATCH "
-                "dev=%d mobile_link=%d",
-                device_id,
-                mobile_link_connected);
-
-            app_ibrt_if_force_audio_retrigger(
-                RETRIGGER_BY_ROLE_MISMATCH);
-        }
-        /*
-         * Profile Exchange 尚未完成。
-         *
-         * 不再先啟動 Master local trigger。
-         *
-         * 舊流程會造成：
-         *
-         * Master 先播放約 0.3～0.6 秒
-         *      ↓
-         * Profile Ready
-         *      ↓
-         * force retrigger 關閉 Master Player
-         *      ↓
-         * 雙耳重新同步播放
-         *
-         * 新流程改為：
-         *
-         * 先等待 IBRT/Profile Recovery
-         *      ↓
-         * Profile Ready
-         *      ↓
-         * force retrigger
-         *      ↓
-         * 直接進入 TWS_INITIAL_SYNC
-         *      ↓
-         * 雙耳同時播放
-         */
-        else if (!profile_exchanged &&
-                 !start_ibrt_onprocess &&
-                 !sync_a2dp_onprocess)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER] "
-                "branch=WAIT_PROFILE_RECOVERY "
-                "dev=%d profile=%d a2dp=%d "
-                "mobile=%d ibrt=%d",
-                device_id,
-                profile_exchanged,
-                a2dp_profile_exchanged,
-                mobile_link_connected,
-                ibrt_link_connected);
-
-            /*
-             * 啟動 application recovery。
-             *
-             * Recovery 會依序：
-             * 1. 確認／建立手機 IBRT link；
-             * 2. 執行 Profile Exchange；
-             * 3. Profile Ready 後 force retrigger；
-             * 4. 重新進入本函數的 TWS_INITIAL_SYNC。
-             */
-            ntt_profile_recovery_start(device_id);
-
-            /*
-             * 不註銷 packet callback，
-             * 也不呼叫 app_bt_stream_trigger_start()。
-             *
-             * 清除目前 cached packet，
-             * 回到 first-packet detect 狀態。
-             */
-            a2dp_audio_synchronize_dest_packet_mut(0);
-            a2dp_audio_detect_first_packet();
-
-            return 0;
-        }
-        /*
-         * IBRT Profile Exchange 或 A2DP status sync 正在處理，
-         * 或 A2DP Profile 尚未交換完成。
-         *
-         * 保留 callback，等待下一個 packet 再檢查。
-         */
-        else if (start_ibrt_onprocess ||
-                 sync_a2dp_onprocess ||
-                 !a2dp_profile_exchanged
-#if BLE_AUDIO_ENABLED
-                 ||
-                 (app_audio_adm_get_le_audio_music_stream_device() !=
-                  BT_DEVICE_INVALID_ID)
-#endif
-                 )
-        {
-            ntt_profile_exchange_wait_count[device_id] = 0;
-
-            a2dp_audio_synchronize_dest_packet_mut(0);
-            a2dp_audio_detect_first_packet();
-
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER] "
-                "branch=WAIT_IBRT_PROCESS "
-                "dev=%d start_ibrt=%d "
-                "sync_a2dp=%d "
-                "profile=%d a2dp_profile=%d",
-                device_id,
-                start_ibrt_onprocess,
-                sync_a2dp_onprocess,
-                profile_exchanged,
-                a2dp_profile_exchanged);
-
-            return 0;
-        }
-        /*
-         * Profile Exchange 已完成。
-         * 執行正常的 Master/Slave Initial Sync。
-         */
-        else
-        {
-            ntt_profile_exchange_wait_count[device_id] = 0;
-
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER] "
-                "branch=TWS_INITIAL_SYNC dev=%d",
-                device_id);
-
-            if ((p_ibrt_ctrl->tws_mode ==
-                 IBRT_SNIFF_MODE) ||
-                (mobile_link_mode ==
-                 IBRT_SNIFF_MODE))
-            {
+        if (bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote)){
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER]cache ok but is_ibrt_master_connected:%d mismatch\n", bts_bt_if_is_dev_link_connected(&curr_device->remote));
+            app_ibrt_if_force_audio_retrigger(RETRIGGER_BY_ROLE_MISMATCH);
+        }else if (!bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote) &&
+                  !app_ibrt_if_start_ibrt_onprocess(&curr_device->remote) &&
+                  !app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote)){
+            if (bts_bt_if_get_dev_link_mode(&curr_device->remote) == IBRT_SNIFF_MODE){
+                //flush all
                 a2dp_audio_synchronize_dest_packet_mut(0);
                 a2dp_audio_detect_first_packet();
-
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[AUTO_SYNC][MASTER] "
-                    "cache skip delay dma trigger2");
-
+                AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip delay dma trigger1\n");
+                return 0;
+            }
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache ok use dma trigger1\n");
+            a2dp_audio_detect_next_packet_callback_register(NULL);
+            a2dp_audio_detect_store_packet_callback_register(NULL);
+#ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
+            app_bt_stream_trigger_start(device_id, A2DP_PLAYER_PLAYBACK_WATER_LINE);
+#else
+            app_bt_stream_trigger_start(device_id, 0);
+#endif
+        }else if (app_ibrt_if_start_ibrt_onprocess(&curr_device->remote) ||
+                  app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote) ||
+                  !bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)
+#if BLE_AUDIO_ENABLED
+                  || (app_audio_adm_get_le_audio_music_stream_device() != BT_DEVICE_INVALID_ID)
+#endif
+                  ){
+            //flush all
+            a2dp_audio_synchronize_dest_packet_mut(0);
+            a2dp_audio_detect_first_packet();
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] ibrt_onporcess:%d,sync_a2dp_status_onporcess:%d,a2dp_profile_exchanged:%d",
+                                app_ibrt_if_start_ibrt_onprocess(&curr_device->remote),
+                                app_ibrt_sync_a2dp_status_onprocess(&curr_device->remote),
+                                bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote));
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip profile_exchanged sync_a2dp_status_onporcess\n");
+            return 0;
+        }else{
+            if (p_ibrt_ctrl->tws_mode == IBRT_SNIFF_MODE    ||
+                bts_bt_if_get_dev_link_mode(&curr_device->remote) == IBRT_SNIFF_MODE){
+                //flush all
+                a2dp_audio_synchronize_dest_packet_mut(0);
+                a2dp_audio_detect_first_packet();
+                AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip delay dma trigger2\n");
                 return 0;
             }
 
 #ifdef A2DP_PLAYER_PLAYBACK_WATER_LINE
             uint32_t dest_waterline_samples = 0;
             uint32_t list_samples = 0;
-
-            dest_waterline_samples =
-                app_bt_stream_get_dma_buffer_samples() /
-                2 *
-                A2DP_PLAYER_PLAYBACK_WATER_LINE;
-
-            a2dp_audio_convert_list_to_samples(
-                &list_samples);
-
-            if (list_samples < dest_waterline_samples)
-            {
+            dest_waterline_samples = app_bt_stream_get_dma_buffer_samples()/2*A2DP_PLAYER_PLAYBACK_WATER_LINE;
+            a2dp_audio_convert_list_to_samples(&list_samples);
+            if (list_samples < dest_waterline_samples){
                 a2dp_audio_detect_first_packet();
-
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[AUTO_SYNC][MASTER] "
-                    "cache skip fill data sample:%d",
-                    list_samples);
-
+                AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache skip fill data sample:%d\n", list_samples);
                 return 0;
             }
-
-            a2dp_audio_decoder_headframe_info_get(
-                &headframe_info);
-
+            a2dp_audio_decoder_headframe_info_get(&headframe_info);
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type ==
-                BT_A2DP_CODEC_TYPE_LHDC)
+            uint8_t codec_type = bta_get_curr_a2dp_codec_type();
+            if(codec_type == BT_A2DP_CODEC_TYPE_LHDC)
             {
-                sync_info.sequenceNumber =
-                    headframe_info.sequenceNumber;
+                sync_info.sequenceNumber = headframe_info.sequenceNumber;
             }
             else
 #endif
             {
-                sync_info.sequenceNumber =
-                    headframe_info.sequenceNumber + 1;
+                sync_info.sequenceNumber = headframe_info.sequenceNumber+1;
             }
-
-            a2dp_audio_synchronize_packet(
-                &sync_info,
-                A2DP_AUDIO_SYNCFRAME_MASK_SEQ);
+            a2dp_audio_synchronize_packet(&sync_info, A2DP_AUDIO_SYNCFRAME_MASK_SEQ);
 #else
             a2dp_audio_synchronize_dest_packet_mut(0);
 #endif
-
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[AUTO_SYNC][MASTER] "
-                "cache ok use dma trigger2");
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] cache ok use dma trigger2\n");
 
 #ifdef A2DP_CP_ACCEL
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type ==
-                BT_A2DP_CODEC_TYPE_LHDC)
+            if(codec_type == BT_A2DP_CODEC_TYPE_LHDC)
             {
-                app_bt_stream_trigger_start(
-                    device_id,
-                    APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC -
-                        a2dp_audio_frame_delay_get());
+                app_bt_stream_trigger_start(device_id, APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC - a2dp_audio_frame_delay_get());
             }
             else
 #endif
             {
-                app_bt_stream_trigger_start(
-                    device_id,
-                    APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME -
-                        a2dp_audio_frame_delay_get());
+                app_bt_stream_trigger_start(device_id, APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME - a2dp_audio_frame_delay_get());
             }
 #else
-            app_bt_stream_trigger_start(
-                device_id,
-                APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME);
+            app_bt_stream_trigger_start(device_id, APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME);
 #endif
-
             APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T sync_trigger;
-            A2DP_AUDIO_HEADFRAME_INFO_T
-                trigger_headframe_info;
-            A2DP_AUDIO_LASTFRAME_INFO_T
-                lastframe_info;
-
-            memset(
-                &sync_trigger,
-                0,
-                sizeof(
-                    APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T));
-
-            memset(
-                &trigger_headframe_info,
-                0,
-                sizeof(
-                    A2DP_AUDIO_HEADFRAME_INFO_T));
-
-            memset(
-                &lastframe_info,
-                0,
-                sizeof(
-                    A2DP_AUDIO_LASTFRAME_INFO_T));
-
-            sync_trigger.trigger_time =
-                tg_acl_trigger_time;
-
+            A2DP_AUDIO_HEADFRAME_INFO_T headframe_info;
+            A2DP_AUDIO_LASTFRAME_INFO_T lastframe_info;
+            sync_trigger.trigger_time = tg_acl_trigger_time;
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type ==
-                BT_A2DP_CODEC_TYPE_LHDC)
+            if(codec_type == BT_A2DP_CODEC_TYPE_LHDC)
             {
-                sync_trigger.trigger_skip_frame =
-                    APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC -
-                    a2dp_audio_frame_delay_get();
+                sync_trigger.trigger_skip_frame = APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC - a2dp_audio_frame_delay_get();
             }
             else
 #endif
             {
-                sync_trigger.trigger_skip_frame =
-                    APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME -
-                    a2dp_audio_frame_delay_get();
+                sync_trigger.trigger_skip_frame = APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME - a2dp_audio_frame_delay_get();
             }
-
-            sync_trigger.trigger_type =
-                APP_TWS_IBRT_AUDIO_TRIGGER_TYPE_INIT_SYNC;
-
-            if (a2dp_audio_lastframe_info_get(
-                    &lastframe_info) < 0)
-            {
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[NTT_DUAL_PHONE_TRIGGER][ERROR] "
-                    "lastframe info failed dev=%d",
-                    device_id);
-
+            sync_trigger.trigger_type = APP_TWS_IBRT_AUDIO_TRIGGER_TYPE_INIT_SYNC;
+            if (a2dp_audio_lastframe_info_get(&lastframe_info)<0){
                 goto exit;
             }
 
-            a2dp_audio_decoder_headframe_info_get(
-                &trigger_headframe_info);
-
-            sync_trigger.sequenceNumberStart =
-                trigger_headframe_info.sequenceNumber;
-
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_DUAL_PHONE_TRIGGER] "
-                "dev=%d sequenceNumberStart=%d",
-                device_id,
-                sync_trigger.sequenceNumberStart);
-
+            a2dp_audio_decoder_headframe_info_get(&headframe_info);
+            sync_trigger.sequenceNumberStart = headframe_info.sequenceNumber;
+            AUDIOPLAYERS_TRACE(0, "sequenceNumberStart %d", sync_trigger.sequenceNumberStart);
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
-            if (codec_type ==
-                BT_A2DP_CODEC_TYPE_LHDC)
+            if(codec_type == BT_A2DP_CODEC_TYPE_LHDC)
             {
-                sync_trigger.audio_info.sequenceNumber =
-                    lastframe_info.sequenceNumber +
-                    APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC;
-
-                if (lastframe_info.totalSubSequenceNumber)
-                {
-                    sync_trigger.audio_info.timestamp =
-                        lastframe_info.timestamp +
-                        (lastframe_info.totalSubSequenceNumber *
-                         lastframe_info.frame_samples) *
-                            APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC;
-                }
-                else
-                {
-                    sync_trigger.audio_info.timestamp =
-                        lastframe_info.timestamp +
-                        dma_buffer_samples *
-                            APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC;
+                sync_trigger.audio_info.sequenceNumber = lastframe_info.sequenceNumber + APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC;
+                if (lastframe_info.totalSubSequenceNumber){
+                    sync_trigger.audio_info.timestamp = lastframe_info.timestamp +
+                                                        (lastframe_info.totalSubSequenceNumber * lastframe_info.frame_samples) *
+                                                        APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC;
+                }else{
+                    sync_trigger.audio_info.timestamp = lastframe_info.timestamp + dma_buffer_samples * APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME_LHDC;
                 }
             }
             else
 #endif
             {
-                sync_trigger.audio_info.sequenceNumber =
-                    lastframe_info.sequenceNumber +
-                    APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME;
-
-                if (lastframe_info.totalSubSequenceNumber)
-                {
-                    sync_trigger.audio_info.timestamp =
-                        lastframe_info.timestamp +
-                        (lastframe_info.totalSubSequenceNumber *
-                         lastframe_info.frame_samples) *
-                            APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME;
-                }
-                else
-                {
-                    sync_trigger.audio_info.timestamp =
-                        lastframe_info.timestamp +
-                        dma_buffer_samples *
-                            APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME;
+                sync_trigger.audio_info.sequenceNumber = lastframe_info.sequenceNumber + APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME;
+                if (lastframe_info.totalSubSequenceNumber){
+                    sync_trigger.audio_info.timestamp = lastframe_info.timestamp +
+                                                        (lastframe_info.totalSubSequenceNumber * lastframe_info.frame_samples) *
+                                                        APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME;
+                }else{
+                    sync_trigger.audio_info.timestamp = lastframe_info.timestamp + dma_buffer_samples * APP_BT_STREAM_IBRT_AUTO_SYNCHRONIZE_INITSYNC_SKIP_FRAME;
                 }
             }
-
-            sync_trigger.audio_info.curSubSequenceNumber =
-                lastframe_info.curSubSequenceNumber;
-
-            sync_trigger.audio_info.totalSubSequenceNumber =
-                lastframe_info.totalSubSequenceNumber;
-
-            sync_trigger.audio_info.frame_samples =
-                lastframe_info.frame_samples;
-
-            sync_trigger.factor_reference =
-                a2dp_audio_get_output_config()->
-                    factor_reference;
-
-            sync_trigger.a2dp_session =
-                bta_tws_a2dp_get_ibrt_session(
-                    device_id);
-
+            sync_trigger.audio_info.curSubSequenceNumber = lastframe_info.curSubSequenceNumber;
+            sync_trigger.audio_info.totalSubSequenceNumber = lastframe_info.totalSubSequenceNumber;
+            sync_trigger.audio_info.frame_samples = lastframe_info.frame_samples;
+            sync_trigger.factor_reference = a2dp_audio_get_output_config()->factor_reference;
+            sync_trigger.a2dp_session = bta_tws_a2dp_get_ibrt_session(device_id);
             sync_trigger.handler_cnt = 0;
-
 #if defined(IBRT_UI)
-            sync_trigger.mobile_addr =
-                curr_device->remote;
+            sync_trigger.mobile_addr = curr_device->remote;
 #endif
+            app_bt_stream_ibrt_auto_synchronize_initsync_start(device_id, &sync_trigger);
 
-            /*
-             * Master 自己建立 Initial Sync。
-             */
-            app_bt_stream_ibrt_auto_synchronize_initsync_start(
-                device_id,
-                &sync_trigger);
-
-            /*
-             * 傳送 Trigger 前再次確認狀態。
-             */
-            bool send_mobile_link_connected =
-                bts_bt_if_is_dev_link_connected(
-                    &curr_device->remote);
-
-            bool send_profile_exchanged =
-                bts_ibrt_if_is_profile_exchanged(
-                    &curr_device->remote);
-
-            if (send_mobile_link_connected &&
-                send_profile_exchanged)
-            {
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[NTT_DUAL_PHONE_TRIGGER] "
-                    "send SET_TRIGGER_TIME "
-                    "dev=%d session=%d "
-                    "trigger_time=%u",
-                    device_id,
-                    sync_trigger.a2dp_session,
-                    sync_trigger.trigger_time);
-
-                tws_ctrl_send_cmd(
-                    APP_TWS_CMD_SET_TRIGGER_TIME,
-                    (uint8_t *)&sync_trigger,
-                    sizeof(
-                        APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T));
-            }
-            else
-            {
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[NTT_DUAL_PHONE_TRIGGER][ERROR] "
-                    "skip SET_TRIGGER_TIME "
-                    "dev=%d mobile_link=%d "
-                    "profile=%d",
-                    device_id,
-                    send_mobile_link_connected,
-                    send_profile_exchanged);
+            if (bts_bt_if_is_dev_link_connected(&curr_device->remote) &&
+                bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)){
+                tws_ctrl_send_cmd(APP_TWS_CMD_SET_TRIGGER_TIME, (uint8_t*)&sync_trigger, sizeof(APP_TWS_IBRT_AUDIO_SYNC_TRIGGER_T));
             }
         }
-    }
-    else
-    {
-        if (app_bt_stream_trigger_stauts_get() ==
-            BT_STREAM_TRIGGER_STATUS_NULL)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[AUTO_SYNC][MASTER] "
-                "audio not ready skip it");
-        }
-        else
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[AUTO_SYNC][MASTER] "
-                "unhandle status:%d",
-                app_bt_stream_trigger_stauts_get());
-
-            app_ibrt_if_force_audio_retrigger(
-                RETRIGGER_BY_UNKNOW);
+    }else{
+        if(app_bt_stream_trigger_stauts_get() == BT_STREAM_TRIGGER_STATUS_NULL){
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] audio not ready skip it");
+        }else{
+            AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][MASTER] unhandle status:%d", app_bt_stream_trigger_stauts_get());
+            app_ibrt_if_force_audio_retrigger(RETRIGGER_BY_UNKNOW);
         }
     }
-
 exit:
     return 0;
 }
@@ -1130,7 +387,7 @@ int app_bt_stream_ibrt_audio_slave_detect_next_packet_cb(uint8_t device_id, btif
             if (bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote) &&
                 (p_ibrt_ctrl->tws_mode == IBRT_SNIFF_MODE    ||
                  bts_bt_if_get_dev_link_mode(&curr_device->remote) == IBRT_SNIFF_MODE ||
-                !bts_ibrt_if_is_profile_exchanged(&curr_device->remote)))
+                !bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)))
             {
                 //flush all
                 a2dp_audio_synchronize_dest_packet_mut(0);
@@ -1878,7 +1135,7 @@ int app_bt_stream_ibrt_audio_mismatch_stopaudio(uint8_t device_id)
             app_audio_sendrequest_param(APP_BT_STREAM_A2DP_SBC, (uint8_t)APP_BT_SETTING_RESTART, 0, APP_SYSFREQ_52M);
             app_bt_stream_ibrt_audio_mismatch_resume(device_id);
         }else{
-            if (bts_ibrt_if_is_profile_exchanged(&curr_device->remote)){
+            if (bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)){
                 if (!bt_media_is_music_media_active()){
                     AUDIOPLAYERS_TRACE(0,"[MISMATCH] stopaudio not active resume it & force retrigger");
                     app_ibrt_if_force_audio_retrigger(RETRIGGER_BY_PLAYER_NOT_ACTIVE);

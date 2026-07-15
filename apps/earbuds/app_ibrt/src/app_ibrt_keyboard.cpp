@@ -37,22 +37,13 @@
 #include "app_hid_device.h"
 #endif
 
-#ifdef MEDIA_PLAYER_SUPPORT
-#include "app_media_player.h"
-#endif
-
-#include "app_factory.h"
-#include "communication_svr.h"
-#include "ble_aiwang_srv.h"
-#include "app_ibrt_customif_cmd.h"
-extern uint8_t out_of_case_reconnect;
 #if defined(IBRT)
+
 #ifdef TILE_DATAPATH
 extern "C" void app_tile_key_handler(APP_KEY_STATUS *status, void *param);
 #endif
 
 extern void app_otaMode_enter(APP_KEY_STATUS *status, void *param);
-extern bool isRightOfTheEarBuds(void);
 
 #ifdef SUPPORT_SIRI
 extern uint8_t voice_assistant_flag;
@@ -217,7 +208,6 @@ void app_ibrt_keyboard_start_perform_a2dp_cis_toggle(void)
     app_ibrt_ui_toggle_a2dp_cis(NULL);
 }
 
-
 #ifdef APP_KEY_ENABLE
 void app_ibrt_handle_longpress_v2(APP_KEY_STATUS *status)
 {
@@ -253,12 +243,11 @@ void app_ibrt_search_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
         switch(status->event)
         {
             case APP_KEY_EVENT_CLICK:
-            	EARBUDS_TRACE(0,"%s kill", __func__);
                 app_ibrt_middleware_handle_click();
                 break;
 
             case APP_KEY_EVENT_DOUBLECLICK:
-                EARBUDS_TRACE(0,"%s double kill", __func__);
+                EARBUDS_TRACE(0,"double kill");
                 if(IBRT_UNKNOW==p_ibrt_ctrl->nv_role)
                 {
                     app_ibrt_if_init_open_box_state_for_evb();
@@ -271,11 +260,9 @@ void app_ibrt_search_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 break;
 
             case APP_KEY_EVENT_LONGPRESS:
-            	EARBUDS_TRACE(0,"%s longpress", __func__);
                 break;
 
             case APP_KEY_EVENT_TRIPLECLICK:
-            	EARBUDS_TRACE(0,"%s tripclick", __func__);
             #ifdef TILE_DATAPATH
                 app_tile_key_handler(status,NULL);
             #else
@@ -283,12 +270,12 @@ void app_ibrt_search_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
             #endif
                 break;
             case HAL_KEY_EVENT_LONGLONGPRESS:
-                EARBUDS_TRACE(0,"%s long long press", __func__);
+                EARBUDS_TRACE(0,"long long press");
                 app_shutdown();
                 break;
 
             case APP_KEY_EVENT_ULTRACLICK:
-                EARBUDS_TRACE(0,"%s ultra kill", __func__);
+                EARBUDS_TRACE(0,"ultra kill");
                 break;
 
             case APP_KEY_EVENT_RAMPAGECLICK:
@@ -296,7 +283,6 @@ void app_ibrt_search_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
                 break;
 
             case APP_KEY_EVENT_UP:
-            	EARBUDS_TRACE(0,"%s click up", __func__);
                 break;
         }
     }
@@ -310,124 +296,79 @@ void app_ibrt_search_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *statu
 #ifdef GFPS_ENABLED
 extern "C" void app_enter_fastpairing_mode(void);
 #endif
-
-
 void app_ibrt_normal_ui_handle_key_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, void *param)
 {
-    EARBUDS_TRACE(0,
-        "[KEY_RAW] code=0x%02X event=%d",
-        status->code,
-        status->event);
-    
     uint8_t conn_devices = 0;
-
-    EARBUDS_TRACE(0,
-        "[KEY] code=0x%02X event=%d",
-        status->code,
-        status->event);
-
-    if (APP_KEY_CODE_GOOGLE == status->code)
+    if (APP_KEY_CODE_GOOGLE != status->code)
     {
-        return;
-    }
-
-    switch (status->event)
-    {
-        case APP_KEY_EVENT_CLICK:
+        switch(status->event)
         {
-            conn_devices = app_bt_count_connected_device();
-            EARBUDS_TRACE(0,"[KEY] CLICK conn=%d",conn_devices);
-            sparraw_tx_key_click_notify_msg(KEY_CLICK);
+            case APP_KEY_EVENT_CLICK:
+                EARBUDS_TRACE(0,"first blood.");
+                app_ibrt_middleware_handle_click();
+                break;
 
-            if (conn_devices == 0)
-            {
-                ntt_key_request_mobile_reconnect();
-            }
+            case APP_KEY_EVENT_DOUBLECLICK:
+                EARBUDS_TRACE(0,"double kill,enter freeman mode");
+                //app_ibrt_if_init_open_box_state_for_evb();
+                app_ibrt_internal_enter_freeman_pairing();
+#ifdef GFPS_ENABLED
+                app_enter_fastpairing_mode();
+#endif
+                break;
+            case APP_KEY_EVENT_LONGPRESS:
+                conn_devices = app_bt_count_connected_device();
+                EARBUDS_TRACE(0,"%s conn_devices %d", __func__, conn_devices);
+                if (conn_devices > 0)
+                {
+                    app_ibrt_handle_longpress_v2(status);
+                }
+                else
+                {
+                    app_ibrt_if_init_open_box_state_for_evb();
+                    app_ibrt_if_enter_pairing_after_tws_connected();
+                }
+                break;
+
+            case APP_KEY_EVENT_TRIPLECLICK:
+#ifdef TILE_DATAPATH
+                app_tile_key_handler(status,NULL);
+#else
+                app_ibrt_if_init_open_box_state_for_evb();
+                app_ibrt_if_enter_pairing_after_tws_connected();
+#endif
+                break;
+
+            case HAL_KEY_EVENT_LONGLONGPRESS:
+                EARBUDS_TRACE(0,"long long press");
+                app_shutdown();
+                break;
+
+            case APP_KEY_EVENT_ULTRACLICK:
+                EARBUDS_TRACE(0,"ultra kill");
+                break;
+
+            case APP_KEY_EVENT_RAMPAGECLICK:
+                EARBUDS_TRACE(0,"rampage kill!you are crazy!");
+                break;
+
+            case APP_KEY_EVENT_UP:
+                break;
         }
-        break;
-
-        case APP_KEY_EVENT_DOUBLECLICK:
-        {
-            EARBUDS_TRACE(0, "[KEY] DOUBLE_CLICK");
-
-            sparraw_tx_key_click_notify_msg(KEY_DOUBLE_CLICK);
-            break;
-        }
-
-        case APP_KEY_EVENT_DOUBLE_AND_HOLD:
-            EARBUDS_TRACE(0, "[KEY] DOUBLE_HOLD");
-            sparraw_tx_key_click_notify_msg(KEY_DOUBLE_HOLD_CLICK);
-            break;
-
-        case APP_KEY_EVENT_DOUBLE_AND_HOLD_LEFT:
-            EARBUDS_TRACE(0, "[KEY] DOUBLE_HOLD_LEFT");
-            sparraw_tx_key_click_notify_msg(KEY_DOUBLE_HOLD_CLICK);
-            break;
-
-        case APP_KEY_EVENT_LONGPRESS:
-            conn_devices = app_bt_count_connected_device();
-
-            EARBUDS_TRACE(0,
-                "[KEY] LONG_PRESS conn=%d",
-                conn_devices);
-
-            sparraw_tx_key_click_notify_msg(KEY_HOLD_CLICK);
-            break;
-
-        case APP_KEY_EVENT_TRIPLECLICK:
-            EARBUDS_TRACE(0, "[KEY] TRIPLE_CLICK");
-            sparraw_tx_key_click_notify_msg(KEY_TRIPLE_CLICK);
-            break;
-
-        case APP_KEY_EVENT_ULTRACLICK:
-            EARBUDS_TRACE(0, "[KEY] ULTRA_CLICK");
-            break;
-
-        case APP_KEY_EVENT_FIFTH_CLICK:
-            EARBUDS_TRACE(0, "[KEY] FIFTH_CLICK");
-            break;
-
-        case APP_KEY_EVENT_RAMPAGECLICK:
-            EARBUDS_TRACE(0, "[KEY] RAMPAGE_CLICK");
-            break;
-
-        case APP_KEY_EVENT_UP:
-            EARBUDS_TRACE(0, "[KEY] UP");
-            sparraw_tx_key_click_notify_msg(KEY_UP);
-            break;
-
-        case APP_KEY_EVENT_UP_AFTER_LONGPRESS:
-            EARBUDS_TRACE(0, "[KEY] UP_AFTER_LONG_PRESS");
-            sparraw_tx_key_click_notify_msg(KEY_UP);
-            break;
-
-        default:
-            EARBUDS_TRACE(0,
-                "[KEY] UNKNOWN event=%d",
-                status->event);
-            break;
     }
 
 #ifdef TILE_DATAPATH
-    if (APP_KEY_CODE_TILE == status->code)
-    {
-        app_tile_key_handler(status, NULL);
-    }
+    if(APP_KEY_CODE_TILE == status->code)
+        app_tile_key_handler(status,NULL);
 #endif
 }
+#endif
 
 struct ibrt_keyboard_notify_v2_t
 {
     bt_bdaddr_t remote;
     APP_KEY_STATUS key_status;
 };
-
-/***
- *
- * even left  earbuds
- * odd  right earbuds
- */
-extern bool isRightOfTheEarBuds(void);
 
 int app_ibrt_if_keyboard_notify_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, void *param)
 {
@@ -440,15 +381,8 @@ int app_ibrt_if_keyboard_notify_v2(bt_bdaddr_t *remote, APP_KEY_STATUS *status, 
     }
 
     data.key_status = *status;
-
-    if (!isRightOfTheEarBuds() && APP_KEY_EVENT_DOUBLE_AND_HOLD == data.key_status.event)
-    {
-    	EARBUDS_TRACE(0, "identify the volum down from the LeftEarBuds");
-    	data.key_status.event = APP_KEY_EVENT_DOUBLE_AND_HOLD_LEFT;
-    }
-
-    EARBUDS_TRACE(0,"%s code=0x%08x, event=%d", __func__, data.key_status.code, data.key_status.event);
     tws_ctrl_send_cmd(APP_TWS_CMD_KEYBOARD_REQUEST, (uint8_t *)&data, sizeof(struct ibrt_keyboard_notify_v2_t));
+
     return 0;
 }
 #endif
@@ -460,21 +394,13 @@ void app_ibrt_keyboard_request_handler_v2(uint16_t rsp_seq, uint8_t *p_buff, uin
 
     struct ibrt_keyboard_notify_v2_t *req = (struct ibrt_keyboard_notify_v2_t *)p_buff;
 
-    EARBUDS_TRACE(0,"%s", __func__);
-
     if (bts_bt_if_is_dev_link_connected(&req->remote))
     {
-    	aparraw_set_key_event_left(1);
 #ifdef IBRT_SEARCH_UI
         app_ibrt_search_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #else
         app_ibrt_normal_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #endif
-		//aparraw_set_key_event_left(0);
-    }
-    else
-    {
-    	EARBUDS_TRACE(0,"%s Error", __func__);
     }
 #endif
 }
@@ -504,7 +430,6 @@ void app_ibrt_if_start_user_action_v2(uint8_t device_id, uint8_t action, uint32_
 
     if (curr_device == NULL)
     {
-    	EARBUDS_TRACE(0,"%s no connected device", __func__);
         return;
     }
 
@@ -543,12 +468,10 @@ void app_ibrt_if_start_user_action_v2(uint8_t device_id, uint8_t action, uint32_
 
     if (bes_bt_tws_besaud_is_connected() && bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote))
     {
-    	EARBUDS_TRACE(0, "bes_bt_tws_besaud_is_connected");
         bts_tws_if_send_user_action(action_data, action_length);
     }
     else
     {
-    	EARBUDS_TRACE(0, "%s not connected", __func__);
         app_ibrt_ui_perform_user_action_v2(action_data, action_length);
     }
 }
@@ -573,7 +496,6 @@ void app_ibrt_keyboard_sync_volume_info_v2(uint8_t device_id)
     }
 }
 
-
 void app_ibrt_ui_perform_user_action_v2(uint8_t *p_buff, uint16_t length)
 {
     struct ibrt_if_action_header *action_header = (struct ibrt_if_action_header *)p_buff;
@@ -590,7 +512,6 @@ void app_ibrt_ui_perform_user_action_v2(uint8_t *p_buff, uint16_t length)
     }
 
     curr_device = app_bt_get_device(device_id);
-    EARBUDS_TRACE(0,"%s action=0x%02x", __func__, action);
 
     switch (action)
     {
@@ -758,4 +679,4 @@ void app_ibrt_ui_perform_user_action_v2(uint8_t *p_buff, uint16_t length)
 }
 
 #endif
-#endif // IBRT
+

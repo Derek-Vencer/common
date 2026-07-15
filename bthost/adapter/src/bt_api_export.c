@@ -383,9 +383,9 @@ bt_status_t bes_bt_me_acl_force_disconnect(uint16_t conn_handle, uint8_t reason,
     return btif_me_force_disconnect_link_with_reason(conn_handle, reason, force_disc);
 }
 
-bt_status_t bt_adapter_connect_acl_with_page_timeout(const bt_bdaddr_t *bd_addr, uint16_t page_timeout)
+bt_status_t bt_adapter_connect_acl_with_page_timeout(const bt_bdaddr_t *bd_addr, uint32_t page_timeout, uint32_t time_to_next_page)
 {
-    return btif_create_acl_to_slave_with_page_timeout(bd_addr, page_timeout);
+    return btif_create_acl_to_slave_with_page_timeout(bd_addr, page_timeout, time_to_next_page);
 }
 
 bt_status_t bt_adapter_connect_acl(const bt_bdaddr_t *bd_addr)
@@ -562,6 +562,35 @@ void bes_bt_hfp_report_user_audio_play_stop_status(void)
 {
     btif_hfp_report_user_audio_play_stop_status();
 }
+
+bt_status_t bta_hsp_register_service(void)
+{
+    return btif_hsp_register_service();
+}
+
+bt_status_t bta_hsp_unregister_service(void)
+{
+    return btif_hsp_unregister_service();
+}
+
+/**
+ * @brief Register a custom AT command that needs front header fixing
+ *
+ * This function registers an AT command to the global list so that when it's received,
+ * the HFP module will know to fix its front header. The command is stored with proper
+ * bounds checking to prevent buffer overflow.
+ *
+ * @param at_cmd      Pointer to the AT command string to register, shuold include '\0'
+ * @param at_cmd_len  Length of the AT command string, don't include '\0' —— like strlen(at_cmd)
+ *
+ * @note The AT command will be truncated if it exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_LENGTH
+ * @note If the list is full (exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_NUMBER), the command is discarded
+ */
+void bta_hfp_register_custom_at_cmd_to_fill_front_header(const char* at_cmd, uint8_t at_cmd_len)
+{
+    btif_hfp_register_custom_at_cmd_to_fill_front_header(at_cmd, at_cmd_len);
+}
+
 #endif /* BT_HFP_SUPPORT */
 
 #ifdef BT_A2DP_SUPPORT
@@ -1918,7 +1947,7 @@ bt_status_t bes_bt_hfp_call_hold(int device_id, btif_hf_hold_call_t action, uint
 
 bool bes_bt_hfp_is_connecting(const bt_bdaddr_t *remote)
 {
-    return btif_hfp_profile_connecting(remote);
+    return btif_hfp_profile_is_connecting(remote);
 }
 
 bool bes_bt_hfp_is_initiator(const bt_bdaddr_t *remote)

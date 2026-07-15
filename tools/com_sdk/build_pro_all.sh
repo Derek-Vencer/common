@@ -26,6 +26,8 @@ chmod 777 tools/com_sdk/cust/*
 ./tools/com_sdk/cust/build_pro_1306p_0013.sh
 ./tools/com_sdk/cust/build_pro_1306p_0014.sh
 ./tools/com_sdk/cust/build_pro_1306p_0015.sh
+./tools/com_sdk/cust/build_pro_1306p_0016.sh
+./tools/com_sdk/cust/build_pro_1306p_0017.sh
 ./tools/com_sdk/cust/build_pro_1502p_0001.sh
 ./tools/com_sdk/cust/build_pro_1502p_0003.sh
 ./tools/com_sdk/cust/build_pro_1502p_0004.sh
@@ -38,6 +40,7 @@ chmod 777 tools/com_sdk/cust/*
 ./tools/com_sdk/cust/build_pro_1503_0001.sh
 ./tools/com_sdk/cust/build_pro_1503_0002.sh
 ./tools/com_sdk/cust/build_pro_1503_0003.sh
+./tools/com_sdk/cust/build_pro_1503_0004.sh
 fi
-./tools/besui_tool/build.sh TWSPRO OTA
-./tools/besui_tool/build.sh NOTWS OTA
+# ./tools/besui_tool/build.sh TWSPRO OTA
+# ./tools/besui_tool/build.sh NOTWS OTA

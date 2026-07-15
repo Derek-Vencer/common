@@ -39,7 +39,7 @@ endif
 
 export AUDIO_OUTPUT_DAC2 ?= 0
 
-APP_ANC_TEST ?= 0
+APP_ANC_TEST ?= 1
 ifeq ($(APP_ANC_TEST),1)
 export TOTA_v2 := 1
 endif
@@ -49,9 +49,8 @@ KBUILD_CPPFLAGS += -DANC_ASSIST_UNUSED_ON_PHONE_CALL
 endif
 
 ifeq ($(ANC_APP),1)
-$(info ANC_APP)
 KBUILD_CPPFLAGS += \
     -DANC_APP \
+    -D__BT_ANC_KEY__ \
     -D__APP_KEY_FN_STYLE_A__
-#    -D__BT_ANC_KEY__  //forbinten ANC_KEY goodocom
 endif

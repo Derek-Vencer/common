@@ -34,6 +34,7 @@ enum CHG_REG_T {
     CHG_REG_0C = 0xC,
     CHG_REG_0E = 0xE,
     CHG_REG_21 = 0x21,
+    CHG_REG_22 = 0x22,
     CHG_REG_23 = 0x23,
     CHG_REG_24 = 0x24,
     CHG_REG_26 = 0x26,
@@ -42,6 +43,7 @@ enum CHG_REG_T {
     CHG_REG_2B = 0x2B,
     CHG_REG_30 = 0x30,
     CHG_REG_31 = 0x31,
+    CHG_REG_32 = 0x32,
     CHG_REG_33 = 0x33,
     CHG_REG_34 = 0x34,
     CHG_REG_40 = 0x40,
@@ -166,6 +168,16 @@ enum CHG_REG_T {
 #define REG_ITERM_EN                                    (1 << 3)
 #define REG_LPO_ON                                      (1 << 4)
 
+// REG_22
+#define REG_VIN_UVLO_N_DET_IN_INTR_RAW                  (1 << 0)
+#define REG_VIN_UVLO_N_DET_IN_INTR_EN                   (1 << 1)
+#define REG_VIN_UVLO_N_DET_IN_INTR_MASK                 (1 << 2)
+#define REG_VIN_UVLO_N_DET_IN_INTR_CLR                  (1 << 3)
+#define REG_VIN_UVLO_N_DET_OUT_INTR_RAW                 (1 << 4)
+#define REG_VIN_UVLO_N_DET_OUT_INTR_EN                  (1 << 5)
+#define REG_VIN_UVLO_N_DET_OUT_INTR_MASK                (1 << 6)
+#define REG_VIN_UVLO_N_DET_OUT_INTR_CLR                 (1 << 7)
+
 // REG_23
 #define REG_PU_LPO                                      (1 << 5)
 #define REG_PU_LPO_DR                                   (1 << 6)
@@ -211,12 +223,17 @@ enum CHG_REG_T {
 #define RESERVED_ANA_17_9_BIT_9                         (1 << 0)
 #define RESERVED_ANA_17_9_BIT_11                        (1 << 2)
 
+// REG_32
+#define VIN_UVLO_N_DB                                   (1 << 1)
+
 // REG_33
 #define CHARGE_STATE_SHIFT                              12
 #define CHARGE_STATE_MASK                               (0x7 << CHARGE_STATE_SHIFT)
 #define CHARGE_STATE(n)                                 BITFIELD_VAL(CHARGE_STATE, n)
 
 // REG_34
+#define VIN_UVLO_N_DET_IN_INTR                          (1 << 1)
+#define VIN_UVLO_N_DET_OUT_INTR                         (1 << 2)
 #define CHARGE_DONE_INTR                                (1 << 5)
 #define VIN_OV_INTR                                     (1 << 7)
 #define VIN_OC_INTR                                     (1 << 8)

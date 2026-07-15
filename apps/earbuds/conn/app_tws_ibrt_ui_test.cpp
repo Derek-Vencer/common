@@ -91,27 +91,21 @@
 #endif
 #include "app_ai_manager_api.h"
 #include "bts_module_if.h"
-
 #ifdef BESUI_APP_EN
 #include "app_tota_general.h"
 #endif
-
 #ifdef BESUI_KEY_EN
 #include "twsui_key.h"
 #endif
-
 #ifdef BESUI_BTMSG_EN
 #include "twsui_btmsg.h"
 #endif
-
 #ifdef BESUI_TWS_EN
 #include "twsui_comm.h"
 #endif
-
 #ifdef BESUI_1WIRE_EN
 #include "twsui_uart.h"
 #endif
-
 #if defined(BESUI_COMM_EN)
 #include "besui_common.h"
 #endif
@@ -227,15 +221,6 @@ static const ibrt_pairing_info_t g_ibrt_pairing_info[] =
     {{0x99, 0x33, 0x33, 0x23, 0x22, 0x11},{0x98, 0x33, 0x33, 0x23, 0x22, 0x11}},    //used for dolby
     {{0x81, 0xda, 0x61, 0xbb, 0xc6, 0x5c},{0x80, 0xda, 0x61, 0xbb, 0xc6, 0x5c}}, //Aragon
 
-	{{0x91, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x90, 0x33, 0x06, 0x06, 0xaa, 0x0d}},//test goodocom
-	{{0x93, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x92, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-	{{0x95, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x94, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-    {{0x97, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x96, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-    {{0x99, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x98, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-    {{0x9b, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x9a, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-	{{0x9d, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x9c, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-	{{0x9f, 0x33, 0x06, 0x06, 0xaa, 0x0d},{0x9e, 0x33, 0x06, 0x06, 0xaa, 0x0d}},
-
 #ifdef BESUI_TWS_EN
     {{0x11, 0x58, 0x00, 0x1e, 0x43, 0x9c},{0x10, 0x58, 0x00, 0x1e, 0x43, 0x9c}},
     {{0x13, 0x58, 0x00, 0x1e, 0x43, 0x9c},{0x12, 0x58, 0x00, 0x1e, 0x43, 0x9c}},
@@ -248,37 +233,14 @@ static const ibrt_pairing_info_t g_ibrt_pairing_info[] =
 #if defined( __BT_ANC_KEY__)&&defined(ANC_APP)
 extern void app_anc_key(APP_KEY_STATUS *status, void *param);
 #endif
-/***
- *
- * even left  earbuds
- * odd  right earbuds
- */
-bool isRightOfTheEarBuds(void) {
-	struct nvrecord_env_t *nvrecord_env;
-	uint8_t localAddr[BD_ADDR_LEN];
-	nv_record_env_get(&nvrecord_env);
-	factory_section_original_btaddr_get(localAddr);
-	EARBUDS_DUMP8("%02x ", localAddr, BD_ADDR_LEN);
-	if(localAddr[0]&0x01)
-	{
-		return TRUE;
-	}
-	else
-	{
-		return FALSE;
-	}
-}
 
 #if !defined(FREE_TWS_PAIRING_ENABLED) && !defined(FREEMAN_ENABLED_STERO)
 static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
 {
-	EARBUDS_TRACE(0, "%s", __func__);
-
 #if !defined(BESUI_TWS_EN)
     const ibrt_pairing_info_t *ibrt_pairing_info_lst = g_ibrt_pairing_info;
     uint32_t lst_size = ARRAY_SIZE(g_ibrt_pairing_info);
 #endif
-
     struct nvrecord_env_t *nvrecord_env;
     uint8_t localAddr[BD_ADDR_LEN];
 
@@ -286,7 +248,6 @@ static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
     factory_section_original_btaddr_get(localAddr);
 
     bool isRightMasterSidePolicy = true;
-
 #ifdef IBRT_RIGHT_MASTER
     isRightMasterSidePolicy = true;
 #else
@@ -315,13 +276,13 @@ static void app_ibrt_raw_ui_test_load_from_bt_pair_list(void)
         if (!memcmp(ibrt_pairing_info_lst[i].master_bdaddr.address, localAddr, BD_ADDR_LEN))
         {
             app_tws_ibrt_reconfig_role(IBRT_MASTER, ibrt_pairing_info_lst[i].master_bdaddr.address,
-            ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
+                ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
             return;
         }
         else if (!memcmp(ibrt_pairing_info_lst[i].slave_bdaddr.address, localAddr, BD_ADDR_LEN))
         {
             app_tws_ibrt_reconfig_role(IBRT_SLAVE, ibrt_pairing_info_lst[i].master_bdaddr.address,
-            ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
+                            ibrt_pairing_info_lst[i].slave_bdaddr.address, isRightMasterSidePolicy);
             return;
         }
     }
@@ -360,7 +321,6 @@ WEAK void app_ibrt_initialize_nv_role_callback(void *config, void * record_env)
 
 int app_ibrt_ui_v2_test_config_load(void *config)
 {
-
 #if !defined(FREE_TWS_PAIRING_ENABLED) && !defined(FREEMAN_ENABLED_STERO)
     app_ibrt_raw_ui_test_load_from_bt_pair_list();
 #endif
@@ -371,11 +331,10 @@ int app_ibrt_ui_v2_test_config_load(void *config)
     nv_record_env_get(&nvrecord_env);
     factory_section_original_btaddr_get(ibrt_config->local_addr.address);
 
-    EARBUDS_TRACE(1, "%s ibrt_mode.mode=%d", __func__, nvrecord_env->ibrt_mode.mode);
-
 #if !defined(FREE_TWS_PAIRING_ENABLED)
     // nv record content has been updated in app_ibrt_raw_ui_test_load_from_bt_pair_list
     ibrt_config->nv_role = nvrecord_env->ibrt_mode.mode;
+
 #else
     app_ibrt_initialize_nv_role_callback(ibrt_config, nvrecord_env);
 #endif
@@ -472,28 +431,8 @@ int app_ibrt_ui_v2_test_config_load(void *config)
 #if defined(A2DP_SBC_PLC_ENABLED)
     ch_select = ibrt_config->audio_chnl_sel;
 #endif
-
-//#ifdef BESUI_TWS_EN
-    EARBUDS_TRACE(0,
-        "[NTT_BOX] before config local_box=%d",
-        app_ui_get_local_box_state());
-
-    app_ui_set_local_box_state(IBRT_OUT_BOX);
-
-    EARBUDS_TRACE(0,
-        "[NTT_BOX] after config local_box=%d",
-        app_ui_get_local_box_state());
-//#endif
-
     bts_core_set_ui_role(nvrecord_env->ibrt_mode.mode);
-    EARBUDS_TRACE(0,"%s ibrt_mode.mode(nv_role)=%d ", __func__, ibrt_config->nv_role);
-    EARBUDS_TRACE(0,"load local_addr: %02x:%02x:%02x:%02x:%02x:%02x",ibrt_config->local_addr.address[0],
-    ibrt_config->local_addr.address[1],ibrt_config->local_addr.address[2],ibrt_config->local_addr.address[3],
-	ibrt_config->local_addr.address[4],ibrt_config->local_addr.address[5]);
-    EARBUDS_TRACE(0,"load peer_addr: %02x:%02x:%02x:%02x:%02x:%02x", ibrt_config->peer_addr.address[0],
-    ibrt_config->peer_addr.address[1], ibrt_config->peer_addr.address[2], ibrt_config->peer_addr.address[3],
-	ibrt_config->peer_addr.address[4], ibrt_config->peer_addr.address[5]);
-    EARBUDS_TRACE(0,"%s over", __func__);
+
     return 0;
 }
 
@@ -1163,7 +1102,7 @@ static void app_ibrt_send_tota_data_test(const char* param, uint32 len)
 
 static void app_ibrt_connect_tws_test(const char* param, uint32 len)
 {
-    bts_tws_if_connect_acl_link(0);
+    bts_tws_if_connect_acl_link(0, 0);
 }
 
 static void app_ibrt_connect_mobile_test(const char* param, uint32_t len)
@@ -1550,7 +1489,6 @@ static void app_prompt_1k_tone_test(const char* param, uint32_t len)
 static void app_ibrt_anc_switch_test(const char* param, uint32_t len)
 {
    app_anc_mode_t mode_int = APP_ANC_MODE_OFF;
-   EARBUDS_TRACE(0, "%s", __func__);
    mode_int = (app_anc_mode_t)atoi((const char*)param);
    app_anc_switch(mode_int);
 }
@@ -2489,10 +2427,8 @@ const static app_ibrt_test_cmd_table_t app_ibrt_test_cmd_table[]=
     {"hearing_aid_stop", app_hearing_aid_stop},
 #endif
 
-#ifdef GPIO_WAKEUP_ENABL
-#ifdef SLT_AUTO_TEST
+#if SLT_AUTO_TEST
     {"gpio_out",                    app_trigger_gpio_out_operation},
-#endif
 #endif
 #ifdef GPIO_WAKEUP_ENABLE
     {"gpio_wakeup_enable",	app_trigger_gpio_irq_wakeup_enable_test},
@@ -2537,7 +2473,7 @@ const static app_ibrt_test_cmd_table_t app_ibrt_test_cmd_table[]=
 
 #ifdef SLT_AUTO_TEST
     {"tone_1k_prompt",              app_prompt_1k_tone_test},
-    /*{"gpio_pull_down",              app_trigger_gpio_irq_pull_down},*/
+    {"gpio_pull_down",              app_trigger_gpio_irq_pull_down},
 #endif
 #ifdef SPA_AUDIO_SEC
     {"tz_demo_func_enable_disable",app_tz_audio_process_demo_func_enable_disable},
@@ -2709,20 +2645,16 @@ void dirac_audio_onoff(APP_KEY_STATUS *status, void *param);
 const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
 {
 #if defined(__AI_VOICE__) || defined(BISTO_ENABLED)
-#error "__AI_VOICE__"
     {{APP_KEY_CODE_GOOGLE, APP_KEY_EVENT_FIRST_DOWN}, "google assistant key", app_ai_manager_key_event_handle, NULL},
     {{APP_KEY_CODE_GOOGLE, APP_KEY_EVENT_UP}, "google assistant key", app_ai_manager_key_event_handle, NULL},
     {{APP_KEY_CODE_GOOGLE, APP_KEY_EVENT_LONGPRESS}, "google assistant key", app_ai_manager_key_event_handle, NULL},
     {{APP_KEY_CODE_GOOGLE, APP_KEY_EVENT_CLICK}, "google assistant key", app_ai_manager_key_event_handle, NULL},
     {{APP_KEY_CODE_GOOGLE, APP_KEY_EVENT_DOUBLECLICK}, "google assistant key", app_ai_manager_key_event_handle, NULL},
 #endif
-
 #ifdef DIRAC_AUDIO_ENABLE
-#error "DIRAC_AUDIO_ENABLE"
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt dirac_audio_onoff key",dirac_audio_onoff, NULL},
 #else
 #if defined(__BT_ANC_KEY__)&&defined(ANC_APP)
-#error "__BT_ANC_KEY__ & ANC_APP"
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt anc key",app_anc_key, NULL},
 #elif TOTA_FACTORY_USED
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"app_bt_key_enter_tota_mode", app_bt_key_enter_tota_mode, NULL},
@@ -2735,15 +2667,7 @@ const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_TRIPLECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_ULTRACLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-
-
-    //AiWang added
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_FIFTH_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_SIXTY_CLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLE_AND_HOLD},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-//    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONG_8S_PRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-	{{APP_KEY_CODE_PWR,APP_KEY_EVENT_UP},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
-	{{APP_KEY_CODE_PWR,HAL_KEY_EVENT_UP_AFTER_LONGPRESS},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_RAMPAGECLICK},"app_ibrt_ui_test_key", app_ibrt_raw_ui_test_key, NULL},
 
     {{APP_KEY_CODE_FN1,APP_KEY_EVENT_CLICK},"app_ibrt_service_test_key", app_tws_ibrt_test_key_io_event, NULL},
     {{APP_KEY_CODE_FN1,APP_KEY_EVENT_DOUBLECLICK},"app_ibrt_service_test_key", app_tws_ibrt_test_key_io_event, NULL},
@@ -2757,16 +2681,14 @@ const APP_KEY_HANDLE  app_ibrt_ui_v2_test_key_cfg[] =
 
 void app_tws_ibrt_raw_ui_test_key_init(void)
 {
-
 #ifdef APP_KEY_ENABLE
-    EARBUDS_TRACE(0,"!!app_tws_ibrt_raw_ui_test_key_init app_ibrt_ui_v2_test_key_cfg!!");
+    EARBUDS_TRACE(0,"app_tws_ibrt_raw_ui_test_key_init");
     app_key_handle_clear();
     for (uint8_t i=0; i<ARRAY_SIZE(app_ibrt_ui_v2_test_key_cfg); i++)
     {
         app_key_handle_registration(&app_ibrt_ui_v2_test_key_cfg[i]);
     }
 #endif
-
 }
 
 #endif

@@ -168,8 +168,6 @@ void audio_manager_stream_ctrl_start_ble_audio(uint8_t conlid, uint16_t stream_t
 void audio_manager_stream_ctrl_stop_ble_audio(uint8_t conlid, uint16_t stream_type, uint8_t stream_lid);
 void audio_manager_stream_ctrl_stop_single_ble_audio_stream(uint8_t conlid, uint16_t stream_type, uint8_t stream_lid);
 void app_bt_audio_state_checker(void);
-int ntt_hfp_pcm_force_restart_after_role_switch(uint8_t device_id);
-
 #ifdef BLE_WALKIE_TALKIE
 void app_audio_manager_register_wt_start_callback(APP_WT_AUDIO_MANAGER_CALLBACK_T cb);
 void app_audio_manager_register_wt_stop_callback(APP_WT_AUDIO_MANAGER_CALLBACK_T cb);

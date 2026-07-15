@@ -164,8 +164,6 @@ typedef uint8_t btif_event_type_t;
 
 #define BTIF_BTEVENT_BES_AUD_CONNECTED                  200
 #define BTIF_BTEVENT_BES_AUD_DISCONNECTED               201
-#define BTIF_STACK_LINK_DISCONNECT_COMPLETE             220
-
 
 /*---------------------------------------------------------------------------
  * btif_class_of_device_t type

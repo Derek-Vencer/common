@@ -35,6 +35,8 @@ void capsensor_close(void);
 
 void capsensor_open(void);
 
+uint16_t capsensor_clk_is_ready(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -470,7 +470,7 @@ void app_tws_connected_event_timehandler(void const *param)
     BESUI_TRACE(3, "[UIBT][UITIMER]%s conn_devices %d accessmode %d nv_role %d ui_role %d", __func__, conn_devices, 
             app_bt_get_curr_access_mode(), p_ibrt_ctrl->nv_role, app_ibrt_if_get_ui_role());
 
-    app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+    app_ibrt_customif_cmd_sync_battery_level(twsui_get_bat_level());
 
     uint8_t *bt_local_addr;
     bt_local_addr = bt_get_local_address();
@@ -725,7 +725,7 @@ void app_bt_phone_connected_event_process(void)
 
     nv_record_all_ddbrec_print();
     BESUI_TRACE(0,"[UIBT]PHONE_CONNECTED");
-	
+
 #if BT_DEVICE_NUM > 1
     uicom.phone_pair_cnt ++;
 #endif

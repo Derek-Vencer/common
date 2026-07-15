@@ -228,6 +228,8 @@ int pmu_get_acin_volt(uint16_t *volt);
 
 enum PMU_PACKAGE_TYPE_T pmu_get_chip_package_type(void);
 
+uint16_t pmu_get_vcodec_volt_mv(void);
+
 #ifdef __cplusplus
 }
 #endif

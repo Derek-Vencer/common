@@ -222,21 +222,6 @@ uint8_t dolby_role = -1;
 #include "nvrecord_env.h"
 #endif
 
-
-#if 1
-#include "app_ibrt_customif_cmd.h"
-#include "hw_codec_iir_process.h"
-#include "audio_process.h"
-#include "nvrecord_bt.h"
-#include "nvrecord_env.h"
-#include "nvrecord_extension.h"
-extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
-
-#endif
-
-extern "C" uint8_t get_er_inbox_status(void);
-extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
-
 void(*app_bt_stream_ext_sco_playback)(uint8_t *buf, uint32_t len) = NULL;
 uint32_t (*app_bt_stream_ext_sco_capture)(uint8_t *buf, uint32_t len) = NULL;
 void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32_t len),
@@ -244,20 +229,6 @@ void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32
 {
     app_bt_stream_ext_sco_playback = playback_cb;
     app_bt_stream_ext_sco_capture  = capture_cb;
-}
-
-extern "C" void ntt_audio_output_mute_refresh(void)
-{
-    if (get_er_inbox_status())
-    {
-        hal_codec_dac_mute(true);
-        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud in box, force speaker mute");
-    }
-    else
-    {
-        hal_codec_dac_mute(false);
-        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud out box, release speaker un-mute");
-    }
 }
 
 // #define A2DP_STREAM_AUDIO_DUMP      (16)
@@ -4417,7 +4388,6 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
         {
             af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK);
-            ntt_audio_output_mute_refresh();
             osThreadSetPriority(localThread, currentPriority);
         }
 
@@ -4454,31 +4424,6 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
     a2dp_is_run = (on != PLAYER_OPER_STOP);
     a2dp_audio_status_updated_callback(a2dp_is_run);
 #endif
-
-#if 1
-		//if(BT_STREAM_MUSIC == stream_type)
-		{
-			struct nvrecord_env_t *nvrecord_env;
-			nv_record_env_get(&nvrecord_env);
-			uint8_t eq_index = nvrecord_env->eq_index_data;
-			if((eq_index >=0) && (eq_index <= 5))
-			{
-				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
-                ntt_audio_drc_apply_by_eq_index(eq_index);
-	
-			}
-			else
-			{
-				eq_index = 0;
-				nvrecord_env->eq_index_data = eq_index;
-				nv_record_env_set(nvrecord_env);
-				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
-                ntt_audio_drc_apply_by_eq_index(eq_index);
-			}
-			app_ibrt_customif_cmd_sync_music_eq(eq_index);
-		}
-#endif
-
     return 0;
 }
 
@@ -7061,6 +7006,10 @@ static int bt_sco_player(bool on, enum APP_SYSFREQ_FREQ_T freq)
             bt_drv_reg_op_enable_dma_tc(adma_ch&0xFF, dma_base);
         }
 
+#if defined(AUDIO_OUTPUT_SW_GAIN) && defined(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO)
+            af_codec_dac1_sw_gain_enable(false);
+#endif
+
         af_codec_set_playback_post_handler(bt_sco_codec_playback_data_post_handler);
 
 #if defined(AUDIO_ANC_FB_MC_SCO) && defined(ANC_APP) && !defined(__AUDIO_RESAMPLE__)
@@ -7265,7 +7214,6 @@ static int bt_sco_player(bool on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
 
         af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK);
-        ntt_audio_output_mute_refresh();
         af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_CAPTURE);
 
         af_stream_start(AUD_STREAM_ID_1, AUD_STREAM_PLAYBACK);
@@ -8131,7 +8079,7 @@ int app_bt_stream_restart(APP_AUDIO_STATUS* status)
                         nRet = bt_a2dp_player(PLAYER_OPER_STOP, freq);
                         nRet = bt_a2dp_player(PLAYER_OPER_START, freq);
                     }else{
-                        if (bts_ibrt_if_is_profile_exchanged(&curr_device->remote)){
+                        if (bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)){
                             AUDIO_BT_TRACE(0,"[STRM_PLAYER][RESTART] force_audio_retrigger");
                             app_audio_manager_sendrequest(APP_BT_STREAM_MANAGER_START,BT_STREAM_MUSIC, device_id,MAX_RECORD_NUM);
                             app_ibrt_if_force_audio_retrigger(RETRIGGER_BY_STREAM_RESTART);
@@ -8261,13 +8209,8 @@ static uint8_t app_bt_stream_volumeup_generic(bool isToUpdateLocalVolumeLevel)
             }
         }
     }
-//fixed default adjust a2dp volume
-#if 0
     else if ((app_bt_stream_isrun(APP_BT_STREAM_A2DP_SBC)) ||
         (app_bt_stream_isrun(APP_BT_STREAM_INVALID)))
-#else
-    else
-#endif
     {
         AUD_ID_ENUM prompt_id = AUD_ID_INVALID;
         uint8_t a2dp_local_vol = 0;
@@ -8277,20 +8220,7 @@ static uint8_t app_bt_stream_volumeup_generic(bool isToUpdateLocalVolumeLevel)
         if (!curr_device)
         {
             AUDIO_BT_TRACE(2, "%s invalid sbc id %x", __func__, bt_media_current_music_get());
-            int i;
-            for ( i= 0; i < BT_DEVICE_NUM; i++)
-            {
-            	if(app_bt_is_a2dp_connected(i))
-            	{
-            		curr_device = app_bt_get_device(i);
-            		break;
-            	}
-            }
-            if( i >= BT_DEVICE_NUM || !curr_device)
-            {
-            	AUDIO_BT_TRACE(2, "%s invalid sbc id more a2dp connected %x", __func__, bt_media_current_music_get());
-                return BT_DEVICE_INVALID_ID;
-            }
+            return BT_DEVICE_INVALID_ID;
         }
 
         AUDIO_BT_TRACE(1, "%s set a2dp volume", __func__);

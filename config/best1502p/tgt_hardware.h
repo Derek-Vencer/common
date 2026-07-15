@@ -35,7 +35,7 @@ extern "C" {
 #define VOL_CTRL_EQ_LIST_NUM                17
 
 #if defined(BES_TWSPRO_EN) || defined(BES_NOTWS_EN)
-#undef EQ_HW_DAC_IIR_LIST_NUM 
+#undef EQ_HW_DAC_IIR_LIST_NUM
 #define EQ_HW_DAC_IIR_LIST_NUM              7
 #endif
 
@@ -60,7 +60,7 @@ extern const char *BT_FIRMWARE_VERSION;
 #endif
 
 #if defined(BES_TWSPRO_EN) || defined(BES_NOTWS_EN)
-#undef CFG_HW_PWL_NUM 
+#undef CFG_HW_PWL_NUM
 #define CFG_HW_PWL_NUM (2)
 #endif
 
@@ -100,7 +100,11 @@ extern const struct HAL_KEY_GPIOKEY_CFG_T cfg_hw_gpio_key_cfg[CFG_HW_GPIOKEY_NUM
 extern const uint16_t CFG_HW_ADCKEY_MAP_TABLE[CFG_HW_ADCKEY_NUMBER];
 extern const struct HAL_IOMUX_PIN_FUNCTION_MAP cfg_hw_pinmux_pwl[CFG_HW_PWL_NUM];
 
+#ifdef BQB_PTS_TEST
+#define BTA_AV_CO_SBC_MAX_BITPOOL  53
+#else
 #define BTA_AV_CO_SBC_MAX_BITPOOL  39
+#endif
 #define MAX_AAC_BITRATE (256*1024)
 
 // Notes: the real CFG_ADC_DC_CALIB_CH_NUM need be equal to the real calibrate mic number!!!

@@ -155,7 +155,6 @@ typedef enum {
     APP_UI_EV_ALL_DISCONNECT_SIG,
     APP_UI_EV_SYS_SHUTDOWN,
     APP_UI_EV_EXIT_EARBUD_MODE,
-    APP_UI_EV_DISCONNECT_MOBILE,
     APP_UI_EV_DESTROY_DEVICE,
 
     /**********LE Audio Related Events (0x10000)**********/

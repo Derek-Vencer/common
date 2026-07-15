@@ -76,7 +76,7 @@ void hal_codec_sync_adc_disable(void)
 #endif
 
 // Recudce 0.57dB in 100Hz@16kHz SampleRate
-// #define CODEC_ADC_DC_FILTER_FACTOR          (6)
+// #define CODEC_ADC_DC_FILTER_FACTOR          (12)
 
 // For 44.1K/48K sample rate
 #ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
@@ -626,6 +626,10 @@ static struct HAL_CODEC_ADC_DC_CALIB_CFG_T adc_calib_cfg[NORMAL_ADC_CH_NUM];
 #ifdef CODEC_SW_SYNC
 static bool codec_sw_sync_play_status[2] = {false,false};
 static bool codec_sw_sync_cap_status[1] = {false};
+#endif
+
+#if defined(CODEC_ADC_DC_FILTER_FACTOR)
+void hal_codec_enable_adc_dc_filter(enum AUD_CHANNEL_MAP_T map, uint32_t enable);
 #endif
 
 static void hal_codec_set_dig_adc_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
@@ -1509,6 +1513,9 @@ int hal_codec_open(enum HAL_CODEC_ID_T id)
         // Enable ADC zero-crossing gain adjustment
         for (i = 0; i < NORMAL_ADC_CH_NUM; i++) {
             *(&codec->REG_084 + i) |= CODEC_CODEC_ADC_GAIN_SEL_CH0;
+#if defined(CODEC_ADC_DC_FILTER_FACTOR)
+            hal_codec_enable_adc_dc_filter((AUD_CHANNEL_MAP_CH0 << i), true);
+#endif
         }
 
         // DRE ini gain and offset
@@ -4481,9 +4488,6 @@ int hal_codec_setup_stream(enum HAL_CODEC_ID_T id, enum AUD_STREAM_T stream, con
 #ifdef AUDIO_ADC_DIG_DC_CALIB
                         hal_codec_adc_dig_dc_offset_enable((AUD_CHANNEL_MAP_CH0 << i), adc_calib_cfg[ch_idx].rsvd0);
 #endif
-#if defined(CODEC_ADC_DC_FILTER_FACTOR)
-                        hal_codec_enable_adc_dc_filter((1 << i), true);
-#endif
                     }
                     i++;
                 }
@@ -6254,6 +6258,10 @@ int hal_codec_dac_dc_auto_calib_enable(void)
 
 int hal_codec_dac_dc_auto_calib_disable(void)
 {
+#if defined(CODEC_ADC_DC_FILTER_FACTOR)
+    hal_codec_enable_adc_dc_filter((AUD_CHANNEL_MAP_CH0 | AUD_CHANNEL_MAP_CH1), true);
+#endif
+
     return 0;
 }
 

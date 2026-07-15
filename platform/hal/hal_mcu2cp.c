@@ -207,8 +207,10 @@ static int MCU2CP_TEXT_LOC hal_mcu2cp_local_irq_clear(enum HAL_MCU2CP_ID_T id, e
             value = CMU_CP2MCU_DATA1_DONE_CLR;
         }
     }
-
+    __DMB();
     cmu->MCU2CP_IRQ_CLR = value;
+    __DMB();
+
 #else
     if (id == HAL_MCU2CP_ID_0) {
         if (type == HAL_MCU2CP_IRQ_DATA_IND) {
@@ -223,8 +225,10 @@ static int MCU2CP_TEXT_LOC hal_mcu2cp_local_irq_clear(enum HAL_MCU2CP_ID_T id, e
             value = CMU_MCU2CP_DATA1_DONE_CLR;
         }
     }
-
+    __DMB();
     cmu->CP2MCU_IRQ_CLR = value;
+    __DMB();
+
 #endif
 
     return 0;

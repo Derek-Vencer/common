@@ -655,44 +655,6 @@ extern void a2dp_handleKey(uint8_t a2dp_key)
     app_bt_a2dp_send_key_request(a2dp_id, a2dp_key);
 }
 
-void app_key_handle_pause_music_on_pogo_in(void)
-{
-#ifdef BT_AVRCP_SUPPORT
-    uint8_t a2dp_id = app_bt_audio_get_curr_a2dp_device();
-
-    if (a2dp_id == BT_DEVICE_INVALID_ID)
-    {
-        BTAPP_TRACE(0, "[POGO_IN][MUSIC] no current a2dp device");
-        return;
-    }
-
-    struct BT_DEVICE_T *curr_device = app_bt_get_device(a2dp_id);
-
-    if (curr_device == NULL)
-    {
-        BTAPP_TRACE(0, "[POGO_IN][MUSIC] device is null");
-        return;
-    }
-
-    if (!curr_device->a2dp_conn_flag)
-    {
-        BTAPP_TRACE(1, "[POGO_IN][MUSIC] a2dp not connected, device=%d", a2dp_id);
-        return;
-    }
-
-#ifdef BESUI_TWS_EN
-    if (btif_a2dp_get_stream_state(app_bt_get_mobile_a2dp_stream(a2dp_id)) != BT_A2DP_STREAM_STATE_STREAMING)
-    {
-        BTAPP_TRACE(1, "[POGO_IN][MUSIC] not streaming, device=%d", a2dp_id);
-        return;
-    }
-#endif
-
-    BTAPP_TRACE(1, "[POGO_IN][MUSIC] pause music, device=%d", a2dp_id);
-
-    a2dp_handleKey(AVRCP_KEY_PAUSE);
-#endif
-}
 
 void hfp_handle_key(uint8_t hfp_key)
 {
@@ -708,23 +670,23 @@ void hfp_handle_key(uint8_t hfp_key)
     {
         case HFP_KEY_ANSWER_CALL:
             ///answer a incomming call
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_ANSWER_CALL\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_ANSWER_CALL\n");
             btif_hf_answer_call(hf_channel_curr);
             break;
         case HFP_KEY_HANGUP_CALL:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_HANGUP_CALL\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_HANGUP_CALL\n");
             btif_hf_hang_up_call(hf_channel_curr);
             break;
         case HFP_KEY_REDIAL_LAST_CALL:
             ///redail the last call
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_REDIAL_LAST_CALL\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_REDIAL_LAST_CALL\n");
             btif_hf_redial_call(hf_channel_curr);
             break;
         case HFP_KEY_CHANGE_TO_PHONE:
             ///remove sco and voice change to phone
             if(app_bt_is_hfp_audio_on())
             {
-                BTAPP_TRACE(0,"hfp_key = HFP_KEY_CHANGE_TO_PHONE\n");
+                BTAPP_TRACE(0,"avrcp_key = HFP_KEY_CHANGE_TO_PHONE\n");
                 btif_hf_disc_audio_link(hf_channel_curr);
             }
             break;
@@ -732,60 +694,60 @@ void hfp_handle_key(uint8_t hfp_key)
             ///add a sco and voice change to earphone
             if(!app_bt_is_hfp_audio_on())
             {
-                BTAPP_TRACE(0,"hfp_key = HFP_KEY_ADD_TO_EARPHONE ver:%x\n",  btif_hf_get_version(hf_channel_curr));
+                BTAPP_TRACE(0,"avrcp_key = HFP_KEY_ADD_TO_EARPHONE ver:%x\n",  btif_hf_get_version(hf_channel_curr));
                 btif_hf_create_audio_link(hf_channel_curr);
             }
             break;
         case HFP_KEY_MUTE:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_MUTE\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_MUTE\n");
             app_bt_manager.hf_tx_mute_flag = 1;
             break;
         case HFP_KEY_CLEAR_MUTE:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_CLEAR_MUTE\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_CLEAR_MUTE\n");
             app_bt_manager.hf_tx_mute_flag = 0;
             break;
         case HFP_KEY_THREEWAY_HOLD_AND_ANSWER:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_THREEWAY_HOLD_AND_ANSWER\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_THREEWAY_HOLD_AND_ANSWER\n");
             btif_hf_call_hold(hf_channel_curr, BTIF_HF_HOLD_HOLD_ACTIVE_CALLS, 0);
             break;
         case HFP_KEY_THREEWAY_HANGUP_AND_ANSWER:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_THREEWAY_HOLD_SWAP_ANSWER\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_THREEWAY_HOLD_SWAP_ANSWER\n");
             btif_hf_call_hold(hf_channel_curr, BTIF_HF_HOLD_RELEASE_ACTIVE_CALLS, 0);
             break;
         case HFP_KEY_THREEWAY_HOLD_REL_INCOMING:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_THREEWAY_HOLD_REL_INCOMING\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_THREEWAY_HOLD_REL_INCOMING\n");
             btif_hf_call_hold(hf_channel_curr, BTIF_HF_HOLD_RELEASE_HELD_CALLS, 0);
             break;
 #if BT_DEVICE_NUM > 1
         case HFP_KEY_DUAL_HF_HANGUP_ANOTHER:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_HANGUP_ANOTHER\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_HANGUP_ANOTHER\n");
             btif_hf_hang_up_call(hf_channel_another);
             break;
         case HFP_KEY_DUAL_HF_HANGUP_CURR_ANSWER_ANOTHER:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_HANGUP_CURR_ANSWER_ANOTHER\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_HANGUP_CURR_ANSWER_ANOTHER\n");
             btif_hf_hang_up_call(hf_channel_curr);
             app_bt_manager.hf_call_next_state = HFCALL_NEXT_STA_ANOTHER_ANSWER;
             break;
         case HFP_KEY_DUAL_HF_HOLD_CURR_ANSWER_ANOTHER:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_HOLD_CURR_ANSWER_ANOTHER\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_HOLD_CURR_ANSWER_ANOTHER\n");
             break;
         case HFP_KEY_DUAL_HF_CHANGETOPHONE_ANSWER_ANOTHER:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_CHANGETOPHONE_ANSWER_ANOTHER\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_CHANGETOPHONE_ANSWER_ANOTHER\n");
             btif_hf_disc_audio_link(hf_channel_curr);
             app_bt_manager.hf_call_next_state = HFCALL_NEXT_STA_ANOTHER_ANSWER;
             break;
         case HFP_KEY_DUAL_HF_CHANGETOPHONE_ANOTHER_ADDTOEARPHONE:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_CHANGETOPHONE_ANOTHER_ADDTOEARPHONE\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_CHANGETOPHONE_ANOTHER_ADDTOEARPHONE\n");
             btif_hf_disc_audio_link(hf_channel_curr);
             app_bt_manager.hf_call_next_state = HFCALL_NEXT_STA_ANOTHER_ADDTOEARPHONE;
             break;
         case HFP_KEY_DUAL_HF_HANGUP_ANOTHER_ADDTOEARPHONE:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_HANGUP_ANOTHER_ADDTOEARPHONE\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_HANGUP_ANOTHER_ADDTOEARPHONE\n");
             btif_hf_hang_up_call(hf_channel_curr);
             app_bt_manager.hf_call_next_state = HFCALL_NEXT_STA_ANOTHER_ADDTOEARPHONE;
             break;
         case HFP_KEY_DUAL_HF_CHANGETOPHONE_ANSWER_CURR:
-            BTAPP_TRACE(0,"hfp_key = HFP_KEY_DUAL_HF_CHANGETOPHONE_ANSWER_CURR\n");
+            BTAPP_TRACE(0,"avrcp_key = HFP_KEY_DUAL_HF_CHANGETOPHONE_ANSWER_CURR\n");
             btif_hf_disc_audio_link(hf_channel_another);
             if (app_bt_manager.config.reject_sco_req_within_a_certain_time_after_it_be_preempted)
             {
@@ -820,12 +782,10 @@ void bt_key_handle_customer_volume(void)
 #if defined(IBRT)
     if(bts_tws_if_is_nv_master())
     {
-    	BTAPP_TRACE(0,"%s Master volume up!!", __func__);
         app_audio_control_streaming_volume_up();
     }
     else
     {
-    	BTAPP_TRACE(0,"%s volume down!!", __func__);
         app_audio_control_streaming_volume_down();
     }
 #endif
@@ -835,7 +795,6 @@ void app_key_click_handle_bt_func(void)
 {
     HFCALL_MACHINE_ENUM hfcall_machine = app_get_hfcall_machine();
     POSSIBLY_UNUSED struct BT_DEVICE_T* a2dp_device = app_bt_get_device(app_bt_audio_get_curr_a2dp_device());
-    BTAPP_TRACE(0,"goc click %s hfcall_machine=%d", __func__, hfcall_machine);
     switch(hfcall_machine)
     {
 #ifdef BT_AVRCP_SUPPORT
@@ -862,10 +821,8 @@ void app_key_click_handle_bt_func(void)
 #endif /* BT_AVRCP_SUPPORT */
 #ifdef BT_HFP_SUPPORT
         case HFCALL_MACHINE_CURRENT_INCOMMING:
-        case HFCALL_MACHINE_CURRENT_INCOMMING_ANOTHER_IDLE:
            hfp_handle_key(HFP_KEY_ANSWER_CALL);
         break;
-#if 0 //goodocom UI requirments single kick
         case HFCALL_MACHINE_CURRENT_OUTGOING:
             hfp_handle_key(HFP_KEY_HANGUP_CALL);
         break;
@@ -878,9 +835,7 @@ void app_key_click_handle_bt_func(void)
         case HFCALL_MACHINE_CURRENT_3WAY_HOLD_CALLING:
             hfp_handle_key(HFP_KEY_THREEWAY_HOLD_AND_ANSWER);
         break;
-#endif
-
-#if BT_DEVICE_NUM > 1 && defined(BT_ONE_BRING_TWO)
+#if BT_DEVICE_NUM > 1
         case HFCALL_MACHINE_CURRENT_INCOMMING_ANOTHER_IDLE:
             hfp_handle_key(HFP_KEY_ANSWER_CALL);
         break;
@@ -925,46 +880,33 @@ void app_key_doubleclick_handle_bt_func(void)
 
     HFCALL_MACHINE_ENUM hfcall_machine = app_get_hfcall_machine();
 
-
-    BTAPP_TRACE(0,"goc %s hfcall_machine=%d", __func__, hfcall_machine);
-
 #ifdef SUPPORT_SIRI
-    if(open_siri_flag)
-    {
-    	open_siri_flag = 0;
-        app_hfp_siri_voice(false);
-        return;
-    }
+    open_siri_flag=0;
 #endif
+
     switch(hfcall_machine)
     {
         case HFCALL_MACHINE_CURRENT_IDLE:
-        case HFCALL_MACHINE_CURRENT_IDLE_ANOTHER_IDLE:
 #ifdef BT_HID_DEVICE
             app_hid_device_send_capture();
 #else
-            //bt_key_handle_customer_doubleclick();
-            BTAPP_TRACE(0,"::goc next song double hf idle");
-            app_audio_control_media_forward();
+            bt_key_handle_customer_doubleclick();
 #endif
         break;
 #ifdef BT_HFP_SUPPORT
         case HFCALL_MACHINE_CURRENT_INCOMMING:
-            //bt_key_handle_call(CALL_STATE_INCOMING);
-        //break;
+            bt_key_handle_call(CALL_STATE_INCOMING);
+        break;
         case HFCALL_MACHINE_CURRENT_OUTGOING:
-        case HFCALL_MACHINE_CURRENT_OUTGOING_ANOTHER_IDLE:
-        case HFCALL_MACHINE_CURRENT_INCOMMING_ANOTHER_IDLE:
             bt_key_handle_call(CALL_STATE_OUTGOING);
         break;
         case HFCALL_MACHINE_CURRENT_CALLING:
         case HFCALL_MACHINE_CURRENT_3WAY_INCOMMING:
-        case HFCALL_MACHINE_CURRENT_CALLING_ANOTHER_IDLE:
             bt_key_handle_call(CALL_STATE_ACTIVE);
         break;
         case HFCALL_MACHINE_CURRENT_3WAY_HOLD_CALLING:
         break;
-#if BT_DEVICE_NUM > 1 && defined(BT_ONE_BRING_TWO)
+#if BT_DEVICE_NUM > 1
         case HFCALL_MACHINE_CURRENT_IDLE_ANOTHER_IDLE:
 #ifdef BT_HID_DEVICE
             app_hid_device_send_capture();
@@ -1011,27 +953,25 @@ void app_key_tripleclick_handle_bt_func(void)
 {
     BTAPP_TRACE(0,"%s enter",__func__);
     CALL_STATE_E call_state = app_bt_get_call_state();
-//  PLAYBACK_INFO_T* playback_info = app_bt_get_music_playback_info();
-    BTAPP_TRACE(0,"goc %s call_state=%d", __func__, call_state);
+    PLAYBACK_INFO_T* playback_info = app_bt_get_music_playback_info();
+
     if(call_state == CALL_STATE_IDLE)
     {
-        BTAPP_TRACE(0,"::goc backward song triple hf idle");
-        app_audio_control_media_backward();
-//        switch(playback_info->playback_status)
-//        {
-//            case IDLE:
-//            case PAUSED:
-//                app_hfp_siri_voice(true);
-//                break;
-//            case PLAYING:
-//                {
-//                    app_audio_control_media_pause();
-//                    app_hfp_siri_voice(true);
-//                }
-//                break;
-//            default:
-//                break;
-//        }
+        switch(playback_info->playback_status)
+        {
+            case IDLE:
+            case PAUSED:
+                app_hfp_siri_voice(true);
+                break;
+            case PLAYING:
+                {
+                    app_audio_control_media_pause();
+                    app_hfp_siri_voice(true);
+                }
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -1042,55 +982,32 @@ void app_key_longpress_handle_bt_func(void)
 #ifdef SUPPORT_SIRI
     open_siri_flag=0;
 #endif
-
 #ifndef FPGA
-    //media_PlayAudio(AUD_ID_BT_WARNING, 0);
-    media_PlayAudio(AUDIO_ID_BT_ALEXA_START, 0);
-    
+    media_PlayAudio(AUD_ID_BT_WARNING, 0);
 #endif
 
-    BTAPP_TRACE(0,"goc %s hfcall_machine=%d", __func__, hfcall_machine);
     switch(hfcall_machine)
     {
         case HFCALL_MACHINE_CURRENT_IDLE:
-        case HFCALL_MACHINE_CURRENT_IDLE_ANOTHER_IDLE:
-        default:
         {
-            //bt_key_handle_customer_volume();
+            bt_key_handle_customer_volume();
 #ifdef BT_PBAP_SUPPORT
             app_bt_pbap_client_test();
 #endif
-
 #ifdef BT_MAP_SUPPORT
             bt_map_client_test(&app_bt_get_device(BT_DEVICE_ID_1)->remote);
 #endif
-
-#ifdef SUPPORT_SIRI
-            if(open_siri_flag == 0 )
-            {
-                if( 0 == app_hfp_siri_voice(true))
-                {
-                    open_siri_flag = 1;
-                    BTAPP_TRACE(0,"goc %s Enable voiceRecognition", __func__);
-                }
-            }
-            break;
-#endif
-
 #if HF_CUSTOM_FEATURE_SUPPORT & HF_CUSTOM_FEATURE_SIRI_REPORT
-#error HF_CUSTOM_FEATURE_SIRI_REPORT
             if(open_siri_flag == 0 )
             {
 #ifndef FPGA
                 media_PlayAudio(AUD_ID_BT_WARNING, 0);
 #endif
                 open_siri_flag = 1;
-                app_hfp_siri_voice(true);
             }
 #endif
         }
         break;
-#if 0
 #ifdef BT_HFP_SUPPORT
         case HFCALL_MACHINE_CURRENT_INCOMMING:
             hfp_handle_key(HFP_KEY_HANGUP_CALL);
@@ -1170,7 +1087,6 @@ void app_key_longpress_handle_bt_func(void)
 #endif /* BT_HFP_SUPPORT */
         default:
         break;
-#endif
     }
 }
 
@@ -1184,7 +1100,6 @@ static const bta_key_click_event_cb_t app_key_click_event_cb =
 
 void app_key_handle_init(void)
 {
-	BTAPP_TRACE(0,"goc %s", __func__);
     bt_adapter_register_key_evt_handle_cb(&app_key_click_event_cb);
 }
 #endif

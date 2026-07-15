@@ -23,8 +23,7 @@ subdir-ccflags-y += \
     -Iutils/cqueue \
     -Iservices/audio_manager/audio_policy/bredr_policy/inc \
     -Iservices/audio_bt \
-    -Iplatform/drivers/bt \
-	-Iservices/communication \
+    -Iplatform/drivers/bt
 
 ifeq ($(BESUI_TWS_EN),1)
 subdir-ccflags-y += -Iapps/besui/tws_ui \

@@ -723,8 +723,8 @@ int a2dp_audio_sync_tune(uint8_t device_id, float ratio)
     sync_tune_dest_ratio = ratio;
 #if defined(IBRT)
     curr_device = app_bt_get_device(device_id);
-    if (bts_ibrt_if_is_profile_exchanged(&curr_device->remote)){
-        if (bts_bt_if_is_dev_link_connected(&curr_device->remote)){
+        if (bts_tws_if_is_tws_link_connected()){
+        if (bts_bt_if_is_dev_link_connected(&curr_device->remote) && bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)){
             APP_TWS_IBRT_AUDIO_SYNC_TUNE_T sync_tune;
             sync_tune.factor_reference = ratio;
 #ifdef IBRT_UI
@@ -2131,7 +2131,7 @@ exit:
             bts_bt_if_is_dev_link_connected(&curr_device->remote)){
             a2dp_audio_latency_factor_sethigh();
             if (bts_tws_if_is_tws_link_connected() &&
-                bts_ibrt_if_is_profile_exchanged(&curr_device->remote)){
+                bts_ibrt_if_a2dp_profile_is_exchanged(&curr_device->remote)){
                 float latency_factor = a2dp_audio_latency_factor_get();
                 tws_ctrl_send_cmd(APP_TWS_CMD_SET_LATENCYFACTOR, (uint8_t*)&latency_factor, sizeof(latency_factor));
                 force_audio_retrigger = true;
@@ -3411,7 +3411,7 @@ void app_audio_set_a2dp_freq(uint32_t freq)
 extern "C" uint8_t is_a2dp_mode(void);
 static void app_post_chopping_timer_handler(void const *param);
 osTimerDef (APP_POST_CHOPPING_TIMER, app_post_chopping_timer_handler);
-__attribute__((unused)) osTimerId app_post_chopping_timer_id = NULL;
+osTimerId app_post_chopping_timer_id = NULL;
 static void app_post_chopping_timer_handler(void const *param)
 {
     AUDIOPLAYERS_TRACE(0, "%s", __func__);
@@ -3428,25 +3428,17 @@ static void app_post_chopping_timer_handler(void const *param)
 
 void app_start_post_chopping_timer(void)
 {
-#if 0
     if (NULL == app_post_chopping_timer_id)
     {
         app_post_chopping_timer_id =
             osTimerCreate(osTimer(APP_POST_CHOPPING_TIMER), osTimerOnce, NULL);
         ASSERT(app_post_chopping_timer_id, "os timer is not enough!");
     }
-    if (isInPostChoppingPeriod)
-    {
-    	AUDIOPLAYERS_TRACE(0, "%s has started", __func__);
-    	osTimerStop(app_post_chopping_timer_id);
-    }
+
     isInPostChoppingPeriod = true;
     AUDIOPLAYERS_TRACE(0, "%s", __func__);
     a2dp_audio_set_freq_user_case(A2DP_AUDIO_BOOST_MODE_FREQ);
     osTimerStart(app_post_chopping_timer_id, 10000);
-#else
-    AUDIOPLAYERS_TRACE(0, "%s disable it, other link the range crash !!!", __func__);
-#endif
 }
 
 bool a2dp_audio_chopping_is_in_post(void)

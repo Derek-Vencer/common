@@ -42,6 +42,7 @@
 #endif
 
 #ifdef TWS_SYSTEM_ENABLED
+#if (APP_BLE_DEMO_APP_ENABLED == 0)
 static void ble_sync_info_prepare_handler(uint8_t *buf, uint16_t *totalLen, uint16_t *len, uint16_t expectLen)
 {
     uint16_t sent_len = 0;
@@ -98,9 +99,11 @@ static void ble_sync_info_rsp_received_handler(uint8_t *buf, uint16_t length, bo
     DEBUG_INFO(2, "%s length:%d %d", __func__, length, isContinueInfo);
     ble_sync_info_receive_continue_process(buf, length, isContinueInfo);
 }
+#endif
 
 void app_ble_mode_tws_sync_init(void)
 {
+#if (APP_BLE_DEMO_APP_ENABLED == 0)
     TWS_SYNC_USER_T userBle =
     {
         ble_sync_info_prepare_handler,
@@ -111,6 +114,7 @@ void app_ble_mode_tws_sync_init(void)
     };
 
     bts_tws_if_register_tws_sync_user(TWS_SYNC_USER_BLE_INFO, &userBle);
+#endif
 }
 
 static void (*g_sync_info)(void) = NULL;
@@ -153,7 +157,7 @@ void ble_roleswitch_complete(uint8_t newRole)
     btif_me_set_ble_bd_address(bt_get_ble_local_address());
 #endif
 
-#if (BLE_AUDIO_ENABLED == 0) && defined(IBRT)
+#if (BLE_AUDIO_ENABLED == 0) && defined(IBRT) && (APP_BLE_DEMO_APP_ENABLED == 0)
     DEBUG_INFO(0, "%s newRole %d", __func__, newRole);
     app_ble_force_switch_adv(BLE_SWITCH_USER_RS, true);
     if (newRole == IBRT_SLAVE)
@@ -167,7 +171,7 @@ void ble_role_update(uint8_t newRole)
 {
 #if defined(IBRT)
     DEBUG_INFO(0, "%s newRole %d", __func__, newRole);
-#if (BLE_AUDIO_ENABLED == 0)
+#if (BLE_AUDIO_ENABLED == 0) && (APP_BLE_DEMO_APP_ENABLED == 0)
     if (newRole == IBRT_SLAVE)
     {
         gap_terminate_all_ble_connection();

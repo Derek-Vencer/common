@@ -52,14 +52,6 @@ typedef struct
     app_ui_evt_t latest_evt;
 } link_evt_run_result_t;
 
-typedef enum {
-    RECONNECT_NONE,
-    LINK_LOSS,
-    TRY_RECONNECT,
-    TRY_RECONNECT_EXT,
-} reconnect_reason_t;
-
-
 typedef enum
 {
     PEER_IDLE,
@@ -69,7 +61,6 @@ typedef enum
 
 typedef enum {
     DESTROY_SENDING,
-    DESTROY_RECEIVING,
     DESTROY_PROCESSING,
     DESTROY_NONE,
 } app_ui_destroy_state_t;
@@ -127,7 +118,6 @@ typedef enum {
     APP_BT_DEVICE_RECONNECT_TIMER_CONNECT,   //connect by Reconnect timer
     APP_BT_DEVICE_MASTER_CHOICE_CONNECT,     //connect by Choice_Action master side
     APP_BT_DEVICE_SLAVE_CHOICE_CONNECT,      //connect by Choice_Action slave side
-    APP_BT_DEVICE_TWS_DISCONNECT_RECONNECT,  //connect by Tws_Disconent
 } app_ui_btmob_conn_type_t;
 
 #ifdef __cplusplus
@@ -156,6 +146,7 @@ void app_ui_btmob_sm_init_connect_param(app_ui_btmob_sm_t *mobile_link_sm, const
 const char* btmob_sm_state_to_string(btmob_sm_state_e state);
 bool app_ui_notify_switch_ui_role(bool switch2master);
 void app_ui_btmob_sm_terminate_reconnect(app_ui_btmob_sm_t *me);
+btmob_sm_state_e app_ui_btmob_sm_get_state(app_ui_btmob_sm_t *me);
 
 #ifdef __cplusplus
 }

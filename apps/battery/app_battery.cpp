@@ -28,7 +28,6 @@
 #include "app_bt.h"
 #include "apps.h"
 #include "app_hfp.h"
-#include "../btapp/bt_app/app_keyhandle.h"
 
 #ifdef APP_BATTERY_ENABLE
 #include "app_status_ind.h"
@@ -58,9 +57,6 @@
 #ifdef BESUI_STEREO_EN
 #include "stereoui.h"
 #endif
-
-#include "app_ble.h"
-#include "communication_svr.h"
 
 #if (defined(BTUSB_AUDIO_MODE) || defined(BTUSB_AUDIO_MODE))
 extern "C" bool app_usbaudio_mode_on(void);
@@ -140,7 +136,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #ifdef BLE_ONLY_ENABLED
 #define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (25000)
 #else
-#define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (10*1000)
+#define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (10000)
 #endif
 #define APP_BATTERY_CHARGING_PERIODIC_MS (APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS)
 
@@ -148,9 +144,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #define APP_BATTERY_GET_STATUS(appevt, status) (status = (appevt>>16)&0xffff)
 #define APP_BATTERY_GET_VOLT(appevt, volt) (volt = appevt&0xffff)
 #define APP_BATTERY_GET_PRAMS(appevt, prams) ((prams) = appevt&0xffff)
-#if defined(IBRT)
-extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
-#endif
+
 enum APP_BATTERY_MEASURE_PERIODIC_T
 {
     APP_BATTERY_MEASURE_PERIODIC_FAST = 0,
@@ -194,8 +188,6 @@ struct APP_BATTERY_MEASURE_T
     APP_BATTERY_CB_T user_cb;
 };
 
-static enum APP_BATTERY_CHARGER_T g_ntt_last_case_state = APP_BATTERY_CHARGER_QTY;
-
 #ifdef IS_BES_BATTERY_MANAGER_ENABLED
 
 static enum APP_BATTERY_CHARGER_T app_battery_charger_forcegetstatus(void);
@@ -206,14 +198,7 @@ osTimerDef (APP_BATTERY_PLUGINOUT_DEBOUNCE, app_battery_pluginout_debounce_handl
 static osTimerId app_battery_pluginout_debounce_timer = NULL;
 static uint32_t app_battery_pluginout_debounce_ctx = 0;
 static uint32_t app_battery_pluginout_debounce_cnt = 0;
-#ifdef IBRT
-extern "C" void ntt_case_close_role_switch_reset(void);
-extern "C" bool ntt_case_close_role_switch_can_shutdown(void);
-#endif
-#ifdef IBRT
-extern "C" void ntt_case_state_sync_local_update(
-    bool in_case);
-#endif
+
 #ifndef MORE_THAN_ONE_TYPE_OF_CHARGER
 const
 #endif
@@ -229,142 +214,7 @@ osTimerDef (APP_BATTERY, app_battery_timer_handler);
 static osTimerId app_battery_timer = NULL;
 static struct APP_BATTERY_MEASURE_T app_battery_measure;
 
-//fixed wrong close the earBuds,when charger open
-static void earBudsCloseOff_PogonIn_handler(void const *param);
-osTimerDef (POGONIN_CLOSE_TIMER, earBudsCloseOff_PogonIn_handler);
-static osTimerId pogonPinCloseTimer = NULL;
-extern bool  aiWangIsNeedOpenEarBuds(void);
-
-#ifdef IBRT
-extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void);
-#endif
-void earBudsCloseOff_PogonIn_StartTimer(void);
-extern bool ntt_charging_pwron_pending_shutdown;
-
-static void earBudsCloseOff_PogonIn_handler(void const *param)
-{
-    int8_t charging = app_battery_is_charging();
-
-    BATTERY_TRACE(2,"[POWER_OFF] PogonIn handler charging=%d pending=%d",charging,ntt_charging_pwron_pending_shutdown);
-
-    if (charging)
-    {
-        BATTERY_TRACE(0,"[POWER_OFF] charging=1 -> check role switch");
-
-#ifdef IBRT
-        static bool s_role_switch_requested = false;
-        static uint8_t s_role_switch_wait_cnt = 0;
-
-        if (s_role_switch_requested)
-        {
-            if (ntt_case_close_role_switch_can_shutdown())
-            {
-                BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
-                s_role_switch_requested = false;
-                s_role_switch_wait_cnt = 0;
-                ntt_charging_pwron_pending_shutdown = false;
-
-                app_shutdown();
-                return;
-            }
-
-            s_role_switch_wait_cnt++;
-            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",s_role_switch_wait_cnt);
-            if (s_role_switch_wait_cnt < 10)
-            {
-                earBudsCloseOff_PogonIn_StartTimer();
-                return;
-            }
-
-            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout, shutdown");
-            s_role_switch_requested = false;
-            s_role_switch_wait_cnt = 0;
-            ntt_charging_pwron_pending_shutdown = false;
-
-            app_shutdown();
-            return;
-        }
-
-        if (ntt_case_close_try_role_switch_before_shutdown())
-        {
-            BATTERY_TRACE(0,"[POWER_OFF] role switch requested");
-            s_role_switch_requested = true;
-            s_role_switch_wait_cnt = 0;
-
-            earBudsCloseOff_PogonIn_StartTimer();
-            return;
-        }
-#endif
-
-        BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
-        ntt_charging_pwron_pending_shutdown = false;
-
-        app_shutdown();
-        return;
-    }
-
-#ifdef IBRT
-    ntt_case_close_role_switch_reset();
-#endif
-
-    ntt_charging_pwron_pending_shutdown = false;
-
-    BATTERY_TRACE(0,"[POWER_OFF] charging=0 -> cancel shutdown, keep power on");
-}
-
-void earBudsCloseOff_PogonIn_StartTimer(void)
-{
-    if (NULL == pogonPinCloseTimer)
-    {
-        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
-    }
-
-    osTimerStop(pogonPinCloseTimer);
-    osTimerStart(pogonPinCloseTimer, 3000);
-}
-
-void earBudsCloseOff_PogonIn_StopTimer(void)
-{
-    if (NULL != pogonPinCloseTimer)
-    {
-        osTimerStop(pogonPinCloseTimer);
-    }
-    BATTERY_TRACE(0,"[CASE_OPEN] stop close-case power off timer");
-}
-
-void earBudsCloseOff_PowerOff_StartTimer(void)
-{
-    if (NULL == pogonPinCloseTimer)
-    {
-        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER),osTimerOnce,NULL);
-    }
-
-    osTimerStop(pogonPinCloseTimer);
-    osTimerStart(pogonPinCloseTimer, 1600);
-    BATTERY_TRACE(0,"[POWER_OFF] start 1.6s charger check timer");
-}
-
-//-------------------------------------------------------------------------------------------
-
-
-extern "C" void aw_ntc_detect_process(uint16_t ad_volt);
 static int app_battery_charger_handle_process(void);
-static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
-	static const int battery_table_level[11] = {4130,4040,3940,3880,3830,3790,3750,3720,3660,3580,3100}; //unit:mv
-	uint8_t level = 0;
-	uint8_t index = 0;
-	//uint16_t last_mv = battery_table_level[0];
-	for (index = 0; index < sizeof(battery_table_level)/sizeof(battery_table_level[0]); index++)
-	{
-		if(app_battery_measure.currvolt >= battery_table_level[index]) {
-			level   = 10 - index;
-			//last_mv = battery_table_level[0];
-			break;
-		}
-	}
-	return level;
-}
-
 
 #ifdef BESUI_STEREO_EN
 int app_ui_battery_charger_handle_process(void)
@@ -394,7 +244,7 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
     uint8_t i;
     uint32_t meanBattVolt = 0;
     HAL_GPADC_MV_T vbat = volt;
-    BATTERY_TRACE(2,"%s %dmv app_vbat_volt_div=%d",__func__, vbat, app_vbat_volt_div);
+    BATTERY_TRACE(2,"%s %d",__func__, vbat);
     if ((vbat == HAL_GPADC_BAD_VALUE) || ((vbat * app_vbat_volt_div) <= APP_BATTERY_ERR_MV))
     {
         app_battery_measure.cb(APP_BATTERY_STATUS_INVALID, vbat);
@@ -404,7 +254,6 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 #if (defined(BTUSB_AUDIO_MODE) || defined(BTUSB_AUDIO_MODE))
     if(app_usbaudio_mode_on()) return ;
 #endif
-
     app_battery_measure.voltage[app_battery_measure.index++%APP_BATTERY_STABLE_COUNT] = vbat * app_vbat_volt_div;
     if (app_battery_measure.index > APP_BATTERY_STABLE_COUNT)
     {
@@ -497,7 +346,6 @@ static void app_battery_timer_start(enum APP_BATTERY_MEASURE_PERIODIC_T periodic
                 break;
             case APP_BATTERY_MEASURE_PERIODIC_NORMAL:
                 periodic_millisec = APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS;
-                break;
             default:
                 break;
         }
@@ -521,7 +369,7 @@ static void app_battery_event_process(enum APP_BATTERY_STATUS_T status, APP_BATT
     uint32_t app_battevt;
     APP_MESSAGE_BLOCK msg;
 
-    BATTERY_TRACE(3,"%s %d,Voltage : %dmV",__func__, status, volt);
+    BATTERY_TRACE(3,"%s %d,%d",__func__, status, volt);
     msg.mod_id = APP_MODULE_BATTERY;
 #if defined(USE_BASIC_THREADS)
     msg.mod_level = APP_MOD_LEVEL_0;
@@ -541,70 +389,29 @@ int app_status_battery_report(uint8_t level)
 #else
 int app_status_battery_report(uint8_t level)
 {
-	BATTERY_TRACE(1,"%s level=%d", __func__, level);
 #if defined(APP_10_SECOND_TIMER_EN)
     app_10_second_timer_check();
 #endif
 
     if (app_is_stack_ready())
     {
+// #if (HF_CUSTOM_FEATURE_SUPPORT & HF_CUSTOM_FEATURE_BATTERY_REPORT) || (HF_SDK_FEATURES & HF_FEATURE_HF_INDICATORS)
 #if defined(SUPPORT_BATTERY_REPORT) || defined(SUPPORT_HF_INDICATORS)
-
 #if defined(IBRT)
         uint8_t hfp_device = app_bt_audio_get_curr_hfp_device();
         struct BT_DEVICE_T *curr_device = app_bt_get_device(hfp_device);
-
         if (curr_device->hf_conn_flag)
         {
-            BATTERY_TRACE(1,
-                          "[BATT] HFP connected level=%d",
-                          level);
-
             app_hfp_set_battery_level(level);
         }
-        else
-        {
-#if defined(BLE_BATT_ENABLE)
-
-            /* HFP battery level(0~9) -> BLE percent(0~100) */
-            uint8_t percent =
-                (level >= 9) ? 100 : ((level + 1) * 10);
-
-            DEBUG_WARNING(0,
-                          "[BLE_BATT][STATUS] level=%d percent=%d",
-                          level,
-                          percent);
-
-            for (int i = 0; i < BT_DEVICE_NUM; i++)
-            {
-                DEBUG_WARNING(0,
-                              "[BLE_BATT][STATUS] dev=%d report=%d%%",
-                              i,
-                              percent);
-
-                app_ble_report_battery_level(i, percent);
-            }
-
-#endif
-        }
-
 #elif defined(BT_HFP_SUPPORT)
-
         app_hfp_set_battery_level(level);
-
 #endif
-
 #else
-
-        BATTERY_TRACE(1,
-                      "[%s] Can not enable SUPPORT_BATTERY_REPORT",
-                      __func__);
-
+        BATTERY_TRACE(1,"[%s] Can not enable SUPPORT_BATTERY_REPORT", __func__);
 #endif
-
         bes_bt_osapi_notify_evm();
     }
-
     return 0;
 }
 #endif
@@ -612,6 +419,7 @@ int app_status_battery_report(uint8_t level)
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     int8_t level = 0;
+
     switch (status)
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
@@ -622,7 +430,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #if defined(IBRT)
 
 #else
-            media_PlayAudio(AUD_ID_BT_BATTERY_LOW, 0);
+            media_PlayAudio(AUD_ID_BT_CHARGE_PLEASE, 0);
 #endif
 #endif
 #endif
@@ -649,43 +457,25 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 level /= 10;
             }
 #else
-
 #ifdef BESUI_TWS_EN
             level = app_battery_level_tran_process(app_battery_measure.currvolt);
             app_battery_measure.currlevel = level;
             app_battery_low_voice_enable_set(app_battery_measure.currlevel);
             level = app_battery_level_compare();
             app_battery_low_voice_play_process();
-
 #ifdef BATTERY_SWITCH_ROLE_EN
             besui_battery_role_switch();
 #endif
-
 #else
-
 #if defined(BESUI_STEREO_EN)
             level = stereo_battery_level_process(app_battery_measure.status, app_battery_measure.currvolt);
+            BATTERY_TRACE(0,"stereo return level=%d", level);
 #endif
-
             app_battery_measure.currlevel = level;
 #endif
-
-#endif
-            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-#if defined(IBRT)
-            {
-                static int8_t last_sync_level = -1;
-
-                if (last_sync_level != level)
-                {
-                    last_sync_level = level;
-                    app_ibrt_customif_cmd_sync_battery_level(level);
-                }
-            }
 #endif
             app_status_battery_report(level);
             break;
-
         case APP_BATTERY_STATUS_PDVOLT:
 #ifndef BT_USB_AUDIO_DUAL_MODE
             BATTERY_TRACE(1,"PDVOLT-->POWEROFF:%d", prams.volt);
@@ -705,9 +495,8 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #else
-
 #if CHARGER_PLUGINOUT_RESET
-                //app_reset();
+                app_reset();
 #else
                 app_battery_measure.status = APP_BATTERY_STATUS_CHARGING;
 #endif
@@ -725,13 +514,11 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 
 int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
-    uint8_t level = 0;
 #if defined(BESUI_TWS_EN)
-#error BESUI_TWS_EN
     BATTERY_TRACE(1,"[UIBAT] status = %d, volt %d",status, prams.volt);
     app_battery_level_tran_process(prams.volt);
 #elif defined(BESUI_STEREO_EN)
-#error BESUI_STEREO_EN
+    uint8_t level = 0;
     level = stereo_battery_level_process(status, prams.volt);
     BATTERY_TRACE(1,"[UIBAT] status=%d, volt=%d, level=%d",status, prams.volt, level);
 #endif
@@ -741,20 +528,17 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
         case APP_BATTERY_STATUS_NORMAL:
         case APP_BATTERY_STATUS_UNDERVOLT:
             app_battery_measure.currvolt = prams.volt;
-            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-            BATTERY_TRACE(1,"[UIBAT] status=%d, volt=%d, level=%d",status, prams.volt, level);
-            app_status_battery_report(level/*prams.volt*/);
+            app_status_battery_report(prams.volt);
             break;
         case APP_BATTERY_STATUS_CHARGING:
-            BATTERY_TRACE(1,"[UIBAT] CHARGING:%d", prams.charger);
+            BATTERY_TRACE(1,"CHARGING:%d", prams.charger);
             if (prams.charger == APP_BATTERY_CHARGER_PLUGOUT)
             {
 #ifndef BT_USB_AUDIO_DUAL_MODE
 #if CHARGER_PLUGINOUT_RESET
                 BATTERY_TRACE(0,"CHARGING-->RESET");
                 osTimerStop(app_battery_timer);
-                //app_shutdown();
-                app_reset();
+                app_shutdown();
 #else
                 app_battery_measure.status = APP_BATTERY_STATUS_NORMAL;
 #endif
@@ -766,13 +550,10 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
                 BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
                 btusb_switch(BTUSB_MODE_USB);
 #endif
-                BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
-                osTimerStop(app_battery_timer);
             }
             break;
         case APP_BATTERY_STATUS_INVALID:
         default:
-        	BATTERY_TRACE(0,"[UIBAT] APP_BATTERY_STATUS_INVALID");
             break;
     }
 
@@ -795,7 +576,9 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
 #endif
         }
     }
+
     app_battery_timer_start(APP_BATTERY_MEASURE_PERIODIC_CHARGING);
+
     return 0;
 }
 
@@ -811,13 +594,11 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
     uint32_t generatedSeed = hal_sys_timer_get();
     for (uint8_t index = 0; index < sizeof(bt_global_addr); index++)
     {
-        generatedSeed ^= (((uint32_t)(bt_global_addr[index])) << (hal_sys_timer_get() & 0xF));
+        generatedSeed ^= (((uint32_t)(bt_global_addr[index])) << (hal_sys_timer_get()&0xF));
     }
     srand(generatedSeed);
 
-
-    if (status == APP_BATTERY_STATUS_PLUGINOUT)
-    {
+    if (status == APP_BATTERY_STATUS_PLUGINOUT){
         app_battery_pluginout_debounce_start();
     }
     else
@@ -826,15 +607,11 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
         {
             case APP_BATTERY_STATUS_NORMAL:
                 app_battery_handle_process_normal((uint32_t)status, msg_prams);
-
 #if defined(CHIP_BEST1501P)
-                if (pmu_ana_volt_is_high() == false)
-                {
+                if(pmu_ana_volt_is_high() == false){
                     pmu_ntc_capture_start(NULL);
-                }
-                else
-                {
-                    BATTERY_TRACE(1, "%s stop ana check", __func__);
+                }else{
+                    BATTERY_TRACE(1,"%s stop ana check",__func__);
                 }
 #endif
                 break;
@@ -846,32 +623,21 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
             default:
                 break;
         }
-
-        if (app_battery_measure.currlevel <= 100)
-        {
-            app_ibrt_customif_cmd_sync_battery_level(app_battery_measure.currlevel);
-        }
     }
-
     if (NULL != app_battery_measure.user_cb)
     {
         uint8_t batteryLevel;
-
 #ifdef __INTERCONNECTION__
-        APP_BATTERY_INFO_T *pBatteryInfo;
-        pBatteryInfo = (APP_BATTERY_INFO_T *)&app_battery_measure.currentBatteryInfo;
-        pBatteryInfo->chargingStatus =
-            ((app_battery_measure.status == APP_BATTERY_STATUS_CHARGING) ? 1 : 0);
+        APP_BATTERY_INFO_T* pBatteryInfo;
+        pBatteryInfo = (APP_BATTERY_INFO_T*)&app_battery_measure.currentBatteryInfo;
+        pBatteryInfo->chargingStatus = ((app_battery_measure.status == APP_BATTERY_STATUS_CHARGING)? 1:0);
         batteryLevel = pBatteryInfo->batteryLevel;
+
 #else
         batteryLevel = app_battery_measure.currlevel;
 #endif
-
         app_battery_measure.user_cb(app_battery_measure.currvolt,
-                                    batteryLevel,
-                                    app_battery_measure.status,
-                                    status,
-                                    msg_prams);
+                                    batteryLevel, app_battery_measure.status,status,msg_prams);
     }
 
     return 0;
@@ -1185,130 +951,61 @@ static void app_battery_pluginout_debounce_start(void)
 static void app_battery_pluginout_debounce_handler(void const *param)
 {
     enum APP_BATTERY_CHARGER_T status_charger = app_battery_charger_forcegetstatus();
-
 #ifdef BESUI_TWS_EN
     bool factory_flag = false;
 #endif
-
-    (void)param;
-
-    if (app_battery_pluginout_debounce_ctx == (uint32_t)status_charger)
-    {
+    if(app_battery_pluginout_debounce_ctx == (uint32_t) status_charger){
         app_battery_pluginout_debounce_cnt++;
     }
     else
     {
-        BATTERY_TRACE(2,"%s dithering cnt %u",__func__,app_battery_pluginout_debounce_cnt);
-
-        /*
-         * 新狀態這次已經讀到一次，
-         * 所以建議從 1 開始。
-         */
-        app_battery_pluginout_debounce_cnt = 1;
+        BATTERY_TRACE(2,"%s dithering cnt %u", __func__, app_battery_pluginout_debounce_cnt);
+        app_battery_pluginout_debounce_cnt = 0;
         app_battery_pluginout_debounce_ctx = (uint32_t)status_charger;
     }
-
 #ifdef BESUI_TWS_EN
-    BATTERY_TRACE(2,"[UIBAT]%s cnt=%u",__func__,app_battery_pluginout_debounce_cnt);
-
+    BATTERY_TRACE(1, "[UIBAT]%s cnt %d", __func__, app_battery_pluginout_debounce_cnt);
 #ifdef BESUI_1WIRE_EN
-    if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
+    if(status_charger == APP_BATTERY_CHARGER_PLUGOUT)
     {
         communication_uart_function_enable(true);
     }
 #endif
 #endif
 
-    if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
-    {
-        BATTERY_TRACE(0,"@communication_stop");
-    }
-    else
-    {
-        BATTERY_TRACE(0,"@communication_init");
-    }
-
-    if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT)
-    {
-        BATTERY_TRACE(2,"%s %s",__func__,status_charger == APP_BATTERY_CHARGER_PLUGOUT ?"PLUGOUT" :"PLUGIN");
-        /*
-         * ==================================================
-         * NTT 左右耳 Case State 同步入口
-         * 必須放在 debounce 穩定確認之後。
-         * ==================================================
-         */
-        BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] current=%d last=%d",status_charger,g_ntt_last_case_state);
-        if (status_charger != g_ntt_last_case_state)
-        {
-            BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] state changed %d -> %d",g_ntt_last_case_state,status_charger);
-            g_ntt_last_case_state = status_charger;
-            if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
-            {
-                BATTERY_TRACE(0,"[NTT_CASE_HW] confirmed PLUGIN -> IN_CASE");
-                ntt_case_state_sync_local_update(true);
-                app_key_handle_pause_music_on_pogo_in();
-            }
-            else if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
-            {
-                BATTERY_TRACE(0,"[NTT_CASE_HW] PMU PLUGOUT ignored; wait UART idle");
-                //BATTERY_TRACE(0,"[NTT_CASE_HW] confirmed PLUGOUT -> OUT_CASE");
-                //ntt_case_state_sync_local_update(false);
-            }
-        }
-        else
-        {
-            BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] duplicate ignored state=%d",status_charger);
-        }
-
-        /*
-         * ==================================================
-         * 原本 PLUGIN / PLUGOUT 處理流程
-         * ==================================================
-         */
+    if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT){
+        BATTERY_TRACE(2,"%s %s", __func__, status_charger == APP_BATTERY_CHARGER_PLUGOUT ? "PLUGOUT" : "PLUGIN");
         if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
         {
-            /*
-             * Pogo pin confirmed inserted.
-             * Pause music if A2DP is streaming.
-             */
-            //app_key_handle_pause_music_on_pogo_in();
-
 #ifndef BESUI_TWS_EN
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
             {
-                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_enable_cfg.pin,HAL_GPIO_DIR_OUT,0);
+                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_OUT, 0);
             }
-#endif
-
+#endif           
 #ifdef BESUI_TWS_EN
             factory_flag = app_charge_fast_exit_factory_mode();
 
-            if (factory_flag)
+            if(factory_flag)
             {
-                pmu_charger_set_irq_handler(app_battery_charger_handler);
-                osTimerStop(app_battery_pluginout_debounce_timer);
                 return;
             }
 #endif
-
 #ifdef BESUI_CHARGE_EN
-            if (!besui_bat_charge_sta_get())
+
+            if(!besui_bat_charge_sta_get())
             {
                 BATTERY_TRACE(0,"close box charging");
                 besui_bat_charge_sta_set(true);
-                if (uicom.poweron_bat_det_flag)
+                if(uicom.poweron_bat_det_flag)
                 {
                     app_charge_putinout_ui_post_msg(CHARGE_PLUGIN);
                 }
             }
 #endif
-
             app_battery_measure.start_time = hal_sys_timer_get();
-
 #ifdef BESUI_STEREO_EN
-            if ((!app_ui_charging_io_read((enum HAL_GPIO_PIN_T)HAL_IOMUX_PIN_P1_7)) && app_get_charging_status())
-            {
-                BATTERY_TRACE(0,"close box charging -2");
+            if ((!app_ui_charging_io_read((enum HAL_GPIO_PIN_T)HAL_IOMUX_PIN_P1_7)) && app_get_charging_status() ) {
                 app_shutdown();
             }
 #endif
@@ -1320,20 +1017,19 @@ static void app_battery_pluginout_debounce_handler(void const *param)
 #else
             if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
             {
-                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_enable_cfg.pin,HAL_GPIO_DIR_OUT,1);
+                hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_OUT, 1);
             }
 #endif
-
 #ifdef BESUI_CHARGE_EN
 #ifdef BESUI_NTC_EN
-            if (!ntc_charger_status())
+            if(!ntc_charger_status())
 #endif
             {
-                if (besui_bat_charge_sta_get())
+                if(besui_bat_charge_sta_get())
                 {
                     BATTERY_TRACE(0,"charging open box");
                     besui_bat_charge_sta_set(false);
-                    if (uicom.poweron_bat_det_flag)
+                    if(uicom.poweron_bat_det_flag)
                     {
                         app_charge_putinout_ui_post_msg(CHARGE_PLUGOUT);
                     }
@@ -1341,14 +1037,11 @@ static void app_battery_pluginout_debounce_handler(void const *param)
             }
 #endif
         }
-
-        app_battery_event_process(APP_BATTERY_STATUS_CHARGING,status_charger);
+        app_battery_event_process(APP_BATTERY_STATUS_CHARGING, status_charger);
         pmu_charger_set_irq_handler(app_battery_charger_handler);
         osTimerStop(app_battery_pluginout_debounce_timer);
-    }
-    else
-    {
-        osTimerStart(app_battery_pluginout_debounce_timer,CHARGER_PLUGINOUT_DEBOUNCE_MS);
+    }else{
+        osTimerStart(app_battery_pluginout_debounce_timer, CHARGER_PLUGINOUT_DEBOUNCE_MS);
     }
 }
 
@@ -1422,7 +1115,7 @@ static struct NTC_CAPTURE_MEASURE_T ntc_capture_measure;
 void ntc_capture_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 {
     uint32_t meanVolt = 0;
-    //BATTERY_TRACE(3,"%s %d irq:0x%04x",__func__, volt, irq_val);
+    BATTERY_TRACE(3,"%s %d irq:0x%04x",__func__, volt, irq_val);
 
     if (volt == HAL_GPADC_BAD_VALUE)
     {
@@ -1446,13 +1139,11 @@ void ntc_capture_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
     }
     ntc_capture_measure.temperature = ((int32_t)ntc_capture_measure.currvolt - NTC_CAPTURE_VOLTAGE_REF)/NTC_CAPTURE_TEMPERATURE_STEP + NTC_CAPTURE_TEMPERATURE_REF;
     pmu_ntc_capture_disable();
-    //BATTERY_TRACE(3,"%s ad:%d temperature:%d",__func__, ntc_capture_measure.currvolt, ntc_capture_measure.temperature);
+    BATTERY_TRACE(3,"%s ad:%d temperature:%d",__func__, ntc_capture_measure.currvolt, ntc_capture_measure.temperature);
 #ifdef BESUI_NTC_EN
     app_ntc_detect_process(volt);
 #endif
-    aw_ntc_detect_process(volt);
 }
-
 
 int ntc_capture_open(void)
 {
@@ -1564,9 +1255,6 @@ static void app_battery_pluginout_event_callback(enum APP_BATTERY_CHARGER_T even
 static void app_battery_pluginout_debounce_handler(void const *param)
 {
     enum APP_BATTERY_CHARGER_T status_charger = app_battery_charger_forcegetstatus();
-
-	BATTERY_TRACE(1,"@@@app_battery_pluginout_debounce_handler");
-	
 #ifdef BESUI_TWS_EN
     bool factory_flag = false;
 #endif

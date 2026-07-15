@@ -354,7 +354,7 @@ bthost_cfg_t* bt_host_get_cfg(void)
 osMailQDef (app_bt_mailbox, APP_BT_MAILBOX_MAX, APP_BT_MAIL);
 static osMailQId app_bt_mailbox = NULL;
 
-osMessageQDef(evm_queue, 128, uint32_t);
+osMessageQDef(evm_queue, 10, uint32_t);
 osMessageQId  evm_queue_id;
 #ifdef APP_TRACE_RX_ENABLE
 #define BT_STATE_CHECKER_INTERVAL_MS 5000
@@ -815,7 +815,6 @@ void bt_host_ready(uint8_t ready_flag)
 #endif
 
 #ifdef __HOST_GEN_FULL_ECDH_KEY__
-#error __HOST_GEN_FULL_ECDH_KEY__
     bt_generate_full_ecdh_key_pair();
     bt_apply_full_ecdh_key_pair();
 #else

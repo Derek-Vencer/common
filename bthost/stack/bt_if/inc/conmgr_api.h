@@ -86,8 +86,7 @@ extern "C" {
     bt_status_t btif_cmgr_register_handler(btif_cmgr_handler_t *cmgr_handler,
                                            btif_cmgr_callback callback);
 
-    bt_status_t btif_cmgr_create_data_link(btif_cmgr_handler_t *cmgr_handler,
-                                           const bt_bdaddr_t *bd_addr, uint16_t page_timeout);
+    bt_status_t btif_cmgr_create_data_link(btif_cmgr_handler_t *cmgr_handler, const bt_bdaddr_t *bd_addr, uint32_t page_timeout, uint32_t time_to_next_page);
 
     bt_status_t btif_cmgr_remove_data_link(const bt_bdaddr_t *remote);
 

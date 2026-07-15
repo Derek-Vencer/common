@@ -14,7 +14,7 @@
  *
  ****************************************************************************/
 #if (A2DP_DECODER_VER < 2)
-#error A2DP_DECODER_VER
+
 // Standard C Included Files
 #include <string.h>
 #include <math.h>

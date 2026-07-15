@@ -176,18 +176,16 @@ void app_factorymode_key_init(void)
 #ifdef __POWERKEY_CTRL_ONOFF_ONLY__
         {{APP_KEY_CODE_PWR,APP_KEY_EVENT_UP},"bt function key",app_bt_key_shutdown, NULL},
 #else
-        {{APP_KEY_CODE_PWR,HAL_KEY_EVENT_LONGPRESS},"bt function key",app_bt_key_shutdown, NULL},
-		{{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONGLONGPRESS},"bt function key",app_bt_key_shutdown, NULL},
+        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONGLONGPRESS},"bt function key",app_bt_key_shutdown, NULL},
 #endif
 #ifndef BESUI_TWS_EN
 #ifdef __IBRT_IBRT_TESTMODE__
         {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt function key",bt_drv_ibrt_test_key_click, NULL},
 #else
-        //{{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt function key",app_factorymode_languageswitch, NULL},
+        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_CLICK},"bt function key",app_factorymode_languageswitch, NULL},
 #endif
-        //{{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"bt function key",app_factorymode_bt_xtalcalib, NULL},
-       // {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONGPRESS},"bt function key",app_factorymode_bt_signalingtest, NULL},
-		{{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"bt function key",app_factorymode_exit, NULL}
+        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_DOUBLECLICK},"bt function key",app_factorymode_bt_xtalcalib, NULL},
+        {{APP_KEY_CODE_PWR,APP_KEY_EVENT_LONGPRESS},"bt function key",app_factorymode_bt_signalingtest, NULL},
 #endif //#ifndef BESUI_TWS_EN
     };
 

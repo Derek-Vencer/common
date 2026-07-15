@@ -107,9 +107,12 @@ static int hal_mcu2btc_local_irq_clear(enum HAL_MCU2BTC_ID_T id, enum HAL_RMT_IP
     if (type == HAL_RMT_IPC_IRQ_SEND_IND) {
         btcmu->ISIRQ_CLR = value;
         // Flush the clear operation immediately
+        __DMB();
         btcmu->ISIRQ_CLR;
     } else {
         cmu->ISIRQ_CLR = value;
+        __DMB();
+        cmu->ISIRQ_CLR;
     }
 #else
     if (id == HAL_MCU2BTC_ID_0) {
@@ -129,11 +132,15 @@ static int hal_mcu2btc_local_irq_clear(enum HAL_MCU2BTC_ID_T id, enum HAL_RMT_IP
     if (type == HAL_RMT_IPC_IRQ_SEND_IND) {
         cmu->ISIRQ_CLR = value;
         // Flush the clear operation immediately
+        __DMB();
         cmu->ISIRQ_CLR;
     } else {
         btcmu->ISIRQ_CLR = value;
+        __DMB();
+        btcmu->ISIRQ_CLR;
     }
 #endif
+    __DMB();
 
     return 0;
 }

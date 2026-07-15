@@ -26,7 +26,7 @@
 #endif
 
 // increase by 1 if the nvrecord's whole data structure is changed and the content needs to be rebuilt
-#define NV_EXTENSION_MAJOR_VERSION 19 //18
+#define NV_EXTENSION_MAJOR_VERSION 18
 // increase by 1 if the new items are appended to the tail of the former nvrecord's data structure
 #define NV_EXTENSION_MINOR_VERSION 1
 
@@ -305,7 +305,7 @@ struct nvrecord_env_t {
 #endif //#ifdef BESUI_APP_EN
 //----------------------------------------------------------------------------------------------
 
-#if 1 //def BESUI_TWS_EN
+#ifdef BESUI_TWS_EN
 #ifdef BESUI_GAME_EN
 #ifdef BESUI_GAME_NV_EN
     uint8_t remember_game_mode;
@@ -325,18 +325,9 @@ struct nvrecord_env_t {
     bool sync_anc_adapt;
 #endif
 
-    //uint8_t sn_data[30];
-    uint8_t sn_data[12+1];
+    uint8_t sn_data[30];
     uint8_t sn_len;
-	uint8_t chargerBoxVersion[15+1];
-	//uint8_t chargerBoxVersion[7+1];
-	uint8_t eq_index_data; 
-    uint8_t color_data;
-	uint8_t key_map_number;
-	//uint8_t key_map_action[4]; 
-	//uint8_t key_map_func[4];
-	uint8_t key_map_action[21+1]; 
-	uint8_t key_map_func[21+1];
+    uint8_t color_data; 
 #endif //#ifdef BESUI_TWS_EN
 
 #ifdef BESUI_CAPSENSOR_FACTORY_EN
@@ -360,10 +351,6 @@ struct nvrecord_env_t {
     uint8_t peer_bleaddr_flag;
     uint8_t peer_bleaddr[6];
 #endif
-    uint8_t chargerBoxBattery;
-    uint8_t color_code;
-    //fixed storage for box version
-    //uint8_t chargerBoxVersion[16+1];
 //----------------------------------------------------------------------------------------------
 };
 

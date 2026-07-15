@@ -90,7 +90,7 @@
 #if defined(APP_USB_A2DP_SOURCE) && defined(BT_SOURCE)
 #include "app_bt_stream.h"
 #endif
-bool ntt_manual_pairing_mode = false;
+
 
 #ifdef BIS_SELFSCAN_ENABLED
 extern void app_bis_selfscan_cmd_init(void);
@@ -408,16 +408,6 @@ extern "C" {
 #include "lwh.h"
 #endif
 
-#include "charger_with_icp1205.h"
-extern void sparraw_service_init(void);
-extern bool aiWangBoxIsUsed(void);
-extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
-//extern void charger_manager_start(void);
-extern void earBudsCloseOff_PogonIn_StartTimer(void);
-#ifdef IBRT
-#include "app_ibrt_customif_cmd.h"
-#endif
-
 #define APP_SIGNAL_POWERON        0x2
 #define APP_SIGNAL_BT_HOST_READY  0x3
 
@@ -438,11 +428,11 @@ enum APP_POWERON_CASE_T {
     APP_POWERON_CASE_REBOOT,
     APP_POWERON_CASE_ALARM,
     APP_POWERON_CASE_CALIB,
-    APP_POWERON_CASE_BOTHSCAN = 5,
+    APP_POWERON_CASE_BOTHSCAN,
     APP_POWERON_CASE_CHARGING,
     APP_POWERON_CASE_FACTORY,
-    APP_POWERON_CASE_TEST = 8,
-    APP_POWERON_CASE_INVALID =9,
+    APP_POWERON_CASE_TEST,
+    APP_POWERON_CASE_INVALID,
 
     APP_POWERON_CASE_NUM
 };
@@ -455,8 +445,6 @@ extern void app_rbplay_audio_reset_pause_status(void);
 
 uint8_t  app_poweroff_flag = 0;
 static enum APP_POWERON_CASE_T g_pwron_case = APP_POWERON_CASE_INVALID;
-
-
 
 #ifndef BESUI_STEREO_EN
 #ifndef APP_TEST_MODE
@@ -479,8 +467,7 @@ typedef void (*APP_10_SECOND_TIMER_CB_T)(void);
 void app_pair_timerout(void);
 void app_poweroff_timerout(void);
 void CloseEarphone(void);
-void wired_uart_communication_modual_init(void);
-bool ntt_charging_pwron_pending_shutdown = false;
+
 typedef struct
 {
     uint8_t timer_id;
@@ -540,12 +527,11 @@ APP_10_SECOND_TIMER_STRUCT app_10_second_array[] =
     INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 32, PairingTransferToConnectable),
     INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 32, CloseEarphone),
 #else
-    INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 12, bes_bt_me_transfer_pairing_to_connectable), // 2min
+    INIT_APP_TIMER(APP_PAIR_TIMER_ID, 0, 0, 6, bes_bt_me_transfer_pairing_to_connectable),
 #ifdef BESUI_STEREO_EN
-#error BESUI_STEREO_EN
     INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 90, CloseEarphone),
 #else
-    INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 30, CloseEarphone), //300s ------ 5 min
+    INIT_APP_TIMER(APP_POWEROFF_TIMER_ID, 0, 0, 93, CloseEarphone),
 #endif
 #endif
 #endif
@@ -586,7 +572,6 @@ void app_10_second_timer_check(void)
 {
     APP_10_SECOND_TIMER_STRUCT *timer = app_10_second_array;
     unsigned int i;
-
 #ifdef BESUI_TWS_EN
     if(uicom.box_open_bat_det_flag)
     {
@@ -594,12 +579,11 @@ void app_10_second_timer_check(void)
         return;
     }
 #endif
-
     for(i = 0; i < ARRAY_SIZE(app_10_second_array); i++) {
         if (timer->timer_en) {
             timer->timer_count++;
-#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-            MAIN_TRACE(0,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+            BESUI_TRACE(2,"[UITIMER]%s id %d count %d", __func__, i, timer->timer_count);
 #endif
             if (timer->timer_count >= timer->timer_period) {
                 timer->timer_en = 0;
@@ -620,46 +604,19 @@ void CloseEarphone(void)
 
 #ifdef ANC_APP
     if(app_anc_work_status()) {
-    	MAIN_TRACE(0,"!!!CloseEarphone APP_POWEROFF_TIMER_ID ANC_APP");
         app_set_10_second_timer(APP_POWEROFF_TIMER_ID, 1, 30);
         return;
     }
 #endif /* ANC_APP */
 
-    if(aiWangBoxIsUsed()) {
-    	MAIN_TRACE(0,"!!!CloseEarphone BOX has stop earbuds to power off!!");
-        app_set_10_second_timer(APP_POWEROFF_TIMER_ID, 1, 30);
-        return;
-    }
-
 #ifndef BLE_ONLY_ENABLED
-    int activeCons = 0, active_phone_cons;
+    int activeCons = 0;
     int activeSourceCons = 0;
-    //fixed only count the phone count,except tws
+
     activeCons = app_bt_get_active_cons();
-    active_phone_cons = app_bt_count_mobile_link();
     activeSourceCons = btif_me_get_source_activeCons();
-    bool hasBleConnect = app_ble_is_any_connection_exist();
-    MAIN_TRACE(0,"CloseEarphone activeCons==%d activeSourceCons=%d active_phone_cons=%d hasBleConnect=%d\n", activeCons, activeSourceCons, active_phone_cons, hasBleConnect);
 
-    if(hasBleConnect > 0) {
-    	MAIN_TRACE(0, "ignore closePhone as BLE connect!!");
-    	return;
-    }
-
-#ifdef IBRT
-	if (bts_tws_if_is_tws_link_connected())
-	{
-			//app_ibrt_customif_cmd_sync_poweroff_shutdown(true);
-			uint8_t cmd_sync_poweroff_shutdown[1];
-			cmd_sync_poweroff_shutdown[0] = 1;
-			DEBUG_INFO(2, "[UITWS]%s poweroff_flag %d",__func__, 1);
-			tws_ctrl_send_cmd(APP_TWS_CMD_POWEROFF_SHUTDOWN_SYNC, cmd_sync_poweroff_shutdown, 1);
-			osDelay(100);
-	}
-#endif
-
-    if(active_phone_cons == 0 && activeSourceCons == 0) {
+    if(activeCons == 0 && activeSourceCons == 0) {
         MAIN_TRACE(0,"!!!CloseEarphone\n");
         app_shutdown();
     }
@@ -681,10 +638,8 @@ static int app_bth_event_callback(const bt_bdaddr_t *bd_addr, BT_EVENT_T event, 
 #ifndef BLE_ONLY_ENABLED
             active_cons = bes_bt_get_active_cons();
 #endif
-            MAIN_TRACE(2,"app_bth_event_callback active_cons=%d!", active_cons);
-            if (active_cons == 0 )
+            if (active_cons == 0)
             {
-
                 app_start_10_second_timer(APP_POWEROFF_TIMER_ID);
             }
             else
@@ -692,8 +647,7 @@ static int app_bth_event_callback(const bt_bdaddr_t *bd_addr, BT_EVENT_T event, 
                 app_stop_10_second_timer(APP_POWEROFF_TIMER_ID);
             }
 #endif
-        }
-        break;
+        } break;
         case BT_EVENT_ACCESS_CHANGE:
         {
             if(param.bt.access_change->access_mode == BT_ACCESS_GENERAL_ACCESSIBLE)
@@ -704,8 +658,7 @@ static int app_bth_event_callback(const bt_bdaddr_t *bd_addr, BT_EVENT_T event, 
             {
                 app_status_indication_set(APP_STATUS_INDICATION_PAGESCAN);
             }
-        }
-        break;
+        } break;
         default:
             break;
     }
@@ -803,7 +756,7 @@ static void app_poweron_normal(APP_KEY_STATUS *status, void *param)
 }
 
 #if !defined(BLE_ONLY_ENABLED)
-__attribute__((unused))  static void app_poweron_scan(APP_KEY_STATUS *status, void *param)
+static void app_poweron_scan(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
 #ifdef BESUI_TWS_EN
@@ -821,7 +774,7 @@ __attribute__((unused))  static void app_poweron_scan(APP_KEY_STATUS *status, vo
 #if !defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN)
 static void app_poweron_factorymode(APP_KEY_STATUS *status, void *param)
 {
-    MAIN_TRACE(1,"%s %d,%d",__func__, status->code, status->event);
+    MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
     hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
     app_factorymode_enter();
 }
@@ -844,7 +797,7 @@ void app_enter_non_signalingtest_mode(void)
 }
 
 static bool g_pwron_finished = false;
-__attribute__((unused)) static void app_poweron_finished(APP_KEY_STATUS *status, void *param)
+static void app_poweron_finished(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
     g_pwron_finished = true;
@@ -867,7 +820,7 @@ const  APP_KEY_HANDLE  pwron_key_handle_cfg[] = {
 const  APP_KEY_HANDLE  pwron_key_handle_cfg[] = {
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITUP},           "power on: normal"     , app_poweron_normal, NULL},
 #if !defined(BLE_ONLY_ENABLED)
-//    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITLONGPRESS},    "power on: both scan"  , app_poweron_scan  , NULL},
+    {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITLONGPRESS},    "power on: both scan"  , app_poweron_scan  , NULL},
 #if !defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN)
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_INITLONGLONGPRESS},"power on: factory mode", app_poweron_factorymode  , NULL},
 #endif
@@ -947,13 +900,8 @@ void pmu_rtc_alarm_handler_dummy(uint32_t seconds)
 int app_shutdown(void)
 {
 #ifndef IGNORE_APP_SHUTDOWN
-    MAIN_TRACE(0,"app_shutdown");
     system_shutdown();
 #endif
-
-   // hal_sw_bootmode_set(HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT);
-   // pmu_reboot();
-
 #ifdef SPOT_ENABLED
 #if defined(RTC_ENABLE)
     if(nv_record_fp_get_spot_adv_enable_value())
@@ -1064,11 +1012,6 @@ void app_start_ota_language_reset(void)
 void app_bt_key_shutdown(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
-#ifdef MEDIA_PLAYER_SUPPORT
-    media_PlayAudio(AUD_ID_POWER_OFF, 0);
-    osDelay(200);
-#endif
-
 #ifdef __POWERKEY_CTRL_ONOFF_ONLY__
     hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
     app_reset();
@@ -1125,7 +1068,6 @@ extern "C" void sys_otaMode_enter()
     app_otaMode_enter(NULL,NULL);
 }
 
-
 #ifdef __USB_COMM__
 void app_usb_cdc_comm_key_handler(APP_KEY_STATUS *status, void *param)
 {
@@ -1176,7 +1118,6 @@ void app_ota_key_handler(APP_KEY_STATUS *status, void *param)
 
     time = hal_sys_timer_get();
 }
-
 extern "C" void app_bt_key(APP_KEY_STATUS *status, void *param)
 {
     MAIN_TRACE(3,"%s %d,%d",__func__, status->code, status->event);
@@ -1341,7 +1282,6 @@ extern void app_factorymode_i2c_switch(APP_KEY_STATUS *status, void *param);
 #endif
 
 #ifdef __POWERKEY_CTRL_ONOFF_ONLY__
-#error "__POWERKEY_CTRL_ONOFF_ONLY__"
 #if defined(__APP_KEY_FN_STYLE_A__)
 const APP_KEY_HANDLE  app_key_handle_cfg[] = {
     {{APP_KEY_CODE_PWR,APP_KEY_EVENT_UP},"bt function key",app_bt_key_shutdown, NULL},
@@ -1485,15 +1425,12 @@ void stereo_poweron_pairing_timer_on(void)
 void app_key_init(void)
 {
 #ifdef BESUI_TWS_EN
-#error "BESUI_TWS_EN"
     return;
 #endif
 #if defined(IBRT) && defined(IBRT_UI) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
 #ifdef BESUI_STEREO_EN
-#error "BESUI_STEREO_EN"
     app_ui_key_poweron_init();
 #else
-    MAIN_TRACE(0,"%s",__func__);
     app_tws_ibrt_raw_ui_test_key_init();
 #endif
 #else
@@ -1532,12 +1469,6 @@ bool app_is_power_off_in_progress(void)
     return app_poweroff_flag?TRUE:FALSE;
 }
 
-int button_power_status = 0;
-void app_ibrt_set_key_power_status(int status)
-{
-	button_power_status = status;
-}
-
 int app_deinit(int deinit_case)
 {
     int nRet = 0;
@@ -1564,7 +1495,6 @@ int app_deinit(int deinit_case)
 #ifdef __PC_CMD_UART__
     app_cmd_close();
 #endif
-
 #if (defined(BTUSB_AUDIO_MODE) || defined(BT_USB_AUDIO_DUAL_MODE))
     if(app_usbaudio_mode_on())
     {
@@ -1638,13 +1568,7 @@ int app_deinit(int deinit_case)
 #endif
 #ifndef BESUI_STEREO_EN
 #ifdef MEDIA_PLAYER_SUPPORT
-		if(button_power_status == 1)
-        	media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
-		else{
-			//media_PlayAudio_standalone_locally(AUDIO_ID_FIND_MY_BUDS, 0);
-            media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
-		}
-		button_power_status = 0;
+        media_PlayAudio_standalone_locally(AUD_ID_POWER_OFF, 0);
 #endif
 #endif
 
@@ -1758,20 +1682,10 @@ int app_bt_connect2tester_init(void)
     if (!nvrec_dev_get_dongleaddr(&tester_addr)){
         nv_record_open(section_usrdata_ddbrecord);
         for (i = 0; nv_record_enum_dev_records(i, &rec) == BT_STS_SUCCESS; i++) {
-        DEBUG_INFO(0,
-            "[DDB] index=%d addr=%02X:%02X:%02X:%02X:%02X:%02X",
-            i,
-            rec.bdAddr.address[0],
-            rec.bdAddr.address[1],
-            rec.bdAddr.address[2],
-            rec.bdAddr.address[3],
-            rec.bdAddr.address[4],
-            rec.bdAddr.address[5]);
             if (!memcmp(rec.bdAddr.address, tester_addr.address, BTIF_BD_ADDR_SIZE)){
                 find_tester = true;
             }
         }
-        DEBUG_INFO(0, "[DDB] total=%d find_tester=%d", i, find_tester);
         if(i==0 && !find_tester){
             memset(&rec, 0, sizeof(btif_device_record_t));
             memcpy(rec.bdAddr.address, tester_addr.address, BTIF_BD_ADDR_SIZE);
@@ -1877,46 +1791,10 @@ int btdrv_tportopen(void);
 
 void app_ibrt_start_power_on_tws_pairing(void);
 void app_ibrt_start_power_on_freeman_pairing(void);
-extern bool ntt_first_no_mobile_pair_mode;
 
 WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 {
 
-}
-
-static bt_bdaddr_t ntt_local_bt_addr;
-static bt_bdaddr_t ntt_peer_bt_addr;
-static bool ntt_local_peer_addr_valid = false;
-
-extern "C" void ntt_set_local_peer_bt_addr(const bt_bdaddr_t *local,
-                                           const bt_bdaddr_t *peer)
-{
-    if (local && peer)
-    {
-        memcpy(&ntt_local_bt_addr, local, sizeof(bt_bdaddr_t));
-        memcpy(&ntt_peer_bt_addr, peer, sizeof(bt_bdaddr_t));
-        ntt_local_peer_addr_valid = true;
-    }
-}
-
-extern "C" bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr)
-{
-    if (!addr || !ntt_local_peer_addr_valid)
-    {
-        return false;
-    }
-
-    if (memcmp(addr->address, ntt_local_bt_addr.address, 6) == 0)
-    {
-        return true;
-    }
-
-    if (memcmp(addr->address, ntt_peer_bt_addr.address, 6) == 0)
-    {
-        return true;
-    }
-
-    return false;
 }
 
 void app_ibrt_init(void)
@@ -1931,7 +1809,6 @@ void app_ibrt_init(void)
 #if defined(IBRT) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
         ibrt_config_t config = {0};
         app_tws_ibrt_init();
-
 #if defined(IBRT_UI)
 #ifdef IBRT_SEARCH_UI
         app_ibrt_search_ui_config_load(&config);
@@ -1981,106 +1858,9 @@ void app_ibrt_init(void)
         else
     #endif
         {
-#if defined(IBRT_UI)
-        //MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
-
-        btif_device_record_t record1 = {0};
-        btif_device_record_t record2 = {0};
-        int record_count = nv_record_enum_latest_two_paired_dev(&record1, &record2);
-        uint8_t mobile_record_count = 0;
-
-        bool has_tws_peer =
-            memcmp(config.peer_addr.address, "\xFF\xFF\xFF\xFF\xFF\xFF", 6) &&
-            memcmp(config.peer_addr.address, "\x00\x00\x00\x00\x00\x00", 6);
-
-        MAIN_TRACE(1,
-            "[NTT_PAIR] record_count=%d",
-            record_count);
-
-        MAIN_TRACE(6,
-            "[NTT_PAIR] local=%02X:%02X:%02X:%02X:%02X:%02X",
-            config.local_addr.address[0], config.local_addr.address[1],
-            config.local_addr.address[2], config.local_addr.address[3],
-            config.local_addr.address[4], config.local_addr.address[5]);
-
-        MAIN_TRACE(6,
-            "[NTT_PAIR] peer =%02X:%02X:%02X:%02X:%02X:%02X",
-            config.peer_addr.address[0], config.peer_addr.address[1],
-            config.peer_addr.address[2], config.peer_addr.address[3],
-            config.peer_addr.address[4], config.peer_addr.address[5]);
-            
-        ntt_set_local_peer_bt_addr(&config.local_addr, &config.peer_addr);
-
-        if (record_count >= 1)
-        {
-            MAIN_TRACE(6,
-                "[NTT_PAIR] record1=%02X:%02X:%02X:%02X:%02X:%02X",
-                record1.bdAddr.address[0], record1.bdAddr.address[1],
-                record1.bdAddr.address[2], record1.bdAddr.address[3],
-                record1.bdAddr.address[4], record1.bdAddr.address[5]);
-
-            if ((memcmp(record1.bdAddr.address, config.local_addr.address, 6) != 0) &&
-                (memcmp(record1.bdAddr.address, config.peer_addr.address, 6) != 0))
-            {
-                mobile_record_count++;
-            }
-        }
-
-        if (record_count >= 2)
-        {
-            MAIN_TRACE(6,
-                "[NTT_PAIR] record2=%02X:%02X:%02X:%02X:%02X:%02X",
-                record2.bdAddr.address[0], record2.bdAddr.address[1],
-                record2.bdAddr.address[2], record2.bdAddr.address[3],
-                record2.bdAddr.address[4], record2.bdAddr.address[5]);
-
-            if ((memcmp(record2.bdAddr.address, config.local_addr.address, 6) != 0) &&
-                (memcmp(record2.bdAddr.address, config.peer_addr.address, 6) != 0))
-            {
-                mobile_record_count++;
-            }
-        }
-
-        MAIN_TRACE(2,
-            "[NTT_PAIR] has_tws_peer=%d mobile_record_count=%d",
-            has_tws_peer,
-            mobile_record_count);
-
-        if (mobile_record_count == 0)
-        {
-            if (!app_ibrt_middleware_is_ui_slave())
-            {
-                MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record -> start pair mode (master)");
-
-                ntt_first_no_mobile_pair_mode = true;
-                ntt_manual_pairing_mode = true;
-
-                set_pair_status(0);
-                set_er_discover_connectable_status(1);
-
-                // app_ibrt_if_init_open_box_state_for_evb();
-
-                app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
-
-                app_bt_reset_delay_power_off();
-            }
-            else
-            {
-                MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record, skip pair mode on slave");
-            }        
-        }
-        else
-        {
-            MAIN_TRACE(1,
-                "[NTT_PAIR] mobile record exists (%d), skip pair mode",
-                mobile_record_count);
-                ntt_first_no_mobile_pair_mode = false;
-        }
- 
-        app_ibrt_start_power_on_tws_pairing();
-#endif
+        #if defined(IBRT_UI)
+            app_ibrt_start_power_on_tws_pairing();
+        #endif
         }
     #elif defined(POWER_ON_ENTER_FREEMAN_PAIRING_ENABLED)
             app_ibrt_if_enter_freeman_pairing();
@@ -2108,7 +1888,6 @@ void app_earbud_mode_init()
 {
 #ifdef __IAG_BLE_INCLUDE__
 #ifdef IBRT
-	MAIN_TRACE(0, "%s bes_ble_gap_force_switch_adv", __func__);
     bes_ble_gap_force_switch_adv(BLE_SWITCH_USER_IBRT, true);
 #endif // #ifdef IBRT
 #if !(BLE_AUDIO_ENABLED)
@@ -2139,28 +1918,6 @@ void app_default_mode_init()
     }
 }
 
-/**
- * @brief Initialize the Bluetooth application based on the configured application mode.
- * 
- * This function initializes various Bluetooth-related modules and services based on the
- * device's application mode (retrieved from non-volatile memory). It performs the following:
- * 
- * - Retrieves the current application mode from NV record
- * - Handles mode override for specific product configurations (DONGLE, WIRELESS_MIC)
- * - Initializes Bluetooth service with the determined mode
- * - Initializes mode-specific modules (e.g., Walkie Talkie for NV_APP_WALKIE_TALKIE mode)
- * - Initializes optional features (BIS self-scan, wireless microphone, etc.) if enabled
- * - Sets system frequency to 32KHz for the APP_SYSFREQ_USER_APP_4 domain
- * 
- * @return int Returns 0 on successful initialization.
- * 
- * @note This function should be called during application startup to configure
- *       all Bluetooth-related functionality.
- * 
- * @see nv_record_appmode_get()
- * @see bt_service_init()
- * @see hal_sysfreq_req()
- */
 int app_bluetooth_application_init()
 {
     nvrec_appmode_e mode = nv_record_appmode_get();
@@ -2221,9 +1978,6 @@ static void app_tell_battery_info_handler(uint8_t *batteryValueCount,
                                           uint8_t *batteryValue)
 {
     GFPS_BATTERY_STATUS_E status = BATTERY_NOT_CHARGING;
-    uint8_t local_level = 0;
-    uint8_t local_percent = 0;
-
 #ifdef BESUI_TWS_EN
     if (app_battery_is_charging())
     {
@@ -2234,18 +1988,15 @@ static void app_tell_battery_info_handler(uint8_t *batteryValueCount,
         status = BATTERY_NOT_CHARGING;
     }
 #endif
-
+    // TODO: add the charger case's battery level
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 #if defined(BESUI_TWS_EN)
     *batteryValueCount = app_gfps_renew_battery_level(status, batteryValue);
 #elif defined(BESUI_STEREO_EN)
     *batteryValueCount = stereo_gfps_battery_level(0, batteryValue);
 #endif
-
-    BESUI_TRACE(2, "[BATT_LOCAL][TELL] %s count=%d status=%d",
-                __func__, *batteryValueCount, status);
-    DUMP8("0x%02x ", batteryValue, *batteryValueCount);
-
+    BESUI_TRACE(1,"%s count %d", __func__, *batteryValueCount);
+    DUMP8("0x%02x ",batteryValue, *batteryValueCount);
 #else
 #if defined(IBRT) && !defined(FREEMAN_ENABLED_STERO)
     if (bts_tws_if_is_tws_link_connected())
@@ -2263,53 +2014,23 @@ static void app_tell_battery_info_handler(uint8_t *batteryValueCount,
 #ifdef BESUI_STEREO_EN
     *batteryValueCount = 3;
 #endif
-
-    local_level = app_battery_current_level();
-
-    if (local_level < 0)
-    {
-        local_percent = 0;
-    }
-    else if (local_level > 100)
-    {
-        local_percent = 100;
-    }
-    else
-    {
-        local_percent = (uint8_t)local_level;
-    }
-
-    MAIN_TRACE(4, "[BATT_LOCAL][TELL] %s count=%d local_level=%d local_percent=%d",
-               __func__, *batteryValueCount, local_level, local_percent);
-
+    MAIN_TRACE(2,"%s,*batteryValueCount is %d",__func__,*batteryValueCount);
     if (1 == *batteryValueCount)
     {
-        batteryValue[0] = local_percent | (status << 7);
-
-        MAIN_TRACE(3, "[BATT_LOCAL][TELL] single local_raw=0x%02x percent=%d status=%d",
-                   batteryValue[0], local_percent, status);
+        batteryValue[0] = ((app_battery_current_level()+1) * 10) | (status << 7);
     }
     else
     {
-        batteryValue[0] = local_percent | (status << 7);
-        batteryValue[1] = local_percent | (status << 7);
+        batteryValue[0] = ((app_battery_current_level()+1) * 10) | (status << 7);
+        batteryValue[1] = ((app_battery_current_level()+1) * 10) | (status << 7);
         batteryValue[2] = 0x7F;
-
-        MAIN_TRACE(5, "[BATT_LOCAL][TELL] tws L/R/Case raw=0x%02x 0x%02x 0x%02x local_percent=%d status=%d",
-                   batteryValue[0], batteryValue[1], batteryValue[2], local_percent, status);
     }
-
 #ifdef BESUI_STEREO_EN
-    batteryValue[0] = 0x7f;
-    batteryValue[1] = 0x7f;
-    batteryValue[2] = 0x7f;
-
-    MAIN_TRACE(3, "[BATT_LOCAL][TELL] stereo override raw=0x%02x 0x%02x 0x%02x",
-               batteryValue[0], batteryValue[1], batteryValue[2]);
+        batteryValue[0] = 0x7f;
+        batteryValue[1] = 0x7f;
+        batteryValue[2] = 0x7f;
 #endif
-
-    DUMP8("[BATT_LOCAL][TELL] batteryValue: ", batteryValue, *batteryValueCount);
-#endif
+#endif //#ifdef GFPS_ENABLED
 }
 #endif
 extern uint32_t __coredump_section_start[];
@@ -2375,20 +2096,16 @@ static int app_sn_global_tag_handler(char *buf, unsigned int buf_len)
 #ifdef BESUI_STEREO_EN
 bool app_ui_charging_io_read(HAL_GPIO_PIN_T hal_pin);
 #endif
-
 int app_init(void)
 {
     app_sysfreq_req(APP_SYSFREQ_USER_APP_INIT, APP_SYSFREQ_208M);
 
     int nRet = 0;
     struct nvrecord_env_t *nvrecord_env;
-#if defined(IGNORE_POWER_ON_KEY_DURING_BOOT_UP) || defined(BESUI_TWS_EN) || defined(FORCE_NOSIGNALINGMODE) || defined(FORCE_NOSIGNALINGMODE)
-    MAIN_TRACE(0,"IGNORE_POWER_ON_KEY_DURING_BOOT_UP ........");
+#if defined(IGNORE_POWER_ON_KEY_DURING_BOOT_UP) || defined(BESUI_TWS_EN)
     bool need_check_key = false;
 #else
-    //MAIN_TRACE(0,"POWER_ON_KEY_DURING_BOOT_UP ........");
-    //bool need_check_key = true;
-    bool need_check_key = false;
+    bool need_check_key = true;
 #endif
     uint8_t pwron_case = APP_POWERON_CASE_INVALID;
 #ifdef BT_USB_AUDIO_DUAL_MODE
@@ -2417,7 +2134,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     MAIN_TRACE(2,"__anc_start: %p length: 0x%x", __anc_start, ANC_SECTION_SIZE);
     MAIN_TRACE(2,"__factory_start: %p length: 0x%x", __factory_start, FACTORY_SECTION_SIZE);
 #endif
-
 #if defined(CHIP_BEST1501P)
     MAIN_TRACE(0,"app_init 0x%02x \n",pmu_ntc_temperature_reference_get());
 #else
@@ -2447,14 +2163,12 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef APP_TRACE_RX_ENABLE
     app_trace_rx_open();
 #endif
-
 #ifdef VOICE_DEV
     voice_dev_init();
 #endif
 
 #if defined(IBRT) && !defined(FREEMAN_ENABLED_STERO)
     // init tws interface
-    MAIN_TRACE(0,"app_init ibrt_middleware_init\n");
     app_ibrt_middleware_init();
 #endif // #ifdef IBRT
 
@@ -2547,14 +2261,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         MAIN_TRACE(0,"To enter test mode!!!");
     }
 
-    if(hal_sw_bootmode_get() & HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT)
-    {
-        hal_sw_bootmode_clear(HAL_SW_BOOTMODE_CUSTOM_OP1_AFTER_REBOOT);
-        pwron_case = APP_POWERON_CASE_TEST;
-        need_check_key = true;
-        MAIN_TRACE(0,"To enter fake power off mode!!!");
-    }
-
 #ifdef TOTA_FACTORY_USED
     if (hal_sw_bootmode_get() & HAL_SW_BOOTMODE_TOTA_REBOOT) {
         hal_sw_bootmode_clear(HAL_SW_BOOTMODE_TOTA_REBOOT);
@@ -2570,30 +2276,20 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
 #ifdef SUPPORT_SINGLE_WIRE_COM
-    //communication_init();
-    if(!(hal_sw_bootmode_get() & HAL_SW_BOOTMODE_TEST_SIGNALINGMODE))
-    {
-       wired_uart_communication_modual_init();
-    }
+    communication_init();
 #endif
 
 #ifdef APP_CHIP_BRIDGE_MODULE
     app_chip_bridge_init();
 #endif
-
 #ifdef BESUI_STEREO_EN
     stereoui_init();
 #endif
-
-
     nRet = app_battery_open();
-    MAIN_TRACE(1,"BATTERY %d pwron_case=%d", nRet, pwron_case);
+    MAIN_TRACE(1,"BATTERY %d",nRet);
     if (pwron_case != APP_POWERON_CASE_TEST){
-        charger_manager_start();
-		sparraw_service_init();
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
-            	MAIN_TRACE(0,"NORMAL POWERON!");
                 nRet = 0;
                 break;
             case APP_BATTERY_OPEN_MODE_CHARGING:
@@ -2616,61 +2312,25 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
                 break;
             case APP_BATTERY_OPEN_MODE_CHARGING_PWRON:
-            {
-                int8_t charging = app_battery_is_charging();
-
-                MAIN_TRACE(0, "CHARGING PWRON!");
-                MAIN_TRACE(1,"[POWER_OFF] CHARGING_PWRON charging=%d",charging);
-
-            #ifdef IBRT_SEARCH_UI
-                is_charging_poweron = true;
-            #endif
-
-            #if defined(BT_USB_AUDIO_DUAL_MODE)
+                MAIN_TRACE(0,"CHARGING PWRON!");
+#ifdef IBRT_SEARCH_UI
+                is_charging_poweron=true;
+#endif
+#if defined(BT_USB_AUDIO_DUAL_MODE)
                 usb_plugin = 1;
-            #endif
-
+#endif
                 need_check_key = false;
-
-            #ifdef BESUI_CHARGE_EN
+                nRet = 0;
+#ifdef BESUI_CHARGE_EN
                 besui_bat_charge_sta_set(true);
-            #endif
-
-            #ifdef MSD_MODE
+#endif
+#ifdef MSD_MODE
                 pwron_case = APP_BATTERY_OPEN_MODE_CHARGING_PWRON;
                 goto exit;
-            #endif
-
-                if (charging)
-                {
-                    /*
-                    * 系統仍在 early boot，先記錄待關機。
-                    * 等 main/app 初始化完成後再執行 app_shutdown()。
-                    */
-                    ntt_charging_pwron_pending_shutdown = true;
-
-                    MAIN_TRACE(0,
-                            "[POWER_OFF] still charging, "
-                            "mark pending shutdown");
-
-                    /*
-                    * 這裡要繼續完成必要的系統初始化，
-                    * 因此不要 nRet=0，也不要 goto exit。
-                    */
-                    break;
-                }
-
-                ntt_charging_pwron_pending_shutdown = false;
-
-                MAIN_TRACE(0,
-                        "[POWER_OFF] charging removed, "
-                        "continue normal power-on");
-
+#endif
                 break;
-            }
             case APP_BATTERY_OPEN_MODE_INVALID:
             default:
-            	MAIN_TRACE(0,"APP_BATTERY_OPEN_MODE_INVALID!");
                 nRet = -1;
                 goto exit;
                 break;
@@ -2688,7 +2348,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     }
 #endif
 
-    MAIN_TRACE(1,"before app_key_open %d pwron_case=%d", need_check_key, pwron_case);
     if (app_key_open(need_check_key)){
         MAIN_TRACE(0,"PWR KEY DITHER!");
         nRet = -1;
@@ -2697,11 +2356,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 
     hal_sw_bootmode_set(HAL_SW_BOOTMODE_REBOOT);
     app_poweron_key_init();
-
 #if defined(_AUTO_TEST_)
     AUTO_TEST_SEND("Power on.");
 #endif
-
 #ifdef USER_APP_BLE_DIS_EN
     app_random_ble_get();
 #endif
@@ -2739,7 +2396,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef PRESSURE_ENABLE
     app_mcu_core_pressure_init();
 #endif
-
 #ifdef BESUI_1WIRE_EN
     app_uart_set_need_twspair_init();
 #endif
@@ -2758,7 +2414,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     }
 
     audio_process_init();
-
 #ifdef __PC_CMD_UART__
     app_cmd_open();
 #endif
@@ -2840,7 +2495,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
 #ifdef ANC_APP
-    MAIN_TRACE(0,"ANC_APP!!");
     app_anc_init();
 #endif
 
@@ -2851,11 +2505,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
     app_ui_status_init();
 #endif
-
 #if defined(MEDIA_PLAYER_SUPPORT) && !defined(PROMPT_IN_FLASH)
     app_play_audio_set_lang(nvrecord_env->media_language.language);
 #endif
-
     app_bt_stream_volume_ptr_update(NULL);
 
 #ifdef __THIRDPARTY
@@ -2945,8 +2597,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
     if (pwron_case != APP_POWERON_CASE_TEST) {
-
-    	MAIN_TRACE(0,"NOT APP_POWERON_CASE_TEST %d!!", pwron_case);
         app_wait_stack_ready();
 
         osThreadSetPriority(app_thread_id, formerPriority);
@@ -2992,44 +2642,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 
     app_application_ready_to_start_callback();
-
-    /*
-    * NTT:
-    * Charging power-on 時先讓 app/audio/BT/UI 初始化完成。
-    * 到這裡系統已經 ready，再啟動 PogonIn 關機檢查。
-    */
-    if (ntt_charging_pwron_pending_shutdown)
-    {
-        int8_t charging = app_battery_is_charging();
-
-        MAIN_TRACE(
-            2,
-            "[POWER_OFF] application ready, pending=%d charging=%d",
-            ntt_charging_pwron_pending_shutdown,
-            charging);
-
-        if (charging)
-        {
-            MAIN_TRACE(
-                0,
-                "[POWER_OFF] application ready and still charging, "
-                "start PogonIn shutdown timer");
-
-            earBudsCloseOff_PogonIn_StartTimer();
-        }
-        else
-        {
-            MAIN_TRACE(
-                0,
-                "[POWER_OFF] application ready but charging removed, "
-                "cancel pending shutdown");
-
-            ntt_charging_pwron_pending_shutdown = false;
-        }
-    }
-
-    if (pwron_case == APP_POWERON_CASE_REBOOT) {
-    	 MAIN_TRACE_IMM(0,"APP_POWERON_CASE_REBOOT!!!");
+    if (pwron_case == APP_POWERON_CASE_REBOOT){
 #ifdef BESUI_STEREO_EN
         app_system_status_set(APP_STATUS_TYPE_POWER_ON);
 #else
@@ -3048,8 +2661,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         ota_basic_env_init();
 #endif
 
-       sparraw_service_init();
-
 
 #if defined(GATT_RATE_TESTS) || defined(GATT_RATE_TESTC)
     gatt_rate_test_begin();
@@ -3057,7 +2668,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 
 #if defined(IBRT)
 #ifdef IBRT_SEARCH_UI
-#error IBRT_SEARCH_UI
         if(is_charging_poweron==false)
         {
             if(IBRT_UNKNOW == nvrecord_env->ibrt_mode.mode)
@@ -3073,12 +2683,10 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         }
 #endif
 #else
-#error !IBRT
-        MAIN_TRACE(1,"Caution BTIF_BAM_NOT_ACCESSIBLE!!!");
         bes_bt_me_write_access_mode(BTIF_BAM_NOT_ACCESSIBLE,1);
 #endif
 #endif
-        MAIN_TRACE(1,"\n\n\nAPP_POWERON_CASE_REBOOT\n\n\n");
+
         app_key_init();
 #ifdef BESUI_TWS_EN
         uicom.poweron_bat_det_flag = true;
@@ -3100,7 +2708,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         gfps_reg_battery_handler(app_tell_battery_info_handler);
         gfps_set_battery_datatype(SHOW_UI_INDICATION);
 #endif
-
 #ifdef __THIRDPARTY
 #if defined(__AI_VOICE__)
         app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO1,THIRDPARTY_INIT, AI_SPEC_INIT);
@@ -3109,8 +2716,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO3,THIRDPARTY_START, AI_SPEC_INIT);
 #endif
 #endif
-
-#if defined( APP_10_SECOND_TIMER_EN) && __BTIF_BT_RECONNECT__
+#if defined( APP_10_SECOND_TIMER_EN) && defined(__BTIF_BT_RECONNECT__)
 #if defined(FREEMAN_ENABLED_STERO)
         osDelay(100);
 #ifdef BESUI_STEREO_EN
@@ -3119,8 +2725,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
-        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ !!!!!!");
-        app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
     }
@@ -3133,9 +2737,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifndef BESUI_TWS_EN
         app_status_indication_set(APP_STATUS_INDICATION_POWERON);
 #ifdef MEDIA_PLAYER_SUPPORT
-        //media_PlayAudio(AUD_ID_POWER_ON, 0);
-        //media_PlayAudio(AUD_ID_BT_WARNING, 0);
-        //osDelay(200);
         media_PlayAudio(AUD_ID_POWER_ON, 0);
 #endif
 #endif
@@ -3162,8 +2763,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         }
     }
 #endif
-    else {
-
+    else{
 #ifdef BESUI_STEREO_EN
         app_system_status_set(APP_STATUS_TYPE_POWER_ON);
 #else
@@ -3182,7 +2782,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
             pwron_case = APP_POWERON_CASE_NORMAL;
         }
         if (pwron_case != APP_POWERON_CASE_INVALID && pwron_case != APP_POWERON_CASE_DITHERING){
-            MAIN_TRACE(1,"power on case:%d!!\n", pwron_case);
+            MAIN_TRACE(1,"power on case:%d\n", pwron_case);
             nRet = 0;
 #ifndef __POWERKEY_CTRL_ONOFF_ONLY__
 #if (!defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN))
@@ -3196,8 +2796,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #if defined(OTA_ENABLE)
             ota_basic_env_init();
 #endif
-
-            sparraw_service_init();
 
 #if defined(GATT_RATE_TESTS) || defined(GATT_RATE_TESTC)
     gatt_rate_test_begin();
@@ -3238,22 +2836,21 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                         app_ibrt_enter_limited_mode();
 #endif
 #else
-                    MAIN_TRACE(1,"power on case:%d BT_DEFAULT_ACCESS_MODE_PAIR!!\n", pwron_case);
                     bes_bt_me_write_access_mode(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR,1);
-#endif //IBRT
+#endif
 #ifdef GFPS_ENABLED
                     app_enter_fastpairing_mode();
 #endif
 #if defined(__BTIF_AUTOPOWEROFF__)
                     app_start_10_second_timer(APP_PAIR_TIMER_ID);
 #endif
-#endif //APP_10_SECOND_TIMER_EN
+#endif
 #ifdef __THIRDPARTY
 #if defined(__AI_VOICE__)
                     app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO2,THIRDPARTY_BT_DISCOVERABLE, AI_SPEC_INIT);
 #endif
 #endif
-#endif //BT_BUILD_WITH_CUSTOMER_HOST
+#endif
 #endif //#ifdef BESUI_TWS_EN
                     break;
                 case APP_POWERON_CASE_NORMAL:
@@ -3297,7 +2894,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #endif
 #endif //#ifdef BESUI_STEREO_EN
 #ifndef BT_BUILD_WITH_CUSTOMER_HOST
-#if defined(APP_10_SECOND_TIMER_EN) && __BTIF_BT_RECONNECT__ //&& defined(FREEMAN_ENABLED_STERO)
+#if defined(APP_10_SECOND_TIMER_EN) && defined(__BTIF_BT_RECONNECT__) && defined(FREEMAN_ENABLED_STERO)
                     osDelay(100);
 #ifdef BESUI_STEREO_EN
                     stereo_poweron_pairing_timer_on();
@@ -3320,16 +2917,13 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                 app_poweron_wait_finished();
 #endif
             }
-
             app_key_init();
-
 #ifdef BESUI_TWS_EN
         uicom.poweron_bat_det_flag = true;
 #endif
             app_battery_start();
 #if defined(APP_10_SECOND_TIMER_EN) && defined(__BTIF_AUTOPOWEROFF__)
 #ifndef BESUI_TWS_EN
-            MAIN_TRACE(1,"power on start APP_POWEROFF_TIMER_ID");
             app_start_10_second_timer(APP_POWEROFF_TIMER_ID);
 #endif
 #endif

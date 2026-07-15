@@ -42,6 +42,9 @@ extern const struct RESAMPLE_COEF_T resample_coef_any_up256;
 extern const struct RESAMPLE_COEF_T resample_coef_any_up512_32;
 extern const struct RESAMPLE_COEF_T resample_coef_any_up512_36;
 
+extern const struct RESAMPLE_COEF_T resample_coef_44p1k_to_16k;
+extern const struct RESAMPLE_COEF_T resample_coef_96k_to_16k;
+
 #ifdef __cplusplus
 }
 #endif

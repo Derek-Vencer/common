@@ -231,13 +231,17 @@ static int hal_intersys_peer_irq_set(enum HAL_INTERSYS_ID_T id, enum HAL_INTERSY
     }
     if(id < HAL_INTERSYS_ID_2)
     {
+        __DMB();
         cmu->ISIRQ_SET = value;
         cmu->ISIRQ_SET;
+        __DMB();
     }
     else
     {
+        __DMB();
         cmu->ISIRQ_SET1 = value;
         cmu->ISIRQ_SET1;
+        __DMB();
     }
 #else
     if (id == HAL_INTERSYS_ID_0) {
@@ -245,8 +249,10 @@ static int hal_intersys_peer_irq_set(enum HAL_INTERSYS_ID_T id, enum HAL_INTERSY
     } else {
         value = CMU_MCU2BT_DATA1_IND_SET;
     }
+    __DMB();
     cmu->ISIRQ_SET = value;
     cmu->ISIRQ_SET;
+    __DMB();
 #endif
 
 #endif // (CHIP_INTERSYS_VER >= 2)
@@ -257,7 +263,9 @@ static int hal_intersys_peer_irq_set(enum HAL_INTERSYS_ID_T id, enum HAL_INTERSY
 static inline void btcmu_reg_update_wait(void)
 {
     // Make sure BTCMU (26M clock domain) write opertions finish before return
+    __DMB();
     btcmu->ISIRQ_CLR;
+    __DMB();
 }
 
 static inline void btcmu_reg_update_wait1(void)
@@ -326,7 +334,10 @@ static int hal_intersys_local_irq_clear(enum HAL_INTERSYS_ID_T id, enum HAL_INTE
             btcmu->ISIRQ_CLR = value;
             btcmu_reg_update_wait();
         } else {
+            __DMB();
             cmu->ISIRQ_CLR = value;
+            cmu->ISIRQ_CLR;
+            __DMB();
         }
     }
     else
@@ -335,7 +346,10 @@ static int hal_intersys_local_irq_clear(enum HAL_INTERSYS_ID_T id, enum HAL_INTE
             btcmu->BT2MCUIRQ_CLR1 = value;
             btcmu_reg_update_wait1();
         } else {
+            __DMB();
             cmu->ISIRQ_CLR1 = value;
+            cmu->ISIRQ_CLR1;
+            __DMB();
         }
     }
 #else
@@ -354,10 +368,14 @@ static int hal_intersys_local_irq_clear(enum HAL_INTERSYS_ID_T id, enum HAL_INTE
     }
 
     if (type == HAL_INTERSYS_IRQ_SEND_IND) {
+        __DMB();
         btcmu->ISIRQ_CLR = value;
         btcmu_reg_update_wait();
     } else {
+        __DMB();
         cmu->ISIRQ_CLR = value;
+        cmu->ISIRQ_CLR;
+        __DMB();
     }
 #endif
 #endif

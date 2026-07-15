@@ -114,7 +114,6 @@ void algo_ceva_delay_onoff(uint8_t onoff);
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 void besui_app_clear_all_nvrecord(void);
 #endif
-
 //----------------------------------------------------------------------------------------
 
 #ifdef __cplusplus

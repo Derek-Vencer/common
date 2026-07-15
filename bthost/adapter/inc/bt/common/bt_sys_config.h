@@ -56,7 +56,6 @@ extern "C" {
 
 /* for debug usage */
 #if !defined(DEBUG)
-#undef  BTHOST_DEBUG
 #define BTHOST_DEBUG 0
 #endif
 
@@ -614,7 +613,6 @@ extern "C" {
 #define L2CAP_CFG_ERTX 300
 
 #if !defined(BLE_ONLY_ENABLED) && !defined(BT_SERVICE_ENABLE)
-#error  __BTIF_BT_RECONNECT__
 #define  __BTIF_BT_RECONNECT__
 #endif
 

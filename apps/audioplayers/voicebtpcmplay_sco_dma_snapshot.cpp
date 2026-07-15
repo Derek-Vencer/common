@@ -44,6 +44,8 @@
 #include "bts_core_if.h"
 #endif
 
+#include "audioflinger.h"
+
 #if defined(SPEECH_TX_24BIT)
 typedef int     TX_PCM_T;
 #else
@@ -254,6 +256,13 @@ int process_downlink_bt_voice_frames(uint8_t *in_buf, uint32_t in_len, uint8_t *
 
 #if defined(SPEECH_RX_24BIT)
     arm_q15_to_q23((int16_t *)pcm_buf, (int32_t *)out_buf, pcm_len);
+#if defined(AUDIO_OUTPUT_SW_GAIN) && defined(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO)
+    af_codec_dac1_sw_gain_process((uint8_t *)pcm_buf, pcm_len * sizeof(int32_t), AUD_BITS_24, AUD_CHANNEL_NUM_1);
+#endif
+#else
+#if defined(AUDIO_OUTPUT_SW_GAIN) && defined(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO)
+    af_codec_dac1_sw_gain_process((uint8_t *)pcm_buf, pcm_len * sizeof(int16_t), AUD_BITS_16, AUD_CHANNEL_NUM_1);
+#endif
 #endif
 
     speech_rx_process(pcm_buf, &pcm_len);

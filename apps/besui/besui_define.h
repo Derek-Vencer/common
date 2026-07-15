@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#if 1 //defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 
 //------------------------------------------------------------------------------
 #if defined(BES_TWSPRO_EN)

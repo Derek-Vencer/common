@@ -31,8 +31,6 @@
 #include "nvrecord_bt.h"
 #include "nvrecord_env.h"
 #include "app_status_ind.h"
-#include "app_media_player.h"
-#include "apps.h"
 
 #ifdef IBRT_UI
 #include "app_ui_evt.h"
@@ -44,9 +42,7 @@
 extern "C" {
 
 }
-
-
-#if 1 //def IBRT_SEARCH_UI
+#ifdef IBRT_SEARCH_UI
 static void app_tws_inquiry_timeout_handler(void const *param);
 osTimerDef (APP_TWS_INQ, app_tws_inquiry_timeout_handler);
 static osTimerId app_tws_timer = NULL;
@@ -58,7 +54,7 @@ static osTimerId app_tws_delay_connect_timer = NULL;
 
 static uint8_t tws_find_process=0;
 static uint8_t tws_inquiry_count=0;
-#define MAX_TWS_INQUIRY_TIMES   12 //3
+#define MAX_TWS_INQUIRY_TIMES   3
 #define IBRT_MAX_SEARCH_TIME    10 /* 12.8s */
 
 uint8_t tws_inq_addr_used;
@@ -70,42 +66,9 @@ typedef struct
 TWS_INQ_ADDR_STRUCT tws_inq_addr[5];
 
 app_ui_evt_t box_event=APP_UI_EV_NONE;
-
 static void app_box_handle_timehandler(void const *param);
 osTimerDef (APP_BOX_HANDLE, app_box_handle_timehandler);
 static osTimerId app_box_handle_timer = NULL;
-
-//goodocom added search timeout
-static void app_tws_searching_timehandler(void const *param);
-osTimerDef(APP_SEARCH_TIMEOUT, app_tws_searching_timehandler);
-static osTimerId app_searchtimeout_handle_timer = NULL;
-
-static void app_tws_pairing_prompt_timehandler(void const *param);
-osTimerDef(APP_SEARCH_PROMPT_TIMEOUT, app_tws_pairing_prompt_timehandler);
-static osTimerId app_tws_pairing_prompt_timer = NULL;
-
-extern int app_shutdown(void);
-static void app_tws_searching_timehandler(void const *param)
-{
-	EARBUDS_TRACE(0,"%s", __func__);
-	if( app_tws_pairing_prompt_timer )  { osTimerStop(app_tws_pairing_prompt_timer); }
-	if( app_tws_delay_connect_timer  )  { osTimerStop(app_tws_delay_connect_timer);  }
-	app_shutdown();
-}
-
-static void app_tws_pairing_prompt_timehandler(void const *param)
-{
-	EARBUDS_TRACE(0,"%s", __func__);
-	if(app_tws_pairing_prompt_timer) osTimerStop(app_tws_pairing_prompt_timer);
-#ifdef MEDIA_PLAYER_SUPPORT
-    if (!app_bt_ibrt_has_mobile_link_connected())
-    {
-       media_PlayAudio(AUD_ID_BT_PAIRING, 0);
-    }
-#endif
-    osTimerStart(app_tws_pairing_prompt_timer,5000);
-}
-
 
 static void app_box_handle_timehandler(void const *param)
 {
@@ -265,8 +228,7 @@ void app_bt_manager_ibrt_role_process(const btif_event_t *Event)
                 p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
                 if(p_ibrt_ctrl->nv_role ==IBRT_UNKNOW)
                     factory_section_original_btaddr_get(p_ibrt_ctrl->local_addr.address);
-                EARBUDS_DUMP8("%02x ", p_ibrt_ctrl->local_addr.address, BT_ADDR_OUTPUT_PRINT_NUM);
-                EARBUDS_DUMP8("%02x ", p_remote_dev_addr->address, BT_ADDR_OUTPUT_PRINT_NUM);
+
                 EARBUDS_TRACE(0,"local:%x remd:%x",p_ibrt_ctrl->local_addr.address[5],p_remote_dev_addr->address[5]);
                 if((p_ibrt_ctrl->local_addr.address[3]==p_remote_dev_addr->address[3])
                    &&(p_ibrt_ctrl->local_addr.address[4]==p_remote_dev_addr->address[4])
@@ -363,7 +325,6 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
                && (btif_me_get_callback_event_inq_result_bd_addr(event)->address[3]== p_ibrt_ctrl->local_addr.address[3]))
             {
                 ///check the device is already checked
-            	EARBUDS_TRACE(0,"peer device");
                 EARBUDS_TRACE(0,"<1>");
                 if(app_tws_is_addr_in_tws_inq_array(btif_me_get_callback_event_inq_result_bd_addr(event)))
                 {
@@ -372,7 +333,7 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
                 ////if rssi event is eir,so find name derictly
                 if(btif_me_get_callback_event_inq_result_inq_mode(event) == BTIF_INQ_MODE_EXTENDED)
                 {
-                	EARBUDS_TRACE(0,"peer device2");
+
                     EARBUDS_TRACE(0,"<2>");
                     uint8_t *eir = (uint8_t *)btif_me_get_callback_event_inq_result_ext_inq_resp(event);
                     //device_name_len = ME_GetExtInqData(eir,0x09,device_name,sizeof(device_name));
@@ -426,8 +387,8 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
             }
             break;
         case BTIF_BTEVENT_INQUIRY_COMPLETE:
-            EARBUDS_TRACE(2,"\n%s %d BTEVENT_INQUIRY_COMPLETE %d\n", __FUNCTION__, __LINE__, tws_inquiry_count);
-            if(tws_inquiry_count >= MAX_TWS_INQUIRY_TIMES)
+            EARBUDS_TRACE(2,"\n%s %d BTEVENT_INQUIRY_COMPLETE\n",__FUNCTION__,__LINE__);
+            if(tws_inquiry_count>=MAX_TWS_INQUIRY_TIMES)
             {
                 tws_app_stop_find();
                 return;
@@ -441,8 +402,8 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
 
                 if(rand_delay == 0)
                 {
+                    //btif_me_inquiry(BTIF_BT_IAC_GIAC, IBRT_MAX_SEARCH_TIME, 0);
                     btif_me_inquiry(BTIF_BT_IAC_LIAC, IBRT_MAX_SEARCH_TIME, 0);
-                   // btif_me_inquiry(BTIF_BT_IAC_LIAC, IBRT_MAX_SEARCH_TIME, 0);
                 }
                 else
                 {
@@ -459,9 +420,9 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
             EARBUDS_TRACE(3,"\n%s %d BTEVENT_LINK_CONNECT_CNF stats=%x\n",__FUNCTION__,__LINE__,btif_me_get_callback_event_err_code(event));
 
             //connect fail start inquiry again
-            if(btif_me_get_callback_event_err_code(event) == 4 && tws_find_process == 1)
+            if(btif_me_get_callback_event_err_code(event) ==4 && tws_find_process == 1)
             {
-                if(tws_inquiry_count >= MAX_TWS_INQUIRY_TIMES)
+                if(tws_inquiry_count>=MAX_TWS_INQUIRY_TIMES)
                 {
                     tws_app_stop_find();
                     return;
@@ -482,12 +443,6 @@ void app_bt_inquiry_call_back(const btif_event_t* event)
             else if(btif_me_get_callback_event_err_code(event) ==0)
             {
                 tws_app_stop_find();
-#ifdef MEDIA_PLAYER_SUPPORT
-				if (!app_bt_ibrt_has_mobile_link_connected())
-				{
-				   //media_PlayAudio(AUD_ID_BT_PAIRING_SUC, 0);
-				}
-#endif
             }
             break;
         case BTIF_BTEVENT_LINK_CONNECT_IND:
@@ -516,23 +471,22 @@ uint8_t is_find_tws_peer_device_onprocess(void)
 
 void find_tws_peer_device_start(void)
 {
-    EARBUDS_TRACE(2,"\nibrt_ui_log: %s %d %d\n",__func__,__LINE__, tws_find_process);
+    EARBUDS_TRACE(2,"\nibrt_ui_log: %s %d\n",__func__,__LINE__);
     bt_status_t  status;
     app_tws_clear_tws_inq_array();
     if(tws_find_process ==0)
     {
         tws_find_process = 1;
-        EARBUDS_TRACE(2,"\nibrt_ui_log: %s %d\n",__func__,__LINE__);
         tws_inquiry_count = 0;
         if (app_tws_timer == NULL)
             app_tws_timer = osTimerCreate(osTimer(APP_TWS_INQ), osTimerOnce, NULL);
         btif_me_set_handler(btif_me_get_bt_handler(),app_bt_inquiry_call_back);
         btif_me_register_global_handler(btif_me_get_bt_handler());
 
-        btif_me_set_event_mask(btif_me_get_bt_handler(), BTIF_BEM_ALL_EVENTS/*BTIF_BEM_LINK_DISCONNECT|BTIF_BEM_ROLE_CHANGE|BTIF_BEM_INQUIRY_RESULT|
-                               BTIF_BEM_INQUIRY_COMPLETE|BTIF_BEM_INQUIRY_CANCELED|BTIF_BEM_LINK_CONNECT_CNF|BTIF_BEM_LINK_CONNECT_IND*/);
+        btif_me_set_event_mask(btif_me_get_bt_handler(), BTIF_BEM_LINK_DISCONNECT|BTIF_BEM_ROLE_CHANGE|BTIF_BEM_INQUIRY_RESULT|
+                               BTIF_BEM_INQUIRY_COMPLETE|BTIF_BEM_INQUIRY_CANCELED|BTIF_BEM_LINK_CONNECT_CNF|BTIF_BEM_LINK_CONNECT_IND);
 
-AGAIN:
+    again:
         EARBUDS_TRACE(2,"\n%s %d\n",__func__,__LINE__);
 
         status = btif_me_inquiry(BTIF_BT_IAC_LIAC, IBRT_MAX_SEARCH_TIME, 0);
@@ -540,7 +494,7 @@ AGAIN:
         if (status != BT_STS_PENDING)
         {
             osDelay(500);
-            goto AGAIN;
+            goto again;
         }
         EARBUDS_TRACE(2,"\n%s %d\n",__func__,__LINE__);
     }
@@ -557,37 +511,23 @@ void app_start_tws_serching_direactly()
 {
     btif_accessible_mode_t mode;
     ibrt_ctrl_t *p_ibrt_ctrl = app_ibrt_if_get_bt_ctrl_ctx();
+
     mode = app_bt_get_curr_access_mode();
     EARBUDS_TRACE(1,"ibrt_ui_log:search tws direactly access_mode:%d",mode);
     if ((BTIF_BAM_GENERAL_ACCESSIBLE==mode)||(BTIF_BAM_LIMITED_ACCESSIBLE==mode))
     {
-		if(NULL == app_tws_delay_connect_timer)
-		{
-			app_tws_delay_connect_timer = osTimerCreate(osTimer(APP_TWS_DELAY_CONNECT),    osTimerOnce,   NULL );
-		}
-
-		if(NULL == app_searchtimeout_handle_timer)
-		{
-			app_searchtimeout_handle_timer = osTimerCreate(osTimer(APP_SEARCH_TIMEOUT),     osTimerOnce,   NULL );
-			osTimerStart(app_searchtimeout_handle_timer, 120*1000); //2minute
-		}
-
-		if( NULL == app_tws_pairing_prompt_timer )
-		{
-			app_tws_pairing_prompt_timer = osTimerCreate(osTimer(APP_SEARCH_PROMPT_TIMEOUT), osTimerOnce, NULL );
-		    osTimerStart(app_tws_pairing_prompt_timer,5000);
-		}
-
+		if(NULL==app_tws_delay_connect_timer)
+			app_tws_delay_connect_timer=osTimerCreate(osTimer(APP_TWS_DELAY_CONNECT),osTimerOnce,NULL );
         if (is_find_tws_peer_device_onprocess())
         {
             find_tws_peer_device_stop();
         }
         else
         {
-            p_ibrt_ctrl->nv_role = IBRT_UNKNOW;
-            EARBUDS_TRACE(1,"Enter tws_peer_device searching ...");
+            p_ibrt_ctrl->nv_role=IBRT_UNKNOW;
             find_tws_peer_device_start();
-            app_status_indication_set(APP_STATUS_INDICATION_CONNECTING);
+
+             app_status_indication_set(APP_STATUS_INDICATION_CONNECTING);
         }
     }
 }
@@ -739,7 +679,6 @@ void app_ibrt_search_ui_init(bool boxOperation,app_ui_evt_t boxEvent)
 {
     if((app_ui_get_config()->check_plugin_excute_closedbox_event) || (false==boxOperation))
     {
-    	EARBUDS_TRACE(0,"%s APP_UI_EV_CASE_CLOSE.", __func__);
 #ifdef BOX_DET_USE_GPIO
         box_det_pin_init();
 #else
@@ -751,7 +690,6 @@ void app_ibrt_search_ui_init(bool boxOperation,app_ui_evt_t boxEvent)
     }
     else if(boxEvent != APP_UI_EV_CASE_CLOSE)
     {
-    	EARBUDS_TRACE(0,"%s boxEvent=%d", __func__, boxEvent);
         app_ui_update_scan_type_policy(SCAN_EV_ENABLE);
     }
 
@@ -861,9 +799,9 @@ void app_ibrt_search_ui_config_load(void *config)
 
     EARBUDS_TRACE(0,"current ibrt_mode.mode(nv_role)=%d ", ibrt_config->nv_role);
     EARBUDS_TRACE(0,"load local_addr: %02x:%02x:*:*:*:%02x",ibrt_config->local_addr.address[0],
-    ibrt_config->local_addr.address[1], ibrt_config->local_addr.address[5]);
+        ibrt_config->local_addr.address[1], ibrt_config->local_addr.address[5]);
     EARBUDS_TRACE(0,"load peer_addr: %02x:%02x:*:*:*:%02x", ibrt_config->peer_addr.address[0],
-    ibrt_config->peer_addr.address[1], ibrt_config->peer_addr.address[5]);
+        ibrt_config->peer_addr.address[1], ibrt_config->peer_addr.address[5]);
 }
 
 #endif

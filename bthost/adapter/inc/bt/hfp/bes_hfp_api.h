@@ -85,6 +85,25 @@ void bes_bt_hfp_report_user_audio_play_stop_status(void);
 
 bt_status_t bt_hf_volume_control(const bt_bdaddr_t *bd_addr, bt_hf_volume_type_t type, int volume);
 
+bt_status_t bta_hsp_register_service(void);
+
+bt_status_t bta_hsp_unregister_service(void);
+
+/**
+ * @brief Register a custom AT command that needs front header fixing
+ *
+ * This function registers an AT command to the global list so that when it's received,
+ * the HFP module will know to fix its front header. The command is stored with proper
+ * bounds checking to prevent buffer overflow.
+ *
+ * @param at_cmd      Pointer to the AT command string to register, shuold include '\0'
+ * @param at_cmd_len  Length of the AT command string, don't include '\0' —— like strlen(at_cmd)
+ *
+ * @note The AT command will be truncated if it exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_LENGTH
+ * @note If the list is full (exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_NUMBER), the command is discarded
+ */
+void bta_hfp_register_custom_at_cmd_to_fill_front_header(const char* at_cmd, uint8_t at_cmd_len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -16,9 +16,6 @@ void communication_enable_irq(void (* irq_cb)(enum HAL_GPIO_PIN_T pin));
 
 void communication_disable_irq(void);
 
-void communication_stop(void);
-
-void communication_batter1205(void);
 
 #ifdef KNOWLES_UART_DATA
 void uart_audio_init();

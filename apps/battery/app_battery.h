@@ -37,7 +37,7 @@ typedef struct
 
 uint8_t* app_battery_get_mobile_support_self_defined_command_p(void);
 #else // #ifdef __INTERCONNECTION__
-#define APP_BATTERY_LEVEL_MAX (100)//(9)
+#define APP_BATTERY_LEVEL_MAX (9)
 #endif // #ifdef __INTERCONNECTION__
 
 #define APP_BATTERY_LEVEL_NUM (APP_BATTERY_LEVEL_MAX-APP_BATTERY_LEVEL_MIN+1)

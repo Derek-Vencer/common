@@ -25,6 +25,7 @@
 #include "hal_sysfreq.h"
 #include "hal_timer.h"
 #include "hal_trace.h"
+#include "hal_location.h"
 #include "pmu.h"
 #include "string.h"
 #include "tgt_hardware.h"
@@ -144,7 +145,10 @@ struct ANALOG_PLL_CFG_T {
 #define OPT_TYPE                        const
 #endif
 
-static OPT_TYPE uint16_t vcodec_mv = (uint16_t)(VCODEC_VOLT * 1000);
+#ifndef PSRAM_ENABLE
+OPT_TYPE
+#endif
+static uint16_t BOOT_DATA_LOC vcodec_mv = (uint16_t)(VCODEC_VOLT * 1000);
 
 static bool ana_spk_req;
 static bool ana_spk_muted;
@@ -1615,12 +1619,19 @@ static void analog_low_power_adc_enable(bool en)
 {
     uint16_t i;
     uint16_t val;
+    uint16_t adc_vsel;
+
+    if (vcodec_mv > 1800) {
+        adc_vsel = 2;
+    } else {
+        adc_vsel = 3;
+    }
 
     if (en) {
         for (i = 0; i < MAX_ANA_MIC_CH_NUM; i++) {
             val = REG_CODEC_ADCA_CAP_BIT1(0x7F) | REG_CODEC_ADCA_CAP_BIT2(0x1F);
             analog_write(ANA_REG_02 + 0x10 * i, val);
-            val = REG_CODEC_ADCA_CAP_BIT3(0x1F) | REG_CODEC_ADCA_REG_VSEL(3);
+            val = REG_CODEC_ADCA_CAP_BIT3(0x1F) | REG_CODEC_ADCA_REG_VSEL(adc_vsel);
             analog_write(ANA_REG_03 + 0x10 * i, val);
             val = REG_CODEC_ADCA_IBSEL_OFFSET(8) | REG_CODEC_ADCA_IBSEL_OP1(0x4) | REG_CODEC_ADCA_IBSEL_OP2(8) | REG_CODEC_ADCA_IBSEL_OP3(8);
             analog_write(ANA_REG_04 + 0x10 * i, val);
@@ -1639,7 +1650,7 @@ static void analog_low_power_adc_enable(bool en)
         for (i = 0; i < MAX_ANA_MIC_CH_NUM; i++) {
             val = REG_CODEC_ADCA_CAP_BIT1(0x7F) | REG_CODEC_ADCA_CAP_BIT2(0x1F);
             analog_write(ANA_REG_02 + 0x10 * i, val);
-            val = REG_CODEC_ADCA_CAP_BIT3(0x1F) | REG_CODEC_ADCA_REG_VSEL(3);
+            val = REG_CODEC_ADCA_CAP_BIT3(0x1F) | REG_CODEC_ADCA_REG_VSEL(adc_vsel);
             analog_write(ANA_REG_03 + 0x10 * i, val);
             val = REG_CODEC_ADCA_IBSEL_OFFSET(8) | REG_CODEC_ADCA_IBSEL_OP1(6) | REG_CODEC_ADCA_IBSEL_OP2(6) | REG_CODEC_ADCA_IBSEL_OP3(8);
             analog_write(ANA_REG_04 + 0x10 * i, val);
@@ -1661,6 +1672,10 @@ void analog_open(void)
 {
     uint16_t val;
     bool low_power_adc = false;
+
+#ifdef PSRAM_ENABLE
+    vcodec_mv = pmu_get_vcodec_volt_mv();
+#endif
 
 #ifdef DYN_ADC_GAIN
     memcpy(dyn_adc_gain_db, tgt_adc_db, sizeof(dyn_adc_gain_db));
@@ -2142,4 +2157,12 @@ void analog_capsensor_clk_gate_off(void)
     analog_read(ANA_REG_51, &val);
     val |= REG_CLK_CAPSENSOR_GATE_EN | REG_CLK_32K_CAPSENSOR_GATE_EN;
     analog_write(ANA_REG_51, val);
+}
+
+uint16_t analog_capsensor_clk_is_ready(void)
+{
+    uint16_t val;
+
+    analog_read(ANA_REG_51, &val);
+    return (val & (REG_CLK_CAPSENSOR_GATE_EN | REG_CLK_32K_CAPSENSOR_GATE_EN));
 }

@@ -228,7 +228,6 @@ void btdrv_uart_bridge_loop(void)
         if (uart_rx_done) {
             uart_rx_done = false;
             if (uart_rx_len > 0) {
-                DRIVERS_TRACE(0,"[btdrv_uart_bridge_loop]:");
                 DRIVERS_TRACE(0,"[RX]:");
                 DRIVERS_DUMP8("%02x ",uart_rx_data_p,uart_rx_len);
 #ifdef REDUCE_EDGE_CHL_TXPWR

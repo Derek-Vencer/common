@@ -260,10 +260,6 @@
 
 #define IOMUX_ALT_FUNC_NUM                  7
 
-#ifndef TRACE
-#define TRACE(attr, str, ...)   TR_INFO(attr, str, ##__VA_ARGS__)
-#endif
-
 // Other func values: 0 -> gpio, 5 -> bt, 6 -> sdio, 7 -> ana_test
 static const uint8_t index_to_func_val[IOMUX_ALT_FUNC_NUM] = { 1, 2, 3, 4, 5, 6, 7};
 
@@ -1683,13 +1679,11 @@ void hal_iomux_single_wire_pmu_uart_tx(uint32_t uart)
 
 void hal_iomux_single_wire_uart_rx(uint32_t uart)
 {
-	//TRACE(0, "%s", __func__);
     hal_iomux_single_wire_pmu_uart_rx(uart);
 }
 
 void hal_iomux_single_wire_uart_tx(uint32_t uart)
 {
-	//TRACE(0, "%s", __func__);
     hal_iomux_single_wire_pmu_uart_tx(uart);
 }
 

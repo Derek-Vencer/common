@@ -33,11 +33,10 @@
 
 #define BT_AUDIO_FACTORMODE_BUFF_SIZE    	(1024*2)
 static enum APP_AUDIO_CACHE_T a2dp_cache_status = APP_AUDIO_CACHE_QTY;
-//static int16_t *app_audioloop_play_cache = NULL;
+static int16_t *app_audioloop_play_cache = NULL;
 
 static uint32_t app_factorymode_data_come(uint8_t *buf, uint32_t len)
 {
-	 FACTORY_TRACE(3,"app_factorymode_data_come len:%d", len);
     app_audio_pcmbuff_put(buf, len);
     if (a2dp_cache_status == APP_AUDIO_CACHE_QTY){
         a2dp_cache_status = APP_AUDIO_CACHE_OK;
@@ -47,15 +46,9 @@ static uint32_t app_factorymode_data_come(uint8_t *buf, uint32_t len)
 
 static uint32_t app_factorymode_more_data(uint8_t *buf, uint32_t len)
 {
-	FACTORY_TRACE(3,"app_factorymode_audioloop len:%d", len);
-//    if (a2dp_cache_status != APP_AUDIO_CACHE_QTY)
-    {
-#if 0
+    if (a2dp_cache_status != APP_AUDIO_CACHE_QTY){
         app_audio_pcmbuff_get((uint8_t *)app_audioloop_play_cache, len/2);
         app_bt_stream_copy_track_one_to_two_16bits((int16_t *)buf, app_audioloop_play_cache, len/2/2);
-#else
-        app_audio_pcmbuff_get((uint8_t *)buf, len);
-#endif
     }
     return len;
 }
@@ -80,18 +73,16 @@ int app_factorymode_audioloop(bool on, enum APP_SYSFREQ_FREQ_T freq)
 
         a2dp_cache_status = APP_AUDIO_CACHE_QTY;
         app_audio_mempool_init();
-        app_audio_mempool_get_buff(&buff_capture, BT_AUDIO_FACTORMODE_BUFF_SIZE*2);
+        app_audio_mempool_get_buff(&buff_capture, BT_AUDIO_FACTORMODE_BUFF_SIZE);
         app_audio_mempool_get_buff(&buff_play, BT_AUDIO_FACTORMODE_BUFF_SIZE*2);
-        //app_audio_mempool_get_buff((uint8_t **)&app_audioloop_play_cache, BT_AUDIO_FACTORMODE_BUFF_SIZE*2/2/*/2*/);
+        app_audio_mempool_get_buff((uint8_t **)&app_audioloop_play_cache, BT_AUDIO_FACTORMODE_BUFF_SIZE*2/2/2);
         app_audio_mempool_get_buff(&buff_loop, BT_AUDIO_FACTORMODE_BUFF_SIZE<<2);
-
         app_audio_pcmbuff_init(buff_loop, BT_AUDIO_FACTORMODE_BUFF_SIZE<<2);
-
         memset(&stream_cfg, 0, sizeof(stream_cfg));
         stream_cfg.bits = AUD_BITS_16;
         //stream_cfg.channel_num = AUD_CHANNEL_NUM_1;
+
 #ifdef SPEECH_TX_AEC_CODEC_REF
-//#error SPEECH_TX_AEC_CODEC_REF
         stream_cfg.channel_num = AUD_CHANNEL_NUM_2;
 #else
         stream_cfg.channel_num = AUD_CHANNEL_NUM_1;
@@ -99,20 +90,19 @@ int app_factorymode_audioloop(bool on, enum APP_SYSFREQ_FREQ_T freq)
 #if defined(__AUDIO_RESAMPLE__) && defined(SW_CAPTURE_RESAMPLE)
         stream_cfg.sample_rate = AUD_SAMPRATE_8463;
 #else
-        stream_cfg.sample_rate = AUD_SAMPRATE_16000;
+        stream_cfg.sample_rate = AUD_SAMPRATE_8000;
 #endif
-#ifdef FPGA
-#error FPGA
-        stream_cfg.device = AUD_STREAM_USE_EXT_CODEC;
-#else
+#if FPGA==0
         stream_cfg.device = AUD_STREAM_USE_INT_CODEC;
+#else
+        stream_cfg.device = AUD_STREAM_USE_EXT_CODEC;
 #endif
-        stream_cfg.vol = 13;//TGT_VOLUME_LEVEL_15;
+        stream_cfg.vol = TGT_VOLUME_LEVEL_15;
         stream_cfg.io_path = AUD_INPUT_PATH_MAINMIC;
         stream_cfg.handler = app_factorymode_data_come;
 
         stream_cfg.data_ptr = BT_AUDIO_CACHE_2_UNCACHE(buff_capture);
-        stream_cfg.data_size = BT_AUDIO_FACTORMODE_BUFF_SIZE*2;
+        stream_cfg.data_size = BT_AUDIO_FACTORMODE_BUFF_SIZE;
         af_stream_open(AUD_STREAM_ID_0, AUD_STREAM_CAPTURE, &stream_cfg);
 
         stream_cfg.channel_num = AUD_CHANNEL_NUM_2;

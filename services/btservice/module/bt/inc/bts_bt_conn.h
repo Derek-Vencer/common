@@ -95,12 +95,13 @@ mobile_statemachine_t* app_ibrt_conn_slave_mock_mobile_link(const bt_bdaddr_t *a
  * @param[in] addr              Mobile address
  * @param[in] direction         The connection is initialed by local or remote
  * @param[in] request_connect   request connect
- * @param[in] timeout           page_timeout (unit is 625us)
+ * @param[in] timeout           page_timeout (unit is 625us), default is IBRT_MOBILE_PAGE_TIMEOUT
+ * @param[in] time_to_next_page idle time after a page comlete, default is 0
  *
  * @return An error status
  ****************************************************************************************
  */
-ibrt_status_t app_ibrt_conn_remote_dev_connect_request(const bt_bdaddr_t *addr, connection_direction_t direction, bool request_connect, uint32_t timeout);
+ibrt_status_t app_ibrt_conn_remote_dev_connect_request(const bt_bdaddr_t *addr, connection_direction_t direction, bool request_connect, uint32_t timeout, uint32_t time_to_next_page);
 
 /**
  ****************************************************************************************
@@ -114,8 +115,6 @@ ibrt_status_t app_ibrt_conn_remote_dev_connect_request(const bt_bdaddr_t *addr, 
 uint16_t app_ibrt_conn_get_dev_acl_handle(const bt_bdaddr_t* addr);
 
 bool bts_bt_sink_conn_is_mobile_connhandle(uint16_t connhandle);
-
-bt_status_t app_tws_ibrt_create_mobile_connection(uint16_t mobile_page_timeout,bt_bdaddr_t *mobile_addr);
 
 ibrt_status_t app_ibrt_conn_send_mobile_msg(const bt_bdaddr_t *addr, ibrt_mobile_message_e evt,uint32_t param0, uint32_t param1);
 

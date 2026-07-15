@@ -16,7 +16,7 @@ else ifeq ($(AUDIO_TRIGGER_VER),2)
 obj_cpp += audio_trigger/version2/
 endif
 
-bt_sco_chain_obj = bt_sco_chain.c bt_sco_chain_cp.c bt_sco_chain_cp_fifo.c bt_sco_chain_thirdparty.c bt_sco_chain_cp_thirdparty.c bt_sco_chain_reframe.c
+bt_sco_chain_obj = bt_sco_chain.c bt_sco_chain_cp.c bt_sco_chain_cp_fifo.c bt_sco_chain_thirdparty.c bt_sco_chain_cp_thirdparty.c bt_sco_chain_reframe.c bt_sco_chain_lea_reframe.c
 bt_sco_chain_obj += bt_sco_chain_thirdparty_alango.c
 bt_sco_chain_obj += bt_sco_chain_thirdparty_xiaomi.c bt_sco_chain_cp_xiaomi.c
 bt_sco_chain_obj += bt_sco_chain_thirdparty_soundplus.c bt_sco_chain_cp_soundplus.c
@@ -38,6 +38,10 @@ obj_c += bt_sco_chain_cp.c
 else
 obj_c += bt_sco_chain.c
 obj_c += bt_sco_chain_cp.c
+endif
+
+ifeq ($(GAF_CONVERSATIONAL_STREAM_PROCESS_ENABLE),1)
+obj_c += bt_sco_chain_lea_reframe.c
 endif
 
 ifeq ($(SCO_CP_ACCEL_FIFO),1)
@@ -74,6 +78,7 @@ ccflags-y := \
 	-Iservices/audio_process \
 	-Iapps/dsp_m55 \
 	-Iutils/kfifo \
+	-Iutils/mfifo \
 	-Iservices/bone_sensor \
 	-Iservices/resources \
 	$(BLUETOOTH_ADAPTER_INCLUDES) \
@@ -118,7 +123,8 @@ ccflags-y := \
 	-Iapps/sensorhub \
 	-Imultimedia/inc/audio/codec/lc3/inc \
 	-Imultimedia/inc/audio/process/sbcplc/include/ \
-	$(AUDIO_ALGORITHMS_INCLUDES)
+	$(AUDIO_ALGORITHMS_INCLUDES) \
+	-Iservices/audioflinger/
 
 ccflags-y += $(BES_MULTIMEDIA_INCLUDES)
 
@@ -206,6 +212,18 @@ ifeq ($(SPEECH_TX_AEC_CODEC_REF),1)
 CFLAGS_voicebtpcmplay.o += -DSPEECH_TX_AEC_CODEC_REF
 CFLAGS_voicebtpcmplay_sco_dma_snapshot.o += -DSPEECH_TX_AEC_CODEC_REF
 CFLAGS_bt_sco_chain_cfg_default.o += -DSPEECH_TX_AEC_CODEC_REF
+endif
+
+ifeq ($(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO),1)
+CFLAGS_voicebtpcmplay_sco_dma_snapshot.o += -DSPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO
+CFLAGS_bt_sco_chain.o += -DSPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO
+CFLAGS_bt_sco_chain_thirdparty.o += -DSPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO
+endif
+
+ifeq ($(AUDIO_OUTPUT_SW_GAIN),1)
+CFLAGS_voicebtpcmplay_sco_dma_snapshot.o += -DAUDIO_OUTPUT_SW_GAIN
+CFLAGS_bt_sco_chain.o += -DAUDIO_OUTPUT_SW_GAIN
+CFLAGS_bt_sco_chain_thirdparty.o += -DAUDIO_OUTPUT_SW_GAIN
 endif
 
 ifeq ($(SPEECH_RX_24BIT),1)

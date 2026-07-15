@@ -240,7 +240,7 @@ typedef struct {
 //#define SW_GAIN_OPTI_MIPS_FOR_ALIGN_4
 
 #ifdef AUDIO_OUTPUT_SW_GAIN
-#ifndef AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC
+#if !defined(AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC) && !defined(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO)
 const
 #endif
 static bool dac1_sw_gain_enabled = true;
@@ -741,12 +741,12 @@ static void af_dump_cfg()
 static void af_codec_dac1_output_gain_changed(float coef)
 {
     dac1_saved_output_coef = coef;
-    //AUDIOFLINGER_TRACE(1, "output_gain_change da1:%08d, final:%08d", (int32_t)(coef * 10000000), (int32_t)(dac1_saved_output_coef * 10000000));
+    AUDIOFLINGER_TRACE(1, "output_gain_change da1:%08d, final:%08d", (int32_t)(coef * 10000000), (int32_t)(dac1_saved_output_coef * 10000000));
 }
 
 void af_codec_dac1_set_algo_gain(float coef)
 {
-    //AUDIOFLINGER_TRACE(1, "algo_gain da1:%08d", (int32_t)(coef * 10000000));
+    AUDIOFLINGER_TRACE(1, "algo_gain da1:%08d", (int32_t)(coef * 10000000));
     dac1_algo_gain = coef;
     fade_update_gain(&dac1_fade, dac1_algo_gain);
 }
@@ -1100,7 +1100,7 @@ static void af_codec_sw_gain_process(uint8_t *buf, uint32_t size, enum AUD_BITS_
 }
 #endif /* #if defined(AUDIO_OUTPUT_SW_GAIN) || defined(AUDIO_OUTPUT_DAC2_SW_GAIN) */
 
-#if defined(AUDIO_OUTPUT_SW_GAIN) && defined(AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC)
+#if defined(AUDIO_OUTPUT_SW_GAIN) && (defined(AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC) || defined(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO))
 void af_codec_dac1_sw_gain_process(uint8_t *buf, uint32_t len, enum AUD_BITS_T bits, enum AUD_CHANNEL_NUM_T chans)
 {
     af_codec_sw_gain_process(buf,len,bits,chans,&sw_gain_iir,dac1_saved_output_coef);
@@ -1651,7 +1651,8 @@ static inline void af_thread_stream_handler(enum AUD_STREAM_ID_T id, enum AUD_ST
         }
 
 #if defined(RTOS) && defined(AF_STREAM_ID_0_PLAYBACK_FADEOUT)
-        if (((id == AUD_STREAM_ID_0) || (id == AUD_STREAM_ID_3)) && stream == AUD_STREAM_PLAYBACK
+        AUDIOFLINGER_TRACE(0,"prompt:STRAM-id=[%d]", id);
+        if ((id == AUD_STREAM_ID_0) && stream == AUD_STREAM_PLAYBACK
             && (role->ctl.use_device == AUD_STREAM_USE_INT_CODEC || role->ctl.use_device == AUD_STREAM_USE_INT_CODEC2)) {
             af_stream_fadeout_process(role, buf, len);
         }
@@ -2334,7 +2335,7 @@ uint32_t af_stream_open(enum AUD_STREAM_ID_T id, enum AUD_STREAM_T stream, const
             fade_reset(&dac1_fade, cfg->sample_rate, 100);
             dac1_algo_gain = 1.f;
 #endif
-#ifdef AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC
+#if defined(AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC) || defined(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO)
             af_codec_dac1_sw_gain_enable(true);
 #endif
 #endif
@@ -5336,6 +5337,25 @@ int af_codec_calib_dac_dc(enum AF_CODEC_CALIB_CMD_T calib_cmd,
         cfg->out_dc_r = dc_r;
         AUDIOFLINGER_TRACE(1, "====>GET_CUR_DC: tgt_l=%d, tgt_r=%d, dc_l=%d, dc_r=%d",
             dc_target_l, dc_target_r, dc_l, dc_r);
+        goto _end;
+    }
+
+
+    if (calib_cmd == CODEC_CALIB_CMD_CHECK_DC_RESULT) {
+        int32_t result_l, result_r;
+
+        AUDIOFLINGER_TRACE(1, "\nDAC DC RESULT CHECK\n");
+        hal_codec_dac_dc_offset_enable(cal_dac_dig_dc_l, cal_dac_dig_dc_r);
+
+        get_codec_dac_dc(&dc_l, &dc_r);
+        osDelay(5);
+        result_l = en_l ? (dc_target_l - dc_l) : 0;
+        result_r = en_r ? (dc_target_r - dc_r) : 0;
+
+        AUDIOFLINGER_TRACE(1, "====>CHECK_DC_RESULT: det_l=%d, det_r=%d", result_l, result_r);
+        cfg->dig_dc_l = result_l;
+        cfg->dig_dc_r = result_r;
+
         goto _end;
     }
 

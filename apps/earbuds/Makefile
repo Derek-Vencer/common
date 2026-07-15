@@ -53,10 +53,7 @@ subdir-ccflags-y += \
     -Iservices/gfps/inc \
     -Ibthost/service/ble_app_new/inc \
     -Iservices/audio_manager/audio_policy/bredr_policy/inc \
-    -Iapps/earbuds/conn/ \
-    -Iservices/communication/  \
-	-Iservices/audio_process \
-     
+    -Iapps/earbuds/conn/
 
 ifeq ($(BLE_AUDIO_ENABLED),1)
 subdir-ccflags-y += \

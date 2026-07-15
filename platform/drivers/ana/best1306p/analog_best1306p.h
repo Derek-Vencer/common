@@ -58,6 +58,8 @@ void analog_capsensor_clk_gate_on(void);
 
 void analog_capsensor_clk_gate_off(void);
 
+uint16_t analog_capsensor_clk_is_ready(void);
+
 #ifdef __cplusplus
 }
 #endif

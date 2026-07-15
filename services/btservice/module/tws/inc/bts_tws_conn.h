@@ -121,8 +121,6 @@ void bts_tws_bandwidth_set_reconfig(void);
  */
 void bts_tws_reg_tws_share_info_cb(void (*cb)(void));
 
-bt_status_t bts_tws_connect_request_handler(uint32_t page_to);
-
 bool bts_tws_peer_earbuds_addr_null();
 
 #if defined(FPGA)

@@ -201,22 +201,6 @@ void *load_audio_cfg_from_audio_section(enum AUDIO_PROCESS_TYPE_T type, uint8_t 
     return res_ptr;
 }
 
-static uint8_t g_ntt_dut_ns_bypass_enable = 0;
-
-void ntt_dut_speech_tx_1mic_ns_bypass_set(uint8_t enable)
-{
-    g_ntt_dut_ns_bypass_enable = enable ? 1 : 0;
-
-    AUDIO_PROCESS_TRACE(1,
-        "[DUT_NS] request bypass=%d",
-        g_ntt_dut_ns_bypass_enable);
-}
-
-uint8_t ntt_dut_speech_tx_1mic_ns_bypass_get(void)
-{
-    return g_ntt_dut_ns_bypass_enable;
-}
-
 #if defined(TOTA_EQ_TUNING)
 void audio_cfg_get_eq_section_info(uint32_t *startAddr, uint32_t *length, uint16_t *version)
 {

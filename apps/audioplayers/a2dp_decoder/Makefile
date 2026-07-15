@@ -136,7 +136,6 @@ ccflags-y += -Iservices/bt_if_enhanced/lhdc_license
 endif
 
 ifeq ($(A2DP_CP_ACCEL),1)
-#$(error A2DP_CP_ACCEL)
 obj-y += a2dp_decoder_cp.o
 ccflags-y += -Iplatform/drivers/cp_accel
 endif

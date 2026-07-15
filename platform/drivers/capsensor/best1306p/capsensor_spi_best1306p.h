@@ -32,6 +32,7 @@ void capsensor_baseline_reg_read(uint32_t* baseline_value_p, uint32_t* baseline_
 void capsensor_fp_mode_set_mask(void);
 void capsensor_fp_mode_clr_mask(void);
 void capsensor_fp_mode_clear_irq(void);
+void capsensor_baseline_read(uint8_t num);
 
 #ifdef __cplusplus
 }

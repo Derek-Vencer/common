@@ -1,6 +1,6 @@
 CHIP        ?= best1306p
 
-DEBUG       ?= 0
+DEBUG       ?= 1
 
 FPGA        ?= 0
 
@@ -9,9 +9,6 @@ RTOS        ?= 1
 LIBC_ROM    ?= 1
 
 export LIBC_OVERRIDE ?= 1
-
-export BESUI_TWS_EN  := 0
-
 
 KERNEL      ?= RTX5
 VERSION_INFO ?= best1306p_ibrt
@@ -32,18 +29,12 @@ FLASH_CHIP	?= ALL
 # GD25Q32C
 # ALL
 
-#export AUDIO_DEBUG ?= 1
-#export APP_TRACE_RX_ENABLE ?= 1
-
-#export APP_RX_API_ENABLE ?= 1
-#export APP_TRACE_RX_ENABLE ?= 1
-
 export I2C_FORCE_RECOVERY ?= 1
 
 # 1622 used i2c1
 export I2C_RECOVERY ?= 2
 
-export INTERSYS_DEBUG ?= 0
+export INTERSYS_DEBUG ?= 1
 
 export FORCE_SIGNALINGMODE ?= 0
 
@@ -71,9 +62,6 @@ AUDIO_OUTPUT_MONO ?= 0
 
 AUDIO_OUTPUT_DIFF ?= 0
 
-
-export CFG_APP_BAS ?= 1
-
 # When change music volume level, will select differnet EQ parameters
 # Phone needs to support Bluetooth Absolute Volume Control
 export AUDIO_VOL_CTRL_EQ ?= 0
@@ -94,9 +82,9 @@ HW_DC_FILTER_WITH_IIR ?= 0
 
 AUDIO_DYNAMIC_BOOST ?= 0
 
-AUDIO_DRC ?= 1
+AUDIO_DRC ?= 0
 
-AUDIO_LIMITER ?= 1
+AUDIO_LIMITER ?= 0
 
 export AUDIO_EQ_DYNAMICS_MEM ?= 0
 
@@ -116,12 +104,11 @@ OSC_26M_X4_AUD2BB ?= 1
 
 export SYS_USE_BBPLL ?= 1
 
-#goodocom adjust 16 --> 13
-AUDIO_OUTPUT_VOLUME_DEFAULT ?= 13
+AUDIO_OUTPUT_VOLUME_DEFAULT ?= 16
 
 # range:1~16
 
-CODEC_DAC_MULTI_VOLUME_TABLE ?= 1
+CODEC_DAC_MULTI_VOLUME_TABLE ?= 0
 
 AUDIO_INPUT_CAPLESSMODE ?= 0
 
@@ -247,7 +234,6 @@ export IBRT_SEARCH_UI ?= 0
 
 export IBRT_UI ?= 1
 ifeq ($(IBRT_UI),1)
-$(info !!IBRT_UI!!)
 KBUILD_CPPFLAGS += -DIBRT_UI
 endif
 
@@ -275,7 +261,6 @@ export USE_KNOWLES ?= 0
 export POWERKEY_I2C_SWITCH ?=0
 
 AUTO_TEST ?= 0
-SPEECH_TX_EQ ?= 1
 
 BES_AUTOMATE_TEST ?= 0
 
@@ -283,8 +268,7 @@ export DUMP_LOG_ENABLE ?= 0
 
 export DUMP_CRASH_LOG ?= 0
 
-#export CPU_PC_DUMP ?= LR
-export CPU_PC_DUMP ?=
+export CPU_PC_DUMP ?= LR
 
 SUPPORT_BATTERY_REPORT ?= 1
 
@@ -313,7 +297,7 @@ export GFPS_ENABLE ?= 0
 HAS_BT_SYNC ?= 1
 
 #For free tws pairing feature
-FREE_TWS_PAIRING_ENABLED ?= 1
+FREE_TWS_PAIRING_ENABLED ?= 0
 
 APP_UART_MODULE ?= 0
 
@@ -323,10 +307,10 @@ export PROMPT_IN_FLASH ?= 0
 export CALIB_SLOW_TIMER ?= 1
 export BT_DONT_PLAY_MUTE_WHEN_A2DP_STUCK_PATCH ?= 1
 
-export TRACE_BUF_SIZE    ?= 8*1024
-export TRACE_BAUD_RATE   ?= 10*115200
+export TRACE_BUF_SIZE ?= 8*1024
+export TRACE_BAUD_RATE ?= 10*115200
 export BTM_MAX_LINK_NUMS ?= 3
-export BT_DEVICE_NUM     ?= 2
+export BT_DEVICE_NUM ?= 2
 
 init-y :=
 core-y := platform/ utils/cqueue/ utils/list/ multimedia/ utils/intersyshci/ utils/sha256/ utils/stream_mcps/
@@ -372,13 +356,11 @@ export SMALL_RET_RAM ?= 1
 export CORE_SLEEP_POWER_DOWN ?= 1
 #INTSRAM_RUN ?= 1
 endif
-
 ifeq ($(INTSRAM_RUN),1)
 LDS_FILE ?= best1000_intsram.lds
 else
 LDS_FILE ?= best1000_1306.lds
 endif
-
 
 export OTA_SUPPORT_SLAVE_BIN ?= 0
 export AUDIO_OUTPUT_DC_AUTO_CALIB ?= 1
@@ -439,52 +421,3 @@ endif
 ifeq ($(or $(BESUI_TWS_EN), $(BESUI_STEREO_EN)), 1)
 include $(srctree)/config/besui.mk
 endif
-
-###goodocom configure 
-export BLE_BATT     ?= 0
-export CRASH_REBOOT ?= 1
-#SOFTWARE_VERSION_INFO := 20
-##uart cmd setting test
-export APP_TRACE_RX_ENABLE := 0
-export AUDIO_DYNAMIC_EQ    := 0
-##
-export BESUI_1WIRE_EN      := 0
-export SUPPORT_SINGLE_WIRE_COM    := 1
-
-## os timer is not enough!
-export OS_TIMER_NUM        := 10
-
-# besui_common.h
-export BESUI_COMM_EN := 1
-
-# added for SPP TUNING EQ 
-export SPP_EQ_TUNING := 1
-
-##enable will crash when play music
-export SW_IIR_EQ_PROCESS := 0
-
-export  TRACE_CRLF       := 1
-
-export TOTA_v2           := 1
-
-
-KBUILD_CPPFLAGS += -DSOFTWARE_VERSION_INFO=$(SOFTWARE_VERSION_INFO)
-
-ifeq ($(BESUI_1WIRE_EN),1)
-$(info BESUI_1WIRE_EN)
-KBUILD_CPPFLAGS += -DBESUI_1WIRE_EN
-else
-export POWER_ON_ENTER_TWS_PAIRING_ENABLED := 1
-endif
-
-define FUNC_VERSION
-V0.$(shell expr $(1) / 10).$(shell expr $(1) % 10)
-endef
-
-#export BESUI_VER_STR := $(call FUNC_VERSION,$(SOFTWARE_VERSION_INFO))
-#KBUILD_CPPFLAGS += -DBESUI_VER_STR=$(BESUI_VER_STR)
-#
-#$(warning SOFTWARE_VERSION_INFO=$(SOFTWARE_VERSION_INFO))
-#$(warning BESUI_VER_STR=$(BESUI_VER_STR))
-
-

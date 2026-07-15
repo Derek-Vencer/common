@@ -62,7 +62,6 @@ int32_t voice_tx_aec_open(uint32_t frame_len, uint32_t bits)
     aec_out_buf = (uint8_t *)speech_calloc(g_frame_len, sizeof(short));
 
     #define FFT_LEN (512)
-	//#define FFT_LEN (1024)
     voice_tx_aec_st = ssp_aec_create(SAMPLE_RATE, g_frame_len, FFT_LEN - g_frame_len, 0, 1, 1);
 
 #ifdef VOICE_TX_AEC_AUDIO_DUMP

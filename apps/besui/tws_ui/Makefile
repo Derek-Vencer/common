@@ -47,9 +47,7 @@ ccflags-y += \
 	-Iinclude/watchdog	\
     -Ithirdparty/userapi \
     -Ibthost/service/bt_app/inc \
-    -Iutils/hsm \
-    -Iservices/tota/ \
-    
+    -Iutils/hsm
 
 ifeq ($(ANC_APP),1)
 ccflags-y += -Iapps/anc/src

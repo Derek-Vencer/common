@@ -94,37 +94,22 @@ int bluetooth_nv_mgr_ble_record_del(le_nv_rec_del_evt input_event, const uint8_t
     return BT_STS_SUCCESS;
 }
 
-extern bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr);
-
-int bluetooth_nv_mgr_bt_record_add(bt_nv_rec_add_evt input_event,
-                                   const bluetooth_nv_bt_record_t *p_record)
+int bluetooth_nv_mgr_bt_record_add(bt_nv_rec_add_evt input_event, const bluetooth_nv_bt_record_t *p_record)
 {
     if (p_record == NULL || input_event >= BT_NV_REC_ADD_EVENT_MAX)
     {
         return BT_STS_INVALID_PARM;
     }
 
-    DEBUG_INFO(1,
-        "NV-BT-ADD input event:%d, ca:%p",
-        input_event,
-        __builtin_return_address(0));
-
-    if (ntt_is_local_or_peer_bt_addr((const bt_bdaddr_t *)p_record))
-    {
-        DEBUG_INFO(0,
-            "[NTT_NV] reject local/peer bt record");
-
-        return BT_STS_FAILED;
-    }
-
+    DEBUG_INFO(1, "NV-BT-ADD input event:%d, ca:%p", input_event, __builtin_return_address(0));
+    
     switch (input_event)
     {
         case BT_NV_REC_ADD_CTKD_OVER_LE:
             nv_record_ddbrec_delete((bt_bdaddr_t *)p_record);
-            break;
-
+        break;
         default:
-            break;
+        break;
     }
 
     return nv_record_add(section_usrdata_ddbrecord, (void *)p_record);

@@ -22,17 +22,30 @@
 extern "C" {
 #endif
 
+// #define CAPSENSOR_USE_RC           1
+
 #ifdef CAPSENSOR_SLIDE
+#ifdef CAPSENSOR_USE_RC
 #define CAP_SAMP_FS          10  /* ms */
 #else
+#define CAP_SAMP_FS          16  /* ms */
+#endif
+#else
+#ifdef CAPSENSOR_USE_RC
 #define CAP_SAMP_FS          50  /* ms */
+#else
+#define CAP_SAMP_FS          60  /* ms */
+#endif
 #endif
 #define CAP_CHNUM            5   /* channel numbers, CAP_USED_TOUCH_NUM+CAP_USED_WEAR_NUM */
 #define CAP_REPNUM           1   /* rep numbers */
 #define CAP_CLK_DIV          20  /* clk_samp_fs = clk/(CAP_CLK_DIV+2): 591K = 13M/(CAP_CLK_DIV + 2) */
 
-#define CAPSENSOR_USE_RC           1
-#define ONE_CH_SAMPLE_TIME_MS      ((1.0f / 333333.3f) * 96 * 8) /* one ch sampling time, eg: 1/333.3k*96*8 = 2.304ms */
+#ifdef CAPSENSOR_USE_RC
+#define ONE_CH_SAMPLE_TIME_MS      ((1.0f / 333.3333f) * 96 * 8) /* one ch sampling time, eg: 1/333.3k*96*8 = 2.304ms */
+#else
+#define ONE_CH_SAMPLE_TIME_MS      ((1.0f / 585.3658f) * 96 * 8) /* one ch sampling time, eg: 1/585.3k*96*8 = 1.312ms */
+#endif
 
 #define CAP_USED_TOUCH_NUM   3      /* slide_num */
 #define CAP_USED_WEAR_NUM    4      /* wear_num */

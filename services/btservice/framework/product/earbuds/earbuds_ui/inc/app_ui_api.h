@@ -26,6 +26,21 @@
 extern "C" {
 #endif
 
+typedef enum {
+    RECONNECT_NONE,
+    LINK_LOSS,
+    TRY_RECONNECT,
+    TRY_RECONNECT_EXT,
+} reconnect_reason_t;
+
+typedef struct {
+    bt_bdaddr_t          addr;               // Address of the device to page.
+    reconnect_reason_t   reason;             // Reconnet reason. LINK_LOSS is for LINK LOSS(08), TRY_RECONNECT is for OPEN, others is invalid.
+    uint16_t             page_times;         // The times of page action about this device.
+    uint32_t             page_timeout;       // Should be assigned a value in callback. Page timeout of this page(unit is 1 slot[0.625ms]).
+    uint32_t             time_to_next_page;  // Should be assigned a value in callback. Idle time between this page and next page (unit is 1ms).
+} app_ui_page_para_t;
+
 typedef struct {
     void (*ibrt_global_state_changed)(ibrt_global_state_change_event *state);
     void (*ibrt_a2dp_state_changed)(const bt_bdaddr_t *addr, ibrt_conn_a2dp_state_change *state);
@@ -46,6 +61,7 @@ typedef struct {
     bool (*disallow_start_reconnect_mob_hook)(const bt_bdaddr_t *addr, const uint16_t active_event);
     bool (*disallow_start_reconnect_tws_hook)(void);
     bool (*disallow_tws_role_switch_hook)(void);
+    void (*set_page_para_hook)(app_ui_page_para_t *page_para);
 } ibrt_ext_conn_policy_cb_t;
 
 typedef struct {
@@ -69,6 +85,12 @@ typedef enum {
     // support multipoint & current already exist two link, but only disc one when enter pairing
     IBRT_PAIRING_DISC_ONE_MOB,
 } ibrt_pairing_with_disc_num;
+
+typedef enum
+{
+    INCOMING_PENDING,
+    OUTGOING_PENDING,
+} app_ui_pending_conn_direction_t;
 
 typedef enum {
     // just disconnect sco and resume when pairing exit
@@ -314,13 +336,15 @@ void best_mgr_tws_role_switch_comp_hook(TWS_UI_ROLE_E current_role, uint8_t errC
 
 bool app_ui_is_addr_null(bt_bdaddr_t *addr);
 
-bool app_ui_pop_from_pending_list(bt_bdaddr_t *addr);
+bool app_ui_pop_from_pending_list(bt_bdaddr_t *addr, app_ui_pending_conn_direction_t pending_direction);
 
-bool app_ui_get_from_pending_list(bt_bdaddr_t *addr);
+bool app_ui_get_from_pending_list(bt_bdaddr_t *addr, app_ui_pending_conn_direction_t pending_direction);
 
-void app_ui_push_device_to_pending_list(bt_bdaddr_t *addr);
+bool app_ui_is_device_on_pending_list(const bt_bdaddr_t *addr, app_ui_pending_conn_direction_t pending_direction);
 
-uint16_t app_ui_pending_conn_req_list_size(void);
+void app_ui_push_device_to_pending_list(bt_bdaddr_t *addr, app_ui_pending_conn_direction_t pending_direction);
+
+uint16_t app_ui_pending_conn_list_size(app_ui_pending_conn_direction_t pending_direction);
 
 bool app_ui_event_has_been_queued(const bt_bdaddr_t* remote_addr,app_ui_evt_t event);
 
@@ -330,13 +354,13 @@ bool app_ui_high_priority_event_interrupt_reconnec(uint16_t link_id);
 
 bool app_ui_disallow_reconnect_mobile_by_peer_status(void);
 
-void app_ui_send_mobile_disconnect_event(const bt_bdaddr_t* mobile_addr);
-
 bool app_ui_notify_peer_to_destroy_device(const bt_bdaddr_t *addr, bool delete_record);
 
-bool app_ui_destroy_device_ongoing(void);
+uint8_t app_ui_destroy_device_count(void);
 
 bool app_ui_destroy_device(const bt_bdaddr_t *del_nv_addr, bool delete_record);
+
+bt_status_t  app_ui_device_is_destroying(const bt_bdaddr_t* remote_addr);
 
 void app_ui_destroy_the_other_device(const bt_bdaddr_t *active_addr, bool need_delete_nv);
 
@@ -476,6 +500,8 @@ bool app_ui_custom_disallow_reconn_dev(const bt_bdaddr_t *addr, uint16_t active_
 
 bool app_ui_custom_disallow_reconn_tws(void);
 
+void app_ui_custom_set_page_para(const bt_bdaddr_t *addr, reconnect_reason_t reason, uint16_t page_times, uint32_t *page_timeout, uint32_t *time_to_next_page);
+
 /**
  ****************************************************************************************
  * @brief exit eabud mode for enter other mode
@@ -501,8 +527,12 @@ bt_bdaddr_t* app_ui_get_peer_tws_device_address();
  * @brief Cancel Page
  *
  * @param addr                - Cancel page mobile addr or tws addr
+ * @return BT_STS_NO_LINK                 - no mobile sm
+ * @return BT_STS_SUCCESS                 - success cancel pending page request
+ * @return BT_STS_PENDING                 - success send cancel page req to sm
+ * @return BT_STS_FAILED                  - act failed
  */
-void app_ui_cancel_page(bt_bdaddr_t *addr);
+bt_status_t app_ui_cancel_page(bt_bdaddr_t *addr);
 
 /**
  * @brief is disconnect event

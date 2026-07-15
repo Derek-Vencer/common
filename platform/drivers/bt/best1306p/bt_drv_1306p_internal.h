@@ -644,6 +644,7 @@ void btdrv_cal_data_write(void);
 void btdrv_temperature_dig_comp(const uint16_t dig_gain);
 void btdtv_rf_vco_drv_workaround(int temperature_celsius);
 bool btdrv_reg_op_check_btc_boot_finish(void);
+void bt_drv_reg_op_set_bt_txpwr_idx(uint8_t link_id, uint8_t tx_idx);
 #ifdef __RF_APB_RESTORE_SUPPORT__
 void bt_drv_rf_inf_enable_auto_power_down(bool enable);
 #endif

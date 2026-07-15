@@ -75,9 +75,6 @@
 #include "audio_trigger_common.h"
 #include "audio_policy.h"
 
-extern bool app_bt_stream_isrun(uint16_t player);
-extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
-
 static int bt_audio_media_play(uint16_t stream_type, const Audio_device_t* device)
 {
     if (device->audio_device.device_type == AUDIO_TYPE_BT)
@@ -631,44 +628,6 @@ void app_bt_media_set_current_media(uint16_t media_type)
     bt_media_set_current_media(media_type);
 }
 
-int ntt_hfp_pcm_force_restart_after_role_switch(uint8_t device_id)
-{
-    bool hfp_pcm_is_run = app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM);
-
-    AUDIO_BT_TRACE(2,
-        "[NTT_HFP_RS] device=%d hfp_pcm_is_run=%d",
-        device_id,
-        hfp_pcm_is_run);
-
-    bt_sco_player_forcemute(false, false);
-
-    if (hfp_pcm_is_run)
-    {
-        app_audio_sendrequest(APP_BT_STREAM_HFP_PCM,
-                            APP_BT_SETTING_RESTART,
-                            0);
-    }
-    else
-    {
-        uint8_t curr_sco = app_bt_audio_get_curr_playing_sco();
-
-        AUDIO_BT_TRACE(2,
-            "[NTT_HFP_RS] hfp not run, curr_sco=%d target=%d",
-            curr_sco,
-            device_id);
-
-        if (curr_sco == device_id)
-        {
-            app_audio_sendrequest(APP_BT_STREAM_HFP_PCM,
-                                APP_BT_SETTING_OPEN,
-                                0);
-        }
-    }
-    bt_sco_player_forcemute(false, false);
-
-    return 0;
-}
-
 #ifdef RB_CODEC
 bool  bt_media_rbcodec_start_process(uint16_t stream_type, int device_id,AUD_ID_ENUM media_id, uint32_t param, uint32_t ptr)
 {
@@ -769,16 +728,6 @@ void app_bt_audio_state_checker(void)
     AUDIO_BT_TRACE(1, "audio_state: %s", app_bt_get_active_media_state());
 }
 
-#if 0
-#include "hw_codec_iir_process.h"
-#include "audio_process.h"
-#include "nvrecord_bt.h"
-#include "nvrecord_env.h"
-#include "nvrecord_extension.h"
-
-extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
-#endif
-
 //only used in iamain thread ,can't used in other thread or interrupt
 void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
 {
@@ -797,27 +746,7 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
           media_id);
 
     AUDIO_BT_TRACE(1, "bt_media_start %s\n", app_bt_get_active_media_state());
-#if 0
-	if(BT_STREAM_MUSIC == stream_type){
-		struct nvrecord_env_t *nvrecord_env;
-	    nv_record_env_get(&nvrecord_env);
-		uint8_t eq_index = nvrecord_env->eq_index_data;
-		if((eq_index >=0) && (eq_index <= 5))
-		{
-			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
-            ntt_audio_drc_apply_by_eq_index(eq_index);
 
-		}
-		else
-		{
-			eq_index = 0;
-			nvrecord_env->eq_index_data = eq_index;
-			nv_record_env_set(nvrecord_env);
-			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
-            ntt_audio_drc_apply_by_eq_index(eq_index);
-		}
-	}
-#endif
     switch(stream_type)
     {
 #ifdef RB_CODEC
@@ -1985,7 +1914,6 @@ int app_audio_manager_ctrl_volume_handle(APP_AUDIO_MESSAGE_BODY *msg_body)
 #endif
 {
 #if defined(BT_BUILD_WITH_CUSTOMER_HOST) || defined(BLE_ONLY_ENABLED)
-#error "BT_BUILD_WITH_CUSTOMER_HOST or BLE_ONLY_ENABLED"
 #else // bes classic bt is disabled
     enum APP_AUDIO_MANAGER_VOLUME_CTRL_T volume_ctrl;
     uint8_t local_volume_changed_device_id = BT_DEVICE_INVALID_ID;
@@ -1993,8 +1921,6 @@ int app_audio_manager_ctrl_volume_handle(APP_AUDIO_MESSAGE_BODY *msg_body)
 
     volume_ctrl  = (enum APP_AUDIO_MANAGER_VOLUME_CTRL_T)msg_body->message_ptr;
     volume_level = (uint16_t)msg_body->message_Param0;
-
-    AUDIO_BT_TRACE(2, "%s volume_ctrl=%d volume_level=%d", __func__, volume_ctrl, volume_level);
 
     switch (volume_ctrl) {
         case APP_AUDIO_MANAGER_VOLUME_CTRL_SET:
@@ -2373,7 +2299,7 @@ static int app_audio_manager_handle_process(APP_AUDIO_MESSAGE_BODY *msg_body)
     APP_AUDIO_MANAGER_GET_CALLBACK(msg_body->message_Param1, callback_fn);
     APP_AUDIO_MANAGER_GET_CALLBACK_PARAM(msg_body->message_Param2, callback_param);
 
-    AUDIO_BT_TRACE(0, "%s %d%s %x%s d%x aud %x", __func__,
+    AUDIO_BT_TRACE(7, "%s %d%s %x%s d%x aud %x", __func__,
           aud_manager_msg.id, handleId2str(aud_manager_msg.id),
           aud_manager_msg.stream_type, aud_manager_msg.stream_type ? strmtype2str(aud_manager_msg.stream_type) : "[N/A]",
           aud_manager_msg.device_id, aud_manager_msg.aud_id);

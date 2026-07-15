@@ -1,5 +1,4 @@
 export ANC_ASSIST_ENABLED   ?= 1
-$(error ANC_ASSIST_ENABLED)
 
 ### ANC ASSIST CONFIG ###
 export VOICE_ASSIST_NOISE               ?= 1

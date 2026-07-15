@@ -40,6 +40,12 @@ extern "C" {
 
 int codec_dac_dc_auto_load(bool open_af, bool reboot, bool init_nv);
 
+
+/*
+ * return: 0(success), !0(failed)
+ */
+int codec_dac_dc_result_check(bool open_af);
+
 #ifdef AUDIO_ADC_DC_AUTO_CALIB
 int codec_adc_dc_auto_load(bool open_af, bool reboot, bool init_nv);
 #endif

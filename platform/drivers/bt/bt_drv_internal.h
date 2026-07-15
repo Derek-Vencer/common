@@ -43,6 +43,8 @@ extern "C" {
 #define BT52_VERSION                      (11)
 #define BT53_VERSION                      (12)
 #define BT54_VERSION                      (13)
+#define BT60_VERSION                      (14)
+#define BT61_VERSION                      (15)
 
 #ifndef ASSERT_ERR
 #define ASSERT_ERR(cond)                             { if (!(cond)) { DRIVERS_TRACE(2,"line is %d file is %s", __LINE__, __FILE__); } }
@@ -151,13 +153,11 @@ extern "C" {
  */
 
 #ifdef MCU_WAKEUP_BT_V2
-#define MCU_WAKEUP_BT_MSG_LEN (8)
-
-enum WAKEUP_STATUS_T
-{
-    INTERSYS_WAIT_BTC_RESPONSE = 0,
-    INTERSYS_TX_DONE = 1,
-};
+#define BT_DRV_OPER_BTCORE_MSG_LEN                  (8)
+#define BT_DRV_OPER_BTCORE_RSP_MAX_RETRY_CNT        (30)
+#define BT_DRV_OPER_BTCORE_IDLE_MAX_RETRY_CNT       (10)
+#define BT_DRV_OPER_BTCORE_BASE_DELAY_US            (10)
+#define BT_DRV_OPER_BTCORE_WAKE_UP_THD              (0) //(1000)
 
 enum WAKEUP_BT_USER_T
 {
@@ -176,7 +176,7 @@ enum WAKEUP_BT_MSG_T
 
     WAKEUP_BT_MSG_QTY
 };
-#endif //MCU_WAKEUP_BT_V2
+#endif /* MCU_WAKEUP_BT_V2 */
 
 enum bes_btc_tport_level
 {
@@ -328,15 +328,11 @@ void bt_drv_free(void *ptr);
 void bt_tester_cmd_receive_evt_analyze(const unsigned char *data, unsigned int len);
 uint32_t bt_drv_get_btc_sw_version(void);
 void bt_drv_bt_tport_type_config(void);
-
 #ifdef MCU_WAKEUP_BT_V2
-void bt_intersys_oper_btcore(enum WAKEUP_BT_USER_T user, enum WAKEUP_BT_MSG_T msg);
-
-void bt_intersys_oper_wait_bt_response(void);
-#endif // MCU_WAKEUP_BT_V2
+void bt_drv_oper_btcore_with_rsp(enum WAKEUP_BT_USER_T user, enum WAKEUP_BT_MSG_T msg);
+#endif /* MCU_WAKEUP_BT_V2 */
 
 #ifdef __cplusplus
 }
 #endif
-
 #endif //__BT_DRV_INTERNAL_H__

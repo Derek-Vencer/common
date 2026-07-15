@@ -1379,8 +1379,7 @@ static int gaf_audio_flexible_capture_stream_start_handler(void* _pStreamEnv)
 #ifdef GAF_CODEC_CROSS_CORE
             app_sysfreq_req(APP_SYSFREQ_USER_SPEECH_ALGO, APP_SYSFREQ_32K);
 #else
-            // app_sysfreq_req(APP_SYSFREQ_USER_SPEECH_ALGO, APP_SYSFREQ_104M);
-            app_sysfreq_req(APP_SYSFREQ_USER_AOB_CAPTURE, APP_SYSFREQ_104M);
+            app_sysfreq_req(APP_SYSFREQ_USER_SPEECH_ALGO, APP_SYSFREQ_104M);
 #endif
         }
 
@@ -2788,6 +2787,7 @@ static void gaf_audio_stream_stop_generic(bool isCheckServiceState, uint8_t con_
                 gaf_audio_stream_capture_bth_send_deinit_to_m55(pStreamEnv);
 #endif
             }
+            pStreamEnv->stream_info.bap_contextType = 0;
         }
         else
         {
@@ -2819,6 +2819,7 @@ static void gaf_audio_stream_stop_generic(bool isCheckServiceState, uint8_t con_
                     gaf_audio_stream_capture_bth_send_deinit_to_m55(pStreamEnv);
                 }
 #endif
+            pStreamEnv->stream_info.bap_contextType = 0;
         }
 
         /// Should be transfered to IDLE by previous procedure, avoid multi call

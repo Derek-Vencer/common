@@ -107,7 +107,7 @@ static void hal_trace_fault_cp_handler(void);
 #endif
 
 #ifndef TRACE_PRINTF_LEN
-#define TRACE_PRINTF_LEN                (256)//(120)
+#define TRACE_PRINTF_LEN                (120)
 #endif
 
 #ifndef TRACE_DUMP_LEN
@@ -2584,9 +2584,7 @@ static void NORETURN USED hal_trace_assert_dump_internal(ASSERT_DUMP_ARGS)
         hal_trace_flush_buffer();
         hal_sys_timer_delay(MS_TO_TICKS(5));
 
-//#ifdef CORE_DUMP
-        //fixed remove it ,to directly reboot
-#if 0
+#ifdef CORE_DUMP
         {
             static CrashCatcherAssertRegisters regs;
 
@@ -3216,8 +3214,8 @@ void hal_trace_fault_dump(const uint32_t *regs, const uint32_t *extra, uint32_t 
                           ((CRASH_DUMP_STACK_NUM_BYTES)/2));
         }
 #endif
-//fixed no wait
-#if 0 //def CORE_DUMP
+
+#ifdef CORE_DUMP
         {
             static CrashCatcherExceptionRegisters eregs;
 

@@ -1,3 +1,5 @@
 {
-    "C_Cpp.dimInactiveRegions": false
+    "files.associations": {
+        "app_voice_assist_fir_lms_cfg.h": "c"
+    }
 }

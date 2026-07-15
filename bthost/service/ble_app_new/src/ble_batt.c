@@ -18,7 +18,7 @@
 #include "app_ble.h"
 #include "nvrecord_env.h"
 
-#define BLE_BATTERY_INSTANCE_NUM  (1)//(2)
+#define BLE_BATTERY_INSTANCE_NUM (2)
 
 GATT_DECL_PRI_SERVICE(g_ble_batt_service, GATT_UUID_BAT_SERVICE);
 
@@ -103,12 +103,6 @@ bt_status_t app_ble_report_battery_level(uint8_t instance, uint8_t battery_level
 {
     gatt_char_notify_t notify = {NULL};
     app_ble_battery_inst_t *inst = NULL;
-    bt_status_t ret;
-    DEBUG_WARNING(0, "[LOCAL_BATT] enter instance=%d battery=%d", instance, battery_level);
-    MAIN_TRACE(2,
-        "[LOCAL_BATT] instance=%d battery=%d%%",
-        instance,
-        battery_level);
 
     if (instance >= BLE_BATTERY_INSTANCE_NUM)
     {
@@ -127,19 +121,9 @@ bt_status_t app_ble_report_battery_level(uint8_t instance, uint8_t battery_level
     inst = g_ble_battery_instance + instance;
     inst->battery_level = battery_level;
 
-    ret = gatts_send_value_notification(
-            GAP_ALL_CONNS,
-            &notify,
-            &battery_level,
-            sizeof(uint8_t));
-
-    MAIN_TRACE(2,
-        "[LOCAL_BATT] notify ret=%d battery=%d%%",
-        ret,
-        battery_level);
-
-    return ret;
+    return gatts_send_value_notification(GAP_ALL_CONNS, &notify, &battery_level, sizeof(uint8_t));
 }
+
 /**
  * battery client
  *
@@ -347,10 +331,8 @@ static bool app_ble_batt_client_callback(gatt_prf_t *prf, gatt_profile_event_t e
             gatt_profile_recv_notify_t *p = (gatt_profile_recv_notify_t *)param.notify;
             if (p->service->service_uuid != GATT_UUID_BAT_SERVICE || p->value_len == 0)
             {
-            	DEBUG_INFO(0, "GATT_PROF_EVENT_NOTIFY invalid");
                 break;
             }
-            DEBUG_INFO(0, "GATT_PROF_EVENT_NOTIFY ok");
             for (; i < conn->service_count; i += 1)
             {
                 s = conn->peer_service + i;

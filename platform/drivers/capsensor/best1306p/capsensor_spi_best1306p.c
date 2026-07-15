@@ -19,15 +19,31 @@
 #include "hal_timer.h"
 #include "capsensor_spi_best1306p.h"
 #include "reg_capsensor_best1306p.h"
+#include CHIP_SPECIFIC_HDR(capsensor_driver)
 #include "capsensor_driver.h"
 #include "hal_analogif.h"
 #include "pmu.h"
 #include "analog.h"
+#include "hal_sleep.h"
 
 #define CAP_REG(r)                                  (((r) & 0xFFF) | 0x0000)
 
 #define capsensorif_reg_read(reg,val)               hal_analogif_reg_read(CAP_REG(reg),val)
 #define capsensorif_reg_write(reg,val)              hal_analogif_reg_write(CAP_REG(reg),val)
+
+#ifdef CAPSENSOR_READ_DATA_POLLING
+static enum CAPSENSOR_READ_DATA_STATE_T cap_status = CAPSENSOR_READ_DATA_IDLE;
+
+static void capsensor_set_cur_status(enum CAPSENSOR_READ_DATA_STATE_T status)
+{
+    cap_status = status;
+}
+
+static enum CAPSENSOR_READ_DATA_STATE_T capsensor_get_cur_status(void)
+{
+    return cap_status;
+}
+#endif
 
 static void capsensor_sw_control_baseline_en(void)
 {
@@ -48,12 +64,16 @@ static void capsensor_sw_control_baseline_en(void)
 void capsensor_baseline_reg_read(uint32_t* baseline_value_p, uint32_t* baseline_value_n)
 {
     uint16_t baseline_val[8] = {0};
+    uint16_t value = 0;
 
     for (int i = 0; i < 8; i++)
     {
-        capsensorif_reg_read(CAP_REG_14 + i, &baseline_val[i]);
-        // DRIVERS_TRACE(0, "baseline[%d]:%x", i, baseline_val[i]);
-
+        capsensorif_reg_read(CAP_REG_0C + i, &value);
+        if (value & (CDC_BASELINE_P_BIT_IN_CH0_DR)) {
+            baseline_val[i] = value & 0x3FF;
+        } else {
+            capsensorif_reg_read(CAP_REG_14 + i, &baseline_val[i]);
+        }
         baseline_value_p[i] = baseline_val[i];
     }
 
@@ -97,8 +117,8 @@ static float formula_convert_sar_vtoc(uint32_t sar_val)
 
 void capsensor_fp_mode_int(void)
 {
+#ifndef CAPSENSOR_READ_DATA_POLLING
     uint16_t value = 0;
-
     capsensorif_reg_read(CAP_REG_88, &value);
     value &= ~(FP_MODE_RD_INT_MASK);//fp_mode_rd_int_mask
     capsensorif_reg_write(CAP_REG_88, value);
@@ -106,6 +126,7 @@ void capsensor_fp_mode_int(void)
     capsensorif_reg_read(CAP_REG_87, &value);
     value |= FP_MODE_RD_INT_RAW_EN_REG;//fp_mode_rd_int_raw_en_reg
     capsensorif_reg_write(CAP_REG_87, value);
+#endif
 }
 
 void capsensor_press_int(void)
@@ -362,6 +383,12 @@ void capsensor_setup_cfg(struct CAPSENSOR_CFG_T * cap_cfg)
     capsensor_press_int();
 #endif
 
+#ifdef CAPSENSOR_READ_DATA_POLLING
+    capsensorif_reg_read(CAP_REG_02, &value);
+    value |= POWER_MODE_REG;
+    capsensorif_reg_write(CAP_REG_02, value);
+#endif
+
     capsensor_fifo_num_and_capture_config(cap_cfg->ch_num, cap_cfg->conversion_num, cap_cfg->samp_fs);
     capsensor_ch_map_config(cap_cfg->ch_num, cap_cfg->ch_map);
     capsensor_down_sel_and_cin_config();
@@ -389,7 +416,9 @@ void capsensor_setup_cfg(struct CAPSENSOR_CFG_T * cap_cfg)
     capsensorif_reg_read(CAP_REG_01, &value);
     value |= CDC_PU_VREF0P7 | CDC_PU_LDO | CDC_PU_CDC_REG;
     capsensorif_reg_write(CAP_REG_01, value);
+#ifdef CAPSENSOR_USE_RC
     analog_capsensor_rc_clk_en(true); //osc clk -> rc clk
+#endif
     hal_sys_timer_delay(MS_TO_TICKS(50));
     value |= FSM_EN;
     value |= CDC_SAR_P_MODE_DR;
@@ -422,14 +451,26 @@ int get_sample(struct capsensor_sample_data *sample, int i)
     return 0;
 }
 
-int stop_hw_wr_start_sw_rd(void)
+int stop_hw_wr_start_sw_rd(uint8_t cap_num)
 {
     uint16_t value = 0;
+    uint16_t ptr_reg_value = 0;
 
     capsensorif_reg_read(CAP_REG_54, &value);
     value |= FIFO_CLK_DR | FIFO_RD_DIRECTION_REG; //fifo_clk_dr
     value &= ~FIFO_RD_CLK_DR; //fifo_rd_clk_dr , fifo_rd_direction_reg:0 add,1 reduce
     capsensorif_reg_write(CAP_REG_54, value);
+
+    capsensorif_reg_read(CAP_REG_82, &ptr_reg_value);
+    // DRIVERS_TRACE(0, "0x82: %x rd_addr_ptr1: %x wr_addr_ptr1: %x", ptr_reg_value, (ptr_reg_value >> 8) & 0x7f, ptr_reg_value & 0x7f);
+
+    capsensorif_reg_read(CAP_REG_8A, &value);
+    value = ((ptr_reg_value & 0x7f) - cap_num) | RD_PTR_DR;
+    capsensorif_reg_write(CAP_REG_8A, value);
+
+    capsensorif_reg_write(CAP_REG_8A, value);
+    value &= ~RD_PTR_DR;
+    capsensorif_reg_write(CAP_REG_8A, value);
 
     return 0;
 }
@@ -564,8 +605,121 @@ void capsensor_pu_rc_dr(bool en)
     capsensorif_reg_write(CAP_REG_84, value);
 }
 
+#ifdef CAPSENSOR_READ_DATA_POLLING
+void capsensor_module_reset(void)
+{
+    capsensorif_reg_write(CAP_REG_91, 0x1F);
+    capsensorif_reg_write(CAP_REG_91, 0x01);
+
+    capsensorif_reg_write(CAP_REG_91, 0x1E);
+}
+
+void capsensor_wakeup_start_capture(void)
+{
+    uint16_t value = 0;
+
+#ifdef CAPSENSOR_USE_RC
+    capsensor_pu_rc_dr(true);
+#endif
+    capsensor_resume();
+    capsensorif_reg_read(CAP_REG_01, &value);
+    value |= FSM_EN;
+    capsensorif_reg_write(CAP_REG_01, value);
+
+    hal_chip_wake_lock(HAL_CHIP_WAKE_LOCK_USER_CAP);
+}
+
+void capsensor_read_capture_data(struct capsensor_sample_data *sample, int num)
+{
+    static bool baseline_dr_flag = 0;
+
+    stop_hw_wr_start_sw_rd(num);
+    capsensor_set_cur_status(CAPSENSOR_READ_DATA_START);
+    for(int i = 0; i < num; i++) {
+        get_sample(sample, i);
+    }
+    stop_sw_rd_start_hw_wr();
+    capsensor_set_cur_status(CAPSENSOR_READ_DATA_DONE);
+
+    select_sort_sample_data(sample, num);
+    if(baseline_dr_flag == 0) {
+        capsensor_baseline_read(num);
+        baseline_dr_flag = 1;
+    }
+#if 0
+    calculate_sample_data(sample, num);
+
+    for (int k = 0; k < num; k++) {
+        DRIVERS_TRACE(0 ,"cap_data: %d\t%x\t%d.%06d\t%x\t%d.%06d\t%d.%06d", sample[k].ch, sample[k].sar,
+            sample[k].sar_int, sample[k].sar_float,
+            sample[k].sdm, sample[k].sdm_int, sample[k].sdm_float,
+            sample[k].sar_sdm_int, sample[k].sar_sdm_float);
+    }
+    DRIVERS_TRACE(0, "\n");
+#endif
+}
+
+void capsensor_state_machine_reset(void)
+{
+    capsensor_suspend();
+    capsensor_module_reset();
+#ifdef CAPSENSOR_USE_RC
+    capsensor_pu_rc_dr(false);
+#endif
+    hal_chip_wake_unlock(HAL_CHIP_WAKE_LOCK_USER_CAP);
+}
+
+
+
+void capsensor_write_pointer_position(uint16_t *write_addr)
+{
+    uint16_t ptr_reg_value = 0;
+
+    *write_addr = 0;
+
+    capsensorif_reg_read(CAP_REG_82, &ptr_reg_value);
+    *write_addr = ptr_reg_value & 0x7f;
+}
+#endif
+
 int capsensor_get_raw_data(struct capsensor_sample_data *sample, int num)
 {
+#ifdef CAPSENSOR_READ_DATA_POLLING
+    int count = 0;
+    uint16_t value = 0;
+    uint16_t write_addr = 0;
+
+    value = capsensor_clk_is_ready();
+    if(!value) {
+        capsensor_wakeup_start_capture();
+        capsensor_set_cur_status(CAPSENSOR_READ_DATA_WAIT_READY);
+    } else {
+        do {
+            capsensor_write_pointer_position(&write_addr);
+            if (write_addr <= num) {
+                hal_sys_timer_delay(MS_TO_TICKS(1));
+            }
+        } while(write_addr <= num && ++count < 15);
+
+        capsensor_write_pointer_position(&write_addr);
+        if(write_addr <= num) {
+            capsensor_set_cur_status(CAPSENSOR_READ_DATA_NOT_ENOUGH);
+            DRIVERS_TRACE(0, "%s, capsensor samp num not enough !!!", __func__);
+            return capsensor_get_cur_status();
+        }
+
+        capsensor_write_pointer_position(&write_addr);
+        if(write_addr > num) {
+            capsensor_read_capture_data(sample, num);
+            capsensor_set_cur_status(CAPSENSOR_READ_DATA_READY);
+        } else {
+            capsensor_set_cur_status(CAPSENSOR_READ_DATA_NOT_ENOUGH);
+            DRIVERS_TRACE(0, "%s, capsensor samp num not enough !!!", __func__);
+            return capsensor_get_cur_status();
+        }
+    }
+    return capsensor_get_cur_status();
+#else
     int cap_irq_mode = 0;
     static bool baseline_dr_flag = 0;
 
@@ -574,7 +728,7 @@ int capsensor_get_raw_data(struct capsensor_sample_data *sample, int num)
 
     switch(cap_irq_mode) {
         case FP_MODE_RD_INT:
-            stop_hw_wr_start_sw_rd();
+            stop_hw_wr_start_sw_rd(num);
             for(int i=0; i<num; i++) {
                 get_sample(sample, i);
             }
@@ -608,6 +762,7 @@ int capsensor_get_raw_data(struct capsensor_sample_data *sample, int num)
     capsensor_pu_rc_dr(false); //close rc
 
     return 0;
+#endif
 }
 
 void capsensor_fp_mode_set_mask(void)

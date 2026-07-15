@@ -129,9 +129,22 @@ void app_ibrt_if_disconnect_all_bt_connections(void);
  * @brief When enable ui, call this function to disconnect the device.
  *
  * @param[in] remote_addr        Remote device address
+ * @return  flase means disconnect act is illgal
  ****************************************************************************************
  */
-void app_ibrt_if_disconnect_mobile_device(const bt_bdaddr_t* remote_addr);
+bool app_ibrt_if_disconnect_mobile_device(const bt_bdaddr_t* remote_addr);
+
+/**
+ ****************************************************************************************
+  * @brief When enable ui, call this function to disconnect the device.
+ *
+ * @param[in] remote_addr        Remote device address
+ * @return BT_STS_NO_LINK                 - no mobile sm
+ * @return BT_STS_ONGOING                 - destroy in progress
+ * @return BT_STS_FAILED                  - destroy not in porgress
+ ****************************************************************************************
+ */
+bt_status_t app_ibrt_if_mobile_device_is_destroying(const bt_bdaddr_t* remote_addr);
 
 /**
  ****************************************************************************************
@@ -143,11 +156,12 @@ void app_ibrt_if_disconnect_mobile_device(const bt_bdaddr_t* remote_addr);
  * @return
  * <table>
  * <tr><th>Value        <th>Description
- * <tr><td>True   <td>reconnect act success
- * <tr><td>False  <td>reconnect act fail
+ * <tr><td>BT_STS_NO_RESOURCES  <td>already have pending req
+ * <tr><td>BT_STS_FAILED        <td>act failed
+ * <tr><td>BT_STS_SUCCESS       <td>act success
  ****************************************************************************************
  */
-bool app_ibrt_if_connect_mobile_device(const bt_bdaddr_t* bt_addr, uint8_t max_try_connect_count);
+bt_status_t app_ibrt_if_connect_mobile_device(const bt_bdaddr_t* bt_addr, uint8_t max_try_connect_count);
 
 bool app_ibrt_if_is_any_mobile_connected(void);
 

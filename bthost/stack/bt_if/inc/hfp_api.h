@@ -134,7 +134,6 @@ int btif_hf_init_channel(btif_hf_channel_t* chan_h);
 bt_status_t btif_hf_disconnect_service_link(btif_hf_channel_t* chan_h);
 bt_status_t btif_hf_create_service_link(bt_bdaddr_t * bt_addr);
 void btif_hf_query_remote_sdp(bt_bdaddr_t *addr);
-bool btif_hfp_profile_is_connecting(uint8_t device_id);
 bool btif_hf_get_remote_bdaddr(btif_hf_channel_t* chan_h, bt_bdaddr_t *bdaddr_p);
 void btif_hfp_register_peer_sco_codec_receive_handler(void (*cb)(uint8_t device_id,void * chan,uint8_t codec));
 void btif_hf_receive_peer_sco_codec_info(const void* remote, uint8_t codec);
@@ -148,7 +147,7 @@ btif_remote_device_t *btif_hf_cmgr_get_remote_device(btif_hf_channel_t* chan_h);
 bt_status_t btif_hf_send_audio_data(btif_hf_channel_t* chan_h, btif_bt_packet_t *packet);
 bt_status_t btif_hf_is_inbandring_enabled(btif_hf_channel_t* chan_h);
 bool btif_hfp_is_profile_initiator(const bt_bdaddr_t* remote);
-bool btif_hfp_profile_connecting(const bt_bdaddr_t *bdaddr_p);
+bool btif_hfp_profile_is_connecting(const bt_bdaddr_t *bdaddr_p);
 bool btif_hf_is_virtual_call_enabled(btif_hf_channel_t* chan_h);
 void btif_hf_set_virtual_call_enable(btif_hf_channel_t* chan_h);
 void btif_hf_set_virtual_call_disable(btif_hf_channel_t* chan_h);
@@ -253,6 +252,26 @@ void btif_hfp_aud_discon_report_callback_deregister(void);
 void btif_hfp_report_user_audio_play_stop_status(void);
 
 bool btif_hfp_remote_support_codec_negotiation(btif_hf_channel_t* chan_h);
+
+bt_status_t btif_hsp_register_service(void);
+
+bt_status_t btif_hsp_unregister_service(void);
+
+/**
+ * @brief Register a custom AT command that needs front header fixing
+ *
+ * This function registers an AT command to the global list so that when it's received,
+ * the HFP module will know to fix its front header. The command is stored with proper
+ * bounds checking to prevent buffer overflow.
+ *
+ * @param at_cmd      Pointer to the AT command string to register, shuold include '\0'
+ * @param at_cmd_len  Length of the AT command string, don't include '\0' —— like strlen(at_cmd)
+ *
+ * @note The AT command will be truncated if it exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_LENGTH
+ * @note If the list is full (exceeds HFP_FIX_RECEIVED_CUSTOM_AT_CMD_MAX_NUMBER), the command is discarded
+ */
+void btif_hfp_register_custom_at_cmd_to_fill_front_header(const char* at_cmd, uint8_t at_cmd_len);
+
 #ifdef __cplusplus
 }
 #endif

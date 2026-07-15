@@ -151,46 +151,39 @@ bt_status_t ble_datapath_client_write_req(uint16_t connhdl,
 
 static void ble_datapath_client_conn_handler(dpc_prf_t *prf)
 {
-    uint8_t conidx = gap_zero_based_conidx(prf->head.con_idx);
-
-    ble_datapath_client_start_discover(conidx);
+    ble_datapath_client_start_discover(prf->head.con_idx);
 
     if(dpc_client_cb && dpc_client_cb->dpc_connected_done_cb)
     {
-        dpc_client_cb->dpc_connected_done_cb(conidx);
+        dpc_client_cb->dpc_connected_done_cb(prf->head.con_idx);
     }
 }
 
 static void ble_datapath_client_disconn_handler(dpc_prf_t *prf)
 {
-    uint8_t conidx = gap_zero_based_conidx(prf->head.con_idx);
-
     if(dpc_client_cb && dpc_client_cb->dpc_disconnected_done_cb)
     {
-        dpc_client_cb->dpc_disconnected_done_cb(conidx);
+        dpc_client_cb->dpc_disconnected_done_cb(prf->head.con_idx);
     }
 }
 
 static void ble_datapath_client_mtu_changed(dpc_prf_t *prf, uint16_t mtu)
 {
-    uint8_t conidx = gap_zero_based_conidx(prf->head.con_idx);
-
     if(dpc_client_cb && dpc_client_cb->dpc_mtu_exchanged_done_cb)
     {
-        dpc_client_cb->dpc_mtu_exchanged_done_cb(conidx, mtu);
+        dpc_client_cb->dpc_mtu_exchanged_done_cb(prf->head.con_idx, mtu);
     }
 }
 
 static void ble_datapath_client_discover_complete(dpc_prf_t *prf)
 {
-    uint8_t conidx = gap_zero_based_conidx(prf->head.con_idx);
     uint8_t value[2] = {0x01, 00};
 
     ble_datapath_client_write_req(prf->head.connhdl, DPC_CHAR_DATA_RX, false, value, 2);
 
     if(dpc_client_cb && dpc_client_cb->dpc_discover_done_cb)
     {
-        dpc_client_cb->dpc_discover_done_cb(conidx);
+        dpc_client_cb->dpc_discover_done_cb(prf->head.con_idx);
     }
 }
 
@@ -265,8 +258,6 @@ static void ble_datapath_client_char_write_complete(dpc_prf_t *prf,
                                                     uint8_t error_code,
                                                     const gatt_peer_character_t *c)
 {
-    uint8_t conidx = gap_zero_based_conidx(prf->head.con_idx);
-
     if (error_code)
     {
         DEBUG_INFO(0, "%s err_code %d", __func__, error_code);
@@ -274,7 +265,7 @@ static void ble_datapath_client_char_write_complete(dpc_prf_t *prf,
 
     if(dpc_client_cb && dpc_client_cb->dpc_tx_done_cb)
     {
-        dpc_client_cb->dpc_tx_done_cb(conidx, error_code);
+        dpc_client_cb->dpc_tx_done_cb(prf->head.con_idx, error_code);
     }
 }
 
@@ -290,8 +281,6 @@ static void ble_datapath_client_rx_data_received(dpc_prf_t *prf,
                                                  const gatt_peer_character_t *c,
                                                  const uint8_t *value, uint16_t len)
 {
-    uint8_t conidx = gap_zero_based_conidx(prf->head.con_idx);
-
     // DEBUG_INFO(0, "%s len %d", __func__, len);
     // DUMP8("%02x ", value, len);
     #ifndef __INTERCONNECTION__
@@ -299,7 +288,7 @@ static void ble_datapath_client_rx_data_received(dpc_prf_t *prf,
     #endif
     if(dpc_client_cb && dpc_client_cb->dpc_data_received_cb)
     {
-        dpc_client_cb->dpc_data_received_cb(conidx, value, len);
+        dpc_client_cb->dpc_data_received_cb(prf->head.con_idx, value, len);
     }
 }
 

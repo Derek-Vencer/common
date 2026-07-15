@@ -70,13 +70,10 @@ ccflags-y +=  \
     -Iapps/dsp_m55 \
     -Iplatform/drivers/cp_accel \
     -Iservices/audio_manager \
-    -Ibthost/service/ble_app_new/inc \
-    -Imultimedia/inc \
+	-Ibthost/service/ble_app_new/inc \
+	-Imultimedia/inc \
     -Imultimedia/inc/speech/inc \
-    -Iapps/earbuds/conn \
-    -Iservices/aiwang_services \
-    
-    
+    -Iapps/earbuds/conn
 
 ifeq ($(BISTO_ENABLE),1)
 ccflags-y += \
@@ -181,7 +178,6 @@ CFLAGS_apps.o += -DMEDIA_PLAYER_SUPPORT
 endif
 
 ifeq ($(ENGINEER_MODE),1)
-$(warning ENGINEER_MODE)
 CFLAGS_apps.o += -D__ENGINEER_MODE_SUPPORT__
 endif
 

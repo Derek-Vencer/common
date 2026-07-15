@@ -22,15 +22,12 @@
 #include "twsui_uart.h"
 #endif
 
-#include "charger_with_icp1205.h"
-
 #if defined(CHIP_BEST2300P) || defined(CHIP_BEST2300A) || (defined(CHIP_BEST1501) && defined(SINGLE_WIRE_UART_PMU_1803))
 #define UART_DEVICE_UART2
 #elif defined(CHIP_BEST1600) && defined(SINGLE_WIRE_UART_PMU_1803)
 #define UART_DEVICE_UART0
 #endif
 
-void communication_enable_irq(void (* irq_cb)(enum HAL_GPIO_PIN_T pin));
 //======================================================================================================
 
 enum COMMUNICATION_MSG {
@@ -42,11 +39,9 @@ enum COMMUNICATION_MSG {
     COMMUNICATION_MSG_REINIT   = 5,
     COMMUNICATION_MSG_RESET    = 6,
     COMMUNICATION_MSG_BREAK    = 7,
-    COMMUNICATION_MSG_STOP    = 8,
-    COMMUNICATION_MSG_CHARGER1205 = 9,
 };
 
-const static uint8_t communication_process_log[10][26] = {
+const static uint8_t communication_process_log[8][26] = {
     "COMMUNICATION_MSG_TX_REQ",
     "COMMUNICATION_MSG_TX_DONE",
     "COMMUNICATION_MSG_RX_REQ",
@@ -55,11 +50,10 @@ const static uint8_t communication_process_log[10][26] = {
     "COMMUNICATION_MSG_REINIT",
     "COMMUNICATION_MSG_RESET",
     "COMMUNICATION_MSG_BREAK",
-	"COMMUNICATION_MSG_STOP",
 };
 
 enum COMMUNICATION_MODE {
-    COMMUNICATION_MODE_NULL = 0,
+    COMMUNICATION_MODE_NULL,
     COMMUNICATION_MODE_TX,
     COMMUNICATION_MODE_RX,
     COMMUNICATION_MODE_ENABLE_IRQ,
@@ -68,7 +62,7 @@ enum COMMUNICATION_MODE {
 
 
 #define COMMAND_BLOCK_MAX (5)
-#define COMMAND_LEN_MAX   (64) //(128)
+#define COMMAND_LEN_MAX (128)
 #define COMMAND_TRANSMITTED_SIGNAL (1<<0)
 
 typedef struct {
@@ -91,7 +85,7 @@ typedef struct {
 osMailQDef (communication_mailbox, COMMUNICATION_MAILBOX_MAX, COMMUNICATION_MAIL);
 static osMailQId communication_mailbox = NULL;
 static uint8_t communication_mailbox_cnt = 0;
-static bool    communication_init_ok  = false;
+
 
 static osThreadId communication_tid = NULL;
 static void communication_thread(void const *argument);
@@ -121,7 +115,7 @@ static const struct HAL_UART_CFG_T uart_cfg = {
 #ifdef BESUI_1WIRE_EN
  	38400,
 #else
-	38400,//921600,
+    921600,
 #endif
 #endif
     true,
@@ -145,20 +139,15 @@ static void communication_process(COMMUNICATION_MAIL* mail_p);
 int communication_io_mode_switch(enum COMMUNICATION_MODE mode);
 
 extern "C" {
-//WEAK void hal_iomux_single_wire_uart_rx(uint32_t uart)
-//{
-//    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
-//}
-//
-//WEAK void hal_iomux_single_wire_uart_tx(uint32_t uart)
-//{
-//    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
-//}
-void hal_iomux_single_wire_uart_rx(uint32_t uart);
+WEAK void hal_iomux_single_wire_uart_rx(uint32_t uart)
+{
+    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
+}
 
-
-void hal_iomux_single_wire_uart_tx(uint32_t uart);
-
+WEAK void hal_iomux_single_wire_uart_tx(uint32_t uart)
+{
+    ASSERT(false, "Please implement API %s in hal_iomux_xxx.c", __func__);
+}
 }
 
 static void communication_set_tx_mode(void)
@@ -222,14 +211,13 @@ static void uart_rx_dma_handler(uint32_t xfer_size, int dma_error, union HAL_UAR
 {
     COMMUNICATION_MAIL msg;
 
-    COMMUNICATION_TRACE(1,"UART-RX size:%d dma_error=%d, status rt:%d fe:%d pe:%d be:%d oe:%d", xfer_size, dma_error, status.RT, status.FE, status.PE, status.BE, status.OE);
+    //COMMUNICATION_TRACE(8,"UART-RX size:%d dma_error=%d, status rt:%d fe:%d pe:%d be:%d oe:%d", xfer_size, dma_error, status.RT, status.FE, status.PE, status.BE, status.OE);
 
     if (status.BE) {
         uart_break_handler();
         return;
     }
 
-//printf("@@@@@@@@uart_rx_dma_handler");
     memset(&msg, 0, sizeof(COMMUNICATION_MAIL));
     msg.message = COMMUNICATION_MSG_RX_DONE;
 
@@ -258,7 +246,7 @@ static void uart_tx_dma_handler(uint32_t xfer_size, int dma_error)
 
     memset(&msg, 0, sizeof(COMMUNICATION_MAIL));
 
-    COMMUNICATION_TRACE(1,"UART-TX size:%d dma_error=%d", xfer_size, dma_error);
+    //COMMUNICATION_TRACE(2,"UART-TX size:%d dma_error=%d", xfer_size, dma_error);
 
     osSignalSet(communication_tid, COMMAND_TRANSMITTED_SIGNAL);
 
@@ -270,7 +258,7 @@ static void uart_tx_dma_handler(uint32_t xfer_size, int dma_error)
 static void uart_init(void)
 {
     struct HAL_UART_CFG_T comm_uart_cfg;
-    //COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
+
     if (!uart_opened) {
         memcpy(&comm_uart_cfg, &uart_cfg, sizeof(comm_uart_cfg));
         hal_uart_open(comm_uart, &comm_uart_cfg);
@@ -283,30 +271,31 @@ static void uart_init(void)
 
 static void uart_deinit(void)
 {
-	//COMMUNICATION_TRACE(1,"[%s] enter %d ...", __func__, uart_opened);
     if (uart_opened) {
         hal_uart_close(comm_uart);
         uart_opened = false;
     }
 }
 
-POSSIBLY_UNUSED static void uart_rx_idle_timer_start(void)
+static void uart_rx_idle_timer_start(void)
 {
     uart_rx_idle_counter = 0;
-    //COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+    COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
 
     if (uart_rx_idle_timer_id != NULL) {
         osTimerStop(uart_rx_idle_timer_id);
-        //osTimerStart(uart_rx_idle_timer_id, 100);
+        osTimerStart(uart_rx_idle_timer_id, 100);
     }
 }
 
 static void uart_rx_edge_detect_handler(enum HAL_GPIO_PIN_T pin)
 {
     COMMUNICATION_MAIL msg = {0};
-    //COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+    COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+
     //disable led2 pin external interrupt mode...
     communication_io_mode_switch(COMMUNICATION_MODE_DISABLE_IRQ);
+
     //post uart rx request...
     msg.message = COMMUNICATION_MSG_RX_REQ;
     communication_mailbox_put(&msg);
@@ -314,15 +303,12 @@ static void uart_rx_edge_detect_handler(enum HAL_GPIO_PIN_T pin)
 
 static void uart_rx_idle_handler(void const *param)
 {
-
 #ifdef BESUI_1WIRE_EN
 	return;
 #endif
-	return;
-
     if(uart_rx_idle_counter++ >= 150)//150 * 100 = 15s
     {
-        //COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
+        COMMUNICATION_TRACE(1,"[%s] enter...", __func__);
 
         uart_rx_idle_counter = 0;
 
@@ -337,22 +323,9 @@ static void uart_rx_idle_handler(void const *param)
     }
 }
 
-void communication_stop(void){
-    if (uart_rx_idle_timer_id != NULL) {
-        osTimerStop(uart_rx_idle_timer_id);
-    }
-    if (communication_init_ok)
-    {
-        COMMUNICATION_MAIL msg;
-        msg.message = COMMUNICATION_MSG_STOP;
-        communication_mailbox_put(&msg);
-        communication_init_ok = false;
-    }
-}
 int communication_io_mode_switch(enum COMMUNICATION_MODE mode)
 {
     //best1400 and best1402 platform
-	COMMUNICATION_TRACE(0,"%s mode=%d", __func__, mode);
     switch (mode)
     {
         case COMMUNICATION_MODE_TX: {
@@ -378,7 +351,6 @@ int communication_io_mode_switch(enum COMMUNICATION_MODE mode)
 
 int communication_io_mode_init(void)
 {
-
 #if defined(CHIP_BEST2300P)
     const struct HAL_IOMUX_PIN_FUNCTION_MAP POSSIBLY_UNUSED pinmux_uart[] = {
         {HAL_IOMUX_PIN_P2_2, HAL_IOMUX_FUNC_GPIO, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
@@ -409,7 +381,7 @@ inline int communication_mailbox_put(COMMUNICATION_MAIL* msg_src)
     mail_p = (COMMUNICATION_MAIL*)osMailAlloc(communication_mailbox, 0);
     if (!mail_p){
         osEvent evt;
-        //COMMUNICATION_TRACE(0,"communication_mailbox");
+        COMMUNICATION_TRACE(0,"communication_mailbox");
         for (uint8_t i=0; i<COMMUNICATION_MAILBOX_MAX; i++){
             evt = osMailGet(communication_mailbox, 0);
             if (evt.status == osEventMail) {
@@ -465,11 +437,6 @@ static void communication_thread(void const *argument)
         if (!communication_mailbox_get(&mail_p)){
             communication_process(mail_p);
             communication_mailbox_free(mail_p);
-			if(mail_p->message == COMMUNICATION_MSG_STOP)
-			{
-				communication_tid = NULL;
-				break;
-			}
         }
     }
 }
@@ -574,35 +541,7 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
             int_unlock(lock);
             uart_rx_idle_timer_start();
             break;
-        case COMMUNICATION_MSG_STOP:
-			#if 1
-            lock = int_lock();
-			uart_deinit();
-            uart_rx_dma_stop();
-			communication_io_mode_switch(COMMUNICATION_MODE_RX);
-            hal_uart_flush(comm_uart, 0);
-            uart_error_detected = 0;
-            int_unlock(lock);
-            osThreadYield();
 
-			osDelay(200);
-			uart_init();
-			osDelay(200);
-			uart_deinit(); 
-			#else
-			lock = int_lock();
-            uart_rx_dma_stop();
-            communication_io_mode_switch(COMMUNICATION_MODE_RX);
-            hal_uart_flush(comm_uart, 0);
-            uart_rx_dma_start();
-            uart_error_detected = 0;
-            int_unlock(lock);
-            uart_rx_idle_timer_start();
-		#endif	
-            break;
-		case COMMUNICATION_MSG_CHARGER1205:
-			handle_batter_1205();
-			break;
         default:
             break;
     }
@@ -624,27 +563,17 @@ void communication_init(void)
         communication_mailbox = osMailCreate(osMailQ(communication_mailbox), NULL);
     }
 
+    if (communication_tid == NULL){
+        communication_tid = osThreadCreate(osThread(communication_thread), NULL);
+    }
+
     if (rx_command_block_p == NULL){
         communication_command_block_alloc(&rx_command_block_p);
         memset(rx_command_block_p->cmd_buf, 0, COMMAND_LEN_MAX);
         rx_command_block_p->cmd_len = 0;
     }
 
-    if (communication_tid == NULL){
-        communication_tid = osThreadCreate(osThread(communication_thread), NULL);
-    }
-	if (communication_init_ok == false){
-	    communication_init_ok = true;
-	    msg.message = COMMUNICATION_MSG_INIT;
-	    communication_mailbox_put(&msg);
-	}
-}
-
-void communication_batter1205(void)
-{
-    COMMUNICATION_MAIL msg;
-	memset(&msg, 0, sizeof(COMMUNICATION_MAIL));
-	msg.message = COMMUNICATION_MSG_CHARGER1205;
+    msg.message = COMMUNICATION_MSG_INIT;
     communication_mailbox_put(&msg);
 }
 
@@ -663,11 +592,7 @@ int communication_receive_register_callback(communication_receive_func_typedef p
 int communication_send_buf(uint8_t * buf, uint8_t len)
 {
     COMMAND_BLOCK *cmd_blk;
-    if (!uart_opened) {
-    	COMMUNICATION_TRACE(0,"[%s] not init\n", __func__);
-    	return -1;
-    }
-    COMMUNICATION_TRACE(0,"[%s] %d\n", __func__, len);
+
     communication_command_block_alloc(&cmd_blk);
     memcpy(cmd_blk->cmd_buf, buf, len);
     cmd_blk->cmd_len = len;
@@ -735,7 +660,7 @@ void communication_enable_irq(void (* irq_cb)(enum HAL_GPIO_PIN_T pin))
     if (ARRAY_SIZE(pinmux_gpio) == 0) {
         return;
     }
-    COMMUNICATION_TRACE(1,"%s", __func__);
+
     hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)pinmux_gpio, ARRAY_SIZE(pinmux_gpio));
     hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)pinmux_gpio[0].pin, HAL_GPIO_DIR_IN, 0);
 

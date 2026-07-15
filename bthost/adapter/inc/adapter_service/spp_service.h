@@ -137,6 +137,7 @@ typedef enum {
     BT_SPP_EVENT_RX_DATA,
     BT_SPP_EVENT_ACCEPT,
     BT_SPP_EVENT_GIVE_CREDITS,
+    BT_SPP_EVENT_CHECK_FCS_FAILED,
     BT_SPP_EVENT_END,
 } bt_spp_event_t;
 

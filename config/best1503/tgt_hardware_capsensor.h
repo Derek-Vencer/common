@@ -32,7 +32,7 @@ extern "C" {
 #define CAP_CLK_DIV          20  /* clk_samp_fs = clk/(CAP_CLK_DIV+2): 591K = 13M/(CAP_CLK_DIV + 2) */
 
 #define CAPSENSOR_USE_RC           1
-#define ONE_CH_SAMPLE_TIME_MS      ((1.0f / 333333.3f) * 96 * 8) /* one ch sampling time, eg: 1/333.3k*96*8 = 2.304ms */
+#define ONE_CH_SAMPLE_TIME_MS      ((1.0f / 333.3333f) * 96 * 8) /* one ch sampling time, eg: 1/333.3k*96*8 = 2.304ms */
 
 #define CAP_USED_TOUCH_NUM   3      /* slide_num */
 #define CAP_USED_WEAR_NUM    4      /* wear_num */

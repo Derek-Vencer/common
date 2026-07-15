@@ -46,7 +46,6 @@ const struct HAL_IOMUX_PIN_FUNCTION_MAP cfg_hw_pinmux_pwl[CFG_HW_PWL_NUM] = {
 #endif
 
 #ifdef __APP_USE_LED_INDICATE_IBRT_STATUS__
-#error __APP_USE_LED_INDICATE_IBRT_STATUS__
 const struct HAL_IOMUX_PIN_FUNCTION_MAP cfg_ibrt_indication_pinmux_pwl[3] = {
     {HAL_IOMUX_PIN_P1_5, HAL_IOMUX_FUNC_AS_GPIO, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
     {HAL_IOMUX_PIN_LED1, HAL_IOMUX_FUNC_AS_GPIO, HAL_IOMUX_PIN_VOLTAGE_VBAT, HAL_IOMUX_PIN_PULLUP_ENABLE},
@@ -150,7 +149,6 @@ const struct CODEC_DAC_VOL_T codec_dac_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, 0}, // 0dBm
 };
 
-#if 0
 const struct CODEC_DAC_VOL_T codec_dac_a2dp_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, -99},
     {TX_PA_GAIN, 0x03, -45},
@@ -170,30 +168,6 @@ const struct CODEC_DAC_VOL_T codec_dac_a2dp_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, -3},
     {TX_PA_GAIN, 0x03, 0}, // 0dBm
 };
-#else
-//added for decrease 2Db
-//20260319
-const struct CODEC_DAC_VOL_T codec_dac_a2dp_vol[TGT_VOLUME_LEVEL_QTY] = {
-	{TX_PA_GAIN, 0x03, -99},
-    {TX_PA_GAIN, 0x03, -47},
-    {TX_PA_GAIN, 0x03, -44},
-    {TX_PA_GAIN, 0x03, -41},
-    {TX_PA_GAIN, 0x03, -38},
-    {TX_PA_GAIN, 0x03, -35},
-    {TX_PA_GAIN, 0x03, -32},
-    {TX_PA_GAIN, 0x03, -29},
-    {TX_PA_GAIN, 0x03, -26},
-    {TX_PA_GAIN, 0x03, -23},
-    {TX_PA_GAIN, 0x03, -20},
-    {TX_PA_GAIN, 0x03, -17},
-    {TX_PA_GAIN, 0x03, -14},
-    {TX_PA_GAIN, 0x03, -11},
-    {TX_PA_GAIN, 0x03, -8},
-    {TX_PA_GAIN, 0x03, -5},
-    {TX_PA_GAIN, 0x03, -2},
-};
-
-#endif
 
 const struct CODEC_DAC_VOL_T codec_dac_hfp_vol[TGT_VOLUME_LEVEL_QTY] = {
     {TX_PA_GAIN, 0x03, -99},
@@ -222,13 +196,10 @@ const struct CODEC_DAC_VOL_T codec_dac_hfp_vol[TGT_VOLUME_LEVEL_QTY] = {
 #endif
 
 #if SPEECH_CODEC_CAPTURE_CHANNEL_NUM == 2
-#error SPEECH_CODEC_CAPTURE_CHANNEL_NUM
 #define CFG_HW_AUD_INPUT_PATH_MAINMIC_DEV   (AUD_CHANNEL_MAP_CH0 | AUD_CHANNEL_MAP_CH1 | VMIC_MAP_CFG)
 #elif SPEECH_CODEC_CAPTURE_CHANNEL_NUM == 3
-#error SPEECH_CODEC_CAPTURE_CHANNEL_NUM 3
 #define CFG_HW_AUD_INPUT_PATH_MAINMIC_DEV   (AUD_CHANNEL_MAP_CH0 | AUD_CHANNEL_MAP_CH1 | AUD_CHANNEL_MAP_CH2 | VMIC_MAP_CFG)
 #else
-//#error SPEECH_CODEC_CAPTURE_CHANNEL_NUM 1
 #define CFG_HW_AUD_INPUT_PATH_MAINMIC_DEV   (AUD_CHANNEL_MAP_CH0 | VMIC_MAP_CFG)
 #endif
 
@@ -247,12 +218,10 @@ const struct CODEC_DAC_VOL_T codec_dac_hfp_vol[TGT_VOLUME_LEVEL_QTY] = {
 
 const struct AUD_IO_PATH_CFG_T cfg_audio_input_path_cfg[CFG_HW_AUD_INPUT_PATH_NUM] = {
 #if defined(SPEECH_TX_AEC_CODEC_REF)
-//#error SPEECH_TX_AEC_CODEC_REF 1
     // NOTE: If enable Ch5 and CH6, need to add channel_num when setup audioflinger stream
     { AUD_INPUT_PATH_MAINMIC, CFG_HW_AUD_INPUT_PATH_MAINMIC_DEV | AUD_CHANNEL_MAP_ECMIC_CH0, },
 #else
-#error SPEECH_TX_AEC_CODEC_REF 2
-    { AUD_INPUT_PATH_MAINMIC, CFG_HW_AUD_INPUT_PATH_MAINMIC_DEV | AUD_CHANNEL_MAP_ECMIC_CH0, },
+    { AUD_INPUT_PATH_MAINMIC, CFG_HW_AUD_INPUT_PATH_MAINMIC_DEV, },
 #endif
     { AUD_INPUT_PATH_LINEIN,  CFG_HW_AUD_INPUT_PATH_LINEIN_DEV, },
 #ifdef VOICE_DETECTOR_SENS_EN

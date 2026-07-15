@@ -62,7 +62,6 @@
 #endif
 
 #include "besui_hfp.h"
-#include "app_ibrt_internal.h"
 
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 extern "C" int32_t bt_sco_chain_bypass_tx_algo(uint32_t sel_ch);
@@ -208,7 +207,6 @@ void app_at_cmd_at_ship_mode_handle(uint8_t device_id)
     uictl.poweroff_fast_flag = true;
 #endif
     uictl.shutdown_type = SHUTDOWN_SHIP_MODE;
-    BESUI_TRACE(0,"SHUTDOWN_SHIP_MODE");
     app_shutdown();
 }
 

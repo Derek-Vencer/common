@@ -6,7 +6,7 @@ cur_dir := $(dir $(lastword $(MAKEFILE_LIST)))
 export BT_SVC_THREAD_STACK_SIZE ?= 3*1024
 KBUILD_CPPFLAGS += -DBT_SVC_THREAD_STACK_SIZE=$(BT_SVC_THREAD_STACK_SIZE)
 
-export BT_SERVICE_HEAP_SIZE ?= 2*1024
+export BT_SERVICE_HEAP_SIZE ?= 3*1024
 KBUILD_CPPFLAGS += -DBT_SERVICE_HEAP_SIZE=$(BT_SERVICE_HEAP_SIZE)
 
 #——————————————————————————————————————————————

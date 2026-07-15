@@ -307,7 +307,7 @@ enum sound_id {
     BT_ANSWER,
     BT_HUNG_UP,
     BT_INCOMING_CALL,
-    BATTERY_LOW,
+    CHARGE_PLEASE,
     CHARGE_FINISH,
     BT_CONNECTED,
     BT_DIS_CONNECT,
@@ -323,8 +323,6 @@ enum sound_id {
 
     LANGUAGE_SWITCH,
     BT_MUTE,
-	BT_1K_TONE,
-
 #ifdef __BT_WARNING_TONE_MERGE_INTO_STREAM_SBC__
     RES_AUD_RING_SAMPRATE_16000,
 #endif
@@ -395,7 +393,7 @@ static const media_sound_map_t media_sound_map_cn[] =
     SOUND_ITEM_DEF(CN_, BT_ANSWER),
     SOUND_ITEM_DEF(CN_, BT_HUNG_UP),
     SOUND_ITEM_DEF(CN_, BT_INCOMING_CALL),
-    SOUND_ITEM_DEF(CN_, BATTERY_LOW),
+    SOUND_ITEM_DEF(CN_, CHARGE_PLEASE),
     SOUND_ITEM_DEF(CN_, CHARGE_FINISH),
     SOUND_ITEM_DEF(CN_, BT_CONNECTED),
     SOUND_ITEM_DEF(CN_, BT_DIS_CONNECT),
@@ -451,7 +449,7 @@ static const media_sound_map_t media_sound_map_en[] =
     SOUND_ITEM_DEF(EN_, BT_ANSWER),
     SOUND_ITEM_DEF(EN_, BT_HUNG_UP),
     SOUND_ITEM_DEF(EN_, BT_INCOMING_CALL),
-    SOUND_ITEM_DEF(EN_, BATTERY_LOW),
+    SOUND_ITEM_DEF(EN_, CHARGE_PLEASE),
     SOUND_ITEM_DEF(EN_, CHARGE_FINISH),
     SOUND_ITEM_DEF(EN_, BT_CONNECTED),
     SOUND_ITEM_DEF(EN_, BT_DIS_CONNECT),
@@ -467,7 +465,6 @@ static const media_sound_map_t media_sound_map_en[] =
 
     SOUND_ITEM_DEF(EN_, LANGUAGE_SWITCH),
     SOUND_ITEM_DEF(EN_, BT_MUTE),
-    SOUND_ITEM_DEF(EN_, BT_1K_TONE),
 #ifdef __BT_WARNING_TONE_MERGE_INTO_STREAM_SBC__
     SOUND_ITEM_DEF(EN_, RES_AUD_RING_SAMPRATE_16000),
 #endif
@@ -1071,8 +1068,6 @@ void media_PlayAudio_single_play(AUD_ID_ENUM id,uint8_t device_id)
 
 void media_PlayAudio(AUD_ID_ENUM id,uint8_t device_id)
 {
-
-	 AUDIO_BT_TRACE(1,"[UIAPP]%s,id:%d,dev_id:%d",__func__,id,device_id);
 #ifdef BESUI_COMM_EN
     if(uictl.poweroff_start_flag)
     {
@@ -1646,8 +1641,8 @@ void media_runtime_audio_prompt_update(uint16_t id, uint8_t** ptr, uint32_t* len
 #endif
         get_sound_id_info(BT_INCOMING_CALL, &sound_data, &length);
         break;
-    case AUD_ID_BT_BATTERY_LOW:
-        get_sound_id_info(BATTERY_LOW, &sound_data, &length);
+    case AUD_ID_BT_CHARGE_PLEASE:
+        get_sound_id_info(CHARGE_PLEASE, &sound_data, &length);
         break;
     case AUD_ID_BT_CHARGE_FINISH:
         get_sound_id_info(CHARGE_FINISH, &sound_data, &length);
@@ -1811,9 +1806,6 @@ void media_runtime_audio_prompt_update(uint16_t id, uint8_t** ptr, uint32_t* len
 #endif //#ifdef BESUI_TWS_EN
 //----------------------------------------------------------------------------------------
 
-    case AUD_ID_TONE_1K:
-    	get_sound_id_info(BT_1K_TONE, &sound_data, &length);
-    	break;
 
     default:
         g_app_audio_length = 0;

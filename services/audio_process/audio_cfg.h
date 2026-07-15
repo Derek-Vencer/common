@@ -44,8 +44,7 @@ int store_audio_cfg_into_audio_section(AUDIO_CFG_T *cfg);
 void *load_audio_cfg_from_audio_section(enum AUDIO_PROCESS_TYPE_T type, uint8_t index);
 void audio_cfg_get_eq_section_info(uint32_t *startAddr, uint32_t *length, uint16_t *version);
 void *audio_cfg_get_default_audio_section(void);
-void ntt_dut_speech_tx_1mic_ns_bypass_set(uint8_t enable);
-uint8_t ntt_dut_speech_tx_1mic_ns_bypass_get(void);
+
 #ifdef __cplusplus
 }
 #endif

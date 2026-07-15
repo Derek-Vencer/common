@@ -7,8 +7,8 @@ split -a3 -d -b 131072 $1
 echo -e -n "\xff\xff\xff\xff" > magic.bin
 echo "CRC32_OF_IMAGE=0x00000000" > crc.bin
 cp magic.bin $2
-#for file in `ls x0??`;
-for file in x0??;do
+for file in `ls x0??`;
+do
     echo "compressing $file"
     lzma -z -k -f -9 $file
     isize=`stat -c %s $file.lzma`

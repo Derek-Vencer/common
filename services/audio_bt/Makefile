@@ -94,9 +94,7 @@ ccflags-y += \
 	-Iservices/bt_watch_service/inc \
     -Iservices/audio_manager\
 	-Iservices/audio_manager/audio_policy/bredr_policy/inc \
-	-Ibthost/service/ble_app_new/inc \
-	-Iapps/earbuds/conn \
-	
+	-Ibthost/service/ble_app_new/inc
 
 ifeq ($(GFPS_ENABLE),1)
 ccflags-y += \
@@ -259,7 +257,6 @@ CFLAGS_app_bt_stream.o += -D__SW_IIR_EQ_PROCESS__
 endif
 
 ifeq ($(HW_DAC_IIR_EQ_PROCESS),1)
-$(info enable HW_DAC_IIR_EQ_PROCESS)
 CFLAGS_app_bt_stream.o += -D__HW_DAC_IIR_EQ_PROCESS__
 endif
 
@@ -378,6 +375,10 @@ endif
 
 ifeq ($(AUDIO_OUTPUT_SW_GAIN_BEFORE_DRC),1)
 CFLAGS_app_bt_stream.o += -DAUDIO_OUTPUT_SW_GAIN_BEFORE_DRC
+endif
+
+ifeq ($(SPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO),1)
+CFLAGS_app_bt_stream.o += -DSPEECH_OUTPUT_SW_GAIN_BEFORE_ALGO
 endif
 
 ifeq ($(PROMPT_CTRL_ANC),1)

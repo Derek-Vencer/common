@@ -60,7 +60,6 @@ void app_factory_change_dst_mtu(const char* cmd, uint32_t cmd_len);
 bool app_factory_reboot(void);
 void app_factory_run_next_nonsignalingtest(void);
 void app_factory_tota_nonsignalingtest_handler(void);
-void app_factorymode_exit(APP_KEY_STATUS *status, void *param);
 
 #ifdef BESUI_TWS_EN
 uint8_t bt_test_mode_dut_get(void);

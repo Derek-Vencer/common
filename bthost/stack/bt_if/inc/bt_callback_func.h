@@ -58,7 +58,6 @@ struct BT_CALLBACK_FUNC_T {
     bt_spp_callback_t ibrt_spp_app_callback;
     bt_hci_cmd_status_callback_t bt_hci_cmd_status_callback;
     bt_hci_cmd_status_callback_t tws_hci_cmd_status_callback;
-    btif_event_callback_t bt_acl_disconnect_callback;
     btif_event_callback_t tws_acl_disconnect_callback;
     bt_get_ibrt_handle_callback_t get_ibrt_hci_handle_callback;
     bt_a2dp_stream_command_pack_callback_t avdtp_stream_command_accept_pack;
@@ -164,7 +163,6 @@ void bt_callback_set_device_support_le_audio(const bt_bdaddr_t *remote);
 void bt_callback_bredr_smp_req_callback_func(uint8 device_id, uint16 conn_handle, uint16 len, uint8 *data);
 int bt_callback_ibrt_spp_callback(const bt_bdaddr_t *remote, bt_spp_event_t event, bt_spp_callback_param_t *param);
 void bt_callback_ibrt_hci_cmd_status(const void *para);
-void bt_callback_ibrt_disconnect_handler(const btif_event_t *);
 uint16_t bt_callback_get_ibrt_hci_handle(const bt_bdaddr_t* remote);
 int bt_callback_ibrt_a2dp_stream_command_pack(void* remote, uint8_t transaction, uint8_t signal_id);
 void bt_callback_hf_sco_codec_info_sync_callback(const bt_bdaddr_t* remote, uint8_t codec);

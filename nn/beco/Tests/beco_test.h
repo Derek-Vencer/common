@@ -29,7 +29,6 @@
 #ifndef TRACE
 #define TRACE(attr, str, ...)   TR_INFO(attr, str, ##__VA_ARGS__)
 #endif
-
 #ifndef TRACE_FLUSH
 #define TRACE_FLUSH()           NORM_LOG_FLUSH()
 #endif

@@ -109,8 +109,8 @@ const uint8_t CN_BT_DIS_CONNECT [] = {
 #include "res/cn/SOUND_DIS_CONNECT.txt"
 };
 
-const uint8_t CN_BATTERY_LOW[] = {
-#include "res/cn/SOUND_BATTERY_LOW.txt"
+const uint8_t CN_CHARGE_PLEASE[] = {
+#include "res/cn/SOUND_CHARGE_PLEASE.txt"
 };
 
 const uint8_t CN_CHARGE_FINISH[] = {
@@ -158,10 +158,6 @@ const uint8_t CN_BT_FINDME[] = {
 /*doesn't have chinese version sound mute */
 const uint8_t CN_BT_MUTE[] = {
 #include "res/SOUND_MUTE.txt"
-};
-
-const uint8_t EN_BT_1K_TONE[] = {
-#include "res/1K_0dB_Tone_100ms_16000.txt"
 };
 
 #endif

@@ -5971,7 +5971,6 @@ void hal_sdmmc_dump(enum HAL_SDMMC_ID_T id)
     HAL_TRACE(TR_ATTR_NO_LF, "[capacity_user]                  : 0x%X", (uint32_t)(mmc->capacity >> 32)); //high 4bytes
     HAL_TRACE(TR_ATTR_NO_TS | TR_ATTR_NO_ID, "%X", (uint32_t)(mmc->capacity));                            //low 4bytes
     uint32_t capacity_user = (uint32_t)(mmc->capacity_user / 1024 / 1024);
-    (void)capacity_user;
     HAL_TRACE(1, "[capacity_user/1024/1024/1024]   : %d.%dGB", capacity_user / 1024, capacity_user * 100 / 1024 % 100);
     HAL_TRACE(1, "[read_bl_len]                    : %d", mmc->read_bl_len);
     HAL_TRACE(1, "[write_bl_len]                   : %d", mmc->write_bl_len);
@@ -6482,7 +6481,6 @@ enum HAL_SDMMC_ERR hal_sdmmc_send_stop(enum HAL_SDMMC_ID_T id)
 void hal_sdmmc_dump_reg(enum HAL_SDMMC_ID_T id)
 {
     struct sdmmc_ip_host *host = &sdmmc_host[id];
-    (void)host;
 
     HAL_TRACE(0, "%s", __func__);
     HAL_TRACE(0, "read reg[%02X]:0x%X", SDMMCIP_REG_CTRL,       sdmmc_ip_readl(host, SDMMCIP_REG_CTRL));

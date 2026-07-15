@@ -45,8 +45,8 @@ const uint8_t EN_BT_CONNECTED [] = {
 #include "res/en/voice_tws/SOUND_CONNECTED.txt"
 };
 
-const uint8_t EN_BATTERY_LOW[] = {
-#include "res/en/voice_tws/SOUND_BATTERY_LOW.txt"
+const uint8_t EN_CHARGE_PLEASE[] = {
+#include "res/en/voice_tws/SOUND_CHARGE_PLEASE.txt"
 };
 
 const uint8_t EN_BT_PAIR_ENABLE[] = {

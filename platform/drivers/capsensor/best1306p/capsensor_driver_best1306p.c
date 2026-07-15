@@ -32,7 +32,9 @@
 
 void capsensor_driver_init(void)
 {
+#ifndef CAPSENSOR_READ_DATA_POLLING
     pmu_capsensor_open(CAP_CLK_DIV); //RC
+#endif
     analog_capsensor_open();
 }
 
@@ -98,7 +100,10 @@ void capsensor_suspend(void)
     uint32_t lock;
 
     lock = int_lock();
+
+#ifndef CAPSENSOR_READ_DATA_POLLING
     capsensor_fp_mode_set_mask();
+#endif
     analog_capsensor_clk_gate_on();
     int_unlock(lock);
 }
@@ -113,8 +118,10 @@ void capsensor_resume(void)
 
     lock = int_lock();
     analog_capsensor_clk_gate_off();
+#ifndef CAPSENSOR_READ_DATA_POLLING
     capsensor_fp_mode_clear_irq();
     capsensor_fp_mode_clr_mask();
+#endif
     int_unlock(lock);
 }
 
@@ -142,6 +149,11 @@ void capsensor_driver_baseline_dr(uint32_t* baseline_value_p, uint32_t* baseline
 void capsensor_driver_baseline_reg_read(uint32_t* baseline_value_p, uint32_t* baseline_value_n)
 {
     capsensor_baseline_reg_read(baseline_value_p, baseline_value_n);
+}
+
+uint16_t capsensor_clk_is_ready(void)
+{
+    return analog_capsensor_clk_is_ready();
 }
 
 #endif

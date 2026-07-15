@@ -59,7 +59,6 @@ endif
 
 export BTHOST_DEBUG ?= 1
 ifeq ($(BTHOST_DEBUG),1)
-$(warning BTHOST_DEBUG)
 KBUILD_CPPFLAGS += -DBTHOST_DEBUG
 endif
 

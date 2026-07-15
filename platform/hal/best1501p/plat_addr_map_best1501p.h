@@ -499,6 +499,7 @@ extern "C" {
 #define TIMER0_BASE                             SENS_TIMER0_BASE
 #endif
 #define TIMER1_BASE                             SENS_TIMER1_BASE
+#define WDT_BASE                                SENS_WDT_BASE
 
 #else /* !CHIP_SUBSYS_SENS */
 
@@ -510,6 +511,7 @@ extern "C" {
 #define TIMER2_BASE                             AON_TIMER0_BASE
 #endif
 #define TIMER1_BASE                             MCU_TIMER1_BASE
+#define WDT_BASE                                AON_WDT_BASE
 
 #endif /* !CHIP_SUBSYS_SENS */
 
@@ -518,7 +520,6 @@ extern "C" {
 #define GPIO1_BASE                              AON_GPIO1_BASE
 #define GPIO2_BASE                              AON_GPIO2_BASE
 #define PWM_BASE                                AON_PWM_BASE
-#define WDT_BASE                                AON_WDT_BASE
 
 #ifdef ALT_BOOT_FLASH
 #define FLASH_BASE                              REAL_FLASH1_BASE

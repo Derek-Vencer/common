@@ -39,59 +39,19 @@
 *Warning: Prohibit reading and writing EM memory in Bluetooth drivers
 *
 *****************************************************************************/
-static uint32_t reg_op_clk_enb = 0;
-
 #ifdef MCU_WAKEUP_BT_V2
-#define BT_DRV_REG_OP_FORCE_WAKE_ENB()  do{\
-                                            uint32_t op_clk_lock = int_lock(); \
-                                            enum HAL_CHIP_METAL_ID_T id = hal_get_chip_metal_id(); \
-                                            if (id >= HAL_CHIP_METAL_ID_3) { \
-                                                uint32_t local_enb = reg_op_clk_enb; \
-                                                bool need_en_wait_rsp = false; \
-                                                if (local_enb == 0){ \
-                                                    bt_intersys_oper_btcore(WAKEUP_BT_USER_DRV, MSG_WAKEUP_BT_AND_DIS_SLP); \
-                                                    need_en_wait_rsp = true; \
-                                                } \
-                                                reg_op_clk_enb++; \
-                                                int_unlock(op_clk_lock); \
-                                                if (need_en_wait_rsp){ \
-                                                    bt_intersys_oper_wait_bt_response(); \
-                                                } \
-                                            } \
-                                            else if(id >= HAL_CHIP_METAL_ID_0) { \
-                                                if (!reg_op_clk_enb){ \
-                                                    hal_cmu_bt_sys_clock_force_on(); \
-                                                } \
-                                                reg_op_clk_enb++; \
-                                                int_unlock(op_clk_lock); \
-                                            } \
+#define BT_DRV_REG_OP_FORCE_WAKE_ENB()  do {    \
+                                            bt_drv_oper_btcore_with_rsp(WAKEUP_BT_USER_DRV, MSG_WAKEUP_BT_AND_DIS_SLP);  \
 
-#define BT_DRV_REG_OP_FORCE_WAKE_DIB()      op_clk_lock = int_lock(); \
-                                            if (id >= HAL_CHIP_METAL_ID_3) { \
-                                                uint32_t local_dsb = --reg_op_clk_enb; \
-                                                bool need_dsb_wait_rsp = false; \
-                                                if (local_dsb == 0){ \
-                                                    bt_intersys_oper_btcore(WAKEUP_BT_USER_DRV ,MSG_WAKEUP_BT_AND_EN_SLP); \
-                                                    need_dsb_wait_rsp = true; \
-                                                } \
-                                                int_unlock(op_clk_lock); \
-                                                if (need_dsb_wait_rsp){ \
-                                                    bt_intersys_oper_wait_bt_response(); \
-                                                } \
-                                            } \
-                                            else if(id >= HAL_CHIP_METAL_ID_0) { \
-                                                reg_op_clk_enb--; \
-                                                if (!reg_op_clk_enb){ \
-                                                    hal_cmu_bt_sys_clock_auto(); \
-                                                } \
-                                                int_unlock(op_clk_lock); \
-                                            } \
-                                        }while(0);
+#define BT_DRV_REG_OP_FORCE_WAKE_DIB()  \
+                                            bt_drv_oper_btcore_with_rsp(WAKEUP_BT_USER_DRV, MSG_WAKEUP_BT_AND_EN_SLP);   \
+                                        } while(0);
 
 #define BT_DRV_REG_OP_CLK_ENB()         BT_DRV_REG_OP_FORCE_WAKE_ENB()
 #define BT_DRV_REG_OP_CLK_TRY_ENB()     BT_DRV_REG_OP_FORCE_WAKE_ENB()
 #define BT_DRV_REG_OP_CLK_DIB()         BT_DRV_REG_OP_FORCE_WAKE_DIB()
-#else
+#else /* MCU_WAKEUP_BT_V2 */
+static uint32_t reg_op_clk_enb = 0;
 #define BT_DRV_REG_OP_FORCE_WAKE_ENB()  do{\
                                             uint32_t op_clk_lock = int_lock(); \
                                             uint32_t local_enb = reg_op_clk_enb; \
@@ -182,7 +142,7 @@ static uint32_t reg_op_clk_enb = 0;
                                             int_unlock(op_clk_lock); \
                                     }while(0);
 
-#else
+#else /* BT_LOG_POWEROFF */
 #define BT_DRV_REG_OP_CLK_ENB()    do{\
                                         uint32_t op_clk_lock = int_lock(); \
                                         if (!reg_op_clk_enb){ \
@@ -200,8 +160,8 @@ static uint32_t reg_op_clk_enb = 0;
                                     } \
                                     int_unlock(op_clk_lock); \
                                     }while(0);
-#endif
-#endif // MCU_WAKEUP_BT_V2
+#endif /* BT_LOG_POWEROFF */
+#endif /* MCU_WAKEUP_BT_V2 */
 
 #define GAIN_TBL_SIZE           0x0F
 
@@ -317,6 +277,7 @@ static uint32_t POSSIBLY_UNUSED bt_wifi_coexistence_disable_addr = 0;
 static uint32_t sens2bt_en_addr=0;
 static uint32_t rf_rx_gain_ths_tbl_ecc_addr = 0;
 static uint32_t POSSIBLY_UNUSED rx_record_addr = 0;
+static uint32_t POSSIBLY_UNUSED custom_pwr_addr = 0;
 #ifdef __NEW_SWAGC_MODE__
 static uint32_t rf_rx_gain_ths_tbl_3m_addr = 0;
 static uint32_t rx_monitor_3m_rxgain_addr = 0;
@@ -465,6 +426,7 @@ void bt_drv_reg_op_global_symbols_init(void)
         rwip_env_addr = RWIP_ENV_1306P_T0_ADDR;
         ble_rx_monitor_addr = BLE_RX_MONITOR_1306P_T0_ADDR;
         ld_bes_bt_env_addr = LD_BES_BT_ENV_1306P_T0_ADDR;
+        custom_pwr_addr = CUSTOM_PWR_1306P_T1_ADDR;
         #ifdef __DEBUG_FIX_RX_GAIN_CNTL__
         rf_rx_gain_fixed_tbl_addr = RF_RX_GAIN_FIXED_TBL_1306P_T0_ADDR;
         #endif
@@ -2067,80 +2029,23 @@ bool bt_drv_error_check_handler(void)
 }
 
 #ifdef MCU_WAKEUP_BT_V2
-static uint32_t reg_op_trigger_clk_enb = 0;
 void bt_drv_i2v_disable_sleep_for_bt_access(void)
 {
-    enum HAL_CHIP_METAL_ID_T metal_id = hal_get_chip_metal_id();
-    if (metal_id >= HAL_CHIP_METAL_ID_3) 
-    {
-        uint32_t op_clk_lock = int_lock();
-        uint32_t local_enb = reg_op_trigger_clk_enb;
-        bool need_wait_rsp = false;
-        if (local_enb == 0)
-        {
-            bt_intersys_oper_btcore(WAKEUP_BT_USER_TRIG, MSG_WAKEUP_BT_AND_DIS_SLP);
-            need_wait_rsp = true;
-        }
-        reg_op_trigger_clk_enb++;
-        int_unlock(op_clk_lock);
+    bt_drv_oper_btcore_with_rsp(WAKEUP_BT_USER_TRIG, MSG_WAKEUP_BT_AND_DIS_SLP);
+    DRIVERS_TRACE(0, "BT:trigger req wakeup");
+}
 
-        if(need_wait_rsp)
-        {
-            bt_intersys_oper_wait_bt_response();
-        }
-
-        DRIVERS_TRACE(1,"BT:trigger req wakeup cnt=%d", reg_op_trigger_clk_enb);
-    }
-    else if (metal_id >= HAL_CHIP_METAL_ID_0)
-    {
-        hal_intersys_wakeup_btcore();
-        DRIVERS_TRACE(1,"BT:disable sleep");
-    }
+void bt_drv_i2v_enable_sleep_for_bt_access(void)
+{
+    bt_drv_oper_btcore_with_rsp(WAKEUP_BT_USER_TRIG, MSG_WAKEUP_BT_AND_EN_SLP);
+    DRIVERS_TRACE(0, "BT:resume sleep");
 }
 #else
 void bt_drv_i2v_disable_sleep_for_bt_access(void)
 {
     hal_intersys_wakeup_btcore();
 }
-#endif
 
-#ifdef MCU_WAKEUP_BT_V2
-void bt_drv_i2v_enable_sleep_for_bt_access(void)
-{
-    enum HAL_CHIP_METAL_ID_T metal_id = hal_get_chip_metal_id();
-    if (metal_id >= HAL_CHIP_METAL_ID_3) 
-    {
-        uint32_t op_clk_lock = int_lock();
-        uint32_t local_enb = --reg_op_trigger_clk_enb;
-        bool need_wait_rsp = false;
-        if (!local_enb)
-        {
-            bt_intersys_oper_btcore(WAKEUP_BT_USER_TRIG, MSG_WAKEUP_BT_AND_EN_SLP);
-            need_wait_rsp = true;
-        }
-        int_unlock(op_clk_lock);
-        if(need_wait_rsp)
-        {
-            bt_intersys_oper_wait_bt_response();
-        }
-
-        DRIVERS_TRACE(1,"BT:resume sleep cnt=%d", reg_op_trigger_clk_enb);
-    }
-    else if (metal_id >= HAL_CHIP_METAL_ID_0)
-    {
-        uint32_t flag_addr = rt_sleep_flag_clear_addr;
-        if(flag_addr !=0)
-        {
-            if(*(uint32_t *)flag_addr == 0)
-            {
-                *(uint32_t *)flag_addr = 1;
-                hal_sys_timer_delay_us(100);
-                DRIVERS_TRACE(1,"BT:resume sleep");
-            }
-        }
-    }
-}
-#else
 void bt_drv_i2v_enable_sleep_for_bt_access(void)
 {
     uint32_t flag_addr = rt_sleep_flag_clear_addr;
@@ -2153,7 +2058,7 @@ void bt_drv_i2v_enable_sleep_for_bt_access(void)
         }
     }
 }
-#endif
+#endif /* MCU_WAKEUP_BT_V2 */
 
 void bt_drv_reg_op_trigger_controller_assert(void)
 {
@@ -3530,6 +3435,19 @@ void btdrv_regop_set_btc_srand_seed_initial(void)
          DRIVERS_TRACE(2,"%s,%d", __func__,seed);
     }
 
+    BT_DRV_REG_OP_CLK_DIB();
+    BT_DRV_REG_OP_EXIT();
+}
+
+void bt_drv_reg_op_set_bt_txpwr_idx(uint8_t link_id, uint8_t tx_idx)
+{
+    BT_DRV_REG_OP_ENTER();
+    BT_DRV_REG_OP_CLK_ENB();
+    if(custom_pwr_addr)
+    {
+        volatile uint8_t* custom_txpwr = (volatile uint8_t *)custom_pwr_addr;
+        custom_txpwr[link_id] = tx_idx;
+    }
     BT_DRV_REG_OP_CLK_DIB();
     BT_DRV_REG_OP_EXIT();
 }

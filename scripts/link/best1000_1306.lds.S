@@ -1409,6 +1409,7 @@ SECTIONS
 		*:lib_a-sf_fabs.o(.text*)
 		*:lib_a-sf_frexp.o(.text*) /* besnet_utils.c */
 		*:beco.o(.text*)
+		*:cmsis_dsp.o(.text.arm_fill_q31)
 #endif
 		*:fastmath_approx.o(.text*)
 		/* cmsis_dsp */
@@ -1699,8 +1700,9 @@ SECTIONS
 			*:spectral_wdrc.o(.text*)
 			*:wind_detection.o(.text*)
 			*:cmsis_dsp.o(.text.arm_scale_f32)
+#if !defined(AUDIO_LIMITER)
 			*:floatlimiter.o(.text.ApplyFloatLimiter)
-			*:cmsis_dsp.o(.text.arm_fill_q31)
+#endif
 			*:cmsis_dsp.o(.text.arm_absmax_f32)
 #endif
 #if defined(SPEECH_TX_2MIC_NS11)

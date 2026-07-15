@@ -1197,7 +1197,7 @@ static const char * const aud_id_str[] =
     "[BT_CALL_HUNG_UP]",
     "[BT_CALL_INCOMING_CALL]",
     "[BT_CALL_INCOMING_NUMBER]",
-    "[BT_BATTERY_LOW]",
+    "[BT_CHARGE_PLEASE]",
     "[BT_CHARGE_FINISH]",
     "[BT_CLEAR_SUCCESS]",
     "[BT_CLEAR_FAIL]",
@@ -1639,7 +1639,6 @@ void bta_register_bt_sink_callback(void *cbs)
     fn.avrcp_register_notify_send_check_callback = p_cbs->avrcp_notify_send_callback;
     fn.avrcp_register_notify_resp_check_callback = p_cbs->avrcp_notify_resp_callback;
     fn.get_ibrt_hci_handle_callback = p_cbs->get_ibrt_handle_callback;
-    fn.bt_acl_disconnect_callback = p_cbs->acl_disconnected_callback;
 }
 
 void bta_register_tws_ibrt_callback(void *cbs)
@@ -1653,7 +1652,6 @@ void bta_register_tws_callback(void *cbs)
 {
     bts_tws_cb_t *p_cbs = (bts_tws_cb_t *)cbs;
     fn.tws_hci_cmd_status_callback = p_cbs->cmd_status_callback;
-    fn.tws_acl_disconnect_callback = p_cbs->acl_disconnected_callback;
 }
 
 

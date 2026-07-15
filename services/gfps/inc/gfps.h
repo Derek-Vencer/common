@@ -22,7 +22,7 @@
 #define FP_SERVICE_LEN                      (0x06)
 #define FP_SERVICE_UUID                     (0x2CFE)
 #ifdef BESUI_GFPS_ID_EN
-#define FP_DEVICE_MODEL_ID                  0xB30FF2 //USER_GFPS_MODEL_ID //besui_define.h
+#define FP_DEVICE_MODEL_ID                  USER_GFPS_MODEL_ID
 #else
 #define FP_DEVICE_MODEL_ID                  (0x2B677D)
 #endif

@@ -146,7 +146,6 @@ dirac_channel_config_t get_dirac_channel_config() {
 #endif
 
 #if defined(AUDIO_EQ_TUNING)
-//#error AUDIO_EQ_TUNING
 #include "hal_cmd.h"
 
 #if defined(__SW_IIR_EQ_PROCESS__)
@@ -246,9 +245,6 @@ extern FIR_CFG_T audio_eq_hw_fir_adaptive_eq_cfg;
 extern const DrcConfig audio_drc_cfg;
 #endif
 
-#define AUDIO_DRC_CFG_LIST_NUM    5
-extern const DrcConfig * const audio_drc_cfg_list[AUDIO_DRC_CFG_LIST_NUM];
-
 #ifdef __AUDIO_DYNAMIC_BOOST__
 extern const DynamicBoostConfig audio_dynamic_boost_cfg;
 // Select dynamic boost using EQ type
@@ -289,7 +285,6 @@ extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ
 #endif
 
 #ifdef __AUDIO_DRC__
-//#error __AUDIO_DRC__
 #ifndef FREEMAN_ENABLED_STERO
 #define AUDIO_DRC_NEEDED_SIZE (1024*15) // TWS
 #else
@@ -942,8 +937,6 @@ int audio_eq_set_cfg(const FIR_CFG_T *fir_cfg,const IIR_CFG_T *iir_cfg,const IIR
 int audio_eq_set_cfg(const FIR_CFG_T *fir_cfg,const IIR_CFG_T *iir_cfg,AUDIO_EQ_TYPE_T audio_eq_type)
 #endif
 {
-	AUDIO_PROCESS_TRACE(3,"@@@@@@@@@audio_eq_set_cfg:%d.", audio_eq_type);
-
 #if defined(__SW_IIR_EQ_PROCESS__) || defined(__HW_FIR_EQ_PROCESS__)|| defined(__HW_DAC_IIR_EQ_PROCESS__)|| defined(__HW_IIR_EQ_PROCESS__)
     switch (audio_eq_type)
     {
@@ -2565,16 +2558,12 @@ int audio_eq_hw_dac_iir_callback(uint8_t *buf, uint32_t  len)
 #endif
     {
 #if defined(TEST_AUDIO_CUSTOM_EQ)
-		AUDIO_PROCESS_TRACE(0,"@@@@@@audio_eq_hw_dac_iir_callback");
-
         audio_eq_merge_custom_eq(&audio_process.hw_dac_iir_cfg, (IIR_CFG_T *)buf, audio_eq_hw_dac_iir_cfg_list[0]);
 #else
         memcpy(&audio_process.hw_dac_iir_cfg, buf, sizeof(IIR_CFG_T));
-	AUDIO_PROCESS_TRACE(0,"@@@@@@2 audio_eq_hw_dac_iir_callback");
-
 #endif
 
-        AUDIO_PROCESS_TRACE(0, "@@LCHNL num: %d, gain0: %d, gain1: %d",
+        AUDIO_PROCESS_TRACE(0, "LCHNL num: %d, gain0: %d, gain1: %d",
                                                     (int32_t)audio_process.hw_dac_iir_cfg.num,
                                                     (int32_t)(audio_process.hw_dac_iir_cfg.gain0*10),
                                                     (int32_t)(audio_process.hw_dac_iir_cfg.gain1*10));
@@ -2855,6 +2844,7 @@ typedef struct {
     uint8_t sample_rate[20];
     // ANC
     uint32_t anc_mode;
+
     // Add new items in order for compatibility
 } query_eq_info_t;
 
@@ -2883,7 +2873,7 @@ int audio_cmd_callback(uint8_t *buf, uint32_t len)
             getSampleArray(info.sample_rate, &info.sample_rate_num);
 
             // ANC
-#if  defined(ANC_APP)
+#if defined(ANC_APP)
             info.anc_mode = app_anc_get_curr_mode();
 #else
             info.anc_mode = 0;
@@ -3173,7 +3163,6 @@ int audio_process_init(void)
 #endif
 
 #else   // #if defined(USB_EQ_TUNING)
-
 #ifdef AUDIO_EQ_SW_IIR_UPDATE_CFG
     hal_cmd_register("sw_iir_eq", audio_eq_sw_iir_callback);
 #endif
@@ -3234,6 +3223,7 @@ int audio_process_init(void)
 #endif  // #if defined(USB_EQ_TUNING)
 
     hal_cmd_register("anc_switch", audio_anc_switch_callback);
+
     hal_cmd_register("cmd", audio_cmd_callback);
     hal_cmd_register("ping", audio_ping_callback);
 #endif  // #if defined(AUDIO_EQ_TUNING)
@@ -3370,19 +3360,5 @@ POSSIBLY_UNUSED int32_t audio_eq_set_onoff(int32_t onoff, AUDIO_EQ_TYPE_T audio_
 #endif
     }
     return 0;
-}
-
-void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
-{
-    uint8_t drc_index = eq_index;
-
-    if (drc_index >= AUDIO_DRC_CFG_LIST_NUM)
-    {
-        drc_index = 0;
-    }
-
-    memcpy(&audio_process.drc_cfg,
-           audio_drc_cfg_list[drc_index],
-           sizeof(DrcConfig));
 }
 

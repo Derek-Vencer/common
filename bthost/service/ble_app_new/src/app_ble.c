@@ -68,10 +68,6 @@
 #include "bt_mesh_ble_export.h"
 #endif
 
-#include "ble_aiwang_srv.h"
-#include "factory_section.h"
-#include "earbud_ux_api.h"
-#include "nvrecord_extension.h"
 #ifndef ADV_DATA_LEN
 #define ADV_DATA_LEN                    (0x1F)
 #endif
@@ -104,15 +100,12 @@ extern uint32_t ble_datapath_save_ctx(uint8_t conidx, uint8_t *buf, uint32_t buf
 extern uint32_t ble_datapath_restore_ctx(uint8_t conidx, uint8_t *buf, uint32_t buf_len);
 #endif /* CFG_APP_DATAPATH_SERVER */
 
-extern uint8_t aiWangGetEarBudsColor(void);
-
 static void app_ble_impl_refresh_adv(void);
 static void app_ble_check_load_server_cache(const gap_conn_item_t *conn);
 static void app_ble_check_load_client_cache(const gap_conn_item_t *conn);
 static void app_ble_gatt_server_cache(const gap_conn_item_t *conn, const gatt_server_cache_t *cache);
 static void app_ble_gatt_client_cache(const gap_conn_item_t *conn, const gatt_client_cache_t *cache);
 static void app_ble_global_handle(ble_event_t *event, void *output);
-extern uint8_t ntt_color_code_nv_get(void);
 
 #if (BLE_AUDIO_ENABLED)
 bool aob_conn_start_adv(bool, bool, bool);
@@ -1643,8 +1636,6 @@ static int app_ble_conn_event_handle(uintptr_t connhdl, gap_conn_event_t event, 
             {
                 app_ble_connection_encrypted(encrpt);
 
-                app_ble_set_phy_mode(encrpt->con_idx, g->default_tx_pref_phy_bits, g->default_rx_pref_phy_bits, GAP_CODED_PHY_NO_PREFER_CODING);
-
                 cb_event.evt_type = BLE_CONNECT_BOND_EVENT;
                 cb_event.p.connect_bond_handled.conidx = gap_zero_based_conidx(encrpt->con_idx);
                 cb_event.p.connect_bond_handled.success = true;
@@ -2261,78 +2252,6 @@ static void app_ble_refresh_advertising(uint8_t adv_handle, gap_adv_param_t *adv
         }
     } while (0);
 
-    if (adv_handle == 0)
-    {
-        /*
-        * Hide public BLE advertising after paired/connected.
-        * Do not expose local name and do not allow new phones to connect.
-        */
-        adv_param->directed_adv = false;
-        adv_param->connectable = true;
-        adv_param->scannable = false;
-        adv_param->include_tx_power_data = false;
-
-        DEBUG_INFO(0,
-            "[BLE_ADV_REFRESH] handle=0 hide public adv conn=%d scan=%d directed=%d",
-            adv_param->connectable,
-            adv_param->scannable,
-            adv_param->directed_adv);
-    }
-#if 0
-    else if (adv_handle == 2)
-    {
-        btif_device_record_t rec;
-
-        if (nv_record_enum_dev_records(0, &rec) == BT_STS_SUCCESS)
-        {
-            bool valid_mobile_addr = !((rec.bdAddr.address[0] == 0xFF) &&
-                                    (rec.bdAddr.address[1] == 0xFF) &&
-                                    (rec.bdAddr.address[2] == 0xFF) &&
-                                    (rec.bdAddr.address[3] == 0xFF) &&
-                                    (rec.bdAddr.address[4] == 0xFF) &&
-                                    (rec.bdAddr.address[5] == 0xFF));
-
-            if (valid_mobile_addr)
-            {
-                /*
-                * Keep handle 2 connectable directed advertising.
-                * Do not set connectable to false here.
-                */
-                adv_param->directed_adv = true;
-                adv_param->high_duty_directed_adv = false;
-                adv_param->connectable = true;
-                adv_param->scannable = false;
-                adv_param->include_tx_power_data = false;
-
-                adv_param->peer_type = BT_ADDR_TYPE_PUBLIC;
-                memcpy(&adv_param->peer_addr,
-                    rec.bdAddr.address,
-                    sizeof(bt_bdaddr_t));
-
-                DEBUG_INFO(0,
-                    "[BLE_DIRECT_REFRESH] handle=2 directed adv to %02X:%02X:%02X:%02X:%02X:%02X conn=%d",
-                    rec.bdAddr.address[0],
-                    rec.bdAddr.address[1],
-                    rec.bdAddr.address[2],
-                    rec.bdAddr.address[3],
-                    rec.bdAddr.address[4],
-                    rec.bdAddr.address[5],
-                    adv_param->connectable);
-            }
-        }
-    }
-#endif
-    DEBUG_INFO(0,
-        "[BLE_ADV_REFRESH] handle=%d directed=%d high_duty=%d conn=%d scan=%d own_type=%d",
-        adv_handle,
-        adv_param->directed_adv,
-        adv_param->high_duty_directed_adv,
-        adv_param->connectable,
-        adv_param->scannable,
-        adv_param->own_addr_type);
-
-    DEBUG_INFO(0, "TEST_ADV_REFRESH");
-
     gap_refresh_advertising(adv_handle, adv_param, app_ble_server_callback);
 }
 
@@ -2918,20 +2837,7 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
 
     app_ble_dt_add_adv_data(adv, &legacy_param, NULL);
 
-    //app_ble_dt_set_local_name(adv_param, NULL);
-
-        DEBUG_INFO(0, "[STUB_FINAL_ADV_LEN]=%d",
-        gap_dt_buf_len(&adv_param->adv_data));
-    DUMP8("%02X ",
-        gap_dt_buf_data(&adv_param->adv_data),
-        gap_dt_buf_len(&adv_param->adv_data));
-
-    DEBUG_INFO(0, "[STUB_FINAL_SCAN_LEN]=%d",
-        gap_dt_buf_len(&adv_param->scan_rsp_data));
-    DUMP8("%02X ",
-        gap_dt_buf_data(&adv_param->scan_rsp_data),
-        gap_dt_buf_len(&adv_param->scan_rsp_data));
-
+    app_ble_dt_set_local_name(adv_param, NULL);
 
     return true;
 }
@@ -3213,78 +3119,24 @@ void app_ble_adv_set_param(BLE_ADV_PARAM_T *param, uint8_t user)
 
     BLE_ADV_PARAM_T tmp_param = {0};
     memcpy(&tmp_param, param, sizeof(BLE_ADV_PARAM_T));
-
     ble_global_t *g = ble_get_global();
-    ble_adv_activity_t *defaultAdv = g->adv + app_ble_get_adv_user(tmp_param.advUser);
+    ble_adv_activity_t *defaultAdv = g->adv + app_ble_get_adv_user(tmp_param.advUser);;
 
     bool legacy_adv = false;
     bool connectable = false;
     bool scannable = false;
     bool directed = false;
-    bool force_direct_adv = false;
     bt_bdaddr_t zero_addr = {{0}};
-    btif_device_record_t rec;
 
-    if ((tmp_param.advMode == ADV_MODE_LEGACY) &&
-        (tmp_param.advType == ADV_TYPE_UNDIRECT) &&
-        (nv_record_enum_dev_records(0, &rec) == BT_STS_SUCCESS))
-    {
-        bool valid_mobile_addr = !((rec.bdAddr.address[0] == 0xFF) &&
-                                   (rec.bdAddr.address[1] == 0xFF) &&
-                                   (rec.bdAddr.address[2] == 0xFF) &&
-                                   (rec.bdAddr.address[3] == 0xFF) &&
-                                   (rec.bdAddr.address[4] == 0xFF) &&
-                                   (rec.bdAddr.address[5] == 0xFF));
+    tmp_param.advDataLen = app_ble_filter_duplicate_data((uint8_t *)gap_dt_buf_data(&defaultAdv->adv_param.adv_data),
+                                                         gap_dt_buf_len(&defaultAdv->adv_param.adv_data),
+                                                         tmp_param.advData, tmp_param.advDataLen);
 
-        if (valid_mobile_addr)
-        {
-            DEBUG_INFO(0,
-                "[BLE_DIRECT_ADV] use bonded mobile %02X:%02X:%02X:%02X:%02X:%02X",
-                rec.bdAddr.address[0],
-                rec.bdAddr.address[1],
-                rec.bdAddr.address[2],
-                rec.bdAddr.address[3],
-                rec.bdAddr.address[4],
-                rec.bdAddr.address[5]);
+    tmp_param.scanRspDataLen = app_ble_filter_duplicate_data((uint8_t *)gap_dt_buf_data(&defaultAdv->adv_param.scan_rsp_data),
+                                                         gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data),
+                                                         tmp_param.scanRspData, tmp_param.scanRspDataLen);
 
-            tmp_param.advType = ADV_TYPE_DIRECT_LDC;
-            tmp_param.peerAddr.addr_type = BT_ADDR_TYPE_PUBLIC;
-
-            memcpy(tmp_param.peerAddr.addr,
-                   rec.bdAddr.address,
-                   BTIF_BD_ADDR_SIZE);
-
-            tmp_param.advDataLen = 0;
-            tmp_param.scanRspDataLen = 0;
-            force_direct_adv = true;
-        }
-        else
-        {
-            DEBUG_INFO(0, "[BLE_DIRECT_ADV] bonded record invalid");
-        }
-    }
-    else
-    {
-        DEBUG_INFO(0, "[BLE_DIRECT_ADV] use normal adv");
-    }
-
-    if (!force_direct_adv)
-    {
-        tmp_param.advDataLen = app_ble_filter_duplicate_data(
-            (uint8_t *)gap_dt_buf_data(&defaultAdv->adv_param.adv_data),
-            gap_dt_buf_len(&defaultAdv->adv_param.adv_data),
-            tmp_param.advData,
-            tmp_param.advDataLen);
-
-        tmp_param.scanRspDataLen = app_ble_filter_duplicate_data(
-            (uint8_t *)gap_dt_buf_data(&defaultAdv->adv_param.scan_rsp_data),
-            gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data),
-            tmp_param.scanRspData,
-            tmp_param.scanRspDataLen);
-    }
-
-    if (gap_filter_list_user_item_exist(BLE_WHITE_LIST_USER_MOBILE) ||
-        gap_filter_list_user_item_exist(BLE_WHITE_LIST_USER_TWS))
+    if (gap_filter_list_user_item_exist(BLE_WHITE_LIST_USER_MOBILE) || gap_filter_list_user_item_exist(BLE_WHITE_LIST_USER_TWS))
     {
         defaultAdv->adv_param.policy = GAP_ADV_ACCEPT_ALL_CONN_SCAN_REQS_IN_LIST;
     }
@@ -3294,18 +3146,13 @@ void app_ble_adv_set_param(BLE_ADV_PARAM_T *param, uint8_t user)
     }
 
     legacy_adv = (tmp_param.advMode == ADV_MODE_LEGACY);
-    connectable = (tmp_param.advType != ADV_TYPE_NON_CONN_SCAN &&
-                   tmp_param.advType != ADV_TYPE_NON_CONN_NON_SCAN);
-    scannable = (tmp_param.advType == ADV_TYPE_UNDIRECT ||
-                 tmp_param.advType == ADV_TYPE_NON_CONN_SCAN ||
-                 tmp_param.advType == ADV_TYPE_CONN_EXT_ADV);
-    directed = (tmp_param.advType == ADV_TYPE_DIRECT_LDC ||
-                tmp_param.advType == ADV_TYPE_DIRECT_HDC);
+    connectable = (tmp_param.advType != ADV_TYPE_NON_CONN_SCAN && tmp_param.advType != ADV_TYPE_NON_CONN_NON_SCAN);
+    scannable = (tmp_param.advType == ADV_TYPE_UNDIRECT || tmp_param.advType == ADV_TYPE_NON_CONN_SCAN || tmp_param.advType == ADV_TYPE_CONN_EXT_ADV);
+    directed = (tmp_param.advType == ADV_TYPE_DIRECT_LDC || tmp_param.advType == ADV_TYPE_DIRECT_HDC);
 
 #ifdef BLE_WATCH_ADAPTER
     defaultAdv->adv_from_adapter = true;
 #endif
-
     defaultAdv->user = app_ble_get_adv_user(tmp_param.advUser);
     defaultAdv->adv_handle = app_ble_get_adv_hdl_by_user(defaultAdv->user);
     defaultAdv->adv_param.connectable = connectable;
@@ -3313,27 +3160,10 @@ void app_ble_adv_set_param(BLE_ADV_PARAM_T *param, uint8_t user)
     defaultAdv->adv_param.directed_adv = directed;
     defaultAdv->adv_param.high_duty_directed_adv = (tmp_param.advType == ADV_TYPE_DIRECT_HDC);
     defaultAdv->adv_param.use_legacy_pdu = legacy_adv;
-    defaultAdv->adv_param.include_tx_power_data = force_direct_adv ? false : true;
+    defaultAdv->adv_param.include_tx_power_data = true;
     defaultAdv->adv_param.own_addr_use_rpa = (tmp_param.localAddrType == GAPM_GEN_RSLV_ADDR);
     defaultAdv->adv_param.peer_type = (bt_addr_type_t)tmp_param.peerAddr.addr_type;
     defaultAdv->adv_param.peer_addr = *(bt_bdaddr_t *)tmp_param.peerAddr.addr;
-
-    DEBUG_INFO(0,
-        "[BLE_ADV_SET] type=%d directed=%d high_duty=%d handle=%d",
-        tmp_param.advType,
-        defaultAdv->adv_param.directed_adv,
-        defaultAdv->adv_param.high_duty_directed_adv,
-        defaultAdv->adv_handle);
-
-    DEBUG_INFO(0,
-        "[BLE_ADV_PEER] type=%d addr=%02X:%02X:%02X:%02X:%02X:%02X",
-        defaultAdv->adv_param.peer_type,
-        defaultAdv->adv_param.peer_addr.address[0],
-        defaultAdv->adv_param.peer_addr.address[1],
-        defaultAdv->adv_param.peer_addr.address[2],
-        defaultAdv->adv_param.peer_addr.address[3],
-        defaultAdv->adv_param.peer_addr.address[4],
-        defaultAdv->adv_param.peer_addr.address[5]);
 
     if (memcmp(&tmp_param.localAddr, &zero_addr, sizeof(bt_bdaddr_t)) != 0)
     {
@@ -3341,83 +3171,48 @@ void app_ble_adv_set_param(BLE_ADV_PARAM_T *param, uint8_t user)
         memcpy(&defaultAdv->adv_param.custom_local_addr, tmp_param.localAddr, 6);
     }
 
-    if (!defaultAdv->custom_adv_interval_ms ||
-        tmp_param.advInterval < defaultAdv->custom_adv_interval_ms)
+    if (!defaultAdv->custom_adv_interval_ms || tmp_param.advInterval < defaultAdv->custom_adv_interval_ms)
     {
         defaultAdv->custom_adv_interval_ms = tmp_param.advInterval;
     }
+    app_ble_set_adv_tx_power_dbm(defaultAdv, btdrv_reg_op_txpwr_idx_to_rssidbm(tmp_param.advTxPwr));
 
-    app_ble_set_adv_tx_power_dbm(
-        defaultAdv,
-        btdrv_reg_op_txpwr_idx_to_rssidbm(tmp_param.advTxPwr));
-
-    if (!force_direct_adv)
+    uint8_t ad_flags = app_ble_get_ad_flags(&tmp_param);
+    if (tmp_param.isBleFlagsAdvDataConfiguredByAppLayer && ad_flags && \
+                    !gap_dt_buf_find_type(&defaultAdv->adv_param.adv_data, GAP_DT_FLAGS, 0))
     {
-        uint8_t ad_flags = app_ble_get_ad_flags(&tmp_param);
-
-        if (tmp_param.isBleFlagsAdvDataConfiguredByAppLayer &&
-            ad_flags &&
-            !gap_dt_buf_find_type(&defaultAdv->adv_param.adv_data, GAP_DT_FLAGS, 0))
-        {
-            gap_dt_add_data_type(&defaultAdv->adv_param.adv_data,
-                                 GAP_DT_FLAGS,
-                                 &ad_flags,
-                                 sizeof(ad_flags));
-        }
-
-        uint16_t appearance = 0;
-
-        appearance = app_ble_adv_find_appearance_type(tmp_param.advData,
-                                                      tmp_param.advDataLen);
-        if (appearance)
-        {
-            gap_dt_add_data_type(&defaultAdv->adv_param.adv_data,
-                                 GAP_DT_APPEARANCE,
-                                 (uint8_t *)&appearance,
-                                 sizeof(uint16_t));
-            appearance = 0;
-        }
-
-        appearance = app_ble_adv_find_appearance_type(tmp_param.scanRspData,
-                                                      tmp_param.scanRspDataLen);
-        if (appearance)
-        {
-            gap_dt_add_data_type(&defaultAdv->adv_param.scan_rsp_data,
-                                 GAP_DT_APPEARANCE,
-                                 (uint8_t *)&appearance,
-                                 sizeof(uint16_t));
-            appearance = 0;
-        }
-
-        app_ble_dt_add_adv_data(defaultAdv, &tmp_param, NULL);
-    }
-    else
-    {
-        gap_dt_buf_clear(&defaultAdv->adv_param.adv_data);
-        gap_dt_buf_clear(&defaultAdv->adv_param.scan_rsp_data);
+        gap_dt_add_data_type(&defaultAdv->adv_param.adv_data, GAP_DT_FLAGS, &ad_flags, sizeof(ad_flags));
     }
 
-    DEBUG_INFO(0, "[ADV_LEN] %d [DATA]:",
-               gap_dt_buf_len(&defaultAdv->adv_param.adv_data));
-    DUMP8("%02x ",
-          gap_dt_buf_data(&defaultAdv->adv_param.adv_data),
-          gap_dt_buf_len(&defaultAdv->adv_param.adv_data));
+    uint16_t appearance = 0;
+    //find adv data appearance type
+    appearance = app_ble_adv_find_appearance_type(tmp_param.advData, tmp_param.advDataLen);
+    if (appearance)
+    {
+        gap_dt_add_data_type(&defaultAdv->adv_param.adv_data, GAP_DT_APPEARANCE, (uint8_t *)&appearance, sizeof(uint16_t));
+        appearance = 0;
+    }
 
-    DEBUG_INFO(0, "[SCAN_RSP_LEN] %d [DATA]:",
-               gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data));
-    DUMP8("%02x ",
-          gap_dt_buf_data(&defaultAdv->adv_param.scan_rsp_data),
-          gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data));
+    //find scan rsp data appearance type
+    appearance = app_ble_adv_find_appearance_type(tmp_param.scanRspData, tmp_param.scanRspDataLen);
+    if (appearance)
+    {
+        gap_dt_add_data_type(&defaultAdv->adv_param.scan_rsp_data, GAP_DT_APPEARANCE, (uint8_t *)&appearance, sizeof(uint16_t));
+        appearance = 0;
+    }
+
+    app_ble_dt_add_adv_data(defaultAdv, &tmp_param, NULL);
+    // app_ble_dt_set_local_name(&defaultAdv->adv_param, NULL);
+
+    DEBUG_INFO(0, "[ADV_LEN] %d [DATA]:", gap_dt_buf_len(&defaultAdv->adv_param.adv_data));
+    DUMP8("%02x ", gap_dt_buf_data(&defaultAdv->adv_param.adv_data), gap_dt_buf_len(&defaultAdv->adv_param.adv_data));
+    DEBUG_INFO(0, "[SCAN_RSP_LEN] %d [DATA]:", gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data));
+    DUMP8("%02x ", gap_dt_buf_data(&defaultAdv->adv_param.scan_rsp_data), gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data));
 
     if (legacy_adv)
     {
-        ASSERT(BLE_ADV_DATA_WITHOUT_FLAG_LEN >=
-               gap_dt_buf_len(&defaultAdv->adv_param.adv_data),
-               "[BLE][ADV]adv data exceed");
-
-        ASSERT(SCAN_RSP_DATA_LEN >=
-               gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data),
-               "[BLE][ADV]scan response data exceed");
+        ASSERT(BLE_ADV_DATA_WITHOUT_FLAG_LEN >= gap_dt_buf_len(&defaultAdv->adv_param.adv_data), "[BLE][ADV]adv data exceed");
+        ASSERT(SCAN_RSP_DATA_LEN >= gap_dt_buf_len(&defaultAdv->adv_param.scan_rsp_data), "[BLE][ADV]scan response data exceed");
     }
 }
 
@@ -3602,132 +3397,30 @@ void ble_core_disable_stub_adv(void)
     app_ble_disable_advertising(BLE_BASIC_ADV_HANDLE);
     app_ble_refresh_adv_state_generic();
 }
+
 POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 {
-    bool adv_enable = false;
-    BLE_ADV_PARAM_T *ble_adv = (BLE_ADV_PARAM_T *)param;
-
     DEBUG_INFO(0, "%s", __func__);
-
-    const uint8_t aiWangPrimaryService[16] = {
-        0xCD, 0x4B, 0xEF, 0xBA,
-        0x10, 0xDA, 0xFA, 0x9D,
-        0x65, 0x43, 0x20, 0x6D,
-        0x76, 0x4F, 0xAE, 0xCA
-    };
-
-    memset(ble_adv->advData, 0, sizeof(ble_adv->advData));
-    ble_adv->advDataLen = 0;
-
-    ble_adv->advData[ble_adv->advDataLen++] = 17;
-    ble_adv->advData[ble_adv->advDataLen++] = 0x07;
-    memcpy(&ble_adv->advData[ble_adv->advDataLen],
-           aiWangPrimaryService,
-           sizeof(aiWangPrimaryService));
-    ble_adv->advDataLen += sizeof(aiWangPrimaryService);
-
-    memset(ble_adv->scanRspData, 0, sizeof(ble_adv->scanRspData));
-    ble_adv->scanRspDataLen = 17;
-
-    /*
-     * Manufacturer Specific Data:
-     * 0:    AD Len = 0x10
-     * 1:    AD Type = 0xFF
-     * 2-3:  Manufacturer ID = 0x9B, 0x0C
-     * 4-9:  Sparrow ID = "MBE003"
-     * 10:   Color Code
-     * 11-16 Device Address
-     */
-    ble_adv->scanRspData[0] = 0x10;
-    ble_adv->scanRspData[1] = 0xFF;
-    ble_adv->scanRspData[2] = 0x9B;
-    ble_adv->scanRspData[3] = 0x0C;
-
-    memcpy(&ble_adv->scanRspData[4], "MBE003", 6);
-
-    uint8_t earBudsColor = aiWangGetEarBudsColor();
-    uint8_t nvColor = ntt_color_code_nv_get();
-
-    if ((0 == earBudsColor) || (0xFF == earBudsColor))
-    {
-        ble_adv->scanRspData[10] = nvColor;
-    }
-    else
-    {
-        ble_adv->scanRspData[10] = earBudsColor;
-    }
-
-    uint8_t *local_bt_addr = app_ibrt_if_get_bt_local_address();
-    uint8_t *peer_nv_addr  = nv_record_get_ibrt_peer_addr();
-
-    static const uint8_t invalid_ff[6] = {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-    };
-
-    static const uint8_t invalid_00[6] = {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-    };
-
-    if (local_bt_addr &&
-        memcmp(local_bt_addr, invalid_ff, 6) &&
-        memcmp(local_bt_addr, invalid_00, 6) &&
-        (local_bt_addr[0] & 0x01))
-    {
-        memcpy(&ble_adv->scanRspData[11], local_bt_addr, 6);
-    }
-    else if (peer_nv_addr &&
-             memcmp(peer_nv_addr, invalid_ff, 6) &&
-             memcmp(peer_nv_addr, invalid_00, 6) &&
-             (peer_nv_addr[0] & 0x01))
-    {
-        memcpy(&ble_adv->scanRspData[11], peer_nv_addr, 6);
-    }
-    else
-    {
-        factory_section_original_btaddr_get(&ble_adv->scanRspData[11]);
-    }
-
-    DEBUG_INFO(0, "[ADV] aiWangGetEarBudsColor=0x%02X", earBudsColor);
-    DEBUG_INFO(0, "[ADV] ntt_color_code_nv_get=0x%02X", nvColor);
-    DEBUG_INFO(0, "[ADV] final color scanRspData[10]=0x%02X",
-            ble_adv->scanRspData[10]);
-
-    DEBUG_INFO(0, "[ADV] Full Manufacturer Data:");
-    DUMP8("%02X ", &ble_adv->scanRspData[0], 17);
-
-    DEBUG_INFO(0, "[ADV] Local BT Addr:");
-    DUMP8("%02X ", local_bt_addr, 6);
-
-    DEBUG_INFO(0, "[ADV] Peer NV BT Addr:");
-    DUMP8("%02X ", peer_nv_addr, 6);
-
-    DEBUG_INFO(0, "[ADV] Manufacturer BT Addr:");
-    DUMP8("%02X ", &ble_adv->scanRspData[11], 6);
-
-    DEBUG_INFO(0, "%s skip BleName in USER_STUB adv", __func__);
-
+    bool adv_enable = false;
     do {
 #if (BLE_APP_HID)
-        BLE_ADV_PARAM_T *cmd = (BLE_ADV_PARAM_T *)param;
-
+        BLE_ADV_PARAM_T *cmd = (BLE_ADV_PARAM_T*)param;
         memcpy(&cmd->advData[cmd->advDataLen],
-               APP_HID_ADV_DATA_UUID,
-               APP_HID_ADV_DATA_UUID_LEN);
+            APP_HID_ADV_DATA_UUID, APP_HID_ADV_DATA_UUID_LEN);
         cmd->advDataLen += APP_HID_ADV_DATA_UUID_LEN;
-
         memcpy(&cmd->advData[cmd->advDataLen],
-               APP_HID_ADV_DATA_APPEARANCE,
-               APP_ADV_DATA_APPEARANCE_LEN);
+            APP_HID_ADV_DATA_APPEARANCE, APP_ADV_DATA_APPEARANCE_LEN);
         cmd->advDataLen += APP_ADV_DATA_APPEARANCE_LEN;
 
+
+        //cmd->advUserInterval[USER_BLE_DEMO0] = BLE_ADVERTISING_INTERVAL;
         adv_enable = true;
         break;
-#endif
+#endif //(BLE_APP_HID)
 
+        // ctkd needs ble adv no matter whether a mobile bt link has been established or not
 #ifdef CTKD_ENABLE
-        set_rsp_dist_lk_bit_field_func dist_lk_set_cb =
-            app_sec_reg_dist_lk_bit_get_callback();
-
+        set_rsp_dist_lk_bit_field_func dist_lk_set_cb = app_sec_reg_dist_lk_bit_get_callback();
         if ((dist_lk_set_cb && dist_lk_set_cb()) || (!dist_lk_set_cb))
         {
             adv_enable = true;
@@ -3735,28 +3428,19 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 #else
 
 #ifdef CUSTOMER_DEFINE_ADV_DATA
-        adv_enable = true;
+        adv_enable = false;
 #else
         adv_enable = true;
 #endif
-
 #endif
-    } while (0);
-
-    DEBUG_INFO(1, "[ADV] USER_STUB adv_enable=%d", adv_enable);
-    DEBUG_INFO(2, "[ADV] advDataLen=%d scanRspDataLen=%d",
-            ble_adv->advDataLen,
-            ble_adv->scanRspDataLen);
-
-    DUMP8("%02X ", ble_adv->advData, ble_adv->advDataLen);
-    DUMP8("%02X ", ble_adv->scanRspData, ble_adv->scanRspDataLen);
+    } while(0);
 
     app_ble_data_fill_enable(USER_STUB, adv_enable);
 }
 
 void app_ble_stub_user_init(void)
 {
-    DEBUG_INFO(0, "%s BLE_ADV!!", __func__);
+    DEBUG_INFO(0, "%s", __func__);
     app_ble_register_data_fill_handle(USER_STUB, (BLE_DATA_FILL_FUNC_T)app_ble_stub_user_data_fill_handler, false);
     ble_core_enable_stub_adv();
 }
@@ -4503,7 +4187,7 @@ bool app_ble_check_need_start_mtu_exchange(const gap_conn_item_t *conn)
         return true;
     }
 
-    return false;
+    return true;
 }
 
 #ifdef CFG_SEC_CON
@@ -6184,147 +5868,114 @@ void app_ble_init(void)
 
 #ifndef BLE_WATCH_ADAPTER
 #if defined(BLE_DIP_ENABLE)
-#error BLE_DIP_ENABLE
     ble_dip_init();
 #endif
 
 #if defined(BLE_BATT_ENABLE)
-//#error BLE_BATT_ENABLE
     ble_batt_init();
 #endif
 
 #if defined(BLE_HID_ENABLE)
-#error BLE_HID_ENABLE
     ble_hid_device_init();
 #endif
 
 #if defined(ANCC_ENABLED)
-#error ANCC_ENABLED
     ble_ancc_init();
 #endif
 
 #if (defined(BES_OTA) || defined(BES_OTA_BASIC))&& !defined(OTA_OVER_TOTA_ENABLED)
-//#error BES_OTA
     ble_ota_init();
 #endif
 
 #if defined(__AMA_VOICE__)
-#error __AMA_VOICE__
     ble_ai_ama_init();
 #endif
 
 #if defined(__DMA_VOICE__)
-#error __DMA_VOICE__
     ble_ai_dma_init();
 #endif
 
 #if defined(__GMA_VOICE__)
-#error __GMA_VOICE__
     ble_ai_gma_init();
 #endif
 
 #if defined(__SMART_VOICE__)
-#error __SMART_VOICE__
     ble_ai_smart_voice_init();
 #endif
 
 #if defined(__TENCENT_VOICE__)
-#error __TENCENT_VOICE__
     ble_ai_tencent_voice_init();
 #endif
 
 #if defined(DUAL_MIC_RECORDING)
-#error DUAL_MIC_RECORDING
     ble_ai_recording_init();
 #endif
 
 #if defined(__CUSTOMIZE_VOICE__)
-#error __CUSTOMIZE_VOICE__
     ble_ai_customize_init();
 #endif
 
 #ifdef CFG_APP_DATAPATH_SERVER
-#error CFG_APP_DATAPATH_SERVER
     ble_datapath_server_init();
 #endif
 
 #ifdef CFG_APP_DATAPATH_CLIENT
-#error CFG_APP_DATAPATH_CLIENT
     ble_datapath_client_init();
 #endif
 
 #ifdef TILE_DATAPATH
-#error TILE_DATAPATH
     ble_tile_init();
 #endif
 
 #endif   /* BLE_WATCH_ADAPTER */
 
 #if defined(BLE_HID_HOST)
-#error BLE_HID_HOST
     ble_hid_host_init();
 #endif
 
 #if (BLE_SHP_SERVER_SUPPORT)
-#error BLE_SHP_SERVER_SUPPORT
     ble_shp_init();
 #endif
 
 #ifdef ANCS_ENABLED
-#error ANCS_ENABLED
     ble_ancs_init();
 #endif
 
 #if defined(BLE_IAS_ENABLED)
-#error BLE_IAS_ENABLED
     ble_iac_init();
 #endif
 
 #if defined(CFG_APP_SAS_SERVER)
-#error CFG_APP_SAS_SERVER
     ble_sass_init();
 #endif
 
 #if defined(BES_MOBILE_SAS)
-#error BES_MOBILE_SAS
     ble_sasc_init();
 #endif
 
 #ifdef SWIFT_ENABLED
-#error SWIFT_ENABLED
     app_swift_init();
 #endif
 
 #ifdef BLE_TOTA_ENABLED
-//#error BLE_TOTA_ENABLED
     ble_tota_init();
 #endif
 
 #ifdef BLE_IAS_ENABLED
-#error BLE_IAS_ENABLED
     ble_ias_init();
 #endif
 
 #ifdef BLE_WIRELESS_TRANS_SRV_ENABLED
-#error BLE_WIRELESS_TRANS_SRV_ENABLED
     ble_wireless_trans_srv_init();
 #endif
 
 #ifdef BLE_WIRELESS_TRANS_CLI_ENABLED
-#error BLE_WIRELESS_TRANS_CLI_ENABLED
     ble_wireless_trans_cli_init();
 #endif
 
 #ifdef BLE_WIFI_SRV_ENABLED
-#error BLE_WIFI_SRV_ENABLED
     ble_wifi_srv_init();
 #endif
-
-#ifdef BLE_AIWANG_SRV_ENABLED
-    ble_aiwang_srv_init();
-#endif
-
-
 }
 
 uint32_t app_ble_save_ctx(uint8_t conidx, uint8_t *buf, uint16_t buf_len)

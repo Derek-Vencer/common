@@ -233,6 +233,93 @@ int codec_dac_dc_check_nv(void)
 
 #endif
 
+int codec_dac_dc_result_check(bool open_af)
+{
+    int ret = 0;
+    uint32_t i;
+    enum HAL_SYSFREQ_USER_T user = HAL_SYSFREQ_USER_APP_1;
+    uint32_t num;
+    struct HAL_CODEC_DAC_DRE_CALIB_CFG_T *cfg, *calib_cfg;
+    bool calib_ch_l, calib_ch_r;
+    struct AF_CODEC_CALIB_CFG_T acfg, *afcfg;
+
+    afcfg = &acfg;
+    memset((void*)afcfg, 0, sizeof(acfg));
+
+    hal_sysfreq_req(user, HAL_CMU_FREQ_104M);
+    hal_sysfreq_print_user_freq();
+    CODEC_CALIB_TRACE(1, "cpu clock: %u", hal_sys_timer_calc_cpu_freq(5, 0));
+
+    hal_codec_set_dac_calib_status(true);
+    calib_cfg = hal_codec_dac_dre_get_calib_cfg(&num);
+
+    if (open_af) {
+        af_open();
+    }
+
+    afcfg->len = DC_CALIB_BUF_SIZE;
+    afcfg->buf = codec_dac_dc_calib_malloc(afcfg->len);
+
+    calib_ch_l = true;
+#ifdef AUDIO_OUTPUT_DC_CALIB_DUAL_CHAN
+    calib_ch_r = true;
+#else
+    calib_ch_r = false;
+#endif
+
+#if defined(AUDIO_ANA_DC_CALIB_USE_COMP) || defined(AUDIO_ANA_DC_CALIB_USE_SDM1B)
+    codec_calib_dac_chan_set(&calib_ch_l, &calib_ch_r);
+#endif
+    af_codec_calib_dac_chan_enable(calib_ch_l, calib_ch_r);
+
+    if (!calib_ch_l && !calib_ch_r) {
+        CODEC_CALIB_TRACE(1, "%s: \nNo need to calib normal dac\n", __func__);
+        goto _exit_result;
+    }
+
+    af_codec_calib_dac_dc(CODEC_CALIB_CMD_OPEN, afcfg);
+
+    cfg = calib_cfg;
+    for (i = 0, cfg = calib_cfg; i < num; i++, cfg++) {
+        uint8_t ana_gain = cfg->ana_gain;
+        uint8_t ini_gain = cfg->ini_ana_gain;
+        uint8_t gain_offs = cfg->gain_offset;
+        uint32_t dig_dc_l = cfg->dc_l;
+        uint32_t dig_dc_r = cfg->dc_r;
+        uint16_t ana_dc_l = cfg->ana_dc_l;
+        uint16_t ana_dc_r = cfg->ana_dc_r;
+        int32_t result_l, result_r;
+
+        af_codec_calib_param_setup(DAC_PARAM_ANA_GAIN, ana_gain, ini_gain, gain_offs);
+        af_codec_calib_param_setup(DAC_PARAM_ANA_DC, ana_dc_l, ana_dc_r, 0);
+        af_codec_calib_param_setup(DAC_PARAM_DIG_DC, dig_dc_l, dig_dc_r, 0);
+
+        af_codec_calib_dac_dc(CODEC_CALIB_CMD_CHECK_DC_RESULT, afcfg);
+
+        result_l = (int32_t)((int32_t)afcfg->dig_dc_l * 0.16);
+        result_r = (int32_t)((int32_t)afcfg->dig_dc_r * 0.16);
+
+        CODEC_CALIB_TRACE(1, "!!!check anagain = 0x%x, result dc: result_l = %d uv", ana_gain, result_l);
+        CODEC_CALIB_TRACE(1, "!!!check anagain = 0x%x, result dc: result_r = %d uv", ana_gain, result_r);
+        if ((ABS(result_l) > 100) || (ABS(result_r) > 100)) {
+            ret = -1;
+            CODEC_CALIB_TRACE(1, "%s fail", __func__);
+        }
+    }
+
+    af_codec_calib_dac_dc(CODEC_CALIB_CMD_CLOSE, afcfg);
+    codec_dac_dc_calib_free(afcfg->buf);
+
+_exit_result:
+    hal_codec_set_dac_calib_status(false);
+    if (open_af) {
+        af_close();
+    }
+
+    hal_sysfreq_req(user, HAL_CMU_FREQ_32K);
+    return ret;
+}
+
 static int codec_dac_dc_do_calib(uint32_t *status)
 {
     int ret = 0;

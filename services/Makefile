@@ -11,9 +11,7 @@ obj-y := \
     ../utils/hsm/ \
     osif/ \
     norflash_api/ \
-    audio_manager/ \
-    aiwang_services/ \
-    
+    audio_manager/
 
 ifneq ($(filter 1, $(GATT_RATE_TESTC) $(GATT_RATE_TESTS)),)
 obj-y += rate_test_demo/

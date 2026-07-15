@@ -1198,7 +1198,7 @@ bt_status_t bt_adapter_init(bt_adapter_callback_t callback);
 bt_status_t bt_adapter_cleanup(void);
 bt_status_t bt_adapter_start_inquiry(void);
 bt_status_t bt_adapter_cancel_inquiry(void);
-bt_status_t bt_adapter_connect_acl_with_page_timeout(const bt_bdaddr_t *bd_addr, uint16_t page_timeout);
+bt_status_t bt_adapter_connect_acl_with_page_timeout(const bt_bdaddr_t *bd_addr, uint32_t page_timeout, uint32_t time_to_next_page);
 bt_status_t bt_adapter_connect_acl(const bt_bdaddr_t *bd_addr);
 bt_status_t bt_adapter_disconnect_acl(const bt_bdaddr_t *bd_addr);
 bt_status_t bt_adapter_create_bond(const bt_bdaddr_t *bd_addr);

@@ -132,6 +132,7 @@ ibrt_status_t app_ibrt_conn_set_discoverable_connectable(bool disc_enable, bool 
  */
 void app_ibrt_conn_dump_ibrt_info();
 
+bool app_ibrt_conn_is_phone_connect_happened(void);
  /**
   ****************************************************************************************
  * @brief app_ibrt_conn_pscan_setting

@@ -106,9 +106,11 @@ typedef struct
     bool disc_for_key_missing;
     bool upper_custom_switch_prepare;
     bool cancel_page_ongoing;
+    bool cancel_page_before_sm_start;
     unsigned int disconnect_reason;
     bool entry_connected;
     uint32_t page_to;
+    uint32_t time_to_next_page;
     uint32_t roleSwitchPreparingTimeoutInMs;
     uint32_t page_stamp;
     uint32_t page_cmp_stamp;

@@ -91,10 +91,7 @@ const char BUILD_INFO_LOCATION sys_build_info[] =
 #endif
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     NEW_LINE_STR "CRC32_OF_IMAGE=0x00000000"
-#else
-	NEW_LINE_STR "CRC32_OF_IMAGE=0x00000000"
 #endif
-
 #ifdef HW_VERSION_STRING
     NEW_LINE_STR "HW_VERSION=" TO_STR(HW_VERSION_STRING)
 #endif

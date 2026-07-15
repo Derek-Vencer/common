@@ -27,6 +27,7 @@
 
 #if defined(IBRT)
 #include "bts_core_if.h"
+#include "app_tws_ibrt_cmd_handler.h"
 #endif
 
 #if (APP_BLE_DEMO_APP_ENABLED)
@@ -74,7 +75,9 @@ struct ble_demo_app_information
 static void ble_demo_app_trans_addrress(uint8_t addr[6]);
 static bool ble_demo_app_adv_activity_prepare(ble_adv_activity_t *adv);
 static void ble_demo_app_conn_estb_thread_handler(uint8_t conidx);
+#if (BLE_AUDIO_ENABLED)
 static void ble_demo_app_visible_svc_database_hash_gen_cmp(void *priv, int error_code, const uint8_t *hash);
+#endif
 static void ble_demo_app_smp_requirements_modify(uint16_t connhdl, ble_smp_require_t *p_requirements);
 static void ble_demo_app_add_ble_record_handler(uint16_t connhdl, BleDevicePairingInfo *p_record);
 static void ble_demo_app_get_specific_irk_ia_handler(uint16_t connhdl, uint8_t **p_irk, bt_bdaddr_t **p_ia);
@@ -480,13 +483,15 @@ static void ble_demo_app_get_specific_hash_handler(uint16_t connhdl, uint8_t **p
 
 static void ble_demo_app_conn_estb_thread_handler(uint8_t conidx)
 {
-    const uint8_t empty_hash[GAP_KEY_LEN] = {0};
     gap_conn_item_t *conn = gap_get_conn_item(app_ble_get_conhdl_from_conidx(conidx));
 
     ble_demo_app_gatt_read_peer_manufacture_name(conn);
 
+
     if (conn->adv_handle == p_demo_app_info->adv_hdl)
     {
+#if (BLE_AUDIO_ENABLED)
+        const uint8_t empty_hash[GAP_KEY_LEN] = {0};
         // Control LEA service no visible
         gaf_prf_control_all_service(conn->connhdl, false);
         // Generate database hash when control service done
@@ -495,9 +500,11 @@ static void ble_demo_app_conn_estb_thread_handler(uint8_t conidx)
             gatts_gen_visible_svc_database_hash(conn->connhdl,
                                                 ble_demo_app_visible_svc_database_hash_gen_cmp);
         }
+#endif
     }
 }
 
+#if (BLE_AUDIO_ENABLED)
 static void ble_demo_app_visible_svc_database_hash_gen_cmp(void *priv, int error_code, const uint8_t *hash)
 {
     struct pp_buff *ppb = (struct pp_buff *)priv;
@@ -521,6 +528,7 @@ static void ble_demo_app_visible_svc_database_hash_gen_cmp(void *priv, int error
 
     ppb_free(ppb);
 }
+#endif
 
 static void ble_demo_app_trans_addrress(uint8_t addr[6])
 {

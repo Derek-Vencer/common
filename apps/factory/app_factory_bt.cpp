@@ -67,13 +67,13 @@ osTimerDef(bt_error_check_timer, bt_error_check_timer_handler);
 static osTimerId bt_error_check_timer_id = NULL;
 uint8_t test_mode_type=0;
 
-#if 1 || defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-#define POWEROFF_TIMEOUT        (60) //(60*15)
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#define POWEROFF_TIMEOUT        (60*15)
 
 static uint32_t dut_poweroff_cnt = 0;
 uint8_t bt_test_mode_dut_get(void)
 {
-	FACTORY_TRACE(0, "%s, test_mode_type = %d", __func__, test_mode_type);
+    BESUI_TRACE(0, "%s, test_mode_type = %d", __func__, test_mode_type);
     if(hal_sw_bootmode_get() & HAL_SW_BOOTMODE_TEST_SIGNALINGMODE)
     {
         return 1;
@@ -127,9 +127,7 @@ static void bt_error_check_timer_handler(void const *param)
     if(dut_poweroff_cnt >= POWEROFF_TIMEOUT)
     {
         dut_poweroff_cnt = 0;
-#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
         uictl.shutdown_type = SHUTDOWN_DUT_TIMEOUT;
-#endif
         app_shutdown();
     }
 #endif
@@ -174,7 +172,7 @@ void app_factorymode_CmgrCallback(btif_cmgr_handler_t *cHandler,
         }
     }
 
-#if 1 || defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     dut_poweroff_cnt = 0;
 #endif
 }
@@ -729,16 +727,6 @@ void app_factorymode_bt_xtalcalib(APP_KEY_STATUS *status, void *param)
 {
     FACTORY_TRACE(1,"%s",__func__);
     app_factorymode_bt_xtalcalib_proc();
-}
-
-void app_factorymode_exit(APP_KEY_STATUS *status, void *param)
-{
-    FACTORY_TRACE(1,"%s",__func__);
-    //hal_sw_bootmode_set(HAL_SW_BOOTMODE_REBOOT);
-    nv_record_flash_flush();
-    osDelay(500);
-    //pmu_reboot();
-    app_shutdown();
 }
 
 #ifdef APP_TRACE_RX_ENABLE
