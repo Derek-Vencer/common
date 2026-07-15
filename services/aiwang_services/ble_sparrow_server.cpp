@@ -13,6 +13,7 @@
 #include "bluetooth_ble_api.h"
 #include "app_bt_func.h"
 #include "ble_aiwang_srv.h"
+#include "bt_sco_chain.h"
 
 #ifdef IBRT
 #include "app_ibrt_internal.h"
@@ -301,6 +302,22 @@ static const char *ntt_api_error_string(uint8_t err)
     }
 }
 
+static uint32_t ntt_read_le32(const uint8_t *data)
+{
+    return ((uint32_t)data[0]) |
+           ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) |
+           ((uint32_t)data[3] << 24);
+}
+
+static void ntt_write_le32(uint8_t *data, uint32_t value)
+{
+    data[0] = (uint8_t)value;
+    data[1] = (uint8_t)(value >> 8);
+    data[2] = (uint8_t)(value >> 16);
+    data[3] = (uint8_t)(value >> 24);
+}
+
 static void ntt_api_send_error_notify(uint8_t rsp_cmd, uint8_t err)
 {
     uint8_t buf[64] = {0};
@@ -308,13 +325,471 @@ static void ntt_api_send_error_notify(uint8_t rsp_cmd, uint8_t err)
     uint16_t detail_len = strlen(detail);
     uint16_t value_len = detail_len + 1;
 
-    buf[0] = (value_len >> 8) & 0xFF;
-    buf[1] = value_len & 0xFF;
+    buf[0] = (uint8_t)((value_len >> 8) & 0xFF);
+    buf[1] = (uint8_t)(value_len & 0xFF);
     buf[2] = err;
+
     memcpy(&buf[3], detail, detail_len);
 
-    TRACE(0, "[API_ERR][NOTIFY] rsp=0x%02X err=0x%02X detail=%s", rsp_cmd, err, detail);
+    TRACE(0,
+          "[API_ERR][NOTIFY] rsp=0x%02X err=0x%02X detail=%s",
+          rsp_cmd,
+          err,
+          detail);
+
     sparraw_tx_msg(rsp_cmd, buf, detail_len + 3);
+}
+
+static bool ntt_speech_eq_check_packet(const uint8_t *data,uint16_t len,uint8_t expected_cmd,uint16_t expected_payload_len)
+{
+    uint16_t payload_len;
+
+    if ((data == NULL) || (len < 3))
+    {
+        return false;
+    }
+
+    if (data[0] != expected_cmd)
+    {
+        return false;
+    }
+
+    payload_len =
+        ((uint16_t)data[1] << 8) |
+        (uint16_t)data[2];
+
+    if (payload_len != expected_payload_len)
+    {
+        return false;
+    }
+
+    if (len != (uint16_t)(payload_len + 3))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Request:
+ *   Byte 0 = 0x70
+ *   Byte 1 = mode
+ *
+ * Response payload, 13 bytes:
+ *   Byte 0     status
+ *   Byte 1     active
+ *   Byte 2     mode
+ *   Byte 3     bypass
+ *   Byte 4     band num
+ *   Byte 5~8   sample rate, LE32
+ *   Byte 9~12  master gain x1000, signed LE32
+ */
+
+static void ntt_handle_get_speech_tx_eq_info(const uint8_t *data,uint16_t len)
+{
+    NTT_SPEECH_TX_EQ_INFO_T info;
+    uint8_t rsp[13] = {0};
+    NTT_SPEECH_EQ_MODE_T mode;
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_GET_SPEECH_TX_EQ_INFO,
+            1))
+    {
+        TRACE(0,
+              "[SCO_EQ][GET_INFO] invalid len=%u",
+              (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_GET_SPEECH_TX_EQ_INFO,
+            rsp,
+            sizeof(rsp));
+
+        return;
+    }
+
+    mode = (NTT_SPEECH_EQ_MODE_T)data[3];
+
+    if ((mode != NTT_SPEECH_EQ_MODE_CURRENT) &&
+        (mode != NTT_SPEECH_EQ_MODE_NB_8K) &&
+        (mode != NTT_SPEECH_EQ_MODE_WB_16K))
+    {
+        TRACE(0,
+              "[SCO_EQ][GET_INFO] invalid mode=%d",
+              (int)mode);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_GET_SPEECH_TX_EQ_INFO,
+            rsp,
+            sizeof(rsp));
+
+        return;
+    }
+
+    memset(&info, 0, sizeof(info));
+
+    ret = ntt_speech_tx_eq_get_info(
+        mode,
+        &info);
+
+    if (ret != 0)
+    {
+        TRACE(0,
+              "[SCO_EQ][GET_INFO] failed mode=%d ret=%d",
+              (int)mode,
+              ret);
+
+        rsp[0] = (uint8_t)(-ret);
+
+        sparraw_tx_msg(RSP_GET_SPEECH_TX_EQ_INFO,rsp,sizeof(rsp));
+
+        return;
+    }
+
+    rsp[0] = 0;
+    rsp[1] = info.active;
+    rsp[2] = info.mode;
+    rsp[3] = info.bypass;
+    rsp[4] = info.num;
+
+    ntt_write_le32(&rsp[5],info.sample_rate);
+
+    ntt_write_le32(&rsp[9],(uint32_t)info.master_gain_x1000);
+
+    TRACE(0,
+          "[SCO_EQ][GET_INFO] active=%d mode=%d fs=%u "
+          "bypass=%d num=%d gain=%d",
+          info.active,
+          info.mode,
+          (unsigned int)info.sample_rate,
+          info.bypass,
+          info.num,
+          info.master_gain_x1000);
+
+    sparraw_tx_msg(RSP_GET_SPEECH_TX_EQ_INFO,rsp,sizeof(rsp));
+}
+
+/*
+ * Request:
+ *   Byte 0 = 0x72
+ *   Byte 1 = mode
+ *
+ * Response payload, 8 bytes:
+ *   Byte 0    status
+ *   Byte 1    mode
+ *   Byte 2    bypass
+ *   Byte 3    band num
+ *   Byte 4~7 master gain x1000, signed LE32
+ */
+static void ntt_handle_get_speech_tx_eq_global(const uint8_t *data,uint16_t len)
+{
+    NTT_SPEECH_TX_EQ_INFO_T info;
+    uint8_t rsp[8] = {0};
+    NTT_SPEECH_EQ_MODE_T mode;
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_GET_SPEECH_TX_EQ_GLOBAL,
+            1))
+    {
+        TRACE(0,
+              "[SCO_EQ][GET_GLOBAL] invalid len=%u",
+              (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_GET_SPEECH_TX_EQ_GLOBAL,
+            rsp,
+            sizeof(rsp));
+        return;
+    }
+
+    mode = (NTT_SPEECH_EQ_MODE_T)data[3];
+
+    memset(&info, 0, sizeof(info));
+
+    ret = ntt_speech_tx_eq_get_info(
+        mode,
+        &info);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    if (ret == 0)
+    {
+        rsp[1] = info.mode;
+        rsp[2] = info.bypass;
+        rsp[3] = info.num;
+
+        ntt_write_le32(
+            &rsp[4],
+            (uint32_t)info.master_gain_x1000);
+    }
+
+    TRACE(0,
+          "[SCO_EQ][GET_GLOBAL] mode=%d bypass=%d "
+          "num=%d gain=%d ret=%d",
+          info.mode,
+          info.bypass,
+          info.num,
+          info.master_gain_x1000,
+          ret);
+
+    sparraw_tx_msg(
+        RSP_GET_SPEECH_TX_EQ_GLOBAL,
+        rsp,
+        sizeof(rsp));
+}
+
+/*
+ * Request:
+ *   Byte 0 = 0x74
+ *   Byte 1 = mode
+ *   Byte 2 = band index
+ *
+ * Response payload, 16 bytes:
+ *   Byte 0      status
+ *   Byte 1      mode
+ *   Byte 2      band index
+ *   Byte 3      filter type
+ *   Byte 4~7    frequency Hz, LE32
+ *   Byte 8~11   gain x1000, signed LE32
+ *   Byte 12~15  Q x1000, LE32
+ */
+static void ntt_handle_get_speech_tx_eq_band(const uint8_t *data,uint16_t len)
+{
+    NTT_SPEECH_TX_EQ_BAND_T band;
+    uint8_t rsp[16] = {0};
+    NTT_SPEECH_EQ_MODE_T mode;
+    uint8_t index;
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_GET_SPEECH_TX_EQ_BAND,
+            2))
+    {
+        TRACE(0,
+              "[SCO_EQ][GET_BAND] invalid len=%u",
+              (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_GET_SPEECH_TX_EQ_BAND,
+            rsp,
+            sizeof(rsp));
+        return;
+    }
+
+    mode = (NTT_SPEECH_EQ_MODE_T)data[3];
+    index = data[4];
+
+    memset(&band, 0, sizeof(band));
+
+    ret = ntt_speech_tx_eq_get_band(
+        mode,
+        index,
+        &band);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    rsp[1] = (uint8_t)mode;
+    rsp[2] = index;
+
+    if (ret == 0)
+    {
+        rsp[2] = band.index;
+        rsp[3] = band.type;
+
+        ntt_write_le32(
+            &rsp[4],
+            band.frequency_hz);
+
+        ntt_write_le32(
+            &rsp[8],
+            (uint32_t)band.gain_x1000);
+
+        ntt_write_le32(
+            &rsp[12],
+            band.q_x1000);
+    }
+
+    sparraw_tx_msg(
+        RSP_GET_SPEECH_TX_EQ_BAND,
+        rsp,
+        sizeof(rsp));
+}
+
+/*
+ * Request, 9 bytes:
+ *   Byte 0    = 0x76
+ *   Byte 1    mode
+ *   Byte 2    bypass
+ *   Byte 3    band num
+ *   Byte 4    reserved
+ *   Byte 5~8 master gain x1000, signed LE32
+ *
+ * Response payload:
+ *   Byte 0 status
+ *   Byte 1 mode
+ */
+static void ntt_handle_set_speech_tx_eq_global(const uint8_t *data,uint16_t len)
+{
+    uint8_t rsp[2] = {0};
+    NTT_SPEECH_EQ_MODE_T mode;
+    uint8_t bypass;
+    uint8_t num;
+    int32_t master_gain;
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_SET_SPEECH_TX_EQ_GLOBAL,
+            8))
+    {
+        TRACE(0,
+              "[SCO_EQ][SET_GLOBAL] invalid len=%u",
+              (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_SET_SPEECH_TX_EQ_GLOBAL,
+            rsp,
+            sizeof(rsp));
+        return;
+    }
+
+    mode = (NTT_SPEECH_EQ_MODE_T)data[3];
+    bypass = data[4];
+    num = data[5];
+
+    master_gain =
+        (int32_t)ntt_read_le32(&data[7]);
+
+    ret = ntt_speech_tx_eq_set_global(
+        mode,
+        bypass,
+        master_gain,
+        num);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    rsp[1] = (uint8_t)mode;
+
+    TRACE(0,
+          "[SCO_EQ][SET_GLOBAL] mode=%d bypass=%u "
+          "num=%u gain=%d ret=%d",
+          (int)mode,
+          bypass,
+          num,
+          master_gain,
+          ret);
+
+    sparraw_tx_msg(
+        RSP_SET_SPEECH_TX_EQ_GLOBAL,
+        rsp,
+        sizeof(rsp));
+}
+
+/*
+ * Request, 17 bytes:
+ *   Byte 0      = 0x78
+ *   Byte 1      mode
+ *   Byte 2      band index
+ *   Byte 3      filter type
+ *   Byte 4      reserved
+ *   Byte 5~8    frequency Hz, LE32
+ *   Byte 9~12   gain x1000, signed LE32
+ *   Byte 13~16  Q x1000, LE32
+ *
+ * Response payload:
+ *   Byte 0 status
+ *   Byte 1 mode
+ *   Byte 2 band index
+ */
+static void ntt_handle_set_speech_tx_eq_band(const uint8_t *data,uint16_t len)
+{
+    NTT_SPEECH_TX_EQ_BAND_T band;
+    uint8_t rsp[3] = {0};
+    NTT_SPEECH_EQ_MODE_T mode;
+    int ret;
+
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_SET_SPEECH_TX_EQ_BAND,
+            16))
+    {
+        TRACE(0,
+              "[SCO_EQ][SET_BAND] invalid len=%u",
+              (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_SET_SPEECH_TX_EQ_BAND,
+            rsp,
+            sizeof(rsp));
+        return;
+    }
+
+    memset(&band, 0, sizeof(band));
+
+    mode = (NTT_SPEECH_EQ_MODE_T)data[3];
+
+    band.index = data[4];
+    band.type = data[5];
+
+    band.frequency_hz =
+        ntt_read_le32(&data[7]);
+
+    band.gain_x1000 =
+        (int32_t)ntt_read_le32(&data[11]);
+
+    band.q_x1000 =
+        ntt_read_le32(&data[15]);
+
+    ret = ntt_speech_tx_eq_set_band(
+        mode,
+        &band);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    rsp[1] = (uint8_t)mode;
+    rsp[2] = band.index;
+
+    TRACE(0,
+          "[SCO_EQ][SET_BAND] mode=%d idx=%u type=%u "
+          "freq=%u gain=%d q=%u ret=%d",
+          (int)mode,
+          band.index,
+          band.type,
+          (unsigned int)band.frequency_hz,
+          band.gain_x1000,
+          (unsigned int)band.q_x1000,
+          ret);
+
+    sparraw_tx_msg(
+        RSP_SET_SPEECH_TX_EQ_BAND,
+        rsp,
+        sizeof(rsp));
 }
 
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
@@ -1162,6 +1637,13 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
 		{SET_KEY_MAPPING,	  handleSetKeyMapping},
 		{GET_EQ_PRESET,		  handleGetEqPresent},
 		{SET_EQ_PRESET,       handleSetEqPresent},
+
+        {REQ_GET_SPEECH_TX_EQ_INFO,     ntt_handle_get_speech_tx_eq_info},
+        {REQ_GET_SPEECH_TX_EQ_GLOBAL,   ntt_handle_get_speech_tx_eq_global},
+        {REQ_GET_SPEECH_TX_EQ_BAND,     ntt_handle_get_speech_tx_eq_band},
+        {REQ_SET_SPEECH_TX_EQ_GLOBAL,   ntt_handle_set_speech_tx_eq_global},
+        {REQ_SET_SPEECH_TX_EQ_BAND,     ntt_handle_set_speech_tx_eq_band},
+
 		{GET_FW_VERSION,      handleGetFwVersion},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},
 		{FACTORY_COMMAND_AUDIO_IO,handleFactoryCmdAudio},

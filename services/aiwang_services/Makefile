@@ -70,6 +70,7 @@ subdir-ccflags-y += -Iapps/common \
 				    -Ibthost/adapter/inc/ble/aob \
 				    -Iapps/battery/ \
 				    -Iapps/factory/ \
+					-Iapps/audioplayers \
 				    -Iservices/nv_section/factory_section \
 				    -Iservices/communication \
 				    -Iservices/ota/ \

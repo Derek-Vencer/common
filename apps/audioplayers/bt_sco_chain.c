@@ -400,7 +400,371 @@ AdaptiveVolumeState *speech_adaptive_volume_st = NULL;
 extern const AdaptiveVolumeConfig audio_adaptive_volume_cfg;
 #endif
 
+#if defined(SPEECH_TX_EQ)
+
+static EqConfig ntt_speech_tx_eq_nb_cfg;
+static EqConfig ntt_speech_tx_eq_wb_cfg;
+
+static bool ntt_speech_tx_eq_cache_initialized = false;
+static int32_t ntt_speech_tx_sample_rate = 0;
+
+#endif
+
 static bool dualmic_enable = true;
+
+#if defined(SPEECH_TX_EQ)
+
+static EqConfig *ntt_speech_tx_eq_get_cfg(NTT_SPEECH_EQ_MODE_T mode)
+{
+    //if (!ntt_speech_tx_eq_cache_initialized)
+    //{
+    //    return NULL;
+    //}
+
+    AUDIOPLAYERS_TRACE(2,
+        "[SCO_EQ] get_cfg mode=%d fs=%d cache=%d",
+        mode,
+        ntt_speech_tx_sample_rate,
+        ntt_speech_tx_eq_cache_initialized);
+
+    switch (mode)
+    {
+        case NTT_SPEECH_EQ_MODE_CURRENT:
+        {
+            /*
+            * 尚未建立 Speech Pipeline 時，
+            * 預設回傳 WB，
+            * 因為目前 HFP 都是 mSBC 16k。
+            */
+            if (ntt_speech_tx_sample_rate <= 0)
+            {
+                return &ntt_speech_tx_eq_wb_cfg;
+            }
+
+            return (ntt_speech_tx_sample_rate <= 8000) ?
+                &ntt_speech_tx_eq_nb_cfg :
+                &ntt_speech_tx_eq_wb_cfg;
+        }
+
+        case NTT_SPEECH_EQ_MODE_NB_8K:
+            return &ntt_speech_tx_eq_nb_cfg;
+
+        case NTT_SPEECH_EQ_MODE_WB_16K:
+            return &ntt_speech_tx_eq_wb_cfg;
+
+        default:
+            return NULL;
+    }
+}
+
+static bool ntt_speech_tx_eq_mode_is_active(NTT_SPEECH_EQ_MODE_T mode)
+{
+    if ((speech_tx_eq_st == NULL) ||
+        (ntt_speech_tx_sample_rate <= 0))
+    {
+        return false;
+    }
+
+    if (mode == NTT_SPEECH_EQ_MODE_CURRENT)
+    {
+        return true;
+    }
+
+    if (ntt_speech_tx_sample_rate <= 8000)
+    {
+        return (mode == NTT_SPEECH_EQ_MODE_NB_8K);
+    }
+
+    return (mode == NTT_SPEECH_EQ_MODE_WB_16K);
+}
+
+static int ntt_speech_tx_eq_apply_if_active(NTT_SPEECH_EQ_MODE_T mode,EqConfig *cfg)
+{
+    if ((cfg == NULL) ||
+        !ntt_speech_tx_eq_mode_is_active(mode))
+    {
+        /*
+         * 沒有通話或修改的是非目前模式。
+         * Cache 已更新，無需立即套用。
+         */
+        return 0;
+    }
+
+    return eq_set_config(
+        speech_tx_eq_st,
+        cfg);
+}
+
+#endif
+
+int ntt_speech_tx_eq_get_info(NTT_SPEECH_EQ_MODE_T mode,NTT_SPEECH_TX_EQ_INFO_T *info)
+{
+#if defined(SPEECH_TX_EQ)
+    EqConfig *cfg;
+
+    if (info == NULL)
+    {
+        return -1;
+    }
+
+    memset(info, 0, sizeof(*info));
+
+    cfg = ntt_speech_tx_eq_get_cfg(mode);
+
+    if (cfg == NULL)
+    {
+        return -2;
+    }
+
+    info->active =
+        (speech_tx_eq_st != NULL) ? 1 : 0;
+
+    if (mode == NTT_SPEECH_EQ_MODE_CURRENT)
+    {
+        if (ntt_speech_tx_sample_rate <= 0)
+        {
+            return -3;
+        }
+
+        info->mode =
+            (ntt_speech_tx_sample_rate <= 8000) ?
+            NTT_SPEECH_EQ_MODE_NB_8K :
+            NTT_SPEECH_EQ_MODE_WB_16K;
+    }
+    else
+    {
+        info->mode = (uint8_t)mode;
+    }
+
+    info->sample_rate =
+        (info->mode == NTT_SPEECH_EQ_MODE_NB_8K) ?
+        8000 : 16000;
+
+    info->bypass =
+        (uint8_t)(cfg->bypass ? 1 : 0);
+
+    info->num =
+        (uint8_t)cfg->num;
+
+    info->master_gain_x1000 =
+        (int32_t)(cfg->gain * 1000.0f);
+
+    return 0;
+#else
+    (void)mode;
+    (void)info;
+    return -10;
+#endif
+}
+
+int ntt_speech_tx_eq_get_band(NTT_SPEECH_EQ_MODE_T mode,uint8_t index,NTT_SPEECH_TX_EQ_BAND_T *band)
+{
+#if defined(SPEECH_TX_EQ)
+    EqConfig *cfg;
+    const BiquardParam *param;
+
+    if (band == NULL)
+    {
+        return -1;
+    }
+
+    cfg = ntt_speech_tx_eq_get_cfg(mode);
+
+    if (cfg == NULL)
+    {
+        return -2;
+    }
+
+    if ((index >= MAX_VQE_EQ_BAND) ||
+        (index >= cfg->num))
+    {
+        return -3;
+    }
+
+    param = &cfg->params[index];
+
+    if (param->type == IIR_BIQUARD_RAW)
+    {
+        return -4;
+    }
+
+    memset(band, 0, sizeof(*band));
+
+    band->index = index;
+    band->type = (uint8_t)param->type;
+
+    band->frequency_hz =
+        (uint32_t)param->design.f0;
+
+    band->gain_x1000 =
+        (int32_t)(param->design.gain * 1000.0f);
+
+    band->q_x1000 =
+        (uint32_t)(param->design.q * 1000.0f);
+
+    return 0;
+#else
+    (void)mode;
+    (void)index;
+    (void)band;
+    return -10;
+#endif
+}
+
+int ntt_speech_tx_eq_set_global(NTT_SPEECH_EQ_MODE_T mode,uint8_t bypass,int32_t master_gain_x1000,uint8_t num)
+{
+#if defined(SPEECH_TX_EQ)
+    EqConfig *cfg;
+    float master_gain;
+
+    cfg = ntt_speech_tx_eq_get_cfg(mode);
+
+    if (cfg == NULL)
+    {
+        return -1;
+    }
+
+    if (num > MAX_VQE_EQ_BAND)
+    {
+        return -2;
+    }
+
+    master_gain =
+        (float)master_gain_x1000 / 1000.0f;
+
+    if ((master_gain < -24.0f) ||
+        (master_gain > 12.0f))
+    {
+        return -3;
+    }
+
+    cfg->bypass = bypass ? 1 : 0;
+    cfg->gain = master_gain;
+    cfg->num = num;
+
+    AUDIOPLAYERS_TRACE(1,
+          "[SCO_EQ] set global mode=%d bypass=%d gain=%d num=%d",
+          mode,
+          cfg->bypass,
+          master_gain_x1000,
+          cfg->num);
+
+    return ntt_speech_tx_eq_apply_if_active(
+        mode,
+        cfg);
+#else
+    (void)mode;
+    (void)bypass;
+    (void)master_gain_x1000;
+    (void)num;
+    return -10;
+#endif
+}
+
+int ntt_speech_tx_eq_set_band(NTT_SPEECH_EQ_MODE_T mode,const NTT_SPEECH_TX_EQ_BAND_T *band)
+{
+#if defined(SPEECH_TX_EQ)
+    EqConfig *cfg;
+    BiquardParam *param;
+    float frequency;
+    float gain;
+    float q;
+    float max_frequency;
+
+    if (band == NULL)
+    {
+        return -1;
+    }
+
+    cfg = ntt_speech_tx_eq_get_cfg(mode);
+
+    if (cfg == NULL)
+    {
+        return -2;
+    }
+
+    if (band->index >= MAX_VQE_EQ_BAND)
+    {
+        return -3;
+    }
+
+    if ((band->type >= IIR_BIQUARD_QTY) ||
+        (band->type == IIR_BIQUARD_RAW))
+    {
+        return -4;
+    }
+
+    frequency = (float)band->frequency_hz;
+    gain =
+        (float)band->gain_x1000 / 1000.0f;
+    q =
+        (float)band->q_x1000 / 1000.0f;
+
+    if (mode == NTT_SPEECH_EQ_MODE_CURRENT)
+    {
+        max_frequency =
+            (ntt_speech_tx_sample_rate <= 8000) ?
+            3500.0f : 7500.0f;
+    }
+    else
+    {
+        max_frequency =
+            (mode == NTT_SPEECH_EQ_MODE_NB_8K) ?
+            3500.0f : 7500.0f;
+    }
+
+    if ((frequency < 20.0f) ||
+        (frequency > max_frequency))
+    {
+        return -5;
+    }
+
+    if ((gain < -24.0f) ||
+        (gain > 24.0f))
+    {
+        return -6;
+    }
+
+    if ((q < 0.1f) ||
+        (q > 20.0f))
+    {
+        return -7;
+    }
+
+    param =
+        &cfg->params[band->index];
+
+    param->type =
+        (enum IIR_BIQUARD_TYPE)band->type;
+
+    param->design.f0 = frequency;
+    param->design.gain = gain;
+    param->design.q = q;
+
+    if (cfg->num < (band->index + 1))
+    {
+        cfg->num = band->index + 1;
+    }
+
+    AUDIOPLAYERS_TRACE(1,
+          "[SCO_EQ] set band mode=%d idx=%d type=%d "
+          "f0=%d gain=%d q=%d",
+          mode,
+          band->index,
+          band->type,
+          band->frequency_hz,
+          band->gain_x1000,
+          band->q_x1000);
+
+    return ntt_speech_tx_eq_apply_if_active(
+        mode,
+        cfg);
+#else
+    (void)mode;
+    (void)band;
+    return -10;
+#endif
+}
 
 void switch_dualmic_status(void)
 {
@@ -722,6 +1086,61 @@ int _speech_tx_init_pre(int sample_rate, int frame_len)
     speech_tx_eq_st = eq_init_with_custom_allocator(sample_rate, frame_len, &speech_cfg->tx_eq, default_allocator());
 #endif
 
+#if defined(SPEECH_TX_EQ)
+    ntt_speech_tx_sample_rate = sample_rate;
+
+    if (!ntt_speech_tx_eq_cache_initialized)
+    {
+        AUDIOPLAYERS_TRACE(1,
+            "[SCO_EQ] ===== FIRST INIT =====");
+
+        AUDIOPLAYERS_TRACE(1,
+            "[SCO_EQ] fs=%d bypass=%d gain=%d num=%d",
+            sample_rate,
+            speech_cfg->tx_eq.bypass,
+            (int)(speech_cfg->tx_eq.gain * 1000.0f),
+            speech_cfg->tx_eq.num);
+
+        for (int i = 0; i < speech_cfg->tx_eq.num; i++)
+        {
+            AUDIOPLAYERS_TRACE(1,
+                "[SCO_EQ] band=%d type=%d f0=%d gain=%d q=%d",
+                i,
+                speech_cfg->tx_eq.params[i].type,
+                (int)speech_cfg->tx_eq.params[i].design.f0,
+                (int)(speech_cfg->tx_eq.params[i].design.gain * 1000.0f),
+                (int)(speech_cfg->tx_eq.params[i].design.q * 1000.0f));
+        }
+
+        memcpy(&ntt_speech_tx_eq_nb_cfg,
+               &speech_cfg->tx_eq,
+               sizeof(EqConfig));
+
+        memcpy(&ntt_speech_tx_eq_wb_cfg,
+               &speech_cfg->tx_eq,
+               sizeof(EqConfig));
+
+        AUDIOPLAYERS_TRACE(1,
+            "[SCO_EQ] cache bypass=%d gain=%d num=%d",
+            ntt_speech_tx_eq_nb_cfg.bypass,
+            (int)(ntt_speech_tx_eq_nb_cfg.gain * 1000.0f),
+            ntt_speech_tx_eq_nb_cfg.num);
+
+        for (int i = 0; i < ntt_speech_tx_eq_nb_cfg.num; i++)
+        {
+            AUDIOPLAYERS_TRACE(1,
+                "[SCO_EQ] cache band=%d type=%d f0=%d gain=%d q=%d",
+                i,
+                ntt_speech_tx_eq_nb_cfg.params[i].type,
+                (int)ntt_speech_tx_eq_nb_cfg.params[i].design.f0,
+                (int)(ntt_speech_tx_eq_nb_cfg.params[i].design.gain * 1000.0f),
+                (int)(ntt_speech_tx_eq_nb_cfg.params[i].design.q * 1000.0f));
+        }
+
+        ntt_speech_tx_eq_cache_initialized = true;
+    }
+#endif
+
 #if defined(SPEECH_TX_POST_GAIN)
     speech_tx_post_gain_st = speech_gain_create(sample_rate, frame_len, &speech_cfg->tx_post_gain);
 #endif
@@ -823,6 +1242,13 @@ int speech_rx_init(int sample_rate, int frame_len)
 
 float speech_sysfreq_to_mips(enum HAL_CMU_FREQ_T sysfreq);
 
+static void ntt_speech_tx_eq_init_cache(void)
+{
+    memcpy(&ntt_speech_tx_eq_nb_cfg,&speech_cfg->tx_eq,sizeof(EqConfig));
+    memcpy(&ntt_speech_tx_eq_wb_cfg,&speech_cfg->tx_eq,sizeof(EqConfig));
+    ntt_speech_tx_eq_cache_initialized = true;
+}
+
 int speech_init2(int tx_sample_rate, int rx_sample_rate,
                      int tx_frame_len, int rx_frame_len,
                      int sco_frame_len,
@@ -853,6 +1279,9 @@ int speech_init2(int tx_sample_rate, int rx_sample_rate,
     // and call in apps.cpp: app_init()
     speech_cfg = (SpeechConfig *)speech_calloc(1, sizeof(SpeechConfig));
     speech_store_config(&speech_cfg_default);
+    ntt_speech_tx_eq_init_cache();
+    AUDIOPLAYERS_TRACE(1,"[SCO_EQ] load speech_cfg_default");
+
     if (ntt_dut_speech_tx_1mic_ns_bypass_get())
     {
         speech_cfg->tx_1mic_ns.bypass = 1;
@@ -999,6 +1428,7 @@ int speech_init(int tx_sample_rate, int rx_sample_rate,
                      int sco_frame_ms,
                      uint8_t *buf, int len)
 {
+    AUDIOPLAYERS_TRACE(1,"[%s] Start...", __func__);
     int tx_frame_len = SPEECH_FRAME_MS_TO_LEN(tx_sample_rate, tx_frame_ms);
     int rx_frame_len = SPEECH_FRAME_MS_TO_LEN(rx_sample_rate, rx_frame_ms);
     int sco_frame_len = SPEECH_FRAME_MS_TO_LEN(tx_sample_rate, sco_frame_ms);
@@ -1019,6 +1449,7 @@ int speech_tx_deinit(void)
 
 #if defined(SPEECH_TX_EQ)
     eq_destroy(speech_tx_eq_st);
+    ntt_speech_tx_sample_rate = 0;
 #endif
 
 #if defined(SPEECH_TX_AGC)

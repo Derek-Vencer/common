@@ -1,6 +1,6 @@
 CHIP        ?= best1306p
 
-DEBUG       ?= 0
+DEBUG       ?= 1
 
 FPGA        ?= 0
 
@@ -275,6 +275,7 @@ export USE_KNOWLES ?= 0
 export POWERKEY_I2C_SWITCH ?=0
 
 AUTO_TEST ?= 0
+SPEECH_TX_EQ ?= 1
 
 BES_AUTOMATE_TEST ?= 0
 

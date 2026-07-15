@@ -28,6 +28,20 @@ extern "C" {
 #define BLE_AIWANG_SRV_ENABLED
 #endif
 
+#define REQ_GET_SPEECH_TX_EQ_INFO        0x70
+#define RSP_GET_SPEECH_TX_EQ_INFO        0x71
+
+#define REQ_GET_SPEECH_TX_EQ_GLOBAL      0x72
+#define RSP_GET_SPEECH_TX_EQ_GLOBAL      0x73
+
+#define REQ_GET_SPEECH_TX_EQ_BAND        0x74
+#define RSP_GET_SPEECH_TX_EQ_BAND        0x75
+
+#define REQ_SET_SPEECH_TX_EQ_GLOBAL      0x76
+#define RSP_SET_SPEECH_TX_EQ_GLOBAL      0x77
+
+#define REQ_SET_SPEECH_TX_EQ_BAND        0x78
+#define RSP_SET_SPEECH_TX_EQ_BAND        0x79
 
 typedef enum cmds {
 	A0_SETS     = 0xA0,

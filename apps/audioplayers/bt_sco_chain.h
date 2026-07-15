@@ -19,6 +19,66 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#if defined(SPEECH_TX_EQ)
+
+typedef enum
+{
+    NTT_SPEECH_EQ_MODE_CURRENT = 0,
+    NTT_SPEECH_EQ_MODE_NB_8K   = 1,
+    NTT_SPEECH_EQ_MODE_WB_16K  = 2,
+} NTT_SPEECH_EQ_MODE_T;
+
+typedef struct
+{
+    uint8_t active;
+    uint8_t mode;
+    uint8_t bypass;
+    uint8_t num;
+
+    uint32_t sample_rate;
+    int32_t master_gain_x1000;
+} NTT_SPEECH_TX_EQ_INFO_T;
+
+typedef struct
+{
+    uint8_t index;
+    uint8_t type;
+    uint16_t reserved;
+
+    uint32_t frequency_hz;
+    int32_t gain_x1000;
+    uint32_t q_x1000;
+} NTT_SPEECH_TX_EQ_BAND_T;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int ntt_speech_tx_eq_get_info(
+    NTT_SPEECH_EQ_MODE_T mode,
+    NTT_SPEECH_TX_EQ_INFO_T *info);
+
+int ntt_speech_tx_eq_get_band(
+    NTT_SPEECH_EQ_MODE_T mode,
+    uint8_t index,
+    NTT_SPEECH_TX_EQ_BAND_T *band);
+
+int ntt_speech_tx_eq_set_global(
+    NTT_SPEECH_EQ_MODE_T mode,
+    uint8_t bypass,
+    int32_t master_gain_x1000,
+    uint8_t num);
+
+int ntt_speech_tx_eq_set_band(
+    NTT_SPEECH_EQ_MODE_T mode,
+    const NTT_SPEECH_TX_EQ_BAND_T *band);
+
+    #ifdef __cplusplus
+}
+#endif
+
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
