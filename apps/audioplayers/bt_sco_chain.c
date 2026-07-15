@@ -413,6 +413,11 @@ static int32_t ntt_speech_tx_sample_rate = 0;
 static CompexpConfig ntt_tx_compexp_cfg;
 static bool ntt_tx_compexp_cache_init = false;
 
+#if defined(SPEECH_TX_AEC2FLOAT)
+static Ec2FloatConfig ntt_speech_tx_aec2float_cfg;
+static bool ntt_speech_tx_aec2float_cache_initialized = false;
+#endif
+
 static bool dualmic_enable = true;
 
 #if defined(SPEECH_TX_EQ)
@@ -856,6 +861,424 @@ int ntt_speech_tx_compexp_set(const NTT_SPEECH_TX_COMPEXP_CFG_T *cfg)
 
     return 0;
 }
+
+int ntt_speech_tx_aec2float_get(
+    NTT_SPEECH_TX_AEC2FLOAT_CFG_T *cfg)
+{
+#if defined(SPEECH_TX_AEC2FLOAT)
+
+    const Ec2FloatConfig *src;
+
+    if (cfg == NULL)
+    {
+        return -1;
+    }
+
+    if (!ntt_speech_tx_aec2float_cache_initialized)
+    {
+        return -2;
+    }
+
+    src = &ntt_speech_tx_aec2float_cfg;
+
+    memset(cfg, 0, sizeof(*cfg));
+
+    cfg->bypass =
+        src->bypass;
+
+    cfg->hpf_enabled =
+        src->hpf_enabled;
+
+    cfg->af_enabled =
+        src->af_enabled;
+
+    cfg->adprop_enabled =
+        src->adprop_enabled;
+
+    cfg->varistep_enabled =
+        src->varistep_enabled;
+
+    cfg->nlp_enabled =
+        src->nlp_enabled;
+
+    cfg->clip_enabled =
+        src->clip_enabled;
+
+    cfg->stsupp_enabled =
+        src->stsupp_enabled;
+
+    cfg->hfsupp_enabled =
+        src->hfsupp_enabled;
+
+    cfg->constrain_enabled =
+        src->constrain_enabled;
+
+    cfg->ns_enabled =
+        src->ns_enabled;
+
+    cfg->cng_enabled =
+        src->cng_enabled;
+
+    cfg->blocks =
+        src->blocks;
+
+    cfg->delay =
+        src->delay;
+
+    cfg->error_threshold_x1e9 =
+        (int32_t)(
+            src->error_threshold *
+            1000000000.0f);
+
+    cfg->gamma_x1e6 =
+        (int32_t)(
+            src->gamma *
+            1000000.0f);
+
+    cfg->echo_band_start =
+        src->echo_band_start;
+
+    cfg->echo_band_end =
+        src->echo_band_end;
+
+    cfg->min_ovrd_x1000 =
+        (int32_t)(
+            src->min_ovrd *
+            1000.0f);
+
+    cfg->target_supp_x1000 =
+        (int32_t)(
+            src->target_supp *
+            1000.0f);
+
+    cfg->highfre_band_start =
+        src->highfre_band_start;
+
+    cfg->highfre_supp_x1000 =
+        (int32_t)(
+            src->highfre_supp *
+            1000.0f);
+
+    cfg->noise_supp_x1000 =
+        (int32_t)(
+            src->noise_supp *
+            1000.0f);
+
+    cfg->cng_type =
+        src->cng_type;
+
+    cfg->cng_level_x1000 =
+        (int32_t)(
+            src->cng_level *
+            1000.0f);
+
+    cfg->clip_threshold_x1000 =
+        (int32_t)(
+            src->clip_threshold *
+            1000.0f);
+
+    cfg->banks =
+        src->banks;
+
+    cfg->filter_len =
+        src->filter_len;
+
+    cfg->ref_thd_x1000 =
+        (int32_t)(
+            src->ref_thd *
+            1000.0f);
+
+    cfg->reset_ec_thd_x1e6 =
+        (int32_t)(
+            src->reset_ec_thd *
+            1000000.0f);
+
+    return 0;
+
+#else
+
+    (void)cfg;
+
+    return -3;
+
+#endif
+}
+
+static bool ntt_speech_tx_aec2float_flag_valid(
+    int32_t value)
+{
+    return (value == 0) || (value == 1);
+}
+
+
+static bool ntt_speech_tx_aec2float_cfg_valid(
+    const NTT_SPEECH_TX_AEC2FLOAT_CFG_T *cfg)
+{
+    if (cfg == NULL)
+    {
+        return false;
+    }
+
+    if (!ntt_speech_tx_aec2float_flag_valid(
+            cfg->bypass) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->hpf_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->af_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->adprop_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->varistep_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->nlp_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->clip_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->stsupp_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->hfsupp_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->constrain_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->ns_enabled) ||
+        !ntt_speech_tx_aec2float_flag_valid(
+            cfg->cng_enabled))
+    {
+        return false;
+    }
+
+    if (cfg->blocks <= 0)
+    {
+        return false;
+    }
+
+    if (cfg->delay < 0)
+    {
+        return false;
+    }
+
+    if ((cfg->gamma_x1e6 < 0) ||
+        (cfg->gamma_x1e6 > 2000000))
+    {
+        return false;
+    }
+
+    if (cfg->echo_band_start < 0)
+    {
+        return false;
+    }
+
+    if (cfg->echo_band_end <
+        cfg->echo_band_start)
+    {
+        return false;
+    }
+
+    if (cfg->banks <= 0)
+    {
+        return false;
+    }
+
+    if ((cfg->filter_len <= 0) ||
+        (cfg->filter_len > 32767))
+    {
+        return false;
+    }
+
+    if ((cfg->cng_type != 0) &&
+        (cfg->cng_type != 1))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+
+int ntt_speech_tx_aec2float_set(
+    const NTT_SPEECH_TX_AEC2FLOAT_CFG_T *cfg)
+{
+#if defined(SPEECH_TX_AEC2FLOAT)
+
+    Ec2FloatConfig new_cfg;
+    int32_t ret;
+
+    if (cfg == NULL)
+    {
+        return -1;
+    }
+
+    if (!ntt_speech_tx_aec2float_cfg_valid(cfg))
+    {
+        return -3;
+    }
+
+    if (!ntt_speech_tx_aec2float_cache_initialized)
+    {
+        return -2;
+    }
+
+    memset(&new_cfg, 0, sizeof(new_cfg));
+
+    new_cfg.bypass =
+        cfg->bypass;
+
+    new_cfg.hpf_enabled =
+        cfg->hpf_enabled;
+
+    new_cfg.af_enabled =
+        cfg->af_enabled;
+
+    new_cfg.adprop_enabled =
+        cfg->adprop_enabled;
+
+    new_cfg.varistep_enabled =
+        cfg->varistep_enabled;
+
+    new_cfg.nlp_enabled =
+        cfg->nlp_enabled;
+
+    new_cfg.clip_enabled =
+        cfg->clip_enabled;
+
+    new_cfg.stsupp_enabled =
+        cfg->stsupp_enabled;
+
+    new_cfg.hfsupp_enabled =
+        cfg->hfsupp_enabled;
+
+    new_cfg.constrain_enabled =
+        cfg->constrain_enabled;
+
+    new_cfg.ns_enabled =
+        cfg->ns_enabled;
+
+    new_cfg.cng_enabled =
+        cfg->cng_enabled;
+
+    new_cfg.blocks =
+        cfg->blocks;
+
+    new_cfg.delay =
+        cfg->delay;
+
+    new_cfg.error_threshold =
+        cfg->error_threshold_x1e9 /
+        1000000000.0f;
+
+    new_cfg.gamma =
+        cfg->gamma_x1e6 /
+        1000000.0f;
+
+    new_cfg.echo_band_start =
+        cfg->echo_band_start;
+
+    new_cfg.echo_band_end =
+        cfg->echo_band_end;
+
+    new_cfg.min_ovrd =
+        cfg->min_ovrd_x1000 /
+        1000.0f;
+
+    new_cfg.target_supp =
+        cfg->target_supp_x1000 /
+        1000.0f;
+
+    new_cfg.highfre_band_start =
+        cfg->highfre_band_start;
+
+    new_cfg.highfre_supp =
+        cfg->highfre_supp_x1000 /
+        1000.0f;
+
+    new_cfg.noise_supp =
+        cfg->noise_supp_x1000 /
+        1000.0f;
+
+    new_cfg.cng_type =
+        cfg->cng_type;
+
+    new_cfg.cng_level =
+        cfg->cng_level_x1000 /
+        1000.0f;
+
+    new_cfg.clip_threshold =
+        cfg->clip_threshold_x1000 /
+        1000.0f;
+
+    new_cfg.banks =
+        cfg->banks;
+
+    new_cfg.filter_len =
+        (int16_t)cfg->filter_len;
+
+    new_cfg.ref_thd =
+        cfg->ref_thd_x1000 /
+        1000.0f;
+
+    new_cfg.reset_ec_thd =
+        cfg->reset_ec_thd_x1e6 /
+        1000000.0f;
+
+    /*
+     * 先套用 DSP；成功後才更新 cache 與 speech_cfg。
+     */
+    if (speech_tx_aec2float_st != NULL)
+    {
+        ret = ec2float_set_config(
+            speech_tx_aec2float_st,
+            &new_cfg,
+            SPEECH_TX_AEC2FLOAT_CORE);
+
+        if (ret != 0)
+        {
+            AUDIOPLAYERS_TRACE(
+                1,
+                "[AEC2FLOAT][SET] "
+                "runtime update failed ret=%d",
+                ret);
+
+            return -4;
+        }
+    }
+
+    memcpy(
+        &ntt_speech_tx_aec2float_cfg,
+        &new_cfg,
+        sizeof(Ec2FloatConfig));
+
+    if (speech_cfg != NULL)
+    {
+        memcpy(
+            &speech_cfg->tx_aec2float,
+            &new_cfg,
+            sizeof(Ec2FloatConfig));
+    }
+
+    ntt_speech_tx_aec2float_cache_initialized = true;
+
+    AUDIOPLAYERS_TRACE(
+        1,
+        "[AEC2FLOAT][SET] bypass=%d delay=%d "
+        "gamma=%d target=%d noise=%d ret=0",
+        new_cfg.bypass,
+        new_cfg.delay,
+        (int)(new_cfg.gamma * 1000000.0f),
+        (int)(new_cfg.target_supp * 1000.0f),
+        (int)(new_cfg.noise_supp * 1000.0f));
+
+    return 0;
+
+#else
+
+    (void)cfg;
+
+    return -3;
+
+#endif
+}
+
+
 
 void switch_dualmic_status(void)
 {
@@ -1340,6 +1763,35 @@ static void ntt_speech_tx_eq_init_cache(void)
     ntt_speech_tx_eq_cache_initialized = true;
 }
 
+static void ntt_speech_tx_aec2float_init_cache(void)
+{
+#if defined(SPEECH_TX_AEC2FLOAT)
+
+    if (speech_cfg == NULL)
+    {
+        AUDIOPLAYERS_TRACE(1,"[AEC2FLOAT][CACHE_INIT] speech_cfg is NULL");
+        return;
+    }
+
+    memcpy(&ntt_speech_tx_aec2float_cfg,&speech_cfg->tx_aec2float,sizeof(Ec2FloatConfig));
+    ntt_speech_tx_aec2float_cache_initialized = true;
+
+    AUDIOPLAYERS_TRACE(
+        1,
+        "[AEC2FLOAT][CACHE_INIT] "
+        "bypass=%d delay=%d gamma=%d "
+        "target=%d noise=%d banks=%d filter=%d",
+        ntt_speech_tx_aec2float_cfg.bypass,
+        ntt_speech_tx_aec2float_cfg.delay,
+        (int)(ntt_speech_tx_aec2float_cfg.gamma *1000000.0f),
+        (int)(ntt_speech_tx_aec2float_cfg.target_supp *1000.0f),
+        (int)(ntt_speech_tx_aec2float_cfg.noise_supp *1000.0f),
+        ntt_speech_tx_aec2float_cfg.banks,
+        ntt_speech_tx_aec2float_cfg.filter_len);
+
+#endif
+}
+
 int speech_init2(int tx_sample_rate, int rx_sample_rate,
                      int tx_frame_len, int rx_frame_len,
                      int sco_frame_len,
@@ -1372,8 +1824,15 @@ int speech_init2(int tx_sample_rate, int rx_sample_rate,
     speech_store_config(&speech_cfg_default);
 
     ntt_speech_tx_eq_init_cache();
+
+#if defined(SPEECH_TX_COMPEXP)
     memcpy(&ntt_tx_compexp_cfg,&speech_cfg->tx_compexp,sizeof(CompexpConfig));
     ntt_tx_compexp_cache_init = true;
+#endif
+
+#if defined(SPEECH_TX_AEC2FLOAT)
+    ntt_speech_tx_aec2float_init_cache();
+#endif
 
     AUDIOPLAYERS_TRACE(1,"[SCO_EQ] load speech_cfg_default");
 

@@ -94,6 +94,84 @@ typedef struct
 int ntt_speech_tx_compexp_get(NTT_SPEECH_TX_COMPEXP_CFG_T *cfg);
 int ntt_speech_tx_compexp_set(const NTT_SPEECH_TX_COMPEXP_CFG_T *cfg);
 
+typedef struct
+{
+    /*
+     * Enable flags：0=disable，1=enable
+     */
+    int32_t bypass;
+    int32_t hpf_enabled;
+    int32_t af_enabled;
+    int32_t adprop_enabled;
+    int32_t varistep_enabled;
+    int32_t nlp_enabled;
+    int32_t clip_enabled;
+    int32_t stsupp_enabled;
+    int32_t hfsupp_enabled;
+    int32_t constrain_enabled;
+    int32_t ns_enabled;
+    int32_t cng_enabled;
+
+    /*
+     * Adaptive filter
+     */
+    int32_t blocks;
+    int32_t delay;
+
+    /*
+     * error_threshold × 1,000,000,000
+     *
+     * 例如：
+     * 0.000015 → 15000
+     */
+    int32_t error_threshold_x1e9;
+
+    /*
+     * gamma × 1,000,000
+     *
+     * 例如：
+     * 0.9 → 900000
+     */
+    int32_t gamma_x1e6;
+
+    int32_t echo_band_start;
+    int32_t echo_band_end;
+
+    /*
+     * Float fields × 1000
+     */
+    int32_t min_ovrd_x1000;
+    int32_t target_supp_x1000;
+
+    int32_t highfre_band_start;
+    int32_t highfre_supp_x1000;
+
+    int32_t noise_supp_x1000;
+
+    int32_t cng_type;
+    int32_t cng_level_x1000;
+
+    int32_t clip_threshold_x1000;
+
+    int32_t banks;
+    int32_t filter_len;
+
+    int32_t ref_thd_x1000;
+
+    /*
+     * reset_ec_thd × 1,000,000
+     *
+     * 例如：
+     * 1.03 → 1030000
+     */
+    int32_t reset_ec_thd_x1e6;
+
+} NTT_SPEECH_TX_AEC2FLOAT_CFG_T;
+
+
+int ntt_speech_tx_aec2float_get(NTT_SPEECH_TX_AEC2FLOAT_CFG_T *cfg);
+int ntt_speech_tx_aec2float_set(const NTT_SPEECH_TX_AEC2FLOAT_CFG_T *cfg);
+
 /*
  * Init speech algorithm, init all related states and memory
  * Input:

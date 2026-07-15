@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.1" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.2" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -369,6 +369,16 @@ static bool ntt_speech_eq_check_packet(const uint8_t *data,uint16_t len,uint8_t 
     }
 
     return true;
+}
+
+static void ntt_aec2float_write_i32(uint8_t *payload,uint16_t index,int32_t value)
+{
+    ntt_write_le32(&payload[index * 4],(uint32_t)value);
+}
+
+static int32_t ntt_aec2float_read_i32(const uint8_t *payload,uint16_t index)
+{
+    return (int32_t)ntt_read_le32(&payload[index * 4]);
 }
 
 /*
@@ -897,7 +907,7 @@ static void ntt_handle_set_speech_tx_compexp(
         (ret == 0) ? 0 : (uint8_t)(-ret);
 
     rsp[1] = cfg.bypass;
-    
+
     TRACE(0,
         "[COMPEXP][SET] bypass=%d type=%d comp=%d ratio=%d makeup=%d ret=%d",
         cfg.bypass,
@@ -909,6 +919,358 @@ static void ntt_handle_set_speech_tx_compexp(
 
     sparraw_tx_msg(
         RSP_SET_SPEECH_TX_COMPEXP,
+        rsp,
+        sizeof(rsp));
+}
+
+static void ntt_handle_get_speech_tx_aec2float(
+    const uint8_t *data,
+    uint16_t len)
+{
+    NTT_SPEECH_TX_AEC2FLOAT_CFG_T cfg;
+    uint8_t rsp[121] = {0};
+    int ret;
+
+    /*
+     * Request：
+     *
+     * 7A 00 00
+     *
+     * Payload length = 0
+     */
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_GET_SPEECH_TX_AEC2FLOAT,
+            0))
+    {
+        TRACE(
+            0,
+            "[AEC2FLOAT][GET] invalid len=%u",
+            (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_GET_SPEECH_TX_AEC2FLOAT,
+            rsp,
+            sizeof(rsp));
+
+        return;
+    }
+
+    memset(&cfg, 0, sizeof(cfg));
+
+    ret = ntt_speech_tx_aec2float_get(&cfg);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    if (ret == 0)
+    {
+        /*
+         * rsp[0] = status
+         * rsp[1...] = 30 × int32
+         */
+        ntt_aec2float_write_i32(
+            &rsp[1], 0, cfg.bypass);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 1, cfg.hpf_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 2, cfg.af_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 3, cfg.adprop_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 4, cfg.varistep_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 5, cfg.nlp_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 6, cfg.clip_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 7, cfg.stsupp_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 8, cfg.hfsupp_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 9, cfg.constrain_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 10, cfg.ns_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 11, cfg.cng_enabled);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 12, cfg.blocks);
+
+        ntt_aec2float_write_i32(
+            &rsp[1], 13, cfg.delay);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            14,
+            cfg.error_threshold_x1e9);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            15,
+            cfg.gamma_x1e6);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            16,
+            cfg.echo_band_start);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            17,
+            cfg.echo_band_end);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            18,
+            cfg.min_ovrd_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            19,
+            cfg.target_supp_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            20,
+            cfg.highfre_band_start);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            21,
+            cfg.highfre_supp_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            22,
+            cfg.noise_supp_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            23,
+            cfg.cng_type);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            24,
+            cfg.cng_level_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            25,
+            cfg.clip_threshold_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            26,
+            cfg.banks);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            27,
+            cfg.filter_len);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            28,
+            cfg.ref_thd_x1000);
+
+        ntt_aec2float_write_i32(
+            &rsp[1],
+            29,
+            cfg.reset_ec_thd_x1e6);
+    }
+
+    TRACE(
+        0,
+        "[AEC2FLOAT][GET] ret=%d "
+        "bypass=%d delay=%d gamma=%d "
+        "target=%d noise=%d",
+        ret,
+        cfg.bypass,
+        cfg.delay,
+        cfg.gamma_x1e6,
+        cfg.target_supp_x1000,
+        cfg.noise_supp_x1000);
+
+    sparraw_tx_msg(
+        RSP_GET_SPEECH_TX_AEC2FLOAT,
+        rsp,
+        sizeof(rsp));
+}
+
+static void ntt_handle_set_speech_tx_aec2float(
+    const uint8_t *data,
+    uint16_t len)
+{
+    NTT_SPEECH_TX_AEC2FLOAT_CFG_T cfg;
+    uint8_t rsp[2] = {0};
+    const uint8_t *payload;
+    int ret;
+
+    /*
+     * Request：
+     *
+     * Byte 0      command = 0x7C
+     * Byte 1~2    payload length = 120
+     * Byte 3~122  30 × int32 LE
+     */
+    if (!ntt_speech_eq_check_packet(
+            data,
+            len,
+            REQ_SET_SPEECH_TX_AEC2FLOAT,
+            120))
+    {
+        TRACE(
+            0,
+            "[AEC2FLOAT][SET] invalid len=%u",
+            (unsigned int)len);
+
+        rsp[0] = API_ERR_INVALID_PARAM;
+
+        sparraw_tx_msg(
+            RSP_SET_SPEECH_TX_AEC2FLOAT,
+            rsp,
+            sizeof(rsp));
+
+        return;
+    }
+
+    memset(&cfg, 0, sizeof(cfg));
+
+    payload = &data[3];
+
+    cfg.bypass =
+        ntt_aec2float_read_i32(payload, 0);
+
+    cfg.hpf_enabled =
+        ntt_aec2float_read_i32(payload, 1);
+
+    cfg.af_enabled =
+        ntt_aec2float_read_i32(payload, 2);
+
+    cfg.adprop_enabled =
+        ntt_aec2float_read_i32(payload, 3);
+
+    cfg.varistep_enabled =
+        ntt_aec2float_read_i32(payload, 4);
+
+    cfg.nlp_enabled =
+        ntt_aec2float_read_i32(payload, 5);
+
+    cfg.clip_enabled =
+        ntt_aec2float_read_i32(payload, 6);
+
+    cfg.stsupp_enabled =
+        ntt_aec2float_read_i32(payload, 7);
+
+    cfg.hfsupp_enabled =
+        ntt_aec2float_read_i32(payload, 8);
+
+    cfg.constrain_enabled =
+        ntt_aec2float_read_i32(payload, 9);
+
+    cfg.ns_enabled =
+        ntt_aec2float_read_i32(payload, 10);
+
+    cfg.cng_enabled =
+        ntt_aec2float_read_i32(payload, 11);
+
+    cfg.blocks =
+        ntt_aec2float_read_i32(payload, 12);
+
+    cfg.delay =
+        ntt_aec2float_read_i32(payload, 13);
+
+    cfg.error_threshold_x1e9 =
+        ntt_aec2float_read_i32(payload, 14);
+
+    cfg.gamma_x1e6 =
+        ntt_aec2float_read_i32(payload, 15);
+
+    cfg.echo_band_start =
+        ntt_aec2float_read_i32(payload, 16);
+
+    cfg.echo_band_end =
+        ntt_aec2float_read_i32(payload, 17);
+
+    cfg.min_ovrd_x1000 =
+        ntt_aec2float_read_i32(payload, 18);
+
+    cfg.target_supp_x1000 =
+        ntt_aec2float_read_i32(payload, 19);
+
+    cfg.highfre_band_start =
+        ntt_aec2float_read_i32(payload, 20);
+
+    cfg.highfre_supp_x1000 =
+        ntt_aec2float_read_i32(payload, 21);
+
+    cfg.noise_supp_x1000 =
+        ntt_aec2float_read_i32(payload, 22);
+
+    cfg.cng_type =
+        ntt_aec2float_read_i32(payload, 23);
+
+    cfg.cng_level_x1000 =
+        ntt_aec2float_read_i32(payload, 24);
+
+    cfg.clip_threshold_x1000 =
+        ntt_aec2float_read_i32(payload, 25);
+
+    cfg.banks =
+        ntt_aec2float_read_i32(payload, 26);
+
+    cfg.filter_len =
+        ntt_aec2float_read_i32(payload, 27);
+
+    cfg.ref_thd_x1000 =
+        ntt_aec2float_read_i32(payload, 28);
+
+    cfg.reset_ec_thd_x1e6 =
+        ntt_aec2float_read_i32(payload, 29);
+
+    ret = ntt_speech_tx_aec2float_set(&cfg);
+
+    rsp[0] =
+        (ret == 0) ? 0 : (uint8_t)(-ret);
+
+    /*
+     * Byte 1：
+     * 0 = 未即時套用或失敗
+     * 1 = 已成功更新 cache/runtime
+     */
+    rsp[1] =
+        (ret == 0) ? 1 : 0;
+
+    TRACE(
+        0,
+        "[AEC2FLOAT][SET] ret=%d "
+        "bypass=%d delay=%d gamma=%d "
+        "target=%d noise=%d",
+        ret,
+        cfg.bypass,
+        cfg.delay,
+        cfg.gamma_x1e6,
+        cfg.target_supp_x1000,
+        cfg.noise_supp_x1000);
+
+    sparraw_tx_msg(
+        RSP_SET_SPEECH_TX_AEC2FLOAT,
         rsp,
         sizeof(rsp));
 }
@@ -1767,6 +2129,8 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
 
         {REQ_GET_SPEECH_TX_COMPEXP,     ntt_handle_get_speech_tx_compexp},
         {REQ_SET_SPEECH_TX_COMPEXP,     ntt_handle_set_speech_tx_compexp},
+        {REQ_GET_SPEECH_TX_AEC2FLOAT,   ntt_handle_get_speech_tx_aec2float},
+        {REQ_SET_SPEECH_TX_AEC2FLOAT,   ntt_handle_set_speech_tx_aec2float},
 
 		{GET_FW_VERSION,      handleGetFwVersion},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},

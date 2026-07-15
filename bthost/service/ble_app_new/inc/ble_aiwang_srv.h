@@ -49,6 +49,12 @@ extern "C" {
 #define REQ_SET_SPEECH_TX_COMPEXP        0x84
 #define RSP_SET_SPEECH_TX_COMPEXP        0x85
 
+#define REQ_GET_SPEECH_TX_AEC2FLOAT      0x7A
+#define RSP_GET_SPEECH_TX_AEC2FLOAT      0x7B
+
+#define REQ_SET_SPEECH_TX_AEC2FLOAT      0x7C
+#define RSP_SET_SPEECH_TX_AEC2FLOAT      0x7D
+
 typedef enum cmds {
 	A0_SETS     = 0xA0,
 	B0_SETS     = 0xB0,
