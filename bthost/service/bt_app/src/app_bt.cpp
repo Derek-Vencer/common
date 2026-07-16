@@ -1707,6 +1707,49 @@ static void ntt_tws_reconnect_after_profile_stop(void)
     }
 }
 
+static bool ntt_tws_peer_addr_is_valid(void)
+{
+    ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
+
+    if (ctrl == NULL)
+    {
+        return false;
+    }
+
+    if (memcmp(ctrl->peer_addr.address,
+               zero_addr,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return false;
+    }
+
+    if (memcmp(ctrl->peer_addr.address,
+               ff_addr,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return false;
+    }
+
+    if (memcmp(ctrl->peer_addr.address,
+               ctrl->local_addr.address,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 static void ntt_tws_reconnect_after_profile_timer_handler(void const *param)
 {
     if (app_ibrt_middleware_is_ui_slave())
@@ -1726,6 +1769,34 @@ static void ntt_tws_reconnect_after_profile_timer_handler(void const *param)
     if (!app_bt_ibrt_has_mobile_link_connected())
     {
         DEBUG_INFO(0, "[NTT_TWS] stop retry: mobile disconnected");
+        ntt_tws_reconnect_after_profile_stop();
+        return;
+    }
+
+    /*
+     * 沒有有效 peer 時，不可啟動 TWS reconnect。
+     * 否則可能連到 FF 地址、本機地址或讓 FSM 卡在 CONNECTING。
+     */
+    if (!ntt_tws_peer_addr_is_valid())
+    {
+        ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+
+        DEBUG_INFO(0,
+            "[NTT_TWS] stop retry: invalid tws peer address");
+
+        if (ctrl != NULL)
+        {
+            DEBUG_INFO(0, "[NTT_TWS] local addr:");
+            DUMP8("%02x ",
+                  ctrl->local_addr.address,
+                  BTIF_BD_ADDR_SIZE);
+
+            DEBUG_INFO(0, "[NTT_TWS] peer addr:");
+            DUMP8("%02x ",
+                  ctrl->peer_addr.address,
+                  BTIF_BD_ADDR_SIZE);
+        }
+
         ntt_tws_reconnect_after_profile_stop();
         return;
     }
@@ -3637,6 +3708,7 @@ void app_bt_role_manager_process(const btif_event_t *Event)
             }
             break;
         case BTIF_BTEVENT_LINK_DISCONNECT:
+            DEBUG_INFO(5,"[BTEVENT] app_bt_role_manager_process BTIF_BTEVENT_LINK_DISCONNECT");
             switchrole_cnt = 0;
             break;
         case BTIF_BTEVENT_ROLE_CHANGE:
@@ -3769,6 +3841,7 @@ void app_bt_role_manager_process_dual_slave(const btif_event_t *Event)
             }
             break;
         case BTIF_BTEVENT_LINK_DISCONNECT:
+            DEBUG_INFO(5,"[BTEVENT] app_bt_role_manager_process_dual_slave BTIF_BTEVENT_LINK_DISCONNECT");
             switchrole_cnt = 0;
             break;
         case BTIF_BTEVENT_ROLE_CHANGE:
@@ -3897,6 +3970,7 @@ void app_bt_sniff_manager_process(const btif_event_t *Event)
         case BTIF_BTEVENT_LINK_CONNECT_CNF:
             break;
         case BTIF_BTEVENT_LINK_DISCONNECT:
+            DEBUG_INFO(5,"[BTEVENT] app_bt_sniff_manager_process BTIF_BTEVENT_LINK_DISCONNECT");
             sniffInfo.maxInterval = BTIF_CMGR_SNIFF_MAX_INTERVAL;
             sniffInfo.minInterval = BTIF_CMGR_SNIFF_MIN_INTERVAL;
             sniffInfo.attempt = BTIF_CMGR_SNIFF_ATTEMPT;

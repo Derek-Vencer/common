@@ -12,7 +12,7 @@ LIB_CFG="BES_LIB_DIR=lib/bes/best1306p/PRO_0015"
 set -e
 
 BUILD_CUSTOMER_CFG="$OTA_CFG $ENC_CFG $GFPS_CFG $ANC_CFG $LIB_CFG \
-                    POWER_ON_ENTER_TWS_PAIRING_ENABLED=1"
+                    POWER_ON_ENTER_TWS_PAIRING_ENABLED=1 CUSTOM_BITRATE=1"
 
 if [[ "$COMMAND" == "clean" ]];
 then

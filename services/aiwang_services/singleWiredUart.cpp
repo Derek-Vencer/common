@@ -973,7 +973,48 @@ bool aiWangBoxIsUsed(void)
 	return boxChargerStatus.boxIsOpen;
 }
 
+static bool ntt_tws_peer_addr_is_valid(void)
+{
+    ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
 
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
+
+    if (ctrl == NULL)
+    {
+        return false;
+    }
+
+    if (memcmp(ctrl->peer_addr.address,
+               zero_addr,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return false;
+    }
+
+    if (memcmp(ctrl->peer_addr.address,
+               ff_addr,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return false;
+    }
+
+    if (memcmp(ctrl->peer_addr.address,
+               ctrl->local_addr.address,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return false;
+    }
+
+    return true;
+}
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
@@ -1188,7 +1229,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1328,9 +1369,31 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             if (!bts_tws_if_is_tws_link_connected())
             {
-                DBGPRINT("[NTT_TWS] TWS not connected, start power on tws pairing");
+                if (ntt_tws_peer_addr_is_valid())
+                {
+                    DBGPRINT("[NTT_TWS] valid peer, start power on tws reconnect");
 
-                app_ibrt_start_power_on_tws_pairing();
+                    app_ibrt_start_power_on_tws_pairing();
+                }
+                else
+                {
+                    ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+
+                    DBGPRINT("[NTT_TWS] invalid peer, skip power on tws reconnect");
+
+                    if (ctrl != NULL)
+                    {
+                        DBGPRINT("[NTT_TWS] local addr:");
+                        DUMP8("%02x ",
+                            ctrl->local_addr.address,
+                            BTIF_BD_ADDR_SIZE);
+
+                        DBGPRINT("[NTT_TWS] peer addr:");
+                        DUMP8("%02x ",
+                            ctrl->peer_addr.address,
+                            BTIF_BD_ADDR_SIZE);
+                    }
+                }
             }
             else
             {

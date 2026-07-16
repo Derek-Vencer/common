@@ -771,6 +771,7 @@ void besui_tws_state_event(ibrt_conn_tws_conn_state_event *state, uint8_t reason
     {
         case IBRT_CONN_ACL_DISCONNECTED:
             besui_bt_msg_put(TWS_DISCONNECTED_EVENT, reason_code, BT_DEVICE_NUM);
+            EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_tws_state_event IBRT_CONN_ACL_DISCONNECTED ");
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
             EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_tws_state_event IBRT_CONN_ACL_PROFILES_CONNECTED ");
@@ -886,6 +887,8 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                 EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
             break;
         case IBRT_CONN_ACL_DISCONNECTED:
+            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_DISCONNECTED ");
+            break;
             break;
         case IBRT_CONN_ACL_CONNECTING_CANCELED:
             break;
@@ -909,6 +912,7 @@ void besui_mobile_state_event(const bt_bdaddr_t *addr, ibrt_mobile_conn_state_ev
     switch (state->state.acl_state)
     {
         case IBRT_CONN_ACL_DISCONNECTED:
+            EARBUDS_TRACE(0, "[NTT_USER_SYNC] besui_mobile_state_event IBRT_CONN_ACL_DISCONNECTED ");
             uictl.auth_start_flag = 0;
             if(reason_code == 0x08)
             {
@@ -1019,6 +1023,7 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
     switch (state->state.acl_state)
     {
         case IBRT_CONN_ACL_DISCONNECTED:
+            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_DISCONNECTED ");
 #if defined(SNDP_VAD_ENABLE)
             if (!app_ibrt_middleware_is_ui_slave())
                 app_sensor_hub_sndp_mcu_request_vad_stop();

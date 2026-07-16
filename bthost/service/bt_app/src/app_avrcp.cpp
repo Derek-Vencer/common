@@ -377,49 +377,81 @@ static void avrcp_event_cmd(uint8_t device_id, btif_avrcp_channel_t *channel,
         }
         break;
     case BTIF_AVCTP_CTYPE_CONTROL:
+    {
+        if (cmd_frame->operands[3] == BTIF_AVRCP_OP_SET_ABSOLUTE_VOLUME)
         {
-            if (cmd_frame->operands[3] == BTIF_AVRCP_OP_SET_ABSOLUTE_VOLUME){
-                uint8_t volume = 0;
-                volume = cmd_frame->operands[7] & 0x7f;
-                DEBUG_INFO(4,"(d%x) ::avrcp_callback_CT receive CONTROL"
-                        " set_absolute_volume %d %d%% transId:%d",
-                        device_id, volume, ((int)volume)*100/128, cmd_frame->transId);
+            uint8_t volume = cmd_frame->operands[7] & 0x7F;
 
-                if((cmd_frame->operandLen != 8))//it works for BQB
-                {
-                    DEBUG_INFO(1,"(d%x) ::avrcp_callback_CT reject invalid volume", device_id);
-                    btif_avrcp_tg_send_error_rsp_for_specific_avc_commands(channel, cmd_frame->transId,
-                        BTIF_AVRCP_OP_SET_ABSOLUTE_VOLUME,
-                        BTIF_AVRCP_ERR_INVALID_PARM);
-                    break;
-                }
-                if(cmd_frame->operands[5] != 0x00 || cmd_frame->operands[6] != 0x01)//it also works for BQB
-                {
-                    DEBUG_INFO(1,"(d%x) ::avrcp_callback_CT reject error length", device_id);
-                    btif_avrcp_tg_send_error_rsp_for_specific_avc_commands(channel, cmd_frame->transId,
-                        BTIF_AVRCP_OP_SET_ABSOLUTE_VOLUME,
-                        BTIF_AVRCP_ERR_PARM_CONTENT_ERR);
-                    break;
-                }
+            DEBUG_INFO(4,
+                "(d%x) ::avrcp_callback_CT receive CONTROL "
+                "set_absolute_volume %d %d%% transId:%d",
+                device_id,
+                volume,
+                ((int)volume) * 100 / 128,
+                cmd_frame->transId);
 
-                app_avrcp_operation_t set_abs_vol;
-                set_abs_vol.opcode = SET_ABSOLUTE_VOLUME_OP;
-                set_abs_vol.parameters = (void *)(uint32_t)volume;
-                app_avrcp_handle_operation(device_id, &set_abs_vol);
+            if (cmd_frame->operandLen != 8)
+            {
+                DEBUG_INFO(1,
+                    "(d%x) ::avrcp_callback_CT reject invalid volume",
+                    device_id);
 
-#ifdef BQB_PTS_TEST
-                btif_avrcp_tg_send_absolute_volume_rsp(channel, volume, cmd_frame->transId);
-#else
-                btif_avrcp_tg_send_absolute_volume_rsp(channel, cmd_frame->operands[7], cmd_frame->transId);
-#endif
-            } else if (BTIF_AVRCP_OP_CUSTOM_CMD == cmd_frame->operands[3]) {
-                DEBUG_INFO(2,"(d%x) ::avrcp_callback_CT receive CONTROL CUSTOM_CMD transId:%d",
-                                                device_id, cmd_frame->transId);
-                app_AVRCP_CustomCmd_Received(&cmd_frame->operands[7], cmd_frame->operandLen - 7);
-                app_AVRCP_sendCustomCmdRsp(device_id, channel, true,cmd_frame->transId);
+                btif_avrcp_tg_send_error_rsp_for_specific_avc_commands(
+                    channel,
+                    cmd_frame->transId,
+                    BTIF_AVRCP_OP_SET_ABSOLUTE_VOLUME,
+                    BTIF_AVRCP_ERR_INVALID_PARM);
+
+                break;
             }
+
+            if ((cmd_frame->operands[5] != 0x00) ||
+                (cmd_frame->operands[6] != 0x01))
+            {
+                DEBUG_INFO(1,
+                    "(d%x) ::avrcp_callback_CT reject error length",
+                    device_id);
+
+                btif_avrcp_tg_send_error_rsp_for_specific_avc_commands(
+                    channel,
+                    cmd_frame->transId,
+                    BTIF_AVRCP_OP_SET_ABSOLUTE_VOLUME,
+                    BTIF_AVRCP_ERR_PARM_CONTENT_ERR);
+
+                break;
+            }
+
+            app_avrcp_operation_t set_abs_vol;
+            set_abs_vol.opcode = SET_ABSOLUTE_VOLUME_OP;
+            set_abs_vol.parameters = (void *)(uint32_t)volume;
+
+            app_avrcp_handle_operation(device_id, &set_abs_vol);
+
+            /* AVRCP absolute volume bit 7 is reserved and must be zero. */
+            btif_avrcp_tg_send_absolute_volume_rsp(
+                channel,
+                volume,
+                cmd_frame->transId);
         }
-        break;
+        else if (BTIF_AVRCP_OP_CUSTOM_CMD == cmd_frame->operands[3])
+        {
+            DEBUG_INFO(2,
+                "(d%x) ::avrcp_callback_CT receive CONTROL CUSTOM_CMD transId:%d",
+                device_id,
+                cmd_frame->transId);
+
+            app_AVRCP_CustomCmd_Received(
+                &cmd_frame->operands[7],
+                cmd_frame->operandLen - 7);
+
+            app_AVRCP_sendCustomCmdRsp(
+                device_id,
+                channel,
+                true,
+                cmd_frame->transId);
+        }
+    }
+    break;
     case BTIF_AVCTP_CTYPE_NOTIFY:
         {
             POSSIBLY_UNUSED bt_status_t status;
