@@ -713,68 +713,323 @@ void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 {
     TRACE(0, "%s.", __func__);
 
-    if ((data == NULL) || (len < 4))
+    /*
+     * Packet format:
+     *
+     * data[0] : command
+     * data[1] : data length high
+     * data[2] : data length low
+     * data[3] : changed key count
+     * data[4] : action 0
+     * data[5] : function 0
+     * data[6] : action 1
+     * data[7] : function 1
+     * ...
+     *
+     * data_len = 1 + key_count * 2
+     */
+
+    if ((data == NULL) || (len < 6))
     {
+        TRACE(0,
+              "[KEYMAP][SET] invalid packet data=%p len=%d",
+              data,
+              len);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
         return;
     }
 
     const uint8_t *data_buf = data + 1;
 
-    uint16_t data_len = ((uint16_t)data_buf[0] << 8) | data_buf[1];
-    uint8_t key_count = data_buf[2];
+    uint16_t data_len =
+        ((uint16_t)data_buf[0] << 8) |
+        ((uint16_t)data_buf[1]);
 
-    if (data_len < 1)
+    uint8_t update_key_count = data_buf[2];
+
+    /*
+     * At least one key must be included.
+     */
+    if ((update_key_count == 0) ||
+        (update_key_count > 20))
     {
+        TRACE(0,
+              "[KEYMAP][SET] invalid update count=%d",
+              update_key_count);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
         return;
     }
 
-    uint16_t calc_key_count = ((data_len - 1) >> 1);
+    /*
+     * data_len contains:
+     *   1 byte key_count
+     *   2 bytes for each mapping
+     */
+    uint16_t expected_data_len =
+        (uint16_t)(1U + ((uint16_t)update_key_count * 2U));
 
-    if ((calc_key_count != key_count) || (key_count > 20))
+    if (data_len != expected_data_len)
     {
+        TRACE(0,
+              "[KEYMAP][SET] data_len mismatch rx=%d expected=%d",
+              data_len,
+              expected_data_len);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
         return;
     }
 
-    uint16_t key_map_len = key_count * 2;
+    /*
+     * Total packet:
+     * command(1) + length(2) + key_count(1)
+     * + mapping(update_key_count * 2)
+     */
+    uint16_t expected_packet_len =
+        (uint16_t)(4U + ((uint16_t)update_key_count * 2U));
 
-    if ((key_map_len + 4) != len)
+    if (len != expected_packet_len)
     {
+        TRACE(0,
+              "[KEYMAP][SET] packet len mismatch rx=%d expected=%d",
+              len,
+              expected_packet_len);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    /*
+     * Ensure RAM/NV mapping has been initialized.
+     *
+     * If NV is empty, this function writes the default 20-key map.
+     * If NV already has valid data, it loads the existing map into RAM.
+     */
+    keymap_init_default();
+
+    struct nvrecord_env_t *nvrecord_env = NULL;
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        TRACE(0, "[KEYMAP][SET] nvrecord_env is NULL");
+
+        ntt_api_send_error_notify(0x43, API_ERR_STORAGE_ERROR);
+        return;
+    }
+
+    uint8_t current_key_count = nvrecord_env->key_map_number;
+
+    if ((current_key_count == 0) ||
+        (current_key_count > 20))
+    {
+        TRACE(0,
+              "[KEYMAP][SET] invalid current count=%d",
+              current_key_count);
+
+        ntt_api_send_error_notify(0x43, API_ERR_STORAGE_ERROR);
         return;
     }
 
     const uint8_t *key_map = &data_buf[3];
-    uint8_t local_er_count = 0;
 
-    for (int i = 0; i < key_count; i++)
+    /*
+     * First pass:
+     * Find every incoming action in the existing mapping table.
+     *
+     * We validate everything first so an invalid packet does not cause
+     * only part of the key mapping table to be modified.
+     */
+    uint8_t update_index[20];
+
+    memset(update_index, 0xFF, sizeof(update_index));
+
+    for (uint8_t i = 0; i < update_key_count; i++)
     {
-        uint8_t key_actions = key_map[i * 2];
-        uint8_t key_func    = key_map[i * 2 + 1];
+        uint8_t incoming_action = key_map[i * 2];
+        uint8_t incoming_func   = key_map[i * 2 + 1];
+        bool found = false;
 
-        handleSetKeyMapActionAndFunc(local_er_count, key_actions, key_func);
-        local_er_count++;
+        /*
+         * Reject duplicate action entries in the same APP packet.
+         */
+        for (uint8_t check = 0; check < i; check++)
+        {
+            if (key_map[check * 2] == incoming_action)
+            {
+                TRACE(0,
+                      "[KEYMAP][SET] duplicate incoming action=0x%02X",
+                      incoming_action);
+
+                ntt_api_send_error_notify(0x43,
+                                          API_ERR_INVALID_PARAM);
+                return;
+            }
+        }
+
+        /*
+         * action is the key identifier.
+         * Find the matching action in the current complete mapping table.
+         */
+        for (uint8_t j = 0; j < current_key_count; j++)
+        {
+            if (nvrecord_env->key_map_action[j] ==
+                incoming_action)
+            {
+                update_index[i] = j;
+                found = true;
+
+                TRACE(0,
+                      "[KEYMAP][SET] match input=%d nv_index=%d "
+                      "action=0x%02X old_func=0x%02X new_func=0x%02X",
+                      i,
+                      j,
+                      incoming_action,
+                      nvrecord_env->key_map_func[j],
+                      incoming_func);
+
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] action not found=0x%02X",
+                  incoming_action);
+
+            /*
+             * Do not append an unknown action because the current protocol
+             * is intended to update an existing key definition.
+             */
+            ntt_api_send_error_notify(0x43,
+                                      API_ERR_INVALID_PARAM);
+            return;
+        }
     }
 
-    handleSetKeyMapNumber(local_er_count);
-    keymap_init_default();
+    /*
+     * Second pass:
+     * All actions are valid. Update only the matching function fields.
+     */
+    bool mapping_changed = false;
 
+    for (uint8_t i = 0; i < update_key_count; i++)
+    {
+        uint8_t nv_index = update_index[i];
+        uint8_t incoming_action = key_map[i * 2];
+        uint8_t incoming_func   = key_map[i * 2 + 1];
+
+        if (nv_index >= current_key_count)
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] invalid resolved index=%d",
+                  nv_index);
+
+            ntt_api_send_error_notify(0x43,
+                                      API_ERR_STORAGE_ERROR);
+            return;
+        }
+
+        /*
+         * action remains unchanged because it is used as the Key ID.
+         * Only overwrite the function selected by the APP.
+         */
+        if (nvrecord_env->key_map_func[nv_index] != incoming_func)
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] update index=%d "
+                  "action=0x%02X func:0x%02X->0x%02X",
+                  nv_index,
+                  incoming_action,
+                  nvrecord_env->key_map_func[nv_index],
+                  incoming_func);
+
+            nvrecord_env->key_map_func[nv_index] = incoming_func;
+            mapping_changed = true;
+        }
+        else
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] unchanged index=%d "
+                  "action=0x%02X func=0x%02X",
+                  nv_index,
+                  incoming_action,
+                  incoming_func);
+        }
+
+        /*
+         * Keep the runtime RAM table synchronized immediately.
+         */
+        s_key_map[nv_index].actions =
+            nvrecord_env->key_map_action[nv_index];
+
+        s_key_map[nv_index].function =
+            nvrecord_env->key_map_func[nv_index];
+    }
+
+    /*
+     * Do not modify key_map_number.
+     *
+     * APP update_key_count means "number of changed keys",
+     * not "total number of keys in the mapping table".
+     */
+    s_key_map_count = current_key_count;
+
+    /*
+     * Write NV only once after all entries have been updated.
+     */
+    if (mapping_changed)
+    {
+        nv_record_env_set(nvrecord_env);
+
+        TRACE(0,
+              "[KEYMAP][SET] NV save done total=%d updated=%d",
+              current_key_count,
+              update_key_count);
+    }
+    else
+    {
+        TRACE(0,
+              "[KEYMAP][SET] no NV write, mapping unchanged");
+    }
+
+    /*
+     * Synchronize the complete mapping table to the peer earbud.
+     *
+     * Although APP only changes one or more keys, sending the complete
+     * table prevents the left/right earbuds from having different maps.
+     */
     uint8_t cmd_sync_button_map[50] = {0};
-    cmd_sync_button_map[0] = local_er_count;
 
-    for (int i = 0; i < local_er_count; i++)
+    cmd_sync_button_map[0] = current_key_count;
+
+    for (uint8_t i = 0; i < current_key_count; i++)
     {
-        cmd_sync_button_map[i * 2 + 1] = (uint8_t)s_key_map[i].actions;
-        cmd_sync_button_map[i * 2 + 2] = (uint8_t)s_key_map[i].function;
+        cmd_sync_button_map[i * 2 + 1] =
+            nvrecord_env->key_map_action[i];
+
+        cmd_sync_button_map[i * 2 + 2] =
+            nvrecord_env->key_map_func[i];
+
+        TRACE(0,
+              "[KEYMAP][SYNC] index=%d action=0x%02X func=0x%02X",
+              i,
+              cmd_sync_button_map[i * 2 + 1],
+              cmd_sync_button_map[i * 2 + 2]);
     }
 
-    app_ibrt_customif_cmd_sync_button_map(cmd_sync_button_map,
-                                          local_er_count * 2 + 1);
+#ifdef IBRT
+    app_ibrt_customif_cmd_sync_button_map(
+        cmd_sync_button_map,
+        (uint16_t)(current_key_count * 2U + 1U));
+#endif
 
 #if need_send_data_by_notify
-    sparraw_tx_msg(RSP_SET_KEY_MAPPING, (const uint8_t *)"", 0);
+    sparraw_tx_msg(RSP_SET_KEY_MAPPING,
+                   (const uint8_t *)"",
+                   0);
 #endif
 }
 

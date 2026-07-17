@@ -80,19 +80,20 @@ const IIR_CFG_T audio_eq_hw_dac_iir_cfg = {
     .gain0 = -22,
     .gain1 = -22,
 #else
-    .gain0 = 0,
-    .gain1 = 0,
+    .gain0 = 9.0,
+    .gain1 = 9.0,
 #endif
-    .num = 8,
-    .param = {
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
-        {IIR_TYPE_PEAK, 0,   1000.0,   0.7},
+    .num = 9,
+    .para = {
+        {IIR_TYPE_PEAK, 4.0, 90, 1.0},
+        {IIR_TYPE_LOW_SHELF, 1.0, 200, 1.0},
+        {IIR_TYPE_PEAK, -4.0, 2100, 3.0},
+        {IIR_TYPE_PEAK, -4.0, 4200, 3.0},
+        {IIR_TYPE_PEAK, 2.0, 1200, 3.0},
+        {IIR_TYPE_HIGH_SHELF, -8.0, 4000, 1.0},
+        {IIR_TYPE_HIGH_SHELF, -6.0, 200, 0.7},
+        {IIR_TYPE_PEAK, -5.0, 500, 0.3},
+        {IIR_TYPE_HIGH_PASS, 0, 60, 0.7},
     }
 };
 
@@ -159,15 +160,22 @@ const IIR_CFG_T audio_eq_hw_iir_cfg = {
     .gain1 = 0,
     .num = 8,
     .param = {
-        {IIR_TYPE_PEAK, -10.1,   100.0,   7},
+/*        {IIR_TYPE_PEAK, -10.1,   100.0,   7},
         {IIR_TYPE_PEAK, -10.1,   400.0,   7},
         {IIR_TYPE_PEAK, -10.1,   700.0,   7},
         {IIR_TYPE_PEAK, -10.1,   1000.0,   7},
         {IIR_TYPE_PEAK, -10.1,   3000.0,   7},
         {IIR_TYPE_PEAK, -10.1,   5000.0,   7},
         {IIR_TYPE_PEAK, -10.1,   7000.0,   7},
-        {IIR_TYPE_PEAK, -10.1,   9000.0,   7},
-
+        {IIR_TYPE_PEAK, -10.1,   9000.0,   7},*/
+        {IIR_TYPE_PEAK, 0.0,   100.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   400.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   700.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   1000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   3000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   5000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   7000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   9000.0,   7},
     }
 };
 
@@ -176,21 +184,21 @@ const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_hw_iir_cfg_list[EQ_HW_IIR_LIST_
 };
 
 const DrcConfig audio_drc_cfg = {
-     .knee = 3,
-     .filter_type = {1000, -1},
-     .band_num = 2,
-     .look_ahead_time = 10,
-     .band_settings = {
-         {-20, 0, 2, 3, 3000, 1},
-         {-20, 0, 2, 3, 3000, 1},
-     }
- };
+    .knee = 3,
+    .filter_type = {20, -1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings = {
+        {-24 ,0.0 ,8 ,1 ,100 ,1},
+        {0.0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
 
 const LimiterConfig audio_limiter_cfg = {
     .knee = 2,
     .look_ahead_time = 10,
-    .threshold = -20,
-    .makeup_gain = 19,
+    .threshold = -1,
+    .makeup_gain = 0,
     .ratio = 1000,
     .attack_time = 3,
     .release_time = 3000,
@@ -202,7 +210,7 @@ const SpectrumFixConfig audio_spectrum_cfg = {
 };
 
 const ReverbConfig audio_reverb_cfg = {
-    .bypass = 0,
+    .bypass = 1,
     .high_pass_f0 = 100,
     .gain = 0,
 };
@@ -217,7 +225,7 @@ const BassEnhancerConfig audio_bass_cfg =
 
 const DynamicBoostConfig audio_dynamic_boost_cfg = {
     .debug = 1,
-    .xover_freq = {200},
+    .xover_freq = {80},
     .order = 4,
     .CT = -40,
     .CS = 0.18,
@@ -294,7 +302,7 @@ const VirtualSurroundConfig audio_virtual_surround_cfg =
 
 const BassEnhancerConfig audio_bass_enhancer_cfg =
 {
-    .switch_on = true,
+    .switch_on = false,
     .low_cut_freq = 100,  // low_cut_freq
     .high_cut_freq = 700, // high_cut_freq
     .gain0 = 0, // invalid
@@ -302,7 +310,7 @@ const BassEnhancerConfig audio_bass_enhancer_cfg =
 };
 
 const DynamicEqConfig audio_dynamic_eq_cfg = {
-    .switch_on = 1,
+    .switch_on = false,
     .debug = 0,
     .offset = 3.9,
     .gain   = 0.f,
@@ -315,7 +323,7 @@ const DynamicEqConfig audio_dynamic_eq_cfg = {
             }
         */
         {
-            .dyeq_eq_cfg = {IIR_BIQUARD_PEAKINGEQ, 6.0,   100.0,   1.0},
+            .dyeq_eq_cfg = {IIR_BIQUARD_PEAKINGEQ, 0.0,   100.0,   1.0},
             .dyeq_drc_cfg = {-50.0,   20.0,   200.0},
         },
         {

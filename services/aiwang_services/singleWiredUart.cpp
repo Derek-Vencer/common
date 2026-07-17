@@ -496,7 +496,7 @@ static void wired_uart_get_battery_level(void)
     {
         pair_status = get_pair_status();
         buff[3] = pair_status;
-
+        DBGPRINT("[PHONE_CONNECTED][BOX_BAT] wired_uart_get_battery_level pair_status =%d",pair_status);
         if (enter_pair_count > 1)
         {
             enter_pair = 0;
@@ -516,6 +516,20 @@ static void wired_uart_get_battery_level(void)
 
     buff[4] = crc8(buff, 4);
     communication_send_buf(buff, 5);
+}
+
+extern "C" void wired_uart_mobile_connected_get_box_battery(void)
+{
+    set_pair_status(1);
+    //if (operateLeftOrRight != isRightEarbuds)
+    //{
+    //    DBGPRINT("[PHONE_CONNECTED][BOX_BAT] skip, not right earbuds");
+    //    return;
+    //}
+
+    DBGPRINT("[PHONE_CONNECTED][BOX_BAT] read case battery");
+
+    wired_uart_get_battery_level();
 }
 
 static void wired_uart_get_ear_addr_handle(void)
