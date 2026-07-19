@@ -940,11 +940,9 @@ static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rs
         if (app_ibrt_middleware_is_ui_slave())
         {
             EARBUDS_TRACE(2,
-                "[NTT_RECONNECT_SYNC] slave start opening reconnect dev=%d status=%d",
+                "[NTT_RECONNECT_SYNC] slave recv sync dev=%d status=%d, skip direct mobile reconnect",
                 device_id,
                 recon_status);
-
-            app_bt_profile_connect_manager_opening_reconnect();
         }
         else
         {

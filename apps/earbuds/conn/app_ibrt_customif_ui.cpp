@@ -857,9 +857,83 @@ static void ntt_user_setting_sync_delay_start(void)
 }
 #endif
 
+#define NTT_MOBILE_RECONNECT_DELAY_MS    2000
+static osTimerId_t ntt_mobile_reconnect_timer = NULL;
+
+static void ntt_mobile_reconnect_after_tws_ready(void *argument)
+{
+    (void)argument;
+
+    MAIN_TRACE(3,
+               "[NTT_RECONNECT_DELAY] tws=%d slave=%d mobile=%d",
+               bts_tws_if_is_tws_link_connected(),
+               app_ibrt_middleware_is_ui_slave(),
+               app_bt_ibrt_has_mobile_link_connected());
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        MAIN_TRACE(0, "[NTT_RECONNECT_DELAY] cancel: TWS disconnected");
+        return;
+    }
+
+    if (app_ibrt_middleware_is_ui_slave())
+    {
+        MAIN_TRACE(0, "[NTT_RECONNECT_DELAY] skip: local is slave");
+        return;
+    }
+
+    if (app_bt_ibrt_has_mobile_link_connected())
+    {
+        MAIN_TRACE(0, "[NTT_RECONNECT_DELAY] skip: mobile already connected");
+        return;
+    }
+
+    MAIN_TRACE(0,
+               "!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY_DELAY]!!!!!!");
+
+    app_bt_profile_connect_manager_opening_reconnect();
+}
+
+static void ntt_mobile_reconnect_timer_start(void)
+{
+    if (ntt_mobile_reconnect_timer == NULL)
+    {
+        ntt_mobile_reconnect_timer =
+            osTimerNew(ntt_mobile_reconnect_after_tws_ready,
+                       osTimerOnce,
+                       NULL,
+                       NULL);
+
+        if (ntt_mobile_reconnect_timer == NULL)
+        {
+            MAIN_TRACE(0,
+                       "[NTT_RECONNECT_DELAY] osTimerNew failed");
+            return;
+        }
+    }
+
+    osTimerStop(ntt_mobile_reconnect_timer);
+
+    osStatus_t status =
+        osTimerStart(ntt_mobile_reconnect_timer, NTT_MOBILE_RECONNECT_DELAY_MS);
+
+    MAIN_TRACE(2,
+               "[NTT_RECONNECT_DELAY] timer start status=%d ticks=%u",
+               status,
+               200);
+}
+
 void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *state, uint8_t reason_code)
 {
     EARBUDS_TRACE(0,"custom_ui tws acl state changed = %d with reason 0x%x role %d", state->state.acl_state, reason_code, state->current_role);
+
+    if(state->state.acl_state == IBRT_CONN_ACL_PROFILES_CONNECTED)
+    {
+        EARBUDS_TRACE(0,"[NTT_RECONNECT] TWS ready role=%d slave=%d",state->current_role,app_ibrt_middleware_is_ui_slave());
+        EARBUDS_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY]!!!!!!");
+        //app_bt_profile_connect_manager_opening_reconnect();
+        ntt_mobile_reconnect_timer_start();
+    }
 
 #ifdef BESUI_BTMSG_EN
     besui_tws_state_event(state, reason_code);
@@ -1511,115 +1585,232 @@ void app_ibrt_customif_pre_handle_box_event_callback(app_ui_evt_t box_evt)
     }
 }
 
-extern "C" bt_status_t bt_adapter_connect_acl_with_page_timeout(
-    const bt_bdaddr_t *bd_addr,
-    uint16_t page_timeout);
+extern "C" void __real_bts_tws_connect_request_handler(
+    const bt_bdaddr_t *remote_addr);
 
-extern "C" bt_status_t __wrap_bts_tws_connect_request_handler(
-    uint16_t page_timeout)
+extern "C" void __wrap_bts_tws_connect_request_handler(
+    const bt_bdaddr_t *remote_addr)
 {
     ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
-    bt_bdaddr_t connect_addr;
-    uint8_t *nv_peer_addr = nv_record_get_ibrt_peer_addr();
 
-    memset(&connect_addr, 0, sizeof(connect_addr));
+    MAIN_TRACE(0, "[NTT_TWS_WRAP] enter");
 
-    if (ctrl == NULL)
+    MAIN_TRACE(1,
+        "[NTT_TWS_WRAP] ui_slave=%d",
+        app_ibrt_middleware_is_ui_slave());
+
+    MAIN_TRACE(1,
+        "[NTT_TWS_WRAP] tws_connected=%d",
+        bts_tws_if_is_tws_link_connected());
+
+    MAIN_TRACE(1,
+        "[NTT_TWS_WRAP] mobile_connected=%d",
+        app_bt_ibrt_has_mobile_link_connected());
+
+    if (remote_addr != NULL)
     {
-        EARBUDS_TRACE(0, "[NTT_TWS_CONNECT] ctrl is NULL");
-        return BT_STS_FAILED;
+        MAIN_TRACE(0, "[NTT_TWS_WRAP] requested remote:");
+        DUMP8("%02X ", remote_addr->address, BTIF_BD_ADDR_SIZE);
+    }
+    else
+    {
+        MAIN_TRACE(0, "[NTT_TWS_WRAP] remote is NULL");
     }
 
-    if (nv_peer_addr == NULL)
+    if (ctrl != NULL)
     {
-        EARBUDS_TRACE(0, "[NTT_TWS_CONNECT] NV peer is NULL");
-        return BT_STS_FAILED;
+        MAIN_TRACE(0, "[NTT_TWS_WRAP] ctrl local:");
+        DUMP8("%02X ",
+              ctrl->local_addr.address,
+              BTIF_BD_ADDR_SIZE);
+
+        MAIN_TRACE(0, "[NTT_TWS_WRAP] ctrl peer:");
+        DUMP8("%02X ",
+              ctrl->peer_addr.address,
+              BTIF_BD_ADDR_SIZE);
+
+        MAIN_TRACE(1,
+            "[NTT_TWS_WRAP] nv_role=%d",
+            ctrl->nv_role);
     }
 
-    memcpy(connect_addr.address,
-           nv_peer_addr,
-           BTIF_BD_ADDR_SIZE);
+    /*
+     * 關鍵：目前不要攔截、不要換地址、不要改角色、
+     * 不要自行判斷 Master/Slave，也不要直接 return。
+     */
+    __real_bts_tws_connect_request_handler(remote_addr);
 
-    EARBUDS_TRACE(1,
-          "[NTT_TWS_CONNECT] page_timeout=0x%04X",
-          page_timeout);
-
-    EARBUDS_TRACE(0, "[NTT_TWS_CONNECT] ctrl local:");
-    EARBUDS_DUMP8("%02X ", ctrl->local_addr.address, BTIF_BD_ADDR_SIZE);
-
-    EARBUDS_TRACE(0, "[NTT_TWS_CONNECT] ctrl peer:");
-    DUMP8("%02X ", ctrl->peer_addr.address, BTIF_BD_ADDR_SIZE);
-
-    EARBUDS_TRACE(0, "[NTT_TWS_CONNECT] NV connect peer:");
-    EARBUDS_DUMP8("%02X ", connect_addr.address, BTIF_BD_ADDR_SIZE);
-
-    if (!memcmp(connect_addr.address,
-                ctrl->local_addr.address,
-                BTIF_BD_ADDR_SIZE))
-    {
-        EARBUDS_TRACE(0,
-              "[NTT_TWS_CONNECT] reject: NV peer equals local");
-        return BT_STS_FAILED;
-    }
-
-    return bt_adapter_connect_acl_with_page_timeout(
-        &connect_addr,
-        page_timeout);
+    MAIN_TRACE(0, "[NTT_TWS_WRAP] real handler called");
 }
 
 /*
 * custom reconfig bd_addr
 */
-void app_ibrt_customif_ui_reconfig_bd_addr(bt_bdaddr_t local_addr, bt_bdaddr_t peer_addr, ibrt_role_e nv_role)
+/*
+ * Return true when address is all 0x00 or all 0xFF.
+ */
+static bool ntt_tws_addr_is_invalid(const bt_bdaddr_t *addr)
 {
-    ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
+
+    if (addr == NULL)
+    {
+        return true;
+    }
+
+    if (memcmp(addr->address,
+               zero_addr,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return true;
+    }
+
+    if (memcmp(addr->address,
+               ff_addr,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+/*
+ * Custom reconfig bd_addr.
+ *
+ * NTT project:
+ * Left and right earbuds use independent Bluetooth addresses.
+ */
+void app_ibrt_customif_ui_reconfig_bd_addr(
+    bt_bdaddr_t local_addr,
+    bt_bdaddr_t peer_addr,
+    ibrt_role_e nv_role)
+{
+    ibrt_ctrl_t *p_ibrt_ctrl =
+        app_tws_ibrt_get_bt_ctrl_ctx();
+
+    EARBUDS_TRACE(0,
+        "==============================");
+
+    EARBUDS_TRACE(1,
+        "[NTT_ADDR] reconfig_bd_addr role=%d",
+        nv_role);
+
+    EARBUDS_TRACE(0,
+        "[NTT_ADDR] input local:");
+    EARBUDS_DUMP8("%02X ",
+        local_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    EARBUDS_TRACE(0,
+        "[NTT_ADDR] input peer:");
+    EARBUDS_DUMP8("%02X ",
+        peer_addr.address,
+        BTIF_BD_ADDR_SIZE);
 
     if (p_ibrt_ctrl == NULL)
     {
         EARBUDS_TRACE(0,
-                      "[NTT_ADDR] %s ctrl is NULL",
-                      __func__);
+            "[NTT_ADDR] reject: ctrl is NULL");
         return;
     }
 
-    EARBUDS_TRACE(2,
-                  "[NTT_ADDR] %s role=%d",
-                  __func__,
-                  nv_role);
-
-    EARBUDS_TRACE(0, "[NTT_ADDR] input local:");
-    EARBUDS_DUMP8("%02X ",
-                  local_addr.address,
-                  BTIF_BD_ADDR_SIZE);
-
-    EARBUDS_TRACE(0, "[NTT_ADDR] input peer:");
-    EARBUDS_DUMP8("%02X ",
-                  peer_addr.address,
-                  BTIF_BD_ADDR_SIZE);
+    /*
+     * Invalid local address must never be applied.
+     */
+    if (ntt_tws_addr_is_invalid(&local_addr))
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] reject: invalid input local");
+        return;
+    }
 
     /*
-     * NTT uses independent BT addresses for left/right earbuds.
-     * Keep configured local and peer addresses unchanged.
+     * Invalid peer address must never overwrite
+     * the current valid runtime peer address.
+     */
+    if (ntt_tws_addr_is_invalid(&peer_addr))
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] reject: invalid input peer");
+
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] keep runtime local:");
+        EARBUDS_DUMP8("%02X ",
+            p_ibrt_ctrl->local_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] keep runtime peer:");
+        EARBUDS_DUMP8("%02X ",
+            p_ibrt_ctrl->peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        return;
+    }
+
+    /*
+     * NTT independent-address design:
+     * local and peer must not be identical.
+     */
+    if (memcmp(local_addr.address,
+               peer_addr.address,
+               BTIF_BD_ADDR_SIZE) == 0)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] reject: input peer equals input local");
+
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] current runtime local:");
+        EARBUDS_DUMP8("%02X ",
+            p_ibrt_ctrl->local_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        EARBUDS_TRACE(0,
+            "[NTT_ADDR] current runtime peer:");
+        EARBUDS_DUMP8("%02X ",
+            p_ibrt_ctrl->peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        return;
+    }
+
+    /*
+     * Apply validated independent local and peer addresses.
      */
     p_ibrt_ctrl->local_addr = local_addr;
     p_ibrt_ctrl->peer_addr  = peer_addr;
     p_ibrt_ctrl->nv_role    = nv_role;
 
     /*
-     * Controller local address must always use local_addr.
-     * Do not exchange local/peer according to IBRT role.
+     * Controller address always uses this earbud's local address.
+     * Never exchange local and peer according to IBRT role.
      */
-    btif_me_set_bt_address(p_ibrt_ctrl->local_addr.address);
+    btif_me_set_bt_address(
+        p_ibrt_ctrl->local_addr.address);
 
-    EARBUDS_TRACE(0, "[NTT_ADDR] final local:");
+    EARBUDS_TRACE(0,
+        "[NTT_ADDR] applied runtime local:");
     EARBUDS_DUMP8("%02X ",
-                  p_ibrt_ctrl->local_addr.address,
-                  BTIF_BD_ADDR_SIZE);
+        p_ibrt_ctrl->local_addr.address,
+        BTIF_BD_ADDR_SIZE);
 
-    EARBUDS_TRACE(0, "[NTT_ADDR] final peer:");
+    EARBUDS_TRACE(0,
+        "[NTT_ADDR] applied runtime peer:");
     EARBUDS_DUMP8("%02X ",
-                  p_ibrt_ctrl->peer_addr.address,
-                  BTIF_BD_ADDR_SIZE);
+        p_ibrt_ctrl->peer_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    EARBUDS_TRACE(0,
+        "[NTT_ADDR] reconfig success");
 }
 
 /*custom can block connect mobile if needed*/
@@ -2713,6 +2904,12 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         EARBUDS_TRACE(0,"[NTT_CASE_CB][LOCAL] IN_CASE");
         app_key_handle_pause_music_on_pogo_in();
         ntt_first_out_reset_local();
+
+        //if(bts_tws_if_is_tws_link_connected())
+        //{
+            //MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
+            //app_bt_profile_connect_manager_opening_reconnect();            
+        //}
         return;
     }
 

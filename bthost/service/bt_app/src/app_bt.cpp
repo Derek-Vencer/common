@@ -5027,14 +5027,28 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     int find_invalid_record_cnt;
     bool reconnect_added = false;
 
+    ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
     DEBUG_INFO(0, "[NTT_RECONNECT] opening reconnect enter");
 
-    //if (app_ibrt_middleware_is_ui_slave())
-    //{
-        //DEBUG_INFO(0, "[NTT_RECONNECT] UI slave skip opening reconnect do");
+    if (ctrl != NULL)
+    {
+        DEBUG_INFO(3,
+            "[NTT_RECONNECT] ui_slave=%d nv_role=%d tws=%d",
+            app_ibrt_middleware_is_ui_slave(),
+            ctrl->nv_role,
+            bts_tws_if_is_tws_link_connected());
 
-        //return;
-    //}
+        /*
+         * Slave must recover TWS first.
+         * Do not directly reconnect the mobile before TWS is ready.
+         */
+        if (app_ibrt_middleware_is_ui_slave() ||
+            ctrl->nv_role == IBRT_SLAVE)
+        {
+            DEBUG_INFO(0,"[NTT_RECONNECT] slave skip direct mobile reconnect");
+            return;
+        }
+    }
 
     if (!btif_me_get_pendCons() &&
         !app_bt_ibrt_has_mobile_link_connected())
@@ -5077,7 +5091,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
         {
             if (ntt_bt_addr_is_invalid(&record1.bdAddr))
             {
-                DEBUG_INFO(0, "[NTT_RECONNECT] delete record1 local/peer");
+                DEBUG_INFO(0,"[NTT_RECONNECT] delete record1 zero/ff address");
                 nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
                 find_invalid_record_cnt++;
             }
