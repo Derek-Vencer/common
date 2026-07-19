@@ -402,7 +402,7 @@ OS_THREAD_TIMING_STATISTICS_ENABLE ?= 0
 
 #CFLAGS_IMAGE += -u _printf_float -u _scanf_float
 
-#LDFLAGS_IMAGE += --wrap main
+LDFLAGS_IMAGE += --wrap bts_tws_connect_request_handler
 
 
 ifeq ($(AI_ENABLE),1)

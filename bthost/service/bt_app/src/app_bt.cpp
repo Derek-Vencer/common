@@ -191,6 +191,8 @@ extern void bt_media_clear_current_media(uint16_t media_type);
 extern void app_ibrt_start_power_on_tws_pairing(void);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 
+extern bool ntt_tws_peer_addr_is_valid(void);
+
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
 
 //reconnect = (INTERVAL+PAGETO)*CNT = (3000ms+5000ms)*15 = 120s
@@ -1705,49 +1707,6 @@ static void ntt_tws_reconnect_after_profile_stop(void)
     {
         osTimerStop(ntt_tws_reconnect_after_profile_timer);
     }
-}
-
-static bool ntt_tws_peer_addr_is_valid(void)
-{
-    ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
-
-    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
-    {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-    };
-
-    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
-    {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-    };
-
-    if (ctrl == NULL)
-    {
-        return false;
-    }
-
-    if (memcmp(ctrl->peer_addr.address,
-               zero_addr,
-               BTIF_BD_ADDR_SIZE) == 0)
-    {
-        return false;
-    }
-
-    if (memcmp(ctrl->peer_addr.address,
-               ff_addr,
-               BTIF_BD_ADDR_SIZE) == 0)
-    {
-        return false;
-    }
-
-    if (memcmp(ctrl->peer_addr.address,
-               ctrl->local_addr.address,
-               BTIF_BD_ADDR_SIZE) == 0)
-    {
-        return false;
-    }
-
-    return true;
 }
 
 static void ntt_tws_reconnect_after_profile_timer_handler(void const *param)

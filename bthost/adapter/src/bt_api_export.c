@@ -489,6 +489,7 @@ bt_bdaddr_t *bes_bt_me_get_addr_by_sco_handle(uint16_t handle)
 
 void bes_bt_me_opening_reconnect(void)
 {
+    MAIN_TRACE(0,"!!!!!! bes_bt_me_opening_reconnect [E]!!!!!!");
     app_bt_profile_connect_manager_opening_reconnect();
 }
 

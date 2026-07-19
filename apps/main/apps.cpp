@@ -1466,6 +1466,7 @@ extern void app_ui_key_poweron_init(void);
 osTimerId   stereo_poweron_pairing_timerid = NULL;
 static void stereo_poweron_pairing_timer_handler(void const *para)
 {
+    MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [A]!!!!!!");
     app_bt_profile_connect_manager_opening_reconnect();
 }
 
@@ -3185,10 +3186,13 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
         stereo_poweron_pairing_timer_on();
 #else
+        osDelay(1000);
+        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [B]!!!!!!");
         app_bt_profile_connect_manager_opening_reconnect();
 #endif
-#endif
-        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ !!!!!!");
+#endif       
+        osDelay(1000);
+        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [C]!!!!!!");
         app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
@@ -3371,6 +3375,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
                     stereo_poweron_pairing_timer_on();
 #else
+                    MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
                     app_bt_profile_connect_manager_opening_reconnect();
 #endif
 

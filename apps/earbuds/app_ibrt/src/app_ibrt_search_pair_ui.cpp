@@ -207,7 +207,20 @@ void app_tws_ibrt_update_info(ibrt_role_e ibrtRole,bt_bdaddr_t *ibrtPeerAddr)
     }
     if (NULL != ibrtPeerAddr)
     {
+        EARBUDS_TRACE(0,"[NTT_TWS] update peer address:");
+
+        EARBUDS_DUMP8("%02X ",
+                    ibrtPeerAddr->address,
+                    BT_ADDR_OUTPUT_PRINT_NUM);
+
         memcpy(p_ibrt_ctrl->peer_addr.address,ibrtPeerAddr->address, BD_ADDR_LEN);
+
+        EARBUDS_TRACE(0,"[NTT_TWS] runtime peer:");
+
+        EARBUDS_DUMP8("%02X ",
+                    p_ibrt_ctrl->peer_addr.address,
+                    BT_ADDR_OUTPUT_PRINT_NUM);
+
         nv_record_update_ibrt_info(p_ibrt_ctrl->nv_role,ibrtPeerAddr);
 
 #ifdef IBRT_RIGHT_MASTER
@@ -280,8 +293,19 @@ void app_bt_manager_ibrt_role_process(const btif_event_t *Event)
                         app_tws_ibrt_update_info(IBRT_SLAVE,p_remote_dev_addr);
                         bts_core_set_ui_role(IBRT_SLAVE);
                     }
+
+                    /*
+                    * NTT project:
+                    * Keep independent BT address.
+                    */
+                    EARBUDS_TRACE(0,
+                        "[NTT_TWS] keep independent local address");
+
+                    /* Do nothing */
+
                     //if(app_ibrt_ui_get_tws_use_same_addr_enable())
                     //ibrt use the same address
+                    
                     {
                         memcpy(p_ibrt_ctrl->local_addr.address,p_remote_dev_addr->address,6);
                     }
@@ -307,6 +331,24 @@ void app_ibrt_config_the_same_bd_addr(bt_bdaddr_t *ibrtSearchedAddr)
 #endif
     EARBUDS_TRACE(0,"%s", __func__);
     EARBUDS_DUMP8("%02x ", p_ibrt_ctrl->local_addr.address, BT_ADDR_OUTPUT_PRINT_NUM);
+    EARBUDS_TRACE(0,"[NTT_TWS] %s skip same BT address mode",__func__);
+    EARBUDS_TRACE(0,"[NTT_TWS] keep local address:");
+    EARBUDS_DUMP8("%02X ",p_ibrt_ctrl->local_addr.address,BT_ADDR_OUTPUT_PRINT_NUM);
+    EARBUDS_TRACE(0,"[NTT_TWS] current peer address:");
+    EARBUDS_DUMP8("%02X ",p_ibrt_ctrl->peer_addr.address,BT_ADDR_OUTPUT_PRINT_NUM);
+    EARBUDS_TRACE(0,"[NTT_TWS] searched address:");
+    EARBUDS_DUMP8("%02X ",ibrtSearchedAddr->address,BT_ADDR_OUTPUT_PRINT_NUM);
+
+    /*
+     * NTT 專案左右耳使用不同 BT Address。
+     *
+     * 不要修改：
+     *   local_addr
+     *   peer_addr
+     *
+     * peer_addr 會由 app_tws_ibrt_update_info()
+     * 正常更新。
+     */
 }
 
 void app_ibrt_reconfig_btAddr_from_nv()

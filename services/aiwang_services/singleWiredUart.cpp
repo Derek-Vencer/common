@@ -987,7 +987,7 @@ bool aiWangBoxIsUsed(void)
 	return boxChargerStatus.boxIsOpen;
 }
 
-static bool ntt_tws_peer_addr_is_valid(void)
+bool ntt_tws_peer_addr_is_valid(void)
 {
     ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
 
