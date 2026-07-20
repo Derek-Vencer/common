@@ -50,7 +50,7 @@
 #include "hfp_api.h"
 #include "app_ibrt_customif_cmd.h"
 #include "app_tws_ibrt.h"
-
+#include "nvrecord_env.h"
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -894,7 +894,7 @@ static void ntt_mobile_reconnect_after_tws_ready(void *argument)
     app_bt_profile_connect_manager_opening_reconnect();
 }
 
-static void ntt_mobile_reconnect_timer_start(void)
+void ntt_mobile_reconnect_timer_start(void)
 {
     if (ntt_mobile_reconnect_timer == NULL)
     {
@@ -929,10 +929,10 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
 
     if(state->state.acl_state == IBRT_CONN_ACL_PROFILES_CONNECTED)
     {
-        EARBUDS_TRACE(0,"[NTT_RECONNECT] TWS ready role=%d slave=%d",state->current_role,app_ibrt_middleware_is_ui_slave());
-        EARBUDS_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY]!!!!!!");
+        //EARBUDS_TRACE(0,"[NTT_RECONNECT] TWS ready role=%d slave=%d",state->current_role,app_ibrt_middleware_is_ui_slave());
+        //EARBUDS_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY]!!!!!!");
         //app_bt_profile_connect_manager_opening_reconnect();
-        ntt_mobile_reconnect_timer_start();
+        //ntt_mobile_reconnect_timer_start();
     }
 
 #ifdef BESUI_BTMSG_EN
@@ -1585,62 +1585,201 @@ void app_ibrt_customif_pre_handle_box_event_callback(app_ui_evt_t box_evt)
     }
 }
 
+bt_bdaddr_t ntt_cfg_local_addr = {};
+bt_bdaddr_t ntt_cfg_peer_addr = {};
+bool ntt_cfg_addr_valid = false;
+
+bool ntt_bt_addr_is_zero(const bt_bdaddr_t *addr)
+{
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] = {0};
+
+    if (addr == NULL)
+    {
+        return true;
+    }
+
+    return (memcmp(addr->address,
+                   zero_addr,
+                   BTIF_BD_ADDR_SIZE) == 0);
+}
+
+bool ntt_bt_addr_is_same(const bt_bdaddr_t *addr1,
+                                const bt_bdaddr_t *addr2)
+{
+    if ((addr1 == NULL) || (addr2 == NULL))
+    {
+        return false;
+    }
+
+    return (memcmp(addr1->address,
+                   addr2->address,
+                   BTIF_BD_ADDR_SIZE) == 0);
+}
+
 extern "C" void __real_bts_tws_connect_request_handler(
-    const bt_bdaddr_t *remote_addr);
+    const bt_bdaddr_t *remote);
 
 extern "C" void __wrap_bts_tws_connect_request_handler(
-    const bt_bdaddr_t *remote_addr)
+    const bt_bdaddr_t *remote)
 {
     ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+    const bt_bdaddr_t *connect_addr = remote;
 
-    MAIN_TRACE(0, "[NTT_TWS_WRAP] enter");
+    MAIN_TRACE(0,
+        "[NTT_TWS_WRAP_V23] enter cfg_valid=%d",
+        ntt_cfg_addr_valid);
 
-    MAIN_TRACE(1,
-        "[NTT_TWS_WRAP] ui_slave=%d",
-        app_ibrt_middleware_is_ui_slave());
-
-    MAIN_TRACE(1,
-        "[NTT_TWS_WRAP] tws_connected=%d",
-        bts_tws_if_is_tws_link_connected());
-
-    MAIN_TRACE(1,
-        "[NTT_TWS_WRAP] mobile_connected=%d",
-        app_bt_ibrt_has_mobile_link_connected());
-
-    if (remote_addr != NULL)
+    if (remote != NULL)
     {
-        MAIN_TRACE(0, "[NTT_TWS_WRAP] requested remote:");
-        DUMP8("%02X ", remote_addr->address, BTIF_BD_ADDR_SIZE);
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] input remote:");
+
+        DUMP8("%02X ",
+              remote->address,
+              BTIF_BD_ADDR_SIZE);
     }
     else
     {
-        MAIN_TRACE(0, "[NTT_TWS_WRAP] remote is NULL");
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] input remote=NULL");
     }
 
     if (ctrl != NULL)
     {
-        MAIN_TRACE(0, "[NTT_TWS_WRAP] ctrl local:");
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] runtime local:");
+
         DUMP8("%02X ",
               ctrl->local_addr.address,
               BTIF_BD_ADDR_SIZE);
 
-        MAIN_TRACE(0, "[NTT_TWS_WRAP] ctrl peer:");
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] runtime peer before:");
+
         DUMP8("%02X ",
               ctrl->peer_addr.address,
               BTIF_BD_ADDR_SIZE);
-
-        MAIN_TRACE(1,
-            "[NTT_TWS_WRAP] nv_role=%d",
-            ctrl->nv_role);
+    }
+    else
+    {
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] ctrl=NULL");
     }
 
-    /*
-     * 關鍵：目前不要攔截、不要換地址、不要改角色、
-     * 不要自行判斷 Master/Slave，也不要直接 return。
-     */
-    __real_bts_tws_connect_request_handler(remote_addr);
+    if (ntt_cfg_addr_valid)
+    {
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] config local:");
 
-    MAIN_TRACE(0, "[NTT_TWS_WRAP] real handler called");
+        DUMP8("%02X ",
+              ntt_cfg_local_addr.address,
+              BTIF_BD_ADDR_SIZE);
+
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] config peer:");
+
+        DUMP8("%02X ",
+              ntt_cfg_peer_addr.address,
+              BTIF_BD_ADDR_SIZE);
+
+        if (ntt_bt_addr_is_zero(&ntt_cfg_local_addr))
+        {
+            MAIN_TRACE(0,
+                "[NTT_TWS_WRAP_V23] ERROR config local zero");
+
+            return;
+        }
+
+        if (ntt_bt_addr_is_zero(&ntt_cfg_peer_addr))
+        {
+            MAIN_TRACE(0,
+                "[NTT_TWS_WRAP_V23] ERROR config peer zero");
+
+            return;
+        }
+
+        if (ntt_bt_addr_is_same(&ntt_cfg_local_addr,
+                                &ntt_cfg_peer_addr))
+        {
+            MAIN_TRACE(0,
+                "[NTT_TWS_WRAP_V23] ERROR config local equals peer");
+
+            return;
+        }
+
+        /*
+         * 重要：
+         * 只修復 runtime peer，不修改 runtime local。
+         *
+         * SDK real handler 內部仍會使用 ctrl->peer_addr，
+         * 所以只修改 connect_addr 不足夠。
+         */
+        if (ctrl != NULL)
+        {
+            if (!ntt_bt_addr_is_same(&ctrl->peer_addr,
+                                     &ntt_cfg_peer_addr))
+            {
+                MAIN_TRACE(0,
+                    "[NTT_TWS_WRAP_V23] repair runtime peer only");
+
+                memcpy(ctrl->peer_addr.address,
+                       ntt_cfg_peer_addr.address,
+                       BTIF_BD_ADDR_SIZE);
+            }
+
+            MAIN_TRACE(0,
+                "[NTT_TWS_WRAP_V23] runtime peer after:");
+
+            DUMP8("%02X ",
+                  ctrl->peer_addr.address,
+                  BTIF_BD_ADDR_SIZE);
+        }
+
+        connect_addr = &ntt_cfg_peer_addr;
+    }
+    else
+    {
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] WARNING config invalid");
+
+        if (connect_addr == NULL)
+        {
+            MAIN_TRACE(0,
+                "[NTT_TWS_WRAP_V23] ERROR config invalid and remote NULL");
+
+            return;
+        }
+    }
+
+    if (ntt_bt_addr_is_zero(connect_addr))
+    {
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] ERROR connect address zero");
+
+        return;
+    }
+
+    if (ntt_cfg_addr_valid &&
+        ntt_bt_addr_is_same(connect_addr,
+                            &ntt_cfg_local_addr))
+    {
+        MAIN_TRACE(0,
+            "[NTT_TWS_WRAP_V23] ERROR connect address equals local");
+
+        return;
+    }
+
+    MAIN_TRACE(0,
+        "[NTT_TWS_WRAP_V23] final connect addr:");
+
+    DUMP8("%02X ",
+          connect_addr->address,
+          BTIF_BD_ADDR_SIZE);
+
+    __real_bts_tws_connect_request_handler(connect_addr);
+
+    MAIN_TRACE(0,
+        "[NTT_TWS_WRAP_V23] real handler called");
 }
 
 /*
@@ -2241,7 +2380,7 @@ int app_ibrt_customif_ui_start(void)
     config.giveup_reconn_when_peer_unpaired               = false;
 
     //if tws&mobile disc, reconnect tws first until tws connected then reconn mobile
-    config.delay_reconn_mob_until_tws_connected           = false;
+    config.delay_reconn_mob_until_tws_connected           = true;
 
     config.delay_reconn_mob_max_times                     = IBRT_UI_DELAY_RECONN_MOBILE_MAX_TIMES;
 
@@ -2391,7 +2530,7 @@ void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
 
     bt_sco_chain_set_master_role(newRole == TWS_UI_MASTER);
 
-#ifdef BT_HFP_SUPPORT
+//#ifdef BT_HFP_SUPPORT
     if (newRole == TWS_UI_MASTER)
     {
         uint8_t curr_sco = app_bt_audio_get_curr_playing_sco();
@@ -2468,7 +2607,7 @@ void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
                 "[ROLE_SWITCH][HFP] no hfp device");
         }
     }
-#endif
+//#endif
 }
 
 bool app_ibrt_customif_disallow_pagescan()

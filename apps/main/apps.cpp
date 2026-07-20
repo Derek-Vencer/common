@@ -2169,9 +2169,6 @@ void app_ibrt_init(void)
     app_ibrt_internal_stack_is_ready();
 #endif
 
-    //MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
-    //app_bt_profile_connect_manager_opening_reconnect();
-
 #if defined(IBRT_UI) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
     app_tws_ibrt_ui_cmd_init();
 #endif
@@ -3378,8 +3375,8 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
                     stereo_poweron_pairing_timer_on();
 #else
-                    //MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
-                    //app_bt_profile_connect_manager_opening_reconnect();
+                    MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
+                    app_bt_profile_connect_manager_opening_reconnect();
 #endif
 
 #endif
