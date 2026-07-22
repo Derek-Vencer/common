@@ -3637,6 +3637,7 @@ void app_bt_role_manager_process(const btif_event_t *Event)
             }
             break;
         case BTIF_BTEVENT_LINK_DISCONNECT:
+            DEBUG_INFO(5,"[BTEVENT] app_bt_role_manager_process BTIF_BTEVENT_LINK_DISCONNECT");
             switchrole_cnt = 0;
             break;
         case BTIF_BTEVENT_ROLE_CHANGE:
@@ -3769,6 +3770,7 @@ void app_bt_role_manager_process_dual_slave(const btif_event_t *Event)
             }
             break;
         case BTIF_BTEVENT_LINK_DISCONNECT:
+            DEBUG_INFO(5,"[BTEVENT] app_bt_role_manager_process_dual_slave BTIF_BTEVENT_LINK_DISCONNECT");
             switchrole_cnt = 0;
             break;
         case BTIF_BTEVENT_ROLE_CHANGE:
@@ -3897,6 +3899,7 @@ void app_bt_sniff_manager_process(const btif_event_t *Event)
         case BTIF_BTEVENT_LINK_CONNECT_CNF:
             break;
         case BTIF_BTEVENT_LINK_DISCONNECT:
+            DEBUG_INFO(5,"[BTEVENT] app_bt_sniff_manager_process BTIF_BTEVENT_LINK_DISCONNECT");
             sniffInfo.maxInterval = BTIF_CMGR_SNIFF_MAX_INTERVAL;
             sniffInfo.minInterval = BTIF_CMGR_SNIFF_MIN_INTERVAL;
             sniffInfo.attempt = BTIF_CMGR_SNIFF_ATTEMPT;

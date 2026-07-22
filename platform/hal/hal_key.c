@@ -1127,19 +1127,37 @@ static void hal_key_debounce_handler(void *param)
             if (key_status.code_click != HAL_KEY_CODE_NONE) {
                 send_key_event(key_status.code_click, HAL_KEY_EVENT_CLICK + key_status.cnt_click);
             }
+
+            /*
+            * New click sequence.
+            * Clear previous click-hold history.
+            */
             key_status.code_click = key_status.code_ready;
             key_status.cnt_click = 0;
+            key_status.cnt_has_click_up = 0;
             key_status.time_click = time;
+
+            TR_INFO(0, "[KEY_FIX] New click sequence, clear cnt_has_click_up");
         } else if (up_new && (up_new | key_status.code_down) == key_status.code_click) {
             key_status.cnt_click++;
             key_status.time_click = time;
         }
 
         if (time - key_status.time_click >= KEY_DOUBLECLICK_THRESHOLD || key_status.cnt_click >= MAX_KEY_CLICK_COUNT) {
+
             send_key_event(key_status.code_click, HAL_KEY_EVENT_CLICK + key_status.cnt_click);
+
+            /*
+            * Double-click sequence is finished.
+            * Clear click-hold history so the next long press
+            * will not be mis-detected as DOUBLE_AND_HOLD.
+            */
             key_status.code_click = HAL_KEY_CODE_NONE;
             key_status.cnt_click = 0;
+            key_status.cnt_has_click_up = 0;
             key_status.event = HAL_KEY_EVENT_NONE;
+
+            TR_INFO(0, "[KEY_FIX] DoubleClick finished, clear cnt_has_click_up");
         }
     }
 
@@ -1200,8 +1218,15 @@ static void hal_key_debounce_handler(void *param)
         	else if(key_status.event != HAL_KEY_EVENT_DOUBLE_AND_HOLD)
         	{
                 if (time - key_status.time_updown >= KEY_LONGPRESS_THRESHOLD) {
+
+                    /*
+                    * Already enters LONGPRESS.
+                    * DOUBLE_AND_HOLD history should be discarded.
+                    */
+                    key_status.cnt_has_click_up = 0;
                     key_status.cnt_repeat = 0;
                     key_status.event = HAL_KEY_EVENT_LONGPRESS;
+                    TR_INFO(0, "[KEY_FIX] LONGPRESS, clear cnt_has_click_up");
                     send_key_event(key_status.code_ready, key_status.event);
                 }
             }

@@ -68,7 +68,8 @@ typedef enum  {
 	FACTORY_COMMAND_AUDIO_IO = 0xB0,
 	FACTORY_COMMAND_INFO     = 0xC0,
 	GET_LOCAL_BT_ADDR  = 0x60,
-	SET_PEER_BT_ADDR   = 0x70
+	SET_PEER_BT_ADDR   = 0x70,
+	SET_DTM_ENABLE	   = 0x90
 } AI_WANG_CMDS_TYPE_SETS;
 
 typedef enum  {
@@ -80,6 +81,7 @@ typedef enum  {
 	RSP_GET_EQ_PRESET     = 0x46,
 	RSP_SET_EQ_PRESET     = 0x4a,
 	RSP_GET_FW_VERSION    = 0x4e,
+	RSP_SET_DTM_ENABLE 	  = 0x92
 } AI_WANG_RSP_TYPE;
 
 typedef enum {

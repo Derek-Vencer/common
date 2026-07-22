@@ -240,6 +240,7 @@ extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void);
 #endif
 void earBudsCloseOff_PogonIn_StartTimer(void);
 extern bool ntt_charging_pwron_pending_shutdown;
+extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
@@ -556,10 +557,9 @@ int app_status_battery_report(uint8_t level)
 
         if (curr_device->hf_conn_flag)
         {
-            BATTERY_TRACE(1,
-                          "[BATT] HFP connected level=%d",
-                          level);
-
+            BATTERY_TRACE(0,"[PHONE_CONNECTED] request case battery");
+            wired_uart_mobile_connected_get_box_battery();
+            BATTERY_TRACE(1,"[BATT] HFP connected level=%d",level);
             app_hfp_set_battery_level(level);
         }
         else

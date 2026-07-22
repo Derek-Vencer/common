@@ -328,8 +328,9 @@ void Icp1205ShipReset(void)
  ******************************************************************************/
 void Icp1205ShipEnable(void)
 {
+	Icp1205ShipReset();
 	 uint8_t dat;
-     dat=	0x11;
+     dat=	0x33;
      DBGPRINT("%s" ,__func__);
 	 writeDataTo_ICP1205(ICP1205_SHIP_CON,&dat,1);
 }

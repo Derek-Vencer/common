@@ -44,6 +44,7 @@
 #include "app_tws_ibrt.h"
 #include "bts_tws_if.h"
 #include "app_ibrt_customif_cmd.h"
+#include "audio_cfg.h"
 
 #define GOC_APP_DEBUG_ENABLE 1
 
@@ -174,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.1" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.3" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -713,68 +714,323 @@ void handleSetKeyMapping(const uint8_t *data, uint16_t len)
 {
     TRACE(0, "%s.", __func__);
 
-    if ((data == NULL) || (len < 4))
+    /*
+     * Packet format:
+     *
+     * data[0] : command
+     * data[1] : data length high
+     * data[2] : data length low
+     * data[3] : changed key count
+     * data[4] : action 0
+     * data[5] : function 0
+     * data[6] : action 1
+     * data[7] : function 1
+     * ...
+     *
+     * data_len = 1 + key_count * 2
+     */
+
+    if ((data == NULL) || (len < 6))
     {
+        TRACE(0,
+              "[KEYMAP][SET] invalid packet data=%p len=%d",
+              data,
+              len);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
         return;
     }
 
     const uint8_t *data_buf = data + 1;
 
-    uint16_t data_len = ((uint16_t)data_buf[0] << 8) | data_buf[1];
-    uint8_t key_count = data_buf[2];
+    uint16_t data_len =
+        ((uint16_t)data_buf[0] << 8) |
+        ((uint16_t)data_buf[1]);
 
-    if (data_len < 1)
+    uint8_t update_key_count = data_buf[2];
+
+    /*
+     * At least one key must be included.
+     */
+    if ((update_key_count == 0) ||
+        (update_key_count > 20))
     {
+        TRACE(0,
+              "[KEYMAP][SET] invalid update count=%d",
+              update_key_count);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
         return;
     }
 
-    uint16_t calc_key_count = ((data_len - 1) >> 1);
+    /*
+     * data_len contains:
+     *   1 byte key_count
+     *   2 bytes for each mapping
+     */
+    uint16_t expected_data_len =
+        (uint16_t)(1U + ((uint16_t)update_key_count * 2U));
 
-    if ((calc_key_count != key_count) || (key_count > 20))
+    if (data_len != expected_data_len)
     {
+        TRACE(0,
+              "[KEYMAP][SET] data_len mismatch rx=%d expected=%d",
+              data_len,
+              expected_data_len);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
         return;
     }
 
-    uint16_t key_map_len = key_count * 2;
+    /*
+     * Total packet:
+     * command(1) + length(2) + key_count(1)
+     * + mapping(update_key_count * 2)
+     */
+    uint16_t expected_packet_len =
+        (uint16_t)(4U + ((uint16_t)update_key_count * 2U));
 
-    if ((key_map_len + 4) != len)
+    if (len != expected_packet_len)
     {
+        TRACE(0,
+              "[KEYMAP][SET] packet len mismatch rx=%d expected=%d",
+              len,
+              expected_packet_len);
+
         ntt_api_send_error_notify(0x43, API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    /*
+     * Ensure RAM/NV mapping has been initialized.
+     *
+     * If NV is empty, this function writes the default 20-key map.
+     * If NV already has valid data, it loads the existing map into RAM.
+     */
+    keymap_init_default();
+
+    struct nvrecord_env_t *nvrecord_env = NULL;
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        TRACE(0, "[KEYMAP][SET] nvrecord_env is NULL");
+
+        ntt_api_send_error_notify(0x43, API_ERR_STORAGE_ERROR);
+        return;
+    }
+
+    uint8_t current_key_count = nvrecord_env->key_map_number;
+
+    if ((current_key_count == 0) ||
+        (current_key_count > 20))
+    {
+        TRACE(0,
+              "[KEYMAP][SET] invalid current count=%d",
+              current_key_count);
+
+        ntt_api_send_error_notify(0x43, API_ERR_STORAGE_ERROR);
         return;
     }
 
     const uint8_t *key_map = &data_buf[3];
-    uint8_t local_er_count = 0;
 
-    for (int i = 0; i < key_count; i++)
+    /*
+     * First pass:
+     * Find every incoming action in the existing mapping table.
+     *
+     * We validate everything first so an invalid packet does not cause
+     * only part of the key mapping table to be modified.
+     */
+    uint8_t update_index[20];
+
+    memset(update_index, 0xFF, sizeof(update_index));
+
+    for (uint8_t i = 0; i < update_key_count; i++)
     {
-        uint8_t key_actions = key_map[i * 2];
-        uint8_t key_func    = key_map[i * 2 + 1];
+        uint8_t incoming_action = key_map[i * 2];
+        uint8_t incoming_func   = key_map[i * 2 + 1];
+        bool found = false;
 
-        handleSetKeyMapActionAndFunc(local_er_count, key_actions, key_func);
-        local_er_count++;
+        /*
+         * Reject duplicate action entries in the same APP packet.
+         */
+        for (uint8_t check = 0; check < i; check++)
+        {
+            if (key_map[check * 2] == incoming_action)
+            {
+                TRACE(0,
+                      "[KEYMAP][SET] duplicate incoming action=0x%02X",
+                      incoming_action);
+
+                ntt_api_send_error_notify(0x43,
+                                          API_ERR_INVALID_PARAM);
+                return;
+            }
+        }
+
+        /*
+         * action is the key identifier.
+         * Find the matching action in the current complete mapping table.
+         */
+        for (uint8_t j = 0; j < current_key_count; j++)
+        {
+            if (nvrecord_env->key_map_action[j] ==
+                incoming_action)
+            {
+                update_index[i] = j;
+                found = true;
+
+                TRACE(0,
+                      "[KEYMAP][SET] match input=%d nv_index=%d "
+                      "action=0x%02X old_func=0x%02X new_func=0x%02X",
+                      i,
+                      j,
+                      incoming_action,
+                      nvrecord_env->key_map_func[j],
+                      incoming_func);
+
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] action not found=0x%02X",
+                  incoming_action);
+
+            /*
+             * Do not append an unknown action because the current protocol
+             * is intended to update an existing key definition.
+             */
+            ntt_api_send_error_notify(0x43,
+                                      API_ERR_INVALID_PARAM);
+            return;
+        }
     }
 
-    handleSetKeyMapNumber(local_er_count);
-    keymap_init_default();
+    /*
+     * Second pass:
+     * All actions are valid. Update only the matching function fields.
+     */
+    bool mapping_changed = false;
 
+    for (uint8_t i = 0; i < update_key_count; i++)
+    {
+        uint8_t nv_index = update_index[i];
+        uint8_t incoming_action = key_map[i * 2];
+        uint8_t incoming_func   = key_map[i * 2 + 1];
+
+        if (nv_index >= current_key_count)
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] invalid resolved index=%d",
+                  nv_index);
+
+            ntt_api_send_error_notify(0x43,
+                                      API_ERR_STORAGE_ERROR);
+            return;
+        }
+
+        /*
+         * action remains unchanged because it is used as the Key ID.
+         * Only overwrite the function selected by the APP.
+         */
+        if (nvrecord_env->key_map_func[nv_index] != incoming_func)
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] update index=%d "
+                  "action=0x%02X func:0x%02X->0x%02X",
+                  nv_index,
+                  incoming_action,
+                  nvrecord_env->key_map_func[nv_index],
+                  incoming_func);
+
+            nvrecord_env->key_map_func[nv_index] = incoming_func;
+            mapping_changed = true;
+        }
+        else
+        {
+            TRACE(0,
+                  "[KEYMAP][SET] unchanged index=%d "
+                  "action=0x%02X func=0x%02X",
+                  nv_index,
+                  incoming_action,
+                  incoming_func);
+        }
+
+        /*
+         * Keep the runtime RAM table synchronized immediately.
+         */
+        s_key_map[nv_index].actions =
+            nvrecord_env->key_map_action[nv_index];
+
+        s_key_map[nv_index].function =
+            nvrecord_env->key_map_func[nv_index];
+    }
+
+    /*
+     * Do not modify key_map_number.
+     *
+     * APP update_key_count means "number of changed keys",
+     * not "total number of keys in the mapping table".
+     */
+    s_key_map_count = current_key_count;
+
+    /*
+     * Write NV only once after all entries have been updated.
+     */
+    if (mapping_changed)
+    {
+        nv_record_env_set(nvrecord_env);
+
+        TRACE(0,
+              "[KEYMAP][SET] NV save done total=%d updated=%d",
+              current_key_count,
+              update_key_count);
+    }
+    else
+    {
+        TRACE(0,
+              "[KEYMAP][SET] no NV write, mapping unchanged");
+    }
+
+    /*
+     * Synchronize the complete mapping table to the peer earbud.
+     *
+     * Although APP only changes one or more keys, sending the complete
+     * table prevents the left/right earbuds from having different maps.
+     */
     uint8_t cmd_sync_button_map[50] = {0};
-    cmd_sync_button_map[0] = local_er_count;
 
-    for (int i = 0; i < local_er_count; i++)
+    cmd_sync_button_map[0] = current_key_count;
+
+    for (uint8_t i = 0; i < current_key_count; i++)
     {
-        cmd_sync_button_map[i * 2 + 1] = (uint8_t)s_key_map[i].actions;
-        cmd_sync_button_map[i * 2 + 2] = (uint8_t)s_key_map[i].function;
+        cmd_sync_button_map[i * 2 + 1] =
+            nvrecord_env->key_map_action[i];
+
+        cmd_sync_button_map[i * 2 + 2] =
+            nvrecord_env->key_map_func[i];
+
+        TRACE(0,
+              "[KEYMAP][SYNC] index=%d action=0x%02X func=0x%02X",
+              i,
+              cmd_sync_button_map[i * 2 + 1],
+              cmd_sync_button_map[i * 2 + 2]);
     }
 
-    app_ibrt_customif_cmd_sync_button_map(cmd_sync_button_map,
-                                          local_er_count * 2 + 1);
+#ifdef IBRT
+    app_ibrt_customif_cmd_sync_button_map(
+        cmd_sync_button_map,
+        (uint16_t)(current_key_count * 2U + 1U));
+#endif
 
 #if need_send_data_by_notify
-    sparraw_tx_msg(RSP_SET_KEY_MAPPING, (const uint8_t *)"", 0);
+    sparraw_tx_msg(RSP_SET_KEY_MAPPING,
+                   (const uint8_t *)"",
+                   0);
 #endif
 }
 
@@ -929,6 +1185,101 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 
 #if need_send_data_by_notify
     sparraw_tx_msg(RSP_SET_EQ_PRESET, (const uint8_t *)"", 0);
+#endif
+}
+
+void handleSetDtmEnable(const uint8_t *data, uint16_t len)
+{
+    TRACE(0, "%s.", __func__);
+
+    /*
+     * APP packet:
+     *
+     * Enable:
+     *   90 00 01 01
+     *
+     * Disable:
+     *   90 00 01 00
+     *
+     * data[0] = command
+     * data[1] = payload length high
+     * data[2] = payload length low
+     * data[3] = enable
+     */
+
+    if ((data == NULL) || (len != 4))
+    {
+        TRACE(0,
+              "[DTM][SET] invalid packet data=%p len=%d",
+              data,
+              len);
+
+        ntt_api_send_error_notify(RSP_SET_DTM_ENABLE,
+                                  API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    uint16_t data_len =
+        ((uint16_t)data[1] << 8) |
+        ((uint16_t)data[2]);
+
+    if (data_len != 1)
+    {
+        TRACE(0,
+              "[DTM][SET] invalid data_len=%d",
+              data_len);
+
+        ntt_api_send_error_notify(RSP_SET_DTM_ENABLE,
+                                  API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    uint8_t enable = data[3];
+
+    if (enable > 1)
+    {
+        TRACE(0,
+              "[DTM][SET] invalid enable=%d",
+              enable);
+
+        ntt_api_send_error_notify(RSP_SET_DTM_ENABLE,
+                                  API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    if (enable)
+    {
+        TRACE(0, "[DUT] Enter DTM mode");
+
+        /*
+         * Disable 1-Mic Noise Suppression.
+         */
+        ntt_dut_speech_tx_1mic_ns_bypass_set(1);
+
+        TRACE(0, "[DUT] TX 1Mic NS -> BYPASS");
+    }
+    else
+    {
+        TRACE(0, "[DUT] Exit DTM mode");
+
+        /*
+         * Restore 1-Mic Noise Suppression.
+         */
+        ntt_dut_speech_tx_1mic_ns_bypass_set(0);
+
+        TRACE(0, "[DUT] TX 1Mic NS -> NORMAL");
+    }
+
+#if need_send_data_by_notify
+    /*
+     * Response:
+     *   92 00 01 01
+     * or
+     *   92 00 01 00
+     */
+    sparraw_tx_msg(RSP_SET_DTM_ENABLE,
+                   &enable,
+                   sizeof(enable));
 #endif
 }
 
@@ -1163,6 +1514,7 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
 		{GET_EQ_PRESET,		  handleGetEqPresent},
 		{SET_EQ_PRESET,       handleSetEqPresent},
 		{GET_FW_VERSION,      handleGetFwVersion},
+        {SET_DTM_ENABLE,      handleSetDtmEnable},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},
 		{FACTORY_COMMAND_AUDIO_IO,handleFactoryCmdAudio},
 		{FACTORY_COMMAND_INFO,    handleFactoryCmdInfo},
@@ -1875,59 +2227,116 @@ void aparraw_set_key_event_left(uint8 status)
 /*************************************************/
 static uint8_t g_button_hold_side = NTT_KEY_SIDE_RIGHT;
 
+static void ntt_cancel_double_hold_state(const char *reason)
+{
+    TRACE(0,
+          "[KEYMAP] cancel hold state reason=%s type=0x%02X timer=%p side=%s",
+          reason ? reason : "unknown",
+          button_hold_type,
+          double_hold_idle_timer_id,
+          ntt_key_side_str(g_button_hold_side));
+
+    /*
+     * 必須先清除狀態，再停止 timer。
+     *
+     * 即使 timer callback 已經進入排程，
+     * callback 看到 button_hold_type == 0xFF
+     * 也不會再執行 DOUBLE_HOLD 功能。
+     */
+    button_hold_type = 0xFF;
+    g_button_hold_side = NTT_KEY_SIDE_RIGHT;
+
+    if (double_hold_idle_timer_id != NULL)
+    {
+        osTimerStop(double_hold_idle_timer_id);
+    }
+}
+
 static void double_hold_idle_timeout_callback(void const *argument)
 {
-    if (button_hold_type == 0xFF)
+    uint8_t hold_type = button_hold_type;
+    uint8_t hold_side = g_button_hold_side;
+
+    /*
+     * 已被 KEY_UP 或 DOUBLE_CLICK 取消。
+     */
+    if (hold_type == 0xFF)
     {
+        TRACE(0, "[KEYMAP] TIMER ignored, hold state canceled");
         return;
     }
 
-    if (button_hold_type == CLICK_DOUBLE_HOLD)
+    if (hold_type == CLICK_DOUBLE_HOLD)
     {
-        TRACE(0, "[KEYMAP] TIMER CLICK_DOUBLE_HOLD side=%s",
-              ntt_key_side_str(g_button_hold_side));
+        TRACE(0,
+              "[KEYMAP] TIMER CLICK_DOUBLE_HOLD side=%s",
+              ntt_key_side_str(hold_side));
 
-        handle_key_event(CLICK_DOUBLE_HOLD, g_button_hold_side);
+        handle_key_event(CLICK_DOUBLE_HOLD, hold_side);
 
-        if (double_hold_idle_timer_id)
-        {
-            osTimerStart(double_hold_idle_timer_id, DOUBLE_HOLD_IDLE_TIMEOUT_MS);
-        }
-    }
-    else if (button_hold_type == CLICK_HOLD_2S)
-    {
         /*
-         * HOLD_2S already executed when key event arrived.
-         * Do not execute it again in timer.
+         * handle_key_event() 執行期間可能收到取消事件。
+         * 必須重新確認狀態，不能無條件重啟 timer。
          */
-        TRACE(0, "[KEYMAP] TIMER ignore CLICK_HOLD_2S");
-        button_hold_type = 0xFF;
+        if ((button_hold_type == CLICK_DOUBLE_HOLD) &&
+            (double_hold_idle_timer_id != NULL))
+        {
+            osTimerStart(double_hold_idle_timer_id,
+                         DOUBLE_HOLD_IDLE_TIMEOUT_MS);
+        }
+        else
+        {
+            TRACE(0,
+                  "[KEYMAP] TIMER not restarted, current type=0x%02X",
+                  button_hold_type);
+        }
+
+        return;
     }
+
+    if (hold_type == CLICK_HOLD_2S)
+    {
+        TRACE(0, "[KEYMAP] TIMER ignore CLICK_HOLD_2S");
+        ntt_cancel_double_hold_state("timer saw hold 2s");
+        return;
+    }
+
+    TRACE(0,
+          "[KEYMAP] TIMER unknown hold type=0x%02X",
+          hold_type);
+
+    ntt_cancel_double_hold_state("unknown timer state");
 }
 
 void double_hold_idle_detection_init(void)
 {
-    // 创建空闲定时器
-    if (double_hold_idle_timer_id == NULL) {
-        double_hold_idle_timer_id = osTimerCreate(osTimer(DOUBLE_HOLD_IDLE_TIMER), osTimerOnce, NULL);
-        if (double_hold_idle_timer_id == NULL) {
-            printf("Failed to create UART idle timer\n");
+    if (double_hold_idle_timer_id == NULL)
+    {
+        double_hold_idle_timer_id =
+            osTimerCreate(osTimer(DOUBLE_HOLD_IDLE_TIMER),
+                          osTimerOnce,
+                          NULL);
+
+        if (double_hold_idle_timer_id == NULL)
+        {
+            TRACE(0, "[KEYMAP] create DOUBLE_HOLD timer failed");
+            button_hold_type = 0xFF;
             return;
         }
     }
-    
-    // 启动定时器
-    osTimerStart(double_hold_idle_timer_id, 500);
 
+    osTimerStop(double_hold_idle_timer_id);
+
+    TRACE(0,
+          "[KEYMAP] start DOUBLE_HOLD timer type=0x%02X side=%s timeout=%d",
+          button_hold_type,
+          ntt_key_side_str(g_button_hold_side),
+          DOUBLE_HOLD_IDLE_TIMEOUT_MS);
+
+    osTimerStart(double_hold_idle_timer_id,
+                 DOUBLE_HOLD_IDLE_TIMEOUT_MS);
 }
-static void delete_double_hold_time(void)
-{
-	if(double_hold_idle_timer_id != NULL)
-	{
-		osTimerDelete(double_hold_idle_timer_id);
-		double_hold_idle_timer_id = NULL;
-	}
-}
+
 /************************************************/
 
 void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
@@ -1964,6 +2373,8 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
     {
         case KEY_CLICK:
         {
+            ntt_cancel_double_hold_state("single click");
+
             TRACE(0, "[KEYMAP] CLICK_SINGLE");
             handle_key_event(CLICK_SINGLE, key_side);
         }
@@ -1971,14 +2382,20 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 
         case KEY_DOUBLE_CLICK:
         {
-        #ifdef SUPPORT_SIRI
+    #ifdef SUPPORT_SIRI
             if (ntt_voice_assist_is_active())
             {
-                TRACE(0, "[KEY] DOUBLE_CLICK -> CLOSE_VOICE_ASSIST");
+                TRACE(0,
+                    "[KEY] DOUBLE_CLICK -> CLOSE_VOICE_ASSIST");
+
+                ntt_cancel_double_hold_state("double click close voice assist");
+
                 ntt_voice_assist_close();
                 break;
             }
-        #endif
+    #endif
+
+            ntt_cancel_double_hold_state("normal double click");
 
             TRACE(0, "[KEYMAP] CLICK_DOUBLE");
             handle_key_event(CLICK_DOUBLE, key_side);
@@ -1987,6 +2404,8 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 
         case KEY_TRIPLE_CLICK:
         {
+            ntt_cancel_double_hold_state("triple click");
+
             TRACE(0, "[KEYMAP] CLICK_TRIPLE");
             handle_key_event(CLICK_TRIPLE, key_side);
         }
@@ -1995,20 +2414,24 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_DOUBLE_HOLD_CLICK:
         {
             TRACE(0, "[KEYMAP] CLICK_DOUBLE_HOLD");
-            handle_key_event(CLICK_DOUBLE_HOLD, key_side);
+
+           ntt_cancel_double_hold_state ("start new double hold");
 
             g_button_hold_side = key_side;
-            double_hold_idle_detection_init();
             button_hold_type = CLICK_DOUBLE_HOLD;
+
+            handle_key_event(CLICK_DOUBLE_HOLD, key_side);
+            double_hold_idle_detection_init();
         }
         break;
 
         case KEY_HOLD_CLICK:
         {
             TRACE(0, "[KEYMAP] CLICK_HOLD_2S");
-            handle_key_event(CLICK_HOLD_2S, key_side);
 
-            button_hold_type = 0xFF;
+            ntt_cancel_double_hold_state("hold 2s event");
+
+            handle_key_event(CLICK_HOLD_2S, key_side);
         }
         break;
 
@@ -2016,15 +2439,16 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         {
             TRACE(0, "[KEYMAP] KEY_UP");
 
-            delete_double_hold_time();
+            ntt_cancel_double_hold_state("key up");
             aparraw_set_key_event_left(0);
-            button_hold_type = 0xFF;
         }
         break;
 
         default:
         {
-            TRACE(0, "[KEYMAP] UNKNOWN kick=%d", kick_type);
+            TRACE(0,
+                "[KEYMAP] UNKNOWN kick=%d",
+                kick_type);
         }
         break;
     }
