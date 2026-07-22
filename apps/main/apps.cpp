@@ -455,7 +455,7 @@ extern void app_rbplay_audio_reset_pause_status(void);
 
 uint8_t  app_poweroff_flag = 0;
 static enum APP_POWERON_CASE_T g_pwron_case = APP_POWERON_CASE_INVALID;
-
+extern void ntt_mobile_reconnect_timer_init(void);
 
 
 #ifndef BESUI_STEREO_EN
@@ -1880,39 +1880,142 @@ void app_ibrt_start_power_on_tws_pairing(void);
 void app_ibrt_start_power_on_freeman_pairing(void);
 extern bool ntt_first_no_mobile_pair_mode;
 
+extern "C" void ntt_set_local_peer_bt_addr(const bt_bdaddr_t *local,const bt_bdaddr_t *peer);
+extern "C" bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr);
+extern "C" bool ntt_force_apply_runtime_bt_addr(void);
+
 WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 {
 
 }
 
-static bt_bdaddr_t ntt_local_bt_addr;
-static bt_bdaddr_t ntt_peer_bt_addr;
+static bt_bdaddr_t ntt_local_bt_addr = {};
+static bt_bdaddr_t ntt_peer_bt_addr = {};
 static bool ntt_local_peer_addr_valid = false;
 
-extern "C" void ntt_set_local_peer_bt_addr(const bt_bdaddr_t *local,
-                                           const bt_bdaddr_t *peer)
+static bool ntt_apps_bt_addr_is_invalid(
+    const bt_bdaddr_t *addr)
 {
-    if (local && peer)
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
     {
-        memcpy(&ntt_local_bt_addr, local, sizeof(bt_bdaddr_t));
-        memcpy(&ntt_peer_bt_addr, peer, sizeof(bt_bdaddr_t));
-        ntt_local_peer_addr_valid = true;
-    }
-}
+        0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00
+    };
 
-extern "C" bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr)
-{
-    if (!addr || !ntt_local_peer_addr_valid)
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
     {
-        return false;
-    }
+        0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF
+    };
 
-    if (memcmp(addr->address, ntt_local_bt_addr.address, 6) == 0)
+    if (addr == NULL)
     {
         return true;
     }
 
-    if (memcmp(addr->address, ntt_peer_bt_addr.address, 6) == 0)
+    if (memcmp(
+            addr->address,
+            zero_addr,
+            BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return true;
+    }
+
+    if (memcmp(
+            addr->address,
+            ff_addr,
+            BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+extern "C" void ntt_set_local_peer_bt_addr(
+    const bt_bdaddr_t *local,
+    const bt_bdaddr_t *peer)
+{
+    ntt_local_peer_addr_valid = false;
+
+    if (ntt_apps_bt_addr_is_invalid(local) ||
+        ntt_apps_bt_addr_is_invalid(peer))
+    {
+        MAIN_TRACE(
+            0,
+            "[NTT_ADDR_CACHE_V28] reject invalid input");
+
+        return;
+    }
+
+    if (memcmp(
+            local->address,
+            peer->address,
+            BTIF_BD_ADDR_SIZE) == 0)
+    {
+        MAIN_TRACE(
+            0,
+            "[NTT_ADDR_CACHE_V28] reject same local/peer");
+
+        return;
+    }
+
+    memcpy(
+        &ntt_local_bt_addr,
+        local,
+        sizeof(bt_bdaddr_t));
+
+    memcpy(
+        &ntt_peer_bt_addr,
+        peer,
+        sizeof(bt_bdaddr_t));
+
+    ntt_local_peer_addr_valid = true;
+
+    MAIN_TRACE(
+        6,
+        "[NTT_ADDR_CACHE_V28] "
+        "local=%02X:%02X:%02X:%02X:%02X:%02X",
+        ntt_local_bt_addr.address[0],
+        ntt_local_bt_addr.address[1],
+        ntt_local_bt_addr.address[2],
+        ntt_local_bt_addr.address[3],
+        ntt_local_bt_addr.address[4],
+        ntt_local_bt_addr.address[5]);
+
+    MAIN_TRACE(
+        6,
+        "[NTT_ADDR_CACHE_V28] "
+        "peer=%02X:%02X:%02X:%02X:%02X:%02X",
+        ntt_peer_bt_addr.address[0],
+        ntt_peer_bt_addr.address[1],
+        ntt_peer_bt_addr.address[2],
+        ntt_peer_bt_addr.address[3],
+        ntt_peer_bt_addr.address[4],
+        ntt_peer_bt_addr.address[5]);
+}
+
+extern "C" bool ntt_is_local_or_peer_bt_addr(
+    const bt_bdaddr_t *addr)
+{
+    if ((addr == NULL) ||
+        !ntt_local_peer_addr_valid)
+    {
+        return false;
+    }
+
+    if (memcmp(
+            addr->address,
+            ntt_local_bt_addr.address,
+            BTIF_BD_ADDR_SIZE) == 0)
+    {
+        return true;
+    }
+
+    if (memcmp(
+            addr->address,
+            ntt_peer_bt_addr.address,
+            BTIF_BD_ADDR_SIZE) == 0)
     {
         return true;
     }
@@ -1931,14 +2034,83 @@ void app_ibrt_init(void)
     {
 #if defined(IBRT) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
         ibrt_config_t config = {0};
+
+        /*
+        * NTT V29:
+        *
+        * 必須在 app_tws_ibrt_init() 之前，
+        * 先把本機 Factory BT address 寫入 BT global address。
+        *
+        * 否則 app_tws_ibrt_init() 會用舊的 global address
+        * 初始化 ctrl->local_addr，左耳會錯誤使用右耳地址 33。
+        */
+        factory_section_original_btaddr_get(config.local_addr.address);
+        MAIN_TRACE(
+            6,
+            "[NTT_PRE_IBRT_ADDR_V29] "
+            "factory local=%02X:%02X:%02X:%02X:%02X:%02X",
+            config.local_addr.address[0],
+            config.local_addr.address[1],
+            config.local_addr.address[2],
+            config.local_addr.address[3],
+            config.local_addr.address[4],
+            config.local_addr.address[5]);
+
+        bt_set_local_address(config.local_addr.address);
+        MAIN_TRACE(
+            0,
+            "[NTT_PRE_IBRT_ADDR_V29] "
+            "bt_set_local_address before app_tws_ibrt_init");
+
+        /*
+        * 現在 app_tws_ibrt_init() 才會使用正確 local address。
+        */
         app_tws_ibrt_init();
 
 #if defined(IBRT_UI)
+
 #ifdef IBRT_SEARCH_UI
         app_ibrt_search_ui_config_load(&config);
 #else
-        app_ibrt_ui_v2_test_config_load(&config);
-#endif
+
+        int config_load_ret = app_ibrt_ui_v2_test_config_load(&config);
+        if (config_load_ret != 0)
+        {
+            MAIN_TRACE(
+                1,
+                "[NTT_BOOT_ADDR_V29] "
+                "config load failed ret=%d",
+                config_load_ret);
+        }
+
+#endif /* IBRT_SEARCH_UI */
+
+        /*
+        * 保存 local/peer，供配對紀錄排除使用。
+        */
+        ntt_set_local_peer_bt_addr(&config.local_addr,&config.peer_addr);
+        MAIN_TRACE(
+            6,
+            "[NTT_BOOT_ADDR_V29] "
+            "config local=%02X:%02X:%02X:%02X:%02X:%02X",
+            config.local_addr.address[0],
+            config.local_addr.address[1],
+            config.local_addr.address[2],
+            config.local_addr.address[3],
+            config.local_addr.address[4],
+            config.local_addr.address[5]);
+
+        MAIN_TRACE(
+            6,
+            "[NTT_BOOT_ADDR_V29] "
+            "config peer=%02X:%02X:%02X:%02X:%02X:%02X",
+            config.peer_addr.address[0],
+            config.peer_addr.address[1],
+            config.peer_addr.address[2],
+            config.peer_addr.address[3],
+            config.peer_addr.address[4],
+            config.peer_addr.address[5]);
+
         hal_trace_global_tag_register(app_ibrt_middleware_fill_debug_info);
         app_ibrt_internal_register_ibrt_cbs();
         app_ibrt_tws_ext_cmd_init();
@@ -1951,9 +2123,29 @@ void app_ibrt_init(void)
         app_tws_ibrt_start(&config,true);
 #else
         app_tws_ibrt_start(&config,false);
-#endif
+#endif /* IBRT_SEARCH_UI */
+        /*
+        * NTT V30:
+        *
+        * app_tws_ibrt_start() 內部會依傳統 IBRT 規則，
+        * 在 Slave 上把 runtime local 改成 peer address。
+        *
+        * 因此 start 完成後立即恢復獨立 local/peer。
+        */
+        if (!ntt_force_apply_runtime_bt_addr())
+        {
+            MAIN_TRACE(
+                0,
+                "[NTT_BOOT_ADDR_V30] force runtime address failed");
+        }
+        else
+        {
+            MAIN_TRACE(
+                0,
+                "[NTT_BOOT_ADDR_V30] force runtime address success");
+        }
 
-#endif
+#endif /* IBRT_UI */
 
 #if defined(IBRT_UI)
         app_ui_init();
@@ -2000,14 +2192,6 @@ void app_ibrt_init(void)
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
-
-    /*
-     * 如果此函式會更新 config 的 local/peer address，
-     * 必須放在 has_tws_peer 判斷之前。
-     */
-    ntt_set_local_peer_bt_addr(
-        &config.local_addr,
-        &config.peer_addr);
 
     bool has_tws_peer =
         (memcmp(config.peer_addr.address,
@@ -3375,8 +3559,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
                     stereo_poweron_pairing_timer_on();
 #else
-                    MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
-                    app_bt_profile_connect_manager_opening_reconnect();
+                    //MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [D]!!!!!!");
+                    //app_bt_profile_connect_manager_opening_reconnect();
+                    ntt_mobile_reconnect_timer_init();
 #endif
 
 #endif

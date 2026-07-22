@@ -364,31 +364,62 @@ extern bool ntt_cfg_addr_valid;
 
 int app_ibrt_ui_v2_test_config_load(void *config)
 {
-#if !defined(FREE_TWS_PAIRING_ENABLED) && !defined(FREEMAN_ENABLED_STERO)
+#if !defined(FREE_TWS_PAIRING_ENABLED) && \
+    !defined(FREEMAN_ENABLED_STERO)
     app_ibrt_raw_ui_test_load_from_bt_pair_list();
 #endif
 
-    ibrt_config_t *ibrt_config = (ibrt_config_t *)config;
+    ibrt_config_t *ibrt_config =
+        (ibrt_config_t *)config;
+
     struct nvrecord_env_t *nvrecord_env = NULL;
 
-    static const uint8_t zero_addr[BD_ADDR_LEN] = {0};
+    static const uint8_t zero_addr[BD_ADDR_LEN] =
+    {
+        0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00
+    };
+
+    static const uint8_t ff_addr[BD_ADDR_LEN] =
+    {
+        0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF
+    };
+
+    if (ibrt_config == NULL)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CFG_ADDR_V28] ERROR config is NULL");
+
+        ntt_cfg_addr_valid = false;
+        return -1;
+    }
 
     nv_record_env_get(&nvrecord_env);
 
     if (nvrecord_env == NULL)
     {
-        EARBUDS_TRACE(0,"[NTT_CFG_ADDR_V21] ERROR nvrecord_env is NULL");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CFG_ADDR_V28] ERROR nvrecord_env is NULL");
+
         ntt_cfg_addr_valid = false;
         return -1;
     }
 
     /*
-     * 讀取本機 Factory BT Address。
+     * 讀取這一支耳機自己的 Factory BT Address。
+     *
+     * 預期：
+     * Right local = 33:22:11:99:D1:88
+     * Left  local = 34:22:11:99:D1:88
      */
     factory_section_original_btaddr_get(
         ibrt_config->local_addr.address);
 
-    EARBUDS_TRACE(1,
+    EARBUDS_TRACE(
+        1,
         "%s ibrt_mode.mode=%d",
         __func__,
         nvrecord_env->ibrt_mode.mode);
@@ -396,8 +427,8 @@ int app_ibrt_ui_v2_test_config_load(void *config)
 #if !defined(FREE_TWS_PAIRING_ENABLED)
 
     /*
-     * nv record content has been updated in
-     * app_ibrt_raw_ui_test_load_from_bt_pair_list().
+     * app_ibrt_raw_ui_test_load_from_bt_pair_list()
+     * 已經更新 nvrecord_env 內容。
      */
     ibrt_config->nv_role =
         nvrecord_env->ibrt_mode.mode;
@@ -421,14 +452,16 @@ int app_ibrt_ui_v2_test_config_load(void *config)
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_LCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_LEFT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_LEFT);
         }
         else if (besui_get_lr_sta() == RIGHT_SIDE)
         {
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_RCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_RIGHT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_RIGHT);
         }
 
 #else
@@ -436,13 +469,15 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ibrt_config->audio_chnl_sel =
             A2DP_AUDIO_CHANNEL_SELECT_RCHNL;
 
-        bts_tws_if_set_local_side(EAR_SIDE_RIGHT);
+        bts_tws_if_set_local_side(
+            EAR_SIDE_RIGHT);
 
 #endif
 
-        memcpy(ibrt_config->peer_addr.address,
-               nvrecord_env->ibrt_mode.record.bdAddr.address,
-               BD_ADDR_LEN);
+        memcpy(
+            ibrt_config->peer_addr.address,
+            nvrecord_env->ibrt_mode.record.bdAddr.address,
+            BD_ADDR_LEN);
     }
     else if (IBRT_SLAVE == nvrecord_env->ibrt_mode.mode)
     {
@@ -453,14 +488,16 @@ int app_ibrt_ui_v2_test_config_load(void *config)
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_LCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_LEFT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_LEFT);
         }
         else if (besui_get_lr_sta() == RIGHT_SIDE)
         {
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_RCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_RIGHT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_RIGHT);
         }
 
 #else
@@ -468,24 +505,28 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ibrt_config->audio_chnl_sel =
             A2DP_AUDIO_CHANNEL_SELECT_LCHNL;
 
-        bts_tws_if_set_local_side(EAR_SIDE_LEFT);
+        bts_tws_if_set_local_side(
+            EAR_SIDE_LEFT);
 
 #endif
 
-        memcpy(ibrt_config->peer_addr.address,
-               nvrecord_env->ibrt_mode.record.bdAddr.address,
-               BD_ADDR_LEN);
+        memcpy(
+            ibrt_config->peer_addr.address,
+            nvrecord_env->ibrt_mode.record.bdAddr.address,
+            BD_ADDR_LEN);
     }
     else
     {
-        ibrt_config->nv_role = IBRT_UNKNOW;
+        ibrt_config->nv_role =
+            IBRT_UNKNOW;
 
         ibrt_config->audio_chnl_sel =
             A2DP_AUDIO_CHANNEL_SELECT_STEREO;
 
-        memset(ibrt_config->peer_addr.address,
-               0,
-               BD_ADDR_LEN);
+        memset(
+            ibrt_config->peer_addr.address,
+            0,
+            BD_ADDR_LEN);
     }
 
 #else /* !IBRT_RIGHT_MASTER */
@@ -499,14 +540,16 @@ int app_ibrt_ui_v2_test_config_load(void *config)
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_LCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_LEFT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_LEFT);
         }
         else if (besui_get_lr_sta() == RIGHT_SIDE)
         {
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_RCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_RIGHT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_RIGHT);
         }
 
 #else
@@ -514,13 +557,15 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ibrt_config->audio_chnl_sel =
             A2DP_AUDIO_CHANNEL_SELECT_RCHNL;
 
-        bts_tws_if_set_local_side(EAR_SIDE_RIGHT);
+        bts_tws_if_set_local_side(
+            EAR_SIDE_RIGHT);
 
 #endif
 
-        memcpy(ibrt_config->peer_addr.address,
-               nvrecord_env->ibrt_mode.record.bdAddr.address,
-               BD_ADDR_LEN);
+        memcpy(
+            ibrt_config->peer_addr.address,
+            nvrecord_env->ibrt_mode.record.bdAddr.address,
+            BD_ADDR_LEN);
     }
     else if (IBRT_MASTER == nvrecord_env->ibrt_mode.mode)
     {
@@ -531,14 +576,16 @@ int app_ibrt_ui_v2_test_config_load(void *config)
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_LCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_LEFT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_LEFT);
         }
         else if (besui_get_lr_sta() == RIGHT_SIDE)
         {
             ibrt_config->audio_chnl_sel =
                 A2DP_AUDIO_CHANNEL_SELECT_RCHNL;
 
-            bts_tws_if_set_local_side(EAR_SIDE_RIGHT);
+            bts_tws_if_set_local_side(
+                EAR_SIDE_RIGHT);
         }
 
 #else
@@ -546,73 +593,107 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ibrt_config->audio_chnl_sel =
             A2DP_AUDIO_CHANNEL_SELECT_LCHNL;
 
-        bts_tws_if_set_local_side(EAR_SIDE_LEFT);
+        bts_tws_if_set_local_side(
+            EAR_SIDE_LEFT);
 
 #endif
 
-        memcpy(ibrt_config->peer_addr.address,
-               nvrecord_env->ibrt_mode.record.bdAddr.address,
-               BD_ADDR_LEN);
+        memcpy(
+            ibrt_config->peer_addr.address,
+            nvrecord_env->ibrt_mode.record.bdAddr.address,
+            BD_ADDR_LEN);
     }
     else
     {
-        ibrt_config->nv_role = IBRT_UNKNOW;
+        ibrt_config->nv_role =
+            IBRT_UNKNOW;
 
         ibrt_config->audio_chnl_sel =
             A2DP_AUDIO_CHANNEL_SELECT_STEREO;
 
-        memset(ibrt_config->peer_addr.address,
-               0,
-               BD_ADDR_LEN);
+        memset(
+            ibrt_config->peer_addr.address,
+            0,
+            BD_ADDR_LEN);
     }
 
 #endif /* IBRT_RIGHT_MASTER */
 
 #if defined(A2DP_SBC_PLC_ENABLED)
-    ch_select = ibrt_config->audio_chnl_sel;
+    ch_select =
+        ibrt_config->audio_chnl_sel;
 #endif
 
     /*
-     * 保存 config load 階段的正確 local / peer address。
+     * 保存 config load 階段的固定 local / peer。
      *
-     * 後續 runtime ctrl->local_addr / ctrl->peer_addr
-     * 即使被 SDK 或其他流程覆蓋，TWS wrapper 仍能使用
-     * 這裡保存的正確地址。
+     * 後續 SDK 即使修改 runtime ctrl，
+     * reconfig callback 與 TWS wrapper
+     * 都能使用這一份固定地址修復。
      */
-    memcpy(ntt_cfg_local_addr.address,
-           ibrt_config->local_addr.address,
-           BD_ADDR_LEN);
+    memcpy(
+        ntt_cfg_local_addr.address,
+        ibrt_config->local_addr.address,
+        BD_ADDR_LEN);
 
-    memcpy(ntt_cfg_peer_addr.address,
-           ibrt_config->peer_addr.address,
-           BD_ADDR_LEN);
+    memcpy(
+        ntt_cfg_peer_addr.address,
+        ibrt_config->peer_addr.address,
+        BD_ADDR_LEN);
 
     bool local_is_zero =
-        (memcmp(ntt_cfg_local_addr.address,
-                zero_addr,
-                BD_ADDR_LEN) == 0);
+        (memcmp(
+            ntt_cfg_local_addr.address,
+            zero_addr,
+            BD_ADDR_LEN) == 0);
+
+    bool local_is_ff =
+        (memcmp(
+            ntt_cfg_local_addr.address,
+            ff_addr,
+            BD_ADDR_LEN) == 0);
 
     bool peer_is_zero =
-        (memcmp(ntt_cfg_peer_addr.address,
-                zero_addr,
-                BD_ADDR_LEN) == 0);
+        (memcmp(
+            ntt_cfg_peer_addr.address,
+            zero_addr,
+            BD_ADDR_LEN) == 0);
+
+    bool peer_is_ff =
+        (memcmp(
+            ntt_cfg_peer_addr.address,
+            ff_addr,
+            BD_ADDR_LEN) == 0);
 
     bool peer_equals_local =
-        (memcmp(ntt_cfg_local_addr.address,
-                ntt_cfg_peer_addr.address,
-                BD_ADDR_LEN) == 0);
+        (memcmp(
+            ntt_cfg_local_addr.address,
+            ntt_cfg_peer_addr.address,
+            BD_ADDR_LEN) == 0);
 
-    ntt_cfg_addr_valid = (!local_is_zero) && (!peer_is_zero) && (!peer_equals_local);
+    ntt_cfg_addr_valid =
+        (!local_is_zero) &&
+        (!local_is_ff) &&
+        (!peer_is_zero) &&
+        (!peer_is_ff) &&
+        (!peer_equals_local);
 
-    EARBUDS_TRACE(0,
-        "[NTT_CFG_ADDR_V21] valid=%d local_zero=%d peer_zero=%d same=%d",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_CFG_ADDR_V28] valid=%d "
+        "local_zero=%d local_ff=%d "
+        "peer_zero=%d peer_ff=%d same=%d",
         ntt_cfg_addr_valid,
         local_is_zero,
+        local_is_ff,
         peer_is_zero,
+        peer_is_ff,
         peer_equals_local);
 
-    EARBUDS_TRACE(0,
-        "[NTT_CFG_ADDR_V21] local: %02x:%02x:%02x:%02x:%02x:%02x",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_CFG_ADDR_V28] local="
+        "%02X:%02X:%02X:%02X:%02X:%02X",
         ntt_cfg_local_addr.address[0],
         ntt_cfg_local_addr.address[1],
         ntt_cfg_local_addr.address[2],
@@ -620,8 +701,10 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ntt_cfg_local_addr.address[4],
         ntt_cfg_local_addr.address[5]);
 
-    EARBUDS_TRACE(0,
-        "[NTT_CFG_ADDR_V21] peer: %02x:%02x:%02x:%02x:%02x:%02x",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_CFG_ADDR_V28] peer="
+        "%02X:%02X:%02X:%02X:%02X:%02X",
         ntt_cfg_peer_addr.address[0],
         ntt_cfg_peer_addr.address[1],
         ntt_cfg_peer_addr.address[2],
@@ -630,32 +713,71 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ntt_cfg_peer_addr.address[5]);
 
     /*
-     * 耳機開機先設定為離盒狀態。
+     * 在 app_tws_ibrt_start() 之前，
+     * 更新 BES BT global local address。
+     *
+     * 不在這裡呼叫 btif_me_set_bt_address()，
+     * 因為 Host stack runtime 尚未完全建立。
      */
-    EARBUDS_TRACE(0,
+    if (ntt_cfg_addr_valid)
+    {
+        bt_set_local_address(
+            ibrt_config->local_addr.address);
+
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CFG_ADDR_V28] "
+            "bt_set_local_address applied:");
+
+        EARBUDS_DUMP8(
+            "%02X ",
+            ibrt_config->local_addr.address,
+            BD_ADDR_LEN);
+    }
+    else
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CFG_ADDR_V28] "
+            "invalid config, skip BT local update");
+    }
+
+    /*
+     * 開機先設定為離盒。
+     */
+    EARBUDS_TRACE(
+        0,
         "[NTT_BOX] before config local_box=%d",
         app_ui_get_local_box_state());
 
-    app_ui_set_local_box_state(IBRT_OUT_BOX);
+    app_ui_set_local_box_state(
+        IBRT_OUT_BOX);
 
-    EARBUDS_TRACE(0,
+    EARBUDS_TRACE(
+        0,
         "[NTT_BOX] after config local_box=%d",
         app_ui_get_local_box_state());
 
     /*
-     * 保留原本 SDK role 初始化。
+     * 使用 NV 中保存的固定角色。
      *
-     * 注意：這裡使用 NV mode，不要在這裡強制修改 nv_role。
+     * Right = MASTER
+     * Left  = SLAVE
      */
-    bts_core_set_ui_role(nvrecord_env->ibrt_mode.mode);
+    bts_core_set_ui_role(
+        nvrecord_env->ibrt_mode.mode);
 
-    EARBUDS_TRACE(0,
-        "%s ibrt_mode.mode(nv_role)=%d",
+    EARBUDS_TRACE(
+        0,
+        "%s nv_mode=%d config_role=%d",
         __func__,
+        nvrecord_env->ibrt_mode.mode,
         ibrt_config->nv_role);
 
-    EARBUDS_TRACE(0,
-        "load local_addr: %02x:%02x:%02x:%02x:%02x:%02x",
+    EARBUDS_TRACE(
+        0,
+        "load local_addr="
+        "%02X:%02X:%02X:%02X:%02X:%02X",
         ibrt_config->local_addr.address[0],
         ibrt_config->local_addr.address[1],
         ibrt_config->local_addr.address[2],
@@ -663,8 +785,10 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ibrt_config->local_addr.address[4],
         ibrt_config->local_addr.address[5]);
 
-    EARBUDS_TRACE(0,
-        "load peer_addr: %02x:%02x:%02x:%02x:%02x:%02x",
+    EARBUDS_TRACE(
+        0,
+        "load peer_addr="
+        "%02X:%02X:%02X:%02X:%02X:%02X",
         ibrt_config->peer_addr.address[0],
         ibrt_config->peer_addr.address[1],
         ibrt_config->peer_addr.address[2],
@@ -672,7 +796,8 @@ int app_ibrt_ui_v2_test_config_load(void *config)
         ibrt_config->peer_addr.address[4],
         ibrt_config->peer_addr.address[5]);
 
-    EARBUDS_TRACE(0,
+    EARBUDS_TRACE(
+        0,
         "%s over",
         __func__);
 

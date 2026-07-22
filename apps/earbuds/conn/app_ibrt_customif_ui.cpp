@@ -51,6 +51,8 @@
 #include "app_ibrt_customif_cmd.h"
 #include "app_tws_ibrt.h"
 #include "nvrecord_env.h"
+#include "besbt.h"
+#include "btm_mediator.h"
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -124,6 +126,7 @@ extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
  * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
  */
 extern void app_key_handle_pause_music_on_pogo_in(void);
+
 
 void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *buffer, uint8_t length)
 {
@@ -857,82 +860,766 @@ static void ntt_user_setting_sync_delay_start(void)
 }
 #endif
 
-#define NTT_MOBILE_RECONNECT_DELAY_MS    2000
+/*
+ * #include "btm_mediator.h"
+ * 手機 reconnect：
+ *
+ * 1. TWS ready 後，先等待 mediator 內舊 PAGE activity 清除。
+ * 2. PAGE ongoingCnt == 0 時，才建立 opening reconnect。
+ * 3. opening reconnect 只允許執行一次。
+ * 4. 後續 watchdog 只檢查 reconnect 狀態，不重入 A2DP reconnect。
+ * 5. 絕對不直接修改 btActivity、ongoingCnt 或 activityState。
+ */
+
+/*
+ * TWS ready 後第一次檢查延遲。
+ */
+#define NTT_MOBILE_RECONNECT_FIRST_DELAY_MS       1000
+
+/*
+ * 發現舊 PAGE activity 仍 ongoing 時的檢查間隔。
+ */
+#define NTT_STALE_PAGE_CHECK_DELAY_MS               500
+
+/*
+ * 最多等待舊 PAGE activity 6 次：
+ * 6 × 500 ms = 約 3 秒。
+ */
+#define NTT_STALE_PAGE_MAX_CHECK                       6
+
+/*
+ * opening reconnect 啟動後的 watchdog 間隔。
+ */
+#define NTT_MOBILE_RECONNECT_CHECK_DELAY_MS          1000
+
+/*
+ * reconnect watchdog 最多檢查次數。
+ */
+#define NTT_MOBILE_RECONNECT_MAX_CHECK                 12
+
+
+extern "C" void
+app_bt_profile_connect_manager_opening_reconnect(void);
+
+/*
+ * Return：
+ *
+ *   0 = reconnect 仍在等待、ACL connecting/connected，
+ *       或目前沒有需要再次處理的 reconnect node
+ *
+ *   1 = reconnect node 仍存在
+ *
+ *   2 = reconnect 已完成或已無 reconnect 工作
+ *
+ * 注意：
+ * 此函數目前只拿來查詢狀態，不可在裡面再次呼叫
+ * app_bt_start_reconnect_next_device()。
+ */
+extern "C" uint8_t
+app_bt_ntt_retry_reconnect_next_device(void);
+
+
 static osTimerId_t ntt_mobile_reconnect_timer = NULL;
+static uint8_t ntt_tws_ready_check_count = 0;
 
-static void ntt_mobile_reconnect_after_tws_ready(void *argument)
+/*
+ * false：
+ * 尚未執行 opening reconnect，仍處於等待 mediator ready 階段。
+ *
+ * true：
+ * opening reconnect 已經執行，進入 watchdog 階段。
+ */
+static bool ntt_mobile_reconnect_started = false;
+
+/*
+ * opening reconnect 後的 watchdog 檢查次數。
+ */
+static uint8_t ntt_mobile_reconnect_check_count = 0;
+
+/*
+ * opening reconnect 前，舊 PAGE ongoing activity 的等待次數。
+ */
+static uint8_t ntt_stale_page_check_count = 0;
+
+
+/*
+ * 印出 BES mediator activity 狀態。
+ *
+ * activity id：
+ *
+ *   0 = PAGE_ACTIVITY_IDX
+ *   1 = START_IBRT_ACTIVITY_IDX
+ *   2 = IBRT_SWITCH_ACTIVITY_IDX
+ *
+ * activityState：
+ *
+ *   0 = ACTIVITY_IDLE
+ *   1 = ACTIVITY_RESERVED
+ *   2 = ACTIVITY_PENDING
+ *   3 = ACTIVITY_ONGOING
+ *   4 = ACTIVITY_W4_RETRY
+ */
+static void ntt_dump_btm_activity(const char *tag)
 {
-    (void)argument;
+    btm_activity_mediator_t *mediator =
+        btm_me_get_activity();
 
-    MAIN_TRACE(3,
-               "[NTT_RECONNECT_DELAY] tws=%d slave=%d mobile=%d",
-               bts_tws_if_is_tws_link_connected(),
-               app_ibrt_middleware_is_ui_slave(),
-               app_bt_ibrt_has_mobile_link_connected());
-
-    if (!bts_tws_if_is_tws_link_connected())
+    if (mediator == NULL)
     {
-        MAIN_TRACE(0, "[NTT_RECONNECT_DELAY] cancel: TWS disconnected");
+        MAIN_TRACE(1,
+                   "[NTT_BTM]%s activity=NULL",
+                   tag);
         return;
     }
 
-    if (app_ibrt_middleware_is_ui_slave())
+    MAIN_TRACE(2,
+               "[NTT_BTM]%s PAGE ongoingCnt=%u",
+               tag,
+               mediator->ongoingCnt);
+
+    for (uint8_t i = 0;
+         i < BTM_ACTIVITY_ENV_NUM;
+         i++)
     {
-        MAIN_TRACE(0, "[NTT_RECONNECT_DELAY] skip: local is slave");
-        return;
+        btm_activity_env_t *env =
+            &mediator->activityEnv[i];
+
+        if (env->activityState == ACTIVITY_IDLE)
+        {
+            continue;
+        }
+
+        const uint8_t *addr =
+            env->activityPara.pagePara.bdaddr.address;
+
+        MAIN_TRACE(10,
+                   "[NTT_BTM] PAGE env=%u state=%u "
+                   "retry=%u "
+                   "addr=%02x:%02x:%02x:%02x:%02x:%02x "
+                   "timeout=0x%04x",
+                   i,
+                   env->activityState,
+                   env->activityRetryCnt,
+                   addr[0],
+                   addr[1],
+                   addr[2],
+                   addr[3],
+                   addr[4],
+                   addr[5],
+                   env->activityPara.pagePara.pageTimeout);
+    }
+}
+
+/*
+ * 檢查 mediator 是否仍有 PAGE activity ongoing。
+ *
+ * page activity pending due to 1,0,0 中第一個 1，
+ * 就是 PAGE_ACTIVITY_IDX 的 ongoingCnt。
+ */
+static bool ntt_btm_page_activity_busy(void)
+{
+    btm_activity_mediator_t *mediator =
+        btm_me_get_activity();
+
+    if (mediator == NULL)
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] PAGE mediator NULL");
+
+        return false;
+    }
+
+    /*
+     * 不要只看 ongoingCnt。
+     *
+     * ongoingCnt 可能仍為 1，
+     * 但 env 已經處於 ACTIVITY_W4_RETRY，
+     * 此時並沒有真正執行 Controller Page。
+     */
+    for (uint8_t i = 0;
+         i < BTM_ACTIVITY_ENV_NUM;
+         i++)
+    {
+        btm_activity_env_t *env =
+            &mediator->activityEnv[i];
+
+        if (env->activityState == ACTIVITY_ONGOING)
+        {
+            const uint8_t *addr =
+                env->activityPara.pagePara.bdaddr.address;
+
+            EARBUDS_TRACE(8,
+                          "[NTT_RECONNECT] active PAGE "
+                          "env=%u state=%u "
+                          "addr=%02x:%02x:%02x:%02x:%02x:%02x",
+                          i,
+                          env->activityState,
+                          addr[0],
+                          addr[1],
+                          addr[2],
+                          addr[3],
+                          addr[4],
+                          addr[5]);
+
+            return true;
+        }
+
+        /*
+         * ACTIVITY_W4_RETRY 不代表 Controller 正在 Page。
+         *
+         * R51 中殘留的是已經成功連線的 TWS peer：
+         *
+         *   state=4
+         *   retry=1
+         *   addr=34:22:11:99:d1:88
+         *
+         * 不再阻擋手機 opening reconnect。
+         */
+        if (env->activityState == ACTIVITY_W4_RETRY)
+        {
+            const uint8_t *addr =
+                env->activityPara.pagePara.bdaddr.address;
+
+            EARBUDS_TRACE(8,
+                          "[NTT_RECONNECT] ignore PAGE W4_RETRY "
+                          "env=%u retry=%u "
+                          "addr=%02x:%02x:%02x:%02x:%02x:%02x",
+                          i,
+                          env->activityRetryCnt,
+                          addr[0],
+                          addr[1],
+                          addr[2],
+                          addr[3],
+                          addr[4],
+                          addr[5]);
+        }
+    }
+
+    return false;
+}
+
+
+/*
+ * 停止 timer 並清除本輪 NTT reconnect 狀態。
+ */
+static void ntt_mobile_reconnect_reset(void)
+{
+    ntt_mobile_reconnect_started = false;
+    ntt_mobile_reconnect_check_count = 0;
+    ntt_stale_page_check_count = 0;
+    ntt_tws_ready_check_count = 0;
+
+    if (ntt_mobile_reconnect_timer != NULL)
+    {
+        osTimerStop(ntt_mobile_reconnect_timer);
+    }
+}
+
+/*
+ * 以指定延遲重新啟動 one-shot timer。
+ */
+static bool ntt_mobile_reconnect_schedule(uint32_t delay_ms,
+                                          const char *reason)
+{
+    osStatus_t status;
+
+    if (ntt_mobile_reconnect_timer == NULL)
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] schedule failed "
+                      "timer=NULL reason=%s",
+                      reason);
+        return false;
+    }
+
+    status =
+        osTimerStart(ntt_mobile_reconnect_timer,
+                     delay_ms);
+
+    EARBUDS_TRACE(0,
+                  "[NTT_RECONNECT] schedule "
+                  "delay=%u status=%d reason=%s",
+                  delay_ms,
+                  status,
+                  reason);
+
+    return (status == osOK);
+}
+
+
+/*
+ * reconnect 執行前的基本條件檢查。
+ *
+ * false：
+ * 不允許繼續 reconnect，呼叫端應停止本輪流程。
+ */
+static bool ntt_mobile_reconnect_runtime_ready(void)
+{
+    if (app_ibrt_if_is_ui_slave())
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] runtime slave");
+
+        return false;
     }
 
     if (app_bt_ibrt_has_mobile_link_connected())
     {
-        MAIN_TRACE(0, "[NTT_RECONNECT_DELAY] skip: mobile already connected");
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] mobile already connected");
+
+        return false;
+    }
+
+    return true;
+}
+
+
+/*
+ * opening reconnect 前，等待舊 PAGE activity 清除。
+ *
+ * Return：
+ *
+ * true  = mediator 已 ready，可以啟動手機 opening reconnect
+ * false = 仍在等待，或 stale PAGE 已確認並停止本輪 reconnect
+ */
+static bool ntt_mobile_reconnect_wait_page_idle(void)
+{
+    /*
+     * 只有實際 ACTIVITY_ONGOING 才需要等待。
+     *
+     * ACTIVITY_W4_RETRY 不再阻擋手機 reconnect。
+     */
+    if (!ntt_btm_page_activity_busy())
+    {
+        if (ntt_stale_page_check_count != 0)
+        {
+            EARBUDS_TRACE(1,
+                          "[NTT_RECONNECT] active PAGE released "
+                          "after check=%u",
+                          ntt_stale_page_check_count);
+        }
+
+        ntt_stale_page_check_count = 0;
+
+        return true;
+    }
+
+    ntt_stale_page_check_count++;
+
+    EARBUDS_TRACE(2,
+                  "[NTT_RECONNECT] active PAGE busy "
+                  "check=%u/%u",
+                  ntt_stale_page_check_count,
+                  NTT_STALE_PAGE_MAX_CHECK);
+
+    ntt_dump_btm_activity("ACTIVE_PAGE_BUSY");
+
+    /*
+     * 即使超過原本 6 次，也不要 abort 整輪手機 reconnect。
+     *
+     * 持續等待，讓 BES mediator 自己完成目前 Page。
+     */
+    if (ntt_stale_page_check_count >=
+        NTT_STALE_PAGE_MAX_CHECK)
+    {
+        EARBUDS_TRACE(1,
+                      "[NTT_RECONNECT] active PAGE still busy "
+                      "check=%u, continue waiting",
+                      ntt_stale_page_check_count);
+
+        /*
+         * 避免 uint8_t 長時間累加溢位。
+         */
+        ntt_stale_page_check_count =
+            NTT_STALE_PAGE_MAX_CHECK;
+    }
+
+    if (!ntt_mobile_reconnect_schedule(
+            NTT_STALE_PAGE_CHECK_DELAY_MS,
+            "wait_active_page_idle"))
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] active PAGE wait "
+                      "timer schedule failed");
+
+        ntt_mobile_reconnect_reset();
+    }
+
+    return false;
+}
+
+/*
+ * one-shot timer callback。
+ */
+static void ntt_mobile_reconnect_timer_handler(void *argument)
+{
+    uint8_t result;
+
+    (void)argument;
+
+    EARBUDS_TRACE(0,
+                  "[NTT_RECONNECT] timer expired "
+                  "started=%d watchdog=%u stale=%u",
+                  ntt_mobile_reconnect_started,
+                  ntt_mobile_reconnect_check_count,
+                  ntt_stale_page_check_count);
+
+    /*
+     * 每次 timer callback 都重新確認：
+     *
+     * 1. 目前必須是 runtime Master
+     * 2. 手機尚未連線
+     *
+     * TWS link ready 在下面另外等待處理。
+     */
+    if (!ntt_mobile_reconnect_runtime_ready())
+    {
+        ntt_mobile_reconnect_reset();
         return;
     }
 
-    MAIN_TRACE(0,
-               "!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY_DELAY]!!!!!!");
-
-    app_bt_profile_connect_manager_opening_reconnect();
-}
-
-void ntt_mobile_reconnect_timer_start(void)
-{
-    if (ntt_mobile_reconnect_timer == NULL)
+    /*
+     * TWS profiles connected callback 可能早於
+     * snoop link id / TWS link state 完全 ready。
+     *
+     * 因此允許每 500 ms 再等待一次，
+     * 不直接中止整輪 reconnect。
+     */
+    if (!bts_tws_if_is_tws_link_connected())
     {
-        ntt_mobile_reconnect_timer =
-            osTimerNew(ntt_mobile_reconnect_after_tws_ready,
-                       osTimerOnce,
-                       NULL,
-                       NULL);
+        ntt_tws_ready_check_count++;
 
-        if (ntt_mobile_reconnect_timer == NULL)
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] wait TWS link ready "
+                      "check=%u/6",
+                      ntt_tws_ready_check_count);
+
+        if (ntt_tws_ready_check_count < 6)
         {
-            MAIN_TRACE(0,
-                       "[NTT_RECONNECT_DELAY] osTimerNew failed");
+            if (!ntt_mobile_reconnect_schedule(
+                    NTT_STALE_PAGE_CHECK_DELAY_MS,
+                    "wait_tws_link_ready"))
+            {
+                EARBUDS_TRACE(0,
+                              "[NTT_RECONNECT] wait TWS timer "
+                              "schedule failed");
+
+                ntt_mobile_reconnect_reset();
+            }
+
             return;
         }
+
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] TWS link ready timeout");
+
+        ntt_mobile_reconnect_reset();
+        return;
     }
 
+    if (ntt_tws_ready_check_count != 0)
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] TWS link ready "
+                      "after check=%u",
+                      ntt_tws_ready_check_count);
+    }
+
+    ntt_tws_ready_check_count = 0;
+
+    /*
+     * 第一階段：
+     *
+     * 尚未建立 opening reconnect。
+     * 必須先確認 mediator 裡沒有舊 PAGE ongoing activity。
+     */
+    if (!ntt_mobile_reconnect_started)
+    {
+        ntt_dump_btm_activity("BEFORE_OPENING_RECONNECT");
+
+        if (!ntt_mobile_reconnect_wait_page_idle())
+        {
+            /*
+             * wait_page_idle() 可能已經：
+             *
+             * 1. 重新安排下一次 timer；
+             * 2. 或判定 stale PAGE 並 reset。
+             */
+            return;
+        }
+
+        /*
+         * 在呼叫 opening reconnect 前先設為 true，
+         * 避免其他事件或 timer 重入時再次建立 reconnect。
+         */
+        ntt_mobile_reconnect_started = true;
+        ntt_mobile_reconnect_check_count = 0;
+
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] first opening reconnect");
+
+        app_bt_profile_connect_manager_opening_reconnect();
+
+        ntt_dump_btm_activity("AFTER_OPENING_RECONNECT");
+
+        /*
+         * opening reconnect 後進入 watchdog。
+         */
+        if (!ntt_mobile_reconnect_schedule(
+                NTT_MOBILE_RECONNECT_CHECK_DELAY_MS,
+                "opening_reconnect_watchdog"))
+        {
+            EARBUDS_TRACE(0,
+                          "[NTT_RECONNECT] watchdog timer "
+                          "schedule failed");
+
+            ntt_mobile_reconnect_reset();
+        }
+
+        return;
+    }
+
+    /*
+     * 第二階段：
+     *
+     * opening reconnect 已經建立。
+     * 只檢查狀態，不再呼叫 opening reconnect。
+     */
+    ntt_dump_btm_activity("WATCHDOG");
+
+    /*
+     * 先檢查手機是否已經連線，
+     * 避免已連線後仍進入 reconnect node 檢查函數。
+     */
+    if (app_bt_ibrt_has_mobile_link_connected())
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] mobile connected, "
+                      "stop watchdog");
+
+        ntt_mobile_reconnect_reset();
+        return;
+    }
+
+    result = app_bt_ntt_retry_reconnect_next_device();
+
+    EARBUDS_TRACE(0,
+                  "[NTT_RECONNECT] watchdog result=%u",
+                  result);
+
+    /*
+     * helper 執行期間手機也可能剛好連線，
+     * 因此呼叫後再檢查一次。
+     */
+    if (app_bt_ibrt_has_mobile_link_connected())
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] mobile connected "
+                      "after watchdog check");
+
+        ntt_mobile_reconnect_reset();
+        return;
+    }
+
+    /*
+     * result == 2：
+     * reconnect 工作完成，或已無 reconnect node。
+     */
+    if (result == 2)
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] reconnect finished, "
+                      "stop watchdog");
+
+        ntt_mobile_reconnect_reset();
+        return;
+    }
+
+    ntt_mobile_reconnect_check_count++;
+
+    EARBUDS_TRACE(0,
+                  "[NTT_RECONNECT] reconnect pending "
+                  "check=%u/%u",
+                  ntt_mobile_reconnect_check_count,
+                  NTT_MOBILE_RECONNECT_MAX_CHECK);
+
+    if (ntt_mobile_reconnect_check_count >=
+        NTT_MOBILE_RECONNECT_MAX_CHECK)
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] watchdog timeout "
+                      "check=%u",
+                      ntt_mobile_reconnect_check_count);
+
+        ntt_dump_btm_activity("WATCHDOG_TIMEOUT");
+
+        ntt_mobile_reconnect_reset();
+        return;
+    }
+
+    if (!ntt_mobile_reconnect_schedule(
+            NTT_MOBILE_RECONNECT_CHECK_DELAY_MS,
+            "reconnect_pending"))
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] reconnect pending "
+                      "timer schedule failed");
+
+        ntt_mobile_reconnect_reset();
+    }
+}
+
+
+/*
+ * 建立 NTT reconnect one-shot timer。
+ */
+void ntt_mobile_reconnect_timer_init(void)
+{
+    if (ntt_mobile_reconnect_timer != NULL)
+    {
+        return;
+    }
+
+    ntt_mobile_reconnect_timer =
+        osTimerNew(ntt_mobile_reconnect_timer_handler,
+                   osTimerOnce,
+                   NULL,
+                   NULL);
+
+    EARBUDS_TRACE(0,
+                  "[NTT_RECONNECT] timer create=%p",
+                  ntt_mobile_reconnect_timer);
+}
+
+
+/*
+ * TWS ready 後，由 Master 呼叫此函數啟動手機 reconnect。
+ */
+void ntt_mobile_reconnect_start(void)
+{
+    ntt_mobile_reconnect_timer_init();
+
+    if (ntt_mobile_reconnect_timer == NULL)
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] start failed, timer is NULL");
+        return;
+    }
+
+    /*
+     * 只有 runtime Master 才能發起手機 reconnect。
+     */
+    if (app_ibrt_if_is_ui_slave())
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] start rejected, "
+                      "runtime slave middleware_slave=%d",
+                      app_ibrt_middleware_is_ui_slave());
+        return;
+    }
+
+    /*
+     * 不要在這裡使用：
+     *
+     *     app_bt_ibrt_has_snoop_link_connected()
+     *
+     * IBRT_CONN_ACL_PROFILES_CONNECTED callback 發生時，
+     * TWS profile 已完成，但 snoop link id 可能尚未設定。
+     *
+     * R49 中：
+     *   5577ms 進入 TWS ready
+     *   6624ms 才執行 bts_tws_set_tws_link_id()
+     *
+     * 如果在這裡要求 snoop link connected，
+     * reconnect timer 會直接被拒絕而永遠不啟動。
+     *
+     * timer callback 會再次檢查真正的 TWS link 狀態。
+     */
+
+    if (app_bt_ibrt_has_mobile_link_connected())
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] start rejected, "
+                      "mobile already connected");
+        return;
+    }
+
+    EARBUDS_TRACE(0,
+                  "[NTT_RECONNECT] start accepted "
+                  "role=%d ui_slave=%d tws=%d",
+                  app_ibrt_if_get_ui_role(),
+                  app_ibrt_if_is_ui_slave(),
+                  bts_tws_if_is_tws_link_connected());
+
+    /*
+     * 停止上一輪 timer，清除本輪所有狀態。
+     */
     osTimerStop(ntt_mobile_reconnect_timer);
 
-    osStatus_t status =
-        osTimerStart(ntt_mobile_reconnect_timer, NTT_MOBILE_RECONNECT_DELAY_MS);
+    ntt_mobile_reconnect_started = false;
+    ntt_mobile_reconnect_check_count = 0;
+    ntt_stale_page_check_count = 0;
 
-    MAIN_TRACE(2,
-               "[NTT_RECONNECT_DELAY] timer start status=%d ticks=%u",
-               status,
-               200);
+    ntt_dump_btm_activity("TWS_READY_START");
+
+    if (!ntt_mobile_reconnect_schedule(
+            NTT_MOBILE_RECONNECT_FIRST_DELAY_MS,
+            "tws_ready_first_delay"))
+    {
+        EARBUDS_TRACE(0,
+                      "[NTT_RECONNECT] first timer start failed");
+
+        ntt_mobile_reconnect_reset();
+        return;
+    }
+
+    EARBUDS_TRACE(1,
+                  "[NTT_RECONNECT] first timer started delay=%u",
+                  NTT_MOBILE_RECONNECT_FIRST_DELAY_MS);
 }
 
 void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *state, uint8_t reason_code)
 {
     EARBUDS_TRACE(0,"custom_ui tws acl state changed = %d with reason 0x%x role %d", state->state.acl_state, reason_code, state->current_role);
 
-    if(state->state.acl_state == IBRT_CONN_ACL_PROFILES_CONNECTED)
+    if (state->state.acl_state == IBRT_CONN_ACL_PROFILES_CONNECTED)
     {
-        //EARBUDS_TRACE(0,"[NTT_RECONNECT] TWS ready role=%d slave=%d",state->current_role,app_ibrt_middleware_is_ui_slave());
-        //EARBUDS_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY]!!!!!!");
-        //app_bt_profile_connect_manager_opening_reconnect();
-        //ntt_mobile_reconnect_timer_start();
+        if (!app_ibrt_if_is_ui_slave())
+        {
+            EARBUDS_TRACE(0,
+                        "[NTT_RECONNECT] TWS ready role=%d slave=%d",
+                        state->current_role,
+                        app_ibrt_middleware_is_ui_slave());
+
+            EARBUDS_TRACE(0,
+                        "!!!!!! __BTIF_BT_RECONNECT__ [TWS_READY] !!!!!!");
+
+            MAIN_TRACE(0,
+                    "====== TWS READY -> MOBILE RECONNECT ======");
+
+            /*
+            * ntt_mobile_reconnect_start() 內部已經負責：
+            *
+            * 1. 建立 timer
+            * 2. 停止上一輪 timer
+            * 3. 清除 reconnect 狀態
+            * 4. dump mediator activity
+            * 5. 啟動 first delay timer
+            *
+            * 此處不可再手動 osTimerStop / osTimerStart，
+            * 否則會重複控制同一個 timer。
+            */
+            ntt_mobile_reconnect_start();
+        }
+        else
+        {
+            EARBUDS_TRACE(0,
+                        "[NTT_RECONNECT] TWS ready ignored, "
+                        "runtime slave role=%d slave=%d",
+                        state->current_role,
+                        app_ibrt_middleware_is_ui_slave());
+        }
     }
 
 #ifdef BESUI_BTMSG_EN
@@ -1585,241 +2272,345 @@ void app_ibrt_customif_pre_handle_box_event_callback(app_ui_evt_t box_evt)
     }
 }
 
+/*
+ * Forward declarations
+ */
+static bool ntt_bt_addr_is_zero(const bt_bdaddr_t *addr);
+static bool ntt_bt_addr_is_ff(const bt_bdaddr_t *addr);
+static bool ntt_bt_addr_is_same(const bt_bdaddr_t *addr1,const bt_bdaddr_t *addr2);
+static bool ntt_bt_addr_pair_is_valid(const bt_bdaddr_t *local,const bt_bdaddr_t *peer);
+extern "C" bool ntt_force_apply_runtime_bt_addr(void);
+
 bt_bdaddr_t ntt_cfg_local_addr = {};
 bt_bdaddr_t ntt_cfg_peer_addr = {};
 bool ntt_cfg_addr_valid = false;
 
-bool ntt_bt_addr_is_zero(const bt_bdaddr_t *addr)
+static bool ntt_bt_addr_is_zero(const bt_bdaddr_t *addr)
 {
-    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] = {0};
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00
+    };
 
     if (addr == NULL)
     {
         return true;
     }
 
-    return (memcmp(addr->address,
-                   zero_addr,
-                   BTIF_BD_ADDR_SIZE) == 0);
+    return
+        (memcmp(
+            addr->address,
+            zero_addr,
+            BTIF_BD_ADDR_SIZE) == 0);
 }
 
-bool ntt_bt_addr_is_same(const bt_bdaddr_t *addr1,
-                                const bt_bdaddr_t *addr2)
+static bool ntt_bt_addr_is_ff(const bt_bdaddr_t *addr)
+{
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF
+    };
+
+    if (addr == NULL)
+    {
+        return true;
+    }
+
+    return
+        (memcmp(
+            addr->address,
+            ff_addr,
+            BTIF_BD_ADDR_SIZE) == 0);
+}
+
+static bool ntt_bt_addr_is_same(const bt_bdaddr_t *addr1,const bt_bdaddr_t *addr2)
 {
     if ((addr1 == NULL) || (addr2 == NULL))
     {
         return false;
     }
 
-    return (memcmp(addr1->address,
-                   addr2->address,
-                   BTIF_BD_ADDR_SIZE) == 0);
+    return
+        (memcmp(
+            addr1->address,
+            addr2->address,
+            BTIF_BD_ADDR_SIZE) == 0);
 }
 
-extern "C" void __real_bts_tws_connect_request_handler(
-    const bt_bdaddr_t *remote);
-
-extern "C" void __wrap_bts_tws_connect_request_handler(
-    const bt_bdaddr_t *remote)
+static bool ntt_bt_addr_pair_is_valid(const bt_bdaddr_t *local,const bt_bdaddr_t *peer)
 {
-    ibrt_ctrl_t *ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
-    const bt_bdaddr_t *connect_addr = remote;
+    if ((local == NULL) || (peer == NULL))
+    {
+        return false;
+    }
 
-    MAIN_TRACE(0,
-        "[NTT_TWS_WRAP_V23] enter cfg_valid=%d",
+    if (ntt_bt_addr_is_zero(local) ||
+        ntt_bt_addr_is_zero(peer))
+    {
+        return false;
+    }
+
+    if (ntt_bt_addr_is_ff(local) ||
+        ntt_bt_addr_is_ff(peer))
+    {
+        return false;
+    }
+
+    if (ntt_bt_addr_is_same(local, peer))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+extern "C" bool ntt_force_apply_runtime_bt_addr(void)
+{
+    ibrt_ctrl_t *ctrl =
+        app_tws_ibrt_get_bt_ctrl_ctx();
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FORCE_ADDR_V30] enter");
+
+    if (ctrl == NULL)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FORCE_ADDR_V30] failed: ctrl is NULL");
+
+        return false;
+    }
+
+    if (!ntt_cfg_addr_valid)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FORCE_ADDR_V30] failed: cfg invalid");
+
+        return false;
+    }
+
+    if (!ntt_bt_addr_pair_is_valid(
+            &ntt_cfg_local_addr,
+            &ntt_cfg_peer_addr))
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FORCE_ADDR_V30] failed: invalid pair");
+
+        return false;
+    }
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FORCE_ADDR_V30] runtime before local:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
+        ctrl->local_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FORCE_ADDR_V30] runtime before peer:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
+        ctrl->peer_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    memcpy(
+        ctrl->local_addr.address,
+        ntt_cfg_local_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    memcpy(
+        ctrl->peer_addr.address,
+        ntt_cfg_peer_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    btif_me_set_bt_address(
+        ctrl->local_addr.address);
+
+    bt_set_local_address(
+        ctrl->local_addr.address);
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FORCE_ADDR_V30] runtime after local:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
+        ctrl->local_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FORCE_ADDR_V30] runtime after peer:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
+        ctrl->peer_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FORCE_ADDR_V30] success");
+
+    return true;
+}
+
+extern "C" bt_status_t
+__real_bts_tws_connect_request_handler(
+    uint32_t page_to);
+
+extern "C" bt_status_t
+__wrap_bts_tws_connect_request_handler(
+    uint32_t page_to)
+{
+    ibrt_ctrl_t *ctrl =
+        app_tws_ibrt_get_bt_ctrl_ctx();
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_TWS_WRAP_V28] "
+        "enter page_to=%u ctrl=%p cfg_valid=%d",
+        page_to,
+        ctrl,
         ntt_cfg_addr_valid);
-
-    if (remote != NULL)
-    {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] input remote:");
-
-        DUMP8("%02X ",
-              remote->address,
-              BTIF_BD_ADDR_SIZE);
-    }
-    else
-    {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] input remote=NULL");
-    }
 
     if (ctrl != NULL)
     {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] runtime local:");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_TWS_WRAP_V28] runtime local:");
 
-        DUMP8("%02X ",
-              ctrl->local_addr.address,
-              BTIF_BD_ADDR_SIZE);
+        EARBUDS_DUMP8(
+            "%02X ",
+            ctrl->local_addr.address,
+            BTIF_BD_ADDR_SIZE);
 
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] runtime peer before:");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_TWS_WRAP_V28] runtime peer before:");
 
-        DUMP8("%02X ",
-              ctrl->peer_addr.address,
-              BTIF_BD_ADDR_SIZE);
-    }
-    else
-    {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] ctrl=NULL");
+        EARBUDS_DUMP8(
+            "%02X ",
+            ctrl->peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
     }
 
     if (ntt_cfg_addr_valid)
     {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] config local:");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_TWS_WRAP_V28] fixed config local:");
 
-        DUMP8("%02X ",
-              ntt_cfg_local_addr.address,
-              BTIF_BD_ADDR_SIZE);
+        EARBUDS_DUMP8(
+            "%02X ",
+            ntt_cfg_local_addr.address,
+            BTIF_BD_ADDR_SIZE);
 
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] config peer:");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_TWS_WRAP_V28] fixed config peer:");
 
-        DUMP8("%02X ",
-              ntt_cfg_peer_addr.address,
-              BTIF_BD_ADDR_SIZE);
+        EARBUDS_DUMP8(
+            "%02X ",
+            ntt_cfg_peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
+    }
 
-        if (ntt_bt_addr_is_zero(&ntt_cfg_local_addr))
+    /*
+    * V30:
+    * 正常情況下 runtime 已在 app_tws_ibrt_start() 後修復。
+    *
+    * wrapper 只做最後一致性檢查。
+    */
+    if ((ctrl != NULL) &&
+        ntt_cfg_addr_valid &&
+        ntt_bt_addr_pair_is_valid(
+            &ntt_cfg_local_addr,
+            &ntt_cfg_peer_addr))
+    {
+        bool local_mismatch =
+            (memcmp(
+                ctrl->local_addr.address,
+                ntt_cfg_local_addr.address,
+                BTIF_BD_ADDR_SIZE) != 0);
+
+        bool peer_mismatch =
+            (memcmp(
+                ctrl->peer_addr.address,
+                ntt_cfg_peer_addr.address,
+                BTIF_BD_ADDR_SIZE) != 0);
+
+        if (local_mismatch || peer_mismatch)
         {
-            MAIN_TRACE(0,
-                "[NTT_TWS_WRAP_V23] ERROR config local zero");
+            EARBUDS_TRACE(
+                0,
+                "[NTT_TWS_WRAP_V30] runtime address mismatch");
 
-            return;
+            EARBUDS_TRACE(
+                2,
+                "[NTT_TWS_WRAP_V30] local_mismatch=%d peer_mismatch=%d",
+                local_mismatch,
+                peer_mismatch);
+
+            memcpy(
+                ctrl->local_addr.address,
+                ntt_cfg_local_addr.address,
+                BTIF_BD_ADDR_SIZE);
+
+            memcpy(
+                ctrl->peer_addr.address,
+                ntt_cfg_peer_addr.address,
+                BTIF_BD_ADDR_SIZE);
+
+            btif_me_set_bt_address(
+                ctrl->local_addr.address);
+
+            bt_set_local_address(
+                ctrl->local_addr.address);
         }
 
-        if (ntt_bt_addr_is_zero(&ntt_cfg_peer_addr))
-        {
-            MAIN_TRACE(0,
-                "[NTT_TWS_WRAP_V23] ERROR config peer zero");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_TWS_WRAP_V30] runtime local after:");
 
-            return;
-        }
+        EARBUDS_DUMP8(
+            "%02X ",
+            ctrl->local_addr.address,
+            BTIF_BD_ADDR_SIZE);
 
-        if (ntt_bt_addr_is_same(&ntt_cfg_local_addr,
-                                &ntt_cfg_peer_addr))
-        {
-            MAIN_TRACE(0,
-                "[NTT_TWS_WRAP_V23] ERROR config local equals peer");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_TWS_WRAP_V30] runtime peer after:");
 
-            return;
-        }
-
-        /*
-         * 重要：
-         * 只修復 runtime peer，不修改 runtime local。
-         *
-         * SDK real handler 內部仍會使用 ctrl->peer_addr，
-         * 所以只修改 connect_addr 不足夠。
-         */
-        if (ctrl != NULL)
-        {
-            if (!ntt_bt_addr_is_same(&ctrl->peer_addr,
-                                     &ntt_cfg_peer_addr))
-            {
-                MAIN_TRACE(0,
-                    "[NTT_TWS_WRAP_V23] repair runtime peer only");
-
-                memcpy(ctrl->peer_addr.address,
-                       ntt_cfg_peer_addr.address,
-                       BTIF_BD_ADDR_SIZE);
-            }
-
-            MAIN_TRACE(0,
-                "[NTT_TWS_WRAP_V23] runtime peer after:");
-
-            DUMP8("%02X ",
-                  ctrl->peer_addr.address,
-                  BTIF_BD_ADDR_SIZE);
-        }
-
-        connect_addr = &ntt_cfg_peer_addr;
-    }
-    else
-    {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] WARNING config invalid");
-
-        if (connect_addr == NULL)
-        {
-            MAIN_TRACE(0,
-                "[NTT_TWS_WRAP_V23] ERROR config invalid and remote NULL");
-
-            return;
-        }
+        EARBUDS_DUMP8(
+            "%02X ",
+            ctrl->peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
     }
 
-    if (ntt_bt_addr_is_zero(connect_addr))
-    {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] ERROR connect address zero");
+    /*
+     * page_to 是 Page timeout，不是 BT address。
+     */
+    bt_status_t ret =
+        __real_bts_tws_connect_request_handler(
+            page_to);
 
-        return;
-    }
+    EARBUDS_TRACE(
+        0,
+        "[NTT_TWS_WRAP_V28] "
+        "leave page_to=%u ret=%d",
+        page_to,
+        ret);
 
-    if (ntt_cfg_addr_valid &&
-        ntt_bt_addr_is_same(connect_addr,
-                            &ntt_cfg_local_addr))
-    {
-        MAIN_TRACE(0,
-            "[NTT_TWS_WRAP_V23] ERROR connect address equals local");
-
-        return;
-    }
-
-    MAIN_TRACE(0,
-        "[NTT_TWS_WRAP_V23] final connect addr:");
-
-    DUMP8("%02X ",
-          connect_addr->address,
-          BTIF_BD_ADDR_SIZE);
-
-    __real_bts_tws_connect_request_handler(connect_addr);
-
-    MAIN_TRACE(0,
-        "[NTT_TWS_WRAP_V23] real handler called");
-}
-
-/*
-* custom reconfig bd_addr
-*/
-/*
- * Return true when address is all 0x00 or all 0xFF.
- */
-static bool ntt_tws_addr_is_invalid(const bt_bdaddr_t *addr)
-{
-    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
-    {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-    };
-
-    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
-    {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-    };
-
-    if (addr == NULL)
-    {
-        return true;
-    }
-
-    if (memcmp(addr->address,
-               zero_addr,
-               BTIF_BD_ADDR_SIZE) == 0)
-    {
-        return true;
-    }
-
-    if (memcmp(addr->address,
-               ff_addr,
-               BTIF_BD_ADDR_SIZE) == 0)
-    {
-        return true;
-    }
-
-    return false;
+    return ret;
 }
 
 /*
@@ -1836,120 +2627,188 @@ void app_ibrt_customif_ui_reconfig_bd_addr(
     ibrt_ctrl_t *p_ibrt_ctrl =
         app_tws_ibrt_get_bt_ctrl_ctx();
 
-    EARBUDS_TRACE(0,
+    EARBUDS_TRACE(
+        0,
         "==============================");
 
-    EARBUDS_TRACE(1,
-        "[NTT_ADDR] reconfig_bd_addr role=%d",
+    EARBUDS_TRACE(
+        1,
+        "[NTT_ADDR_V28] reconfig callback role=%d",
         nv_role);
 
-    EARBUDS_TRACE(0,
-        "[NTT_ADDR] input local:");
-    EARBUDS_DUMP8("%02X ",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_ADDR_V28] callback input local:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
         local_addr.address,
         BTIF_BD_ADDR_SIZE);
 
-    EARBUDS_TRACE(0,
-        "[NTT_ADDR] input peer:");
-    EARBUDS_DUMP8("%02X ",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_ADDR_V28] callback input peer:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
         peer_addr.address,
         BTIF_BD_ADDR_SIZE);
 
     if (p_ibrt_ctrl == NULL)
     {
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] reject: ctrl is NULL");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] reject: ctrl is NULL");
+
         return;
     }
 
     /*
-     * Invalid local address must never be applied.
+     * 優先使用 config load 階段保存的固定地址。
+     *
+     * 不能直接相信 callback 的 local/peer，
+     * 因為傳統 IBRT 流程可能依角色交換地址。
      */
-    if (ntt_tws_addr_is_invalid(&local_addr))
+    if (ntt_cfg_addr_valid &&
+        ntt_bt_addr_pair_is_valid(
+            &ntt_cfg_local_addr,
+            &ntt_cfg_peer_addr))
     {
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] reject: invalid input local");
-        return;
-    }
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] fixed config local:");
 
-    /*
-     * Invalid peer address must never overwrite
-     * the current valid runtime peer address.
-     */
-    if (ntt_tws_addr_is_invalid(&peer_addr))
-    {
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] reject: invalid input peer");
+        EARBUDS_DUMP8(
+            "%02X ",
+            ntt_cfg_local_addr.address,
+            BTIF_BD_ADDR_SIZE);
 
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] keep runtime local:");
-        EARBUDS_DUMP8("%02X ",
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] fixed config peer:");
+
+        EARBUDS_DUMP8(
+            "%02X ",
+            ntt_cfg_peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        memcpy(
+            p_ibrt_ctrl->local_addr.address,
+            ntt_cfg_local_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        memcpy(
+            p_ibrt_ctrl->peer_addr.address,
+            ntt_cfg_peer_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
+        p_ibrt_ctrl->nv_role =
+            nv_role;
+
+        /*
+         * 此 callback 執行時 IBRT/Host runtime 已存在，
+         * 因此同步 Host stack cached BT address。
+         */
+        btif_me_set_bt_address(
+            p_ibrt_ctrl->local_addr.address);
+
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] enforced runtime local:");
+
+        EARBUDS_DUMP8(
+            "%02X ",
             p_ibrt_ctrl->local_addr.address,
             BTIF_BD_ADDR_SIZE);
 
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] keep runtime peer:");
-        EARBUDS_DUMP8("%02X ",
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] enforced runtime peer:");
+
+        EARBUDS_DUMP8(
+            "%02X ",
             p_ibrt_ctrl->peer_addr.address,
             BTIF_BD_ADDR_SIZE);
+
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] fixed reconfig success");
 
         return;
     }
 
     /*
-     * NTT independent-address design:
-     * local and peer must not be identical.
+     * 以下只在 fixed config 無效時使用，
+     * 保留 SDK 原始 fallback 行為。
      */
-    if (memcmp(local_addr.address,
-               peer_addr.address,
-               BTIF_BD_ADDR_SIZE) == 0)
+    EARBUDS_TRACE(
+        0,
+        "[NTT_ADDR_V28] fixed config invalid, use callback fallback");
+
+    if (ntt_bt_addr_is_zero(&local_addr) ||
+        ntt_bt_addr_is_ff(&local_addr))
     {
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] reject: input peer equals input local");
-
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] current runtime local:");
-        EARBUDS_DUMP8("%02X ",
-            p_ibrt_ctrl->local_addr.address,
-            BTIF_BD_ADDR_SIZE);
-
-        EARBUDS_TRACE(0,
-            "[NTT_ADDR] current runtime peer:");
-        EARBUDS_DUMP8("%02X ",
-            p_ibrt_ctrl->peer_addr.address,
-            BTIF_BD_ADDR_SIZE);
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] reject fallback: invalid local");
 
         return;
     }
 
-    /*
-     * Apply validated independent local and peer addresses.
-     */
-    p_ibrt_ctrl->local_addr = local_addr;
-    p_ibrt_ctrl->peer_addr  = peer_addr;
-    p_ibrt_ctrl->nv_role    = nv_role;
+    if (ntt_bt_addr_is_zero(&peer_addr) ||
+        ntt_bt_addr_is_ff(&peer_addr))
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] reject fallback: invalid peer");
 
-    /*
-     * Controller address always uses this earbud's local address.
-     * Never exchange local and peer according to IBRT role.
-     */
+        return;
+    }
+
+    if (ntt_bt_addr_is_same(
+            &local_addr,
+            &peer_addr))
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADDR_V28] reject fallback: local equals peer");
+
+        return;
+    }
+
+    p_ibrt_ctrl->local_addr =
+        local_addr;
+
+    p_ibrt_ctrl->peer_addr =
+        peer_addr;
+
+    p_ibrt_ctrl->nv_role =
+        nv_role;
+
     btif_me_set_bt_address(
         p_ibrt_ctrl->local_addr.address);
 
-    EARBUDS_TRACE(0,
-        "[NTT_ADDR] applied runtime local:");
-    EARBUDS_DUMP8("%02X ",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_ADDR_V28] fallback runtime local:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
         p_ibrt_ctrl->local_addr.address,
         BTIF_BD_ADDR_SIZE);
 
-    EARBUDS_TRACE(0,
-        "[NTT_ADDR] applied runtime peer:");
-    EARBUDS_DUMP8("%02X ",
+    EARBUDS_TRACE(
+        0,
+        "[NTT_ADDR_V28] fallback runtime peer:");
+
+    EARBUDS_DUMP8(
+        "%02X ",
         p_ibrt_ctrl->peer_addr.address,
         BTIF_BD_ADDR_SIZE);
 
-    EARBUDS_TRACE(0,
-        "[NTT_ADDR] reconfig success");
+    EARBUDS_TRACE(
+        0,
+        "[NTT_ADDR_V28] fallback reconfig success");
 }
 
 /*custom can block connect mobile if needed*/
@@ -2372,8 +3231,24 @@ int app_ibrt_customif_ui_start(void)
     config.reconnect_mobile_wait_ready_timeout            = IBRT_UI_MOBILE_RECONNECT_WAIT_READY_TIMEOUT;
     config.reconnect_tws_wait_ready_timeout               = IBRT_UI_TWS_RECONNECT_WAIT_READY_TIMEOUT;
     config.reconnect_ibrt_wait_response_timeout           = IBRT_UI_RECONNECT_IBRT_WAIT_RESPONSE_TIMEOUT;
-    config.nv_master_reconnect_tws_wait_response_timeout  = IBRT_UI_NV_MASTER_RECONNECT_TWS_WAIT_RESPONSE_TIMEOUT;
-    config.nv_slave_reconnect_tws_wait_response_timeout   = IBRT_UI_NV_SLAVE_RECONNECT_TWS_WAIT_RESPONSE_TIMEOUT;
+    //config.nv_master_reconnect_tws_wait_response_timeout  = IBRT_UI_NV_MASTER_RECONNECT_TWS_WAIT_RESPONSE_TIMEOUT;
+
+    config.nv_master_reconnect_tws_wait_response_timeout = 300;
+
+    /*
+    * NTT:
+    * Master 先主動 Page。
+    * Slave 延後 3 秒才 fallback Page，避免雙向 ACL collision。
+    */
+    config.nv_slave_reconnect_tws_wait_response_timeout = 3000;
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_TWS_CFG] master_wait=%u ms slave_wait=%u ms",
+        config.nv_master_reconnect_tws_wait_response_timeout,
+        config.nv_slave_reconnect_tws_wait_response_timeout);
+
+    //config.nv_slave_reconnect_tws_wait_response_timeout   = IBRT_UI_NV_SLAVE_RECONNECT_TWS_WAIT_RESPONSE_TIMEOUT;
 
     config.check_plugin_excute_closedbox_event            = true;
     config.ibrt_with_ai                                   = false;

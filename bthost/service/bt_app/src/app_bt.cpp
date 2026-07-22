@@ -1689,7 +1689,7 @@ uint8_t app_bt_hfp_adjust_volume(uint8_t device_id, bool up, bool adjust_local_v
     return hfp_local_vol;
 }
 #endif /* BT_HFP_SUPPORT */
-
+extern "C" bool app_bt_ibrt_has_mobile_link_connected(void);
 #define NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS      400
 #define NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY     1
 
@@ -4638,59 +4638,108 @@ void app_bt_inquiry_remote_device_name(const bt_bdaddr_t * bdaddr)
     bt_defer_call_func_1((uint32_t)(uintptr_t)btif_me_get_remote_device_name, param_a);
 }
 
-void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
+void app_bt_device_reconnect_handler(
+    struct BT_DEVICE_RECONNECT_T *reconnect)
 {
 #ifdef BT_SOURCE
     if (reconnect->for_source_device)
     {
-        bt_source_perform_profile_reconnect(&reconnect->rmt_addr);
+        bt_source_perform_profile_reconnect(
+            &reconnect->rmt_addr);
     }
     else
 #endif
     {
-        if (app_bt_is_acl_connected_byaddr(&reconnect->rmt_addr))
+        if (app_bt_is_acl_connected_byaddr(
+                &reconnect->rmt_addr))
         {
-            DEBUG_INFO(1,"%s acl already connected", __func__);
+            DEBUG_INFO(1,
+                "[NTT_RECONNECT] %s ACL already connected, delete node",
+                __func__);
+
             app_bt_delete_reconnect_device(reconnect);
             return;
         }
 
         if (btif_me_get_pendCons() > 0)
         {
-            DEBUG_INFO(1,"%s exist pending acl cons, reset the timer", __func__);
-            osTimerStart(reconnect->acl_reconnect_timer, BTIF_BT_DEFAULT_PAGE_TIMEOUT_IN_MS);
+            DEBUG_INFO(2,
+                "[NTT_RECONNECT] %s pending ACL=%d, reset SDK timer",
+                __func__,
+                btif_me_get_pendCons());
+
+            osTimerStart(
+                reconnect->acl_reconnect_timer,
+                BTIF_BT_DEFAULT_PAGE_TIMEOUT_IN_MS);
+
             return;
         }
+
 #if defined(BT_HFP_SUPPORT)
         if (app_bt_audio_count_connected_sco())
         {
-            DEBUG_INFO(1,"%s exist sco streaming, reset the timer", __func__);
-            osTimerStart(reconnect->acl_reconnect_timer, APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS);
-            return;
-        }
-#endif // BT_HFP_SUPPORT
+            DEBUG_INFO(1,
+                "[NTT_RECONNECT] %s SCO active, wait",
+                __func__);
 
-#ifdef BT_A2DP_SUPPORT
-        if(app_bt_audio_get_curr_playing_a2dp() != BT_DEVICE_INVALID_ID &&
-           !app_bt_is_acl_connected_byaddr(&reconnect->rmt_addr))
-        {
-            DEBUG_INFO(1,"%s alloc more timing to a2dp link when doing page", __func__);
-            app_bt_audio_enable_active_link(true, app_bt_audio_get_curr_playing_a2dp());
+            osTimerStart(
+                reconnect->acl_reconnect_timer,
+                APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS);
+
+            return;
         }
 #endif
 
-        bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
-        if (!app_bt_is_a2dp_connected_byaddr(&reconnect->rmt_addr) && bt_host_cfg->a2dp_sink_enable)
+#ifdef BT_A2DP_SUPPORT
+        if ((app_bt_audio_get_curr_playing_a2dp() !=
+             BT_DEVICE_INVALID_ID) &&
+            !app_bt_is_acl_connected_byaddr(
+                &reconnect->rmt_addr))
         {
-            DEBUG_INFO(0,"try connect a2dp");
-            app_bt_precheck_before_starting_connecting(false);
-            app_bt_reconnect_a2dp_profile(&reconnect->rmt_addr, A2DP_ROLE_SNK);
+            DEBUG_INFO(1,
+                "%s alloc more timing to a2dp link when doing page",
+                __func__);
+
+            app_bt_audio_enable_active_link(
+                true,
+                app_bt_audio_get_curr_playing_a2dp());
         }
-        else if (!app_bt_is_hfp_connected_byaddr(&reconnect->rmt_addr))
+#endif
+
+        bthost_cfg_t *bt_host_cfg = bt_host_get_cfg();
+
+        if (!app_bt_is_a2dp_connected_byaddr(
+                &reconnect->rmt_addr) &&
+            bt_host_cfg->a2dp_sink_enable)
         {
-            DEBUG_INFO(0,"try connect hf");
+            DEBUG_INFO(2,
+                "[NTT_RECONNECT] try connect a2dp mode=%d acl_cnt=%d",
+                reconnect->reconnect_mode,
+                reconnect->acl_reconnect_cnt);
+
             app_bt_precheck_before_starting_connecting(false);
-            app_bt_reconnect_hfp_profile(&reconnect->rmt_addr);
+
+            app_bt_reconnect_a2dp_profile(
+                &reconnect->rmt_addr,
+                A2DP_ROLE_SNK);
+        }
+        else if (!app_bt_is_hfp_connected_byaddr(
+                     &reconnect->rmt_addr))
+        {
+            DEBUG_INFO(2,
+                "[NTT_RECONNECT] try connect hfp mode=%d acl_cnt=%d",
+                reconnect->reconnect_mode,
+                reconnect->acl_reconnect_cnt);
+
+            app_bt_precheck_before_starting_connecting(false);
+
+            app_bt_reconnect_hfp_profile(
+                &reconnect->rmt_addr);
+        }
+        else
+        {
+            DEBUG_INFO(0,
+                "[NTT_RECONNECT] required profiles already connected");
         }
     }
 }
@@ -4796,6 +4845,47 @@ static void app_bt_start_reconnect_next_device(void)
 
     DEBUG_INFO(0,"!!!start reconnect next device\n");
     app_bt_start_poweron_reconnect();
+}
+
+/*
+ * Return:
+ *   0 = reconnect 尚在處理，繼續等待
+ *   2 = 已完成或 node 不存在，可以停止 watchdog
+ */
+extern "C" uint8_t app_bt_ntt_retry_reconnect_next_device(void)
+{
+    struct BT_DEVICE_RECONNECT_T *reconnect = NULL;
+
+    reconnect = app_bt_get_poweron_reconnect_device();
+
+    if (reconnect == NULL)
+    {
+        DEBUG_INFO(0,
+            "[NTT_RECONNECT] no reconnect node, stop watchdog");
+
+        return 2;
+    }
+
+    if (app_bt_is_acl_connected_byaddr(&reconnect->rmt_addr))
+    {
+        DEBUG_INFO(0,
+            "[NTT_RECONNECT] mobile ACL connected, stop watchdog");
+
+        return 2;
+    }
+
+    DEBUG_INFO(3,
+        "[NTT_RECONNECT] reconnect still pending mode=%d acl_cnt=%d pend=%d",
+        reconnect->reconnect_mode,
+        reconnect->acl_reconnect_cnt,
+        btif_me_get_pendCons());
+
+    /*
+     * 重要：
+     * 不可再呼叫 app_bt_start_reconnect_next_device()。
+     * reconnect node 已經存在，交給 SDK 原生流程。
+     */
+    return 0;
 }
 
 void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote, bool is_for_source_device)
@@ -5042,8 +5132,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
          * Slave must recover TWS first.
          * Do not directly reconnect the mobile before TWS is ready.
          */
-        if (app_ibrt_middleware_is_ui_slave() ||
-            ctrl->nv_role == IBRT_SLAVE)
+        if (app_ibrt_middleware_is_ui_slave())
         {
             DEBUG_INFO(0,"[NTT_RECONNECT] slave skip direct mobile reconnect");
             return;
@@ -5053,7 +5142,6 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     if (!btif_me_get_pendCons() &&
         !app_bt_ibrt_has_mobile_link_connected())
     {
-        DEBUG_INFO(0, "[NTT_RECONNECT] reset reconnect context");
         ntt_bt_reconnect_context_reset();
     }
     else
