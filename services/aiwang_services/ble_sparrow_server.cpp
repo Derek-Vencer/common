@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.3" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.4" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -1878,7 +1878,8 @@ static void on_accept_call(void)    {
 	CALL_STATE_E call_state = app_bt_get_call_state();
     if ((call_state == CALL_STATE_INCOMING) || (call_state == CALL_STATE_THREE_WAY_INCOMING))
     {
-       bt_key_handle_call(call_state);
+       //bt_key_handle_call(call_state);
+       app_audio_control_call_answer();
     }
     
 #endif

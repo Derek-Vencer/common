@@ -1982,16 +1982,13 @@ void app_ibrt_init(void)
     #endif
         {
 #if defined(IBRT_UI)
-        //MAIN_TRACE(0, "%s app_ibrt_start_power_on_tws_pairing", __func__);
 
         btif_device_record_t record1 = {0};
         btif_device_record_t record2 = {0};
-        int record_count = nv_record_enum_latest_two_paired_dev(&record1, &record2);
-        uint8_t mobile_record_count = 0;
+        int record_count =
+            nv_record_enum_latest_two_paired_dev(&record1, &record2);
 
-        bool has_tws_peer =
-            memcmp(config.peer_addr.address, "\xFF\xFF\xFF\xFF\xFF\xFF", 6) &&
-            memcmp(config.peer_addr.address, "\x00\x00\x00\x00\x00\x00", 6);
+        uint8_t mobile_record_count = 0;
 
         MAIN_TRACE(1,
             "[NTT_PAIR] record_count=%d",
@@ -1999,28 +1996,78 @@ void app_ibrt_init(void)
 
         MAIN_TRACE(6,
             "[NTT_PAIR] local=%02X:%02X:%02X:%02X:%02X:%02X",
-            config.local_addr.address[0], config.local_addr.address[1],
-            config.local_addr.address[2], config.local_addr.address[3],
-            config.local_addr.address[4], config.local_addr.address[5]);
+            config.local_addr.address[0],
+            config.local_addr.address[1],
+            config.local_addr.address[2],
+            config.local_addr.address[3],
+            config.local_addr.address[4],
+            config.local_addr.address[5]);
 
         MAIN_TRACE(6,
-            "[NTT_PAIR] peer =%02X:%02X:%02X:%02X:%02X:%02X",
-            config.peer_addr.address[0], config.peer_addr.address[1],
-            config.peer_addr.address[2], config.peer_addr.address[3],
-            config.peer_addr.address[4], config.peer_addr.address[5]);
-            
-        ntt_set_local_peer_bt_addr(&config.local_addr, &config.peer_addr);
+            "[NTT_PAIR] peer before set=%02X:%02X:%02X:%02X:%02X:%02X",
+            config.peer_addr.address[0],
+            config.peer_addr.address[1],
+            config.peer_addr.address[2],
+            config.peer_addr.address[3],
+            config.peer_addr.address[4],
+            config.peer_addr.address[5]);
+
+        /*
+         * 這個函式可能會更新 config.peer_addr，
+         * 因此 peer 有效性必須在它執行之後判斷。
+         */
+        ntt_set_local_peer_bt_addr(
+            &config.local_addr,
+            &config.peer_addr);
+
+        MAIN_TRACE(6,
+            "[NTT_PAIR] peer after set=%02X:%02X:%02X:%02X:%02X:%02X",
+            config.peer_addr.address[0],
+            config.peer_addr.address[1],
+            config.peer_addr.address[2],
+            config.peer_addr.address[3],
+            config.peer_addr.address[4],
+            config.peer_addr.address[5]);
+
+        static const uint8_t invalid_peer_ff[6] =
+        {
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+        };
+
+        static const uint8_t invalid_peer_00[6] =
+        {
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+
+        bool peer_is_ff =
+            (memcmp(config.peer_addr.address,
+                    invalid_peer_ff,
+                    sizeof(invalid_peer_ff)) == 0);
+
+        bool peer_is_00 =
+            (memcmp(config.peer_addr.address,
+                    invalid_peer_00,
+                    sizeof(invalid_peer_00)) == 0);
+
+        bool has_tws_peer = !peer_is_ff && !peer_is_00;
 
         if (record_count >= 1)
         {
             MAIN_TRACE(6,
                 "[NTT_PAIR] record1=%02X:%02X:%02X:%02X:%02X:%02X",
-                record1.bdAddr.address[0], record1.bdAddr.address[1],
-                record1.bdAddr.address[2], record1.bdAddr.address[3],
-                record1.bdAddr.address[4], record1.bdAddr.address[5]);
+                record1.bdAddr.address[0],
+                record1.bdAddr.address[1],
+                record1.bdAddr.address[2],
+                record1.bdAddr.address[3],
+                record1.bdAddr.address[4],
+                record1.bdAddr.address[5]);
 
-            if ((memcmp(record1.bdAddr.address, config.local_addr.address, 6) != 0) &&
-                (memcmp(record1.bdAddr.address, config.peer_addr.address, 6) != 0))
+            if ((memcmp(record1.bdAddr.address,
+                        config.local_addr.address,
+                        6) != 0) &&
+                (memcmp(record1.bdAddr.address,
+                        config.peer_addr.address,
+                        6) != 0))
             {
                 mobile_record_count++;
             }
@@ -2030,12 +2077,19 @@ void app_ibrt_init(void)
         {
             MAIN_TRACE(6,
                 "[NTT_PAIR] record2=%02X:%02X:%02X:%02X:%02X:%02X",
-                record2.bdAddr.address[0], record2.bdAddr.address[1],
-                record2.bdAddr.address[2], record2.bdAddr.address[3],
-                record2.bdAddr.address[4], record2.bdAddr.address[5]);
+                record2.bdAddr.address[0],
+                record2.bdAddr.address[1],
+                record2.bdAddr.address[2],
+                record2.bdAddr.address[3],
+                record2.bdAddr.address[4],
+                record2.bdAddr.address[5]);
 
-            if ((memcmp(record2.bdAddr.address, config.local_addr.address, 6) != 0) &&
-                (memcmp(record2.bdAddr.address, config.peer_addr.address, 6) != 0))
+            if ((memcmp(record2.bdAddr.address,
+                        config.local_addr.address,
+                        6) != 0) &&
+                (memcmp(record2.bdAddr.address,
+                        config.peer_addr.address,
+                        6) != 0))
             {
                 mobile_record_count++;
             }
@@ -2046,12 +2100,16 @@ void app_ibrt_init(void)
             has_tws_peer,
             mobile_record_count);
 
+        /*
+         * 手機配對模式判斷仍然保留。
+         */
         if (mobile_record_count == 0)
         {
             if (!app_ibrt_middleware_is_ui_slave())
             {
                 MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record -> start pair mode (master)");
+                    "[NTT_PAIR] no mobile record -> "
+                    "start mobile pair mode (master)");
 
                 ntt_first_no_mobile_pair_mode = true;
                 ntt_manual_pairing_mode = true;
@@ -2059,27 +2117,99 @@ void app_ibrt_init(void)
                 set_pair_status(0);
                 set_er_discover_connectable_status(1);
 
-                // app_ibrt_if_init_open_box_state_for_evb();
-
-                app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+                app_bt_set_access_mode(
+                    BTIF_BAM_GENERAL_ACCESSIBLE);
 
                 app_bt_reset_delay_power_off();
             }
             else
             {
                 MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record, skip pair mode on slave");
-            }        
+                    "[NTT_PAIR] no mobile record, "
+                    "skip pair mode on slave");
+            }
         }
         else
         {
             MAIN_TRACE(1,
-                "[NTT_PAIR] mobile record exists (%d), skip pair mode",
+                "[NTT_PAIR] mobile record exists (%d), "
+                "skip mobile pair mode",
                 mobile_record_count);
-                ntt_first_no_mobile_pair_mode = false;
+
+            ntt_first_no_mobile_pair_mode = false;
         }
- 
-        app_ibrt_start_power_on_tws_pairing();
+
+        /*
+         * 只有 peer address 有效時，才啟動 TWS reconnect。
+         */
+        if (has_tws_peer)
+        {
+            MAIN_TRACE(1,
+                "[NTT_TWS] valid peer, start TWS reconnect: "
+                "%02X:%02X:%02X:%02X:%02X:%02X",
+                config.peer_addr.address[0],
+                config.peer_addr.address[1],
+                config.peer_addr.address[2],
+                config.peer_addr.address[3],
+                config.peer_addr.address[4],
+                config.peer_addr.address[5]);
+
+            app_ibrt_start_power_on_tws_pairing();
+        }
+        else
+        {
+            MAIN_TRACE(1,
+                "[NTT_TWS] invalid peer, skip TWS reconnect: "
+                "%02X:%02X:%02X:%02X:%02X:%02X",
+                config.peer_addr.address[0],
+                config.peer_addr.address[1],
+                config.peer_addr.address[2],
+                config.peer_addr.address[3],
+                config.peer_addr.address[4],
+                config.peer_addr.address[5]);
+
+            MAIN_TRACE(0,
+                "[NTT_BOOT] no TWS peer -> standalone mobile mode");
+
+            /*
+            * peer 無效時，不應再用 UI slave 判斷阻止手機模式。
+            * current_role 現在也可能是 0xFF，不能依賴 TWS role。
+            */
+            if (mobile_record_count == 0)
+            {
+                MAIN_TRACE(0,
+                    "[NTT_PAIR] no mobile record -> discoverable/connectable");
+
+                ntt_first_no_mobile_pair_mode = true;
+                ntt_manual_pairing_mode = true;
+
+                set_pair_status(0);
+                set_er_discover_connectable_status(1);
+
+                app_bt_set_access_mode(
+                    BTIF_BAM_GENERAL_ACCESSIBLE);
+            }
+            else
+            {
+                MAIN_TRACE(1,
+                    "[NTT_PAIR] mobile record exists (%d) -> connectable",
+                    mobile_record_count);
+
+                ntt_first_no_mobile_pair_mode = false;
+                ntt_manual_pairing_mode = false;
+
+                set_er_discover_connectable_status(1);
+
+                app_bt_set_access_mode(
+                    BTIF_BAM_CONNECTABLE_ONLY);
+            }
+
+            /*
+             * 不要在這裡呼叫 app_ibrt_start_power_on_tws_pairing()。
+             * 也不要把 local address 當作 peer address 使用。
+             */
+        }
+
 #endif
         }
     #elif defined(POWER_ON_ENTER_FREEMAN_PAIRING_ENABLED)

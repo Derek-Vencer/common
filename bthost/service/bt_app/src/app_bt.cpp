@@ -5162,7 +5162,9 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
         else
         {
             DEBUG_INFO(0,
-                "[NTT_RECONNECT] no valid phone record, skip reconnect");
+                "[NTT_RECONNECT] no reconnect started -> CONNECTABLE_ONLY");
+
+            app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
         }
 #endif
     }
@@ -5424,9 +5426,17 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
                     DEBUG_INFO(2,"app_bt: a2dp_act in NV =%d,a2dp_connect=%d",btdevice_plf_p->a2dp_act,profile_mgr->a2dp_connect);
                     if (btdevice_plf_p->a2dp_act && profile_mgr->a2dp_connect != bt_profile_connect_status_success)
                     {
-                        DEBUG_INFO(0,"!!!continue connect hfp\n");
-                        app_bt_precheck_before_starting_connecting(profile_mgr->profile_connected);
-                        app_bt_reconnect_a2dp_profile(&profile_mgr->rmt_addr, A2DP_ROLE_SNK);
+                        #if 0
+                        app_bt_precheck_before_starting_connecting(
+                            profile_mgr->profile_connected);
+
+                        app_bt_reconnect_a2dp_profile(
+                            &profile_mgr->rmt_addr,
+                            A2DP_ROLE_SNK);
+                        #endif
+
+                        DEBUG_INFO(0,
+                            "[NTT_A2DP] HFP connected, wait incoming A2DP path-1");
                     }
 #if defined(__GATT_OVER_BR_EDR__)
                     if (app_bt_check_is_ios_device(&profile_mgr->rmt_addr) && !app_btgatt_is_connected(curr_device->device_id))
@@ -5566,9 +5576,17 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
             {
                 if (bt_host_cfg->a2dp_sink_enable)
                 {
-                    DEBUG_INFO(0,"!!!continue connect a2dp\n");
-                    app_bt_precheck_before_starting_connecting(profile_mgr->profile_connected);
-                    app_bt_reconnect_a2dp_profile(&profile_mgr->rmt_addr, A2DP_ROLE_SNK);
+                    #if 0
+                    app_bt_precheck_before_starting_connecting(
+                        profile_mgr->profile_connected);
+
+                    app_bt_reconnect_a2dp_profile(
+                        &profile_mgr->rmt_addr,
+                        A2DP_ROLE_SNK);
+                    #endif
+
+                    DEBUG_INFO(0,
+                        "[NTT_A2DP] HFP connected, wait incoming A2DP path-2");
                 }
             }
         }
