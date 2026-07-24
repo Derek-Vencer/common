@@ -71,7 +71,7 @@ extern "C" uint8_t ntt_color_code_nv_get(void);
 extern "C" void ntt_color_code_nv_set(uint8_t color);
 extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
 extern bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length);
-
+extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 #define MAX_PACKET_SIZE             (512)
 #define SPARRAW_EVENT_MAX_MAILBOX   (10)
 #define SPARRAW_EVENT_BUF_SIZE      (MAX_PACKET_SIZE*SPARRAW_EVENT_MAX_MAILBOX)
@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.3.6" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.4" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -1171,6 +1171,7 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
     audio_eq_set_cfg(NULL,
                      audio_eq_cfg_vol_list[presetId],
                      AUDIO_EQ_TYPE_HW_DAC_IIR);
+    ntt_audio_drc_apply_by_eq_index(presetId);
 
     app_ibrt_customif_cmd_sync_music_eq(presetId);
 
