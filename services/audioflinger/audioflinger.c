@@ -801,28 +801,59 @@ static void af_codec_sw_gain_process(uint8_t *buf,
 {
     uint32_t i;
     uint32_t pcm_len;
-    float output_gain;
+
     int32_t pcm_out_l;
     int32_t pcm_out_r;
 
+    float iir_gain;
+    float output_gain;
+
+    float coefs_b0;
+    float coefs_b1;
+    float coefs_b2;
+
+    float coefs_a1;
+    float coefs_a2;
+
+    float history_x0;
+    float history_x1;
+
+    float history_y0;
+    float history_y1;
+
     /*
      * NTT TEST:
-     * 完全 bypass SW gain IIR。
      *
-     * 原本：
-     *   coef -> SW gain IIR -> fade gain -> PCM
+     * 保留 50% SW Gain IIR 平滑效果。
      *
-     * 測試版本：
-     *   coef -> fade gain -> PCM
+     * 原始版本：
+     *     output_gain = iir_gain;
      *
-     * iir 參數保留是為了不修改函式介面，
-     * 但本測試版本不使用 iir 與 history。
+     * 完全 bypass：
+     *     output_gain = coef;
+     *
+     * 本版本：
+     *     output_gain = 50% iir_gain + 50% coef;
      */
-    (void)iir;
+#define NTT_SW_GAIN_IIR_MIX       (0.5f)
+#define NTT_SW_GAIN_DIRECT_MIX    (1.0f - NTT_SW_GAIN_IIR_MIX)
 
-    if (buf == NULL || size == 0) {
+    if (buf == NULL || size == 0 || iir == NULL) {
         return;
     }
+
+    coefs_b0 = iir->coefs_b[0];
+    coefs_b1 = iir->coefs_b[1];
+    coefs_b2 = iir->coefs_b[2];
+
+    coefs_a1 = iir->coefs_a[1];
+    coefs_a2 = iir->coefs_a[2];
+
+    history_x0 = iir->history_x[0];
+    history_x1 = iir->history_x[1];
+
+    history_y0 = iir->history_y[0];
+    history_y1 = iir->history_y[1];
 
     /*
      * Mono playback
@@ -838,13 +869,33 @@ static void af_codec_sw_gain_process(uint8_t *buf,
 
             for (i = 0; i < pcm_len; i++) {
                 /*
-                 * Bypass SW gain IIR:
-                 * output_gain 直接使用 codec software gain。
+                 * 原始 IIR gain 計算
                  */
-                output_gain = coef;
+                iir_gain =
+                    coef * coefs_b0 +
+                    history_x0 * coefs_b1 +
+                    history_x1 * coefs_b2 -
+                    history_y0 * coefs_a1 -
+                    history_y1 * coefs_a2;
 
                 /*
-                 * 保留 prompt ducking / fade 功能。
+                 * 更新 IIR history
+                 */
+                history_y1 = history_y0;
+                history_y0 = iir_gain;
+
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                /*
+                 * 50% IIR + 50% direct gain
+                 */
+                output_gain =
+                    iir_gain * NTT_SW_GAIN_IIR_MIX +
+                    coef * NTT_SW_GAIN_DIRECT_MIX;
+
+                /*
+                 * 保留原有 fade / prompt ducking
                  */
                 output_gain *=
                     fade_smooth_gain(&dac1_fade, dac1_algo_gain);
@@ -852,7 +903,8 @@ static void af_codec_sw_gain_process(uint8_t *buf,
                 pcm_out_l =
                     (int32_t)((float)pcm_buf[i] * output_gain);
 
-                pcm_buf[i] = (int16_t)__SSAT(pcm_out_l, 16);
+                pcm_buf[i] =
+                    (int16_t)__SSAT(pcm_out_l, 16);
             }
         }
         /*
@@ -864,7 +916,22 @@ static void af_codec_sw_gain_process(uint8_t *buf,
             pcm_len = size / sizeof(int32_t);
 
             for (i = 0; i < pcm_len; i++) {
-                output_gain = coef;
+                iir_gain =
+                    coef * coefs_b0 +
+                    history_x0 * coefs_b1 +
+                    history_x1 * coefs_b2 -
+                    history_y0 * coefs_a1 -
+                    history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = iir_gain;
+
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain =
+                    iir_gain * NTT_SW_GAIN_IIR_MIX +
+                    coef * NTT_SW_GAIN_DIRECT_MIX;
 
                 output_gain *=
                     fade_smooth_gain(&dac1_fade, dac1_algo_gain);
@@ -872,7 +939,8 @@ static void af_codec_sw_gain_process(uint8_t *buf,
                 pcm_out_l =
                     (int32_t)((float)pcm_buf[i] * output_gain);
 
-                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                pcm_buf[i] =
+                    __SSAT(pcm_out_l, 24);
             }
         }
     }
@@ -881,25 +949,33 @@ static void af_codec_sw_gain_process(uint8_t *buf,
      */
     else if (chans == AUD_CHANNEL_NUM_2) {
         /*
-         * 16-bit stereo PCM:
-         * L, R, L, R...
+         * 16-bit stereo PCM
          */
         if (bits <= AUD_BITS_16) {
             int16_t *pcm_buf = (int16_t *)buf;
 
             pcm_len = size / sizeof(int16_t);
 
-            /*
-             * 每次處理一個 stereo frame。
-             * i     = Left
-             * i + 1 = Right
-             */
             for (i = 0; (i + 1) < pcm_len; i += 2) {
-                output_gain = coef;
+                iir_gain =
+                    coef * coefs_b0 +
+                    history_x0 * coefs_b1 +
+                    history_x1 * coefs_b2 -
+                    history_y0 * coefs_a1 -
+                    history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = iir_gain;
+
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain =
+                    iir_gain * NTT_SW_GAIN_IIR_MIX +
+                    coef * NTT_SW_GAIN_DIRECT_MIX;
 
                 /*
-                 * 左右聲道共用同一個 gain，
-                 * 每個 stereo frame 只更新一次 fade。
+                 * Stereo frame 左右聲道共用同一個 gain
                  */
                 output_gain *=
                     fade_smooth_gain(&dac1_fade, dac1_algo_gain);
@@ -918,8 +994,7 @@ static void af_codec_sw_gain_process(uint8_t *buf,
             }
         }
         /*
-         * 24-bit stereo PCM stored in int32_t:
-         * L, R, L, R...
+         * 24-bit stereo PCM stored in int32_t
          */
         else {
             int32_t *pcm_buf = (int32_t *)buf;
@@ -927,7 +1002,22 @@ static void af_codec_sw_gain_process(uint8_t *buf,
             pcm_len = size / sizeof(int32_t);
 
             for (i = 0; (i + 1) < pcm_len; i += 2) {
-                output_gain = coef;
+                iir_gain =
+                    coef * coefs_b0 +
+                    history_x0 * coefs_b1 +
+                    history_x1 * coefs_b2 -
+                    history_y0 * coefs_a1 -
+                    history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = iir_gain;
+
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain =
+                    iir_gain * NTT_SW_GAIN_IIR_MIX +
+                    coef * NTT_SW_GAIN_DIRECT_MIX;
 
                 output_gain *=
                     fade_smooth_gain(&dac1_fade, dac1_algo_gain);
@@ -946,6 +1036,18 @@ static void af_codec_sw_gain_process(uint8_t *buf,
             }
         }
     }
+
+    /*
+     * 寫回 IIR history
+     */
+    iir->history_y[1] = history_y1;
+    iir->history_y[0] = history_y0;
+
+    iir->history_x[1] = history_x1;
+    iir->history_x[0] = history_x0;
+
+#undef NTT_SW_GAIN_IIR_MIX
+#undef NTT_SW_GAIN_DIRECT_MIX
 }
 #endif /* #if defined(AUDIO_OUTPUT_SW_GAIN) || defined(AUDIO_OUTPUT_DAC2_SW_GAIN) */
 
