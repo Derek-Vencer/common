@@ -2610,10 +2610,80 @@ static void ntt_first_out_reset_local(void)
     ntt_first_out_role_check_stop();
 }
 
+static void ntt_case_out_slave_push_battery(void)
+{
+    bool tws_connected;
+    uint8_t local_battery;
+    TWS_UI_ROLE_E ui_role;
+
+    tws_connected =
+        bts_tws_if_is_tws_link_connected();
+
+    ui_role =
+        app_ibrt_if_get_ui_role();
+
+    EARBUDS_TRACE(
+        2,
+        "[BAT][CASE_OUT_PUSH] tws=%d role=%d",
+        tws_connected,
+        ui_role);
+
+    /*
+     * TWS 尚未連線時無法推送。
+     */
+    if (!tws_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[BAT][CASE_OUT_PUSH] skip, tws=0");
+        return;
+    }
+
+    /*
+     * 只允許 Slave 主動推送電量給 Master。
+     *
+     * 如果目前 SDK 的 Slave enum 名稱不是 TWS_UI_SLAVE，
+     * 請替換成專案實際使用的 Slave role 定義。
+     */
+    if (ui_role != TWS_UI_SLAVE)
+    {
+        EARBUDS_TRACE(
+            1,
+            "[BAT][CASE_OUT_PUSH] skip, not slave role=%d",
+            ui_role);
+        return;
+    }
+
+    local_battery =
+        app_battery_current_level();
+
+    if (local_battery > 100)
+    {
+        EARBUDS_TRACE(
+            1,
+            "[BAT][CASE_OUT_PUSH] invalid battery=%u",
+            local_battery);
+        return;
+    }
+
+    EARBUDS_TRACE(
+        1,
+        "[BAT][CASE_OUT_PUSH][SLAVE->MASTER] battery=%u",
+        local_battery);
+
+    app_ibrt_customif_cmd_sync_battery_level(
+        local_battery);
+}
+
 extern "C"
 void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 {
-    NTT_CASE_STATE_E peer_state = ntt_case_state_get_peer();
+    NTT_CASE_STATE_E peer_state =
+        ntt_case_state_get_peer();
+
+    bool tws_connected =
+        bts_tws_if_is_tws_link_connected();
+
     EARBUDS_TRACE(
         6,
         "[NTT_CASE_CB][LOCAL] state=%d peer=%d "
@@ -2621,13 +2691,16 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         state,
         peer_state,
         app_ibrt_if_get_ui_role(),
-        bts_tws_if_is_tws_link_connected(),
+        tws_connected,
         app_bt_ibrt_has_mobile_link_connected(),
         g_ntt_first_out_owner);
 
     if (state == NTT_CASE_STATE_IN_CASE)
     {
-        EARBUDS_TRACE(0,"[NTT_CASE_CB][LOCAL] IN_CASE");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CASE_CB][LOCAL] IN_CASE");
+
         app_key_handle_pause_music_on_pogo_in();
         ntt_first_out_reset_local();
         return;
@@ -2635,15 +2708,38 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 
     if (state != NTT_CASE_STATE_OUT_CASE)
     {
-        EARBUDS_TRACE(1,"[NTT_CASE_CB][LOCAL] invalid state=%d",state);
+        EARBUDS_TRACE(
+            1,
+            "[NTT_CASE_CB][LOCAL] invalid state=%d",
+            state);
         return;
     }
 
-    EARBUDS_TRACE(0,"[NTT_CASE_CB][LOCAL] OUT_CASE");
+    EARBUDS_TRACE(
+        0,
+        "[NTT_CASE_CB][LOCAL] OUT_CASE");
+
+    /*
+     * 耳機離盒且 TWS 已連線時：
+     *
+     * 若本機目前是 Slave，主動將本機電量推送給 Master。
+     */
+    if (tws_connected)
+    {
+        ntt_case_out_slave_push_battery();
+    }
+    else
+    {
+        EARBUDS_TRACE(
+            0,
+            "[BAT][CASE_OUT_PUSH] wait, tws=0");
+    }
+
     /*
      * 離盒後取消入盒關機 timer。
      */
     earBudsCloseOff_PogonIn_StopTimer();
+
     /*
      * 判斷是否為先離盒者。
      *
@@ -2652,7 +2748,10 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
      */
     if (peer_state == NTT_CASE_STATE_IN_CASE)
     {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] local first OUT, peer still IN");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] local first OUT, peer still IN");
+
         ntt_first_out_take_master_and_reconnect();
         return;
     }
@@ -2663,7 +2762,10 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
      */
     if (peer_state == NTT_CASE_STATE_OUT_CASE)
     {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] peer already OUT, local later OUT");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] peer already OUT, local later OUT");
+
         ntt_later_out_keep_slave();
         return;
     }
@@ -2675,7 +2777,10 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
      * 正常情況下，兩耳在盒內收到有效 UART packet 後，
      * peer 應該是 IN_CASE。
      */
-    EARBUDS_TRACE(1,"[NTT_FIRST_OUT] peer UNKNOWN, wait peer state");
+    EARBUDS_TRACE(
+        1,
+        "[NTT_FIRST_OUT] peer UNKNOWN, wait peer state");
+
     ntt_later_out_keep_slave();
 }
 

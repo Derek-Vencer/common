@@ -5445,7 +5445,6 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
                     }
 #endif
                 }
-
                 app_bt_switch_role_if_needed(&curr_device->remote);
                 break;
             case BTIF_HF_EVENT_SERVICE_DISCONNECTED:

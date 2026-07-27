@@ -515,6 +515,16 @@ static void wired_uart_get_battery_level(void)
     }
 
     buff[4] = crc8(buff, 4);
+
+    DBGPRINT("[EAR_POWER][UART_TX][%s] raw=%d report=%u pair=%u crc=0x%02X",
+            isRightEarbuds ? "RIGHT" : "LEFT",
+            raw_level,
+            report_level,
+            pair_status,
+            buff[4]);
+
+    DUMP8("[EAR_POWER][UART_TX_RAW] ", buff, sizeof(buff));
+
     communication_send_buf(buff, 5);
 }
 
@@ -828,37 +838,123 @@ void aiwang_box_battery_update_enable(bool enable)
     box_battery_update_enable = enable;
 }
 
+static uint8_t box_ear_level_to_percent(uint8_t level)
+{
+    /*
+     * Charging case earbud battery protocol:
+     *
+     * 0 = 10%
+     * 1 = 20%
+     * 2 = 30%
+     * ...
+     * 8 = 90%
+     * 9 = 100%
+     *
+     * 如果充電盒定義 0 代表 0%，請改成另一種換算方式。
+     */
+    if (level > 9)
+    {
+        return 0xFF;
+    }
+
+    return (uint8_t)((level + 1) * 10);
+}
+
 static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
 {
+    uint8_t box_battery;
+    uint8_t left_level;
+    uint8_t right_level;
+    uint8_t left_percent;
+    uint8_t right_percent;
+
     if ((data == NULL) || (len < 3))
     {
+        DBGPRINT(
+            "[BOX_BAT][ERROR] invalid data=%p len=%u",
+            data,
+            len);
+
         return;
     }
 
-    if (!box_battery_update_enable && box_battery_cache_valid)
+    /*
+     * UART payload:
+     *
+     * data[0] = Charging case battery, range 0~100%
+     * data[1] = Left ear battery level, range 0~9
+     * data[2] = Right ear battery level, range 0~9
+     */
+    box_battery = data[0];
+    left_level  = data[1];
+    right_level = data[2];
+
+    DBGPRINT(
+        "[BOX_BAT][UART_RAW] CASE=%u L_LEVEL=%u R_LEVEL=%u",
+        box_battery,
+        left_level,
+        right_level);
+
+    /*
+     * Validate protocol ranges.
+     */
+    if ((box_battery > 100) ||
+        (left_level > 9) ||
+        (right_level > 9))
     {
+        DBGPRINT(
+            "[BOX_BAT][INVALID] CASE=%u L_LEVEL=%u R_LEVEL=%u",
+            box_battery,
+            left_level,
+            right_level);
+
         return;
     }
 
+    left_percent  = box_ear_level_to_percent(left_level);
+    right_percent = box_ear_level_to_percent(right_level);
+
+    /*
+     * CMD_SEND_BOX_BATTERY_LEVEL is fresh data from the charging case.
+     * Always update the RAM cache after validation.
+     *
+     * Do not block this update using:
+     *     !box_battery_update_enable && box_battery_cache_valid
+     */
     boxChargerStatus.getBatteryOK        = true;
-    boxChargerStatus.boxChargerBattery   = data[0];
-    boxChargerStatus.leftEarBudsBattery  = data[1];
-    boxChargerStatus.rightEarBudsBattery = data[2];
+    boxChargerStatus.boxChargerBattery   = box_battery;
+    boxChargerStatus.leftEarBudsBattery  = left_percent;
+    boxChargerStatus.rightEarBudsBattery = right_percent;
 
     box_battery_cache_valid = true;
 
-    box_battery_nv_save(data[0]);
+    /*
+     * Only CASE battery is currently stored in NV.
+     */
+    box_battery_nv_save(box_battery);
 
-    static int8_t s_last_tws_connected = -1;
+    DBGPRINT(
+        "[BOX_BAT][UPDATED][%s] "
+        "CASE=%u%% L=%u%% R=%u%% "
+        "(raw L=%u R=%u)",
+        isRightEarbuds == RIGHT_BUDS ?
+            "RIGHT_EAR_FW" : "LEFT_EAR_FW",
+        boxChargerStatus.boxChargerBattery,
+        boxChargerStatus.leftEarBudsBattery,
+        boxChargerStatus.rightEarBudsBattery,
+        left_level,
+        right_level);
 
-    bool tws_connected = bts_tws_if_is_tws_link_connected();
-
-    if (s_last_tws_connected != tws_connected)
+#if defined(IBRT)
     {
+        bool tws_connected =
+            bts_tws_if_is_tws_link_connected();
 
-        s_last_tws_connected = tws_connected;
+        DBGPRINT(
+            "[BOX_BAT][TWS] connected=%u",
+            tws_connected);
     }
-
+#endif
 }
 
 uint8_t aiWang_get_profile_conn_num(void)
@@ -1071,32 +1167,196 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
              }
         	 break;
          }
-    case CMD_GET_EAR_POWER:               //Get headphone battery level
+    case CMD_GET_EAR_POWER:               // Get headphone battery level
+    {
+        int8_t local_battery_raw = app_battery_current_level();
+        uint8_t local_battery = 0xFF;
+        uint8_t peer_battery = getPeerBattery();
+
+        /*
+        * app_battery_current_level() 預期回傳 0~100。
+        * 小於 0 視為無效，大於 100 則限制為 100。
+        */
+        if (local_battery_raw < 0)
         {
+            local_battery = 0xFF;
+        }
+        else if (local_battery_raw > 100)
+        {
+            local_battery = 100;
+        }
+        else
+        {
+            local_battery = (uint8_t)local_battery_raw;
+        }
 
-            if (isRightEarbuds)
+        /*
+        * 將本機電量與 TWS Peer 電量寫入正確的左右耳欄位。
+        *
+        * 右耳執行時：
+        *   LOCAL -> rightEarBudsBattery
+        *   PEER  -> leftEarBudsBattery
+        *
+        * 左耳執行時：
+        *   LOCAL -> leftEarBudsBattery
+        *   PEER  -> rightEarBudsBattery
+        */
+        if (isRightEarbuds == RIGHT_BUDS)
+        {
+            if (local_battery <= 100)
             {
-                memset(&boxChargerStatus.boxSoftVersion[0], 0, 16 + 1);
-                memcpy(&boxChargerStatus.boxSoftVersion[0], &uart_cmd_dat[4], 11);
+                boxChargerStatus.rightEarBudsBattery = local_battery;
+            }
 
-                DBGPRINT("[EAR_POWER][BOX] version:%s",
-                        boxChargerStatus.boxSoftVersion);
+            if (peer_battery <= 100)
+            {
+                boxChargerStatus.leftEarBudsBattery = peer_battery;
+            }
+        }
+        else
+        {
+            if (local_battery <= 100)
+            {
+                boxChargerStatus.leftEarBudsBattery = local_battery;
+            }
 
-                aiWangSetBoxVersion(&boxChargerStatus.boxSoftVersion[0], 11);
+            if (peer_battery <= 100)
+            {
+                boxChargerStatus.rightEarBudsBattery = peer_battery;
+            }
+        }
 
-                DBGPRINT("[EAR_POWER][CALL] wired_uart_get_battery_level");
+        /*
+        * 顯示本機與 Peer 電量。
+        * 無效值使用 INVALID，避免顯示成 255%。
+        */
+        if (local_battery <= 100 && peer_battery <= 100)
+        {
+            DBGPRINT("[EAR_POWER][%s] LOCAL=%u%% PEER=%u%%",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+                    local_battery,
+                    peer_battery);
+        }
+        else if (local_battery <= 100)
+        {
+            DBGPRINT("[EAR_POWER][%s] LOCAL=%u%% PEER=INVALID",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+                    local_battery);
+        }
+        else if (peer_battery <= 100)
+        {
+            DBGPRINT("[EAR_POWER][%s] LOCAL=INVALID PEER=%u%%",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+                    peer_battery);
+        }
+        else
+        {
+            DBGPRINT("[EAR_POWER][%s] LOCAL=INVALID PEER=INVALID",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT");
+        }
 
-                getPeerBattery();
+        /*
+        * 顯示目前保存的左耳、右耳與充電盒電量。
+        */
+        if (boxChargerStatus.leftEarBudsBattery <= 100 &&
+            boxChargerStatus.rightEarBudsBattery <= 100 &&
+            boxChargerStatus.boxChargerBattery <= 100)
+        {
+            DBGPRINT("[EAR_POWER][%s] L=%u%% R=%u%% CASE=%u%%",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+                    boxChargerStatus.leftEarBudsBattery,
+                    boxChargerStatus.rightEarBudsBattery,
+                    boxChargerStatus.boxChargerBattery);
+        }
+        else
+        {
+            DBGPRINT("[EAR_POWER][%s] L=%s R=%s CASE=%s",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
 
-                wired_uart_get_battery_level();
+                    (boxChargerStatus.leftEarBudsBattery <= 100) ?
+                        "VALID" : "INVALID",
+
+                    (boxChargerStatus.rightEarBudsBattery <= 100) ?
+                        "VALID" : "INVALID",
+
+                    (boxChargerStatus.boxChargerBattery <= 100) ?
+                        "VALID" : "INVALID");
+
+            DBGPRINT("[EAR_POWER][%s][RAW] L=%u R=%u CASE=%u",
+                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+                    boxChargerStatus.leftEarBudsBattery,
+                    boxChargerStatus.rightEarBudsBattery,
+                    boxChargerStatus.boxChargerBattery);
+        }
+
+        /*
+        * 目前只有右耳保存充電盒版本。
+        *
+        * Frame 格式：
+        * [0]      0x55
+        * [1]      0xAA
+        * [2]      CMD
+        * [3]      Target
+        * [4..N-2] Payload
+        * [N-1]    CRC
+        *
+        * 因此實際 payload 長度為：
+        * uart_dat_len - 5
+        */
+        if (isRightEarbuds == RIGHT_BUDS)
+        {
+            uint8_t version_payload_len = 0;
+
+            memset(boxChargerStatus.boxSoftVersion,
+                0,
+                sizeof(boxChargerStatus.boxSoftVersion));
+
+            if (uart_dat_len > 5)
+            {
+                version_payload_len = uart_dat_len - 5;
+
+                /*
+                * boxSoftVersion 最多保存 16 bytes，
+                * 最後一個 byte 保留給 '\0'。
+                */
+                if (version_payload_len >
+                    (sizeof(boxChargerStatus.boxSoftVersion) - 1))
+                {
+                    version_payload_len =
+                        sizeof(boxChargerStatus.boxSoftVersion) - 1;
+                }
+
+                memcpy(boxChargerStatus.boxSoftVersion,
+                    &uart_cmd_dat[4],
+                    version_payload_len);
+
+                boxChargerStatus.boxSoftVersion[version_payload_len] = '\0';
+
+                DBGPRINT("[EAR_POWER][BOX] version=\"%s\" payload_len=%u frame_len=%u",
+                        boxChargerStatus.boxSoftVersion,
+                        version_payload_len,
+                        uart_dat_len);
+
+                aiWangSetBoxVersion(boxChargerStatus.boxSoftVersion,
+                                    version_payload_len);
             }
             else
             {
-                DBGPRINT("[EAR_POWER][SKIP] not right earbuds");
+                DBGPRINT("[EAR_POWER][BOX] no version payload frame_len=%u",
+                        uart_dat_len);
             }
-
-            break;
         }
+
+        /*
+        * 回報本機耳機電量給充電盒。
+        * 此函式是 UART TX，不是讀取充電盒三組電量。
+        */
+        DBGPRINT("[EAR_POWER][CALL] wired_uart_get_battery_level()");
+
+        wired_uart_get_battery_level();
+
+        break;
+    }
     case CMD_NONE_CASE:
         {
     	    break;
@@ -1311,14 +1571,31 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
     case CMD_SEND_BOX_BATTERY_LEVEL:
     {
-        uint32_t now = hal_sys_timer_get();       
+        uint32_t now = hal_sys_timer_get();
+
+        DBGPRINT(
+            "[BOX_BAT][RX][%s] len=%u target=0x%02X",
+            isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
+            uart_dat_len,
+            uart_cmd_dat[3]);
+
+        DUMP8("[BOX_BAT][RX_RAW] ",
+            uart_cmd_dat,
+            uart_dat_len);
 
         if (ntt_last_box_battery_case_tick != 0)
         {
-            uint32_t diff_ms = TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
+            uint32_t diff_ms =
+                TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
 
             if (diff_ms < NTT_BOX_BATTERY_CASE_INTERVAL_MS)
             {
+                DBGPRINT(
+                    "[BOX_BAT][SKIP][%s] interval=%u ms",
+                    isRightEarbuds == RIGHT_BUDS ?
+                        "RIGHT" : "LEFT",
+                    diff_ms);
+
                 break;
             }
         }
@@ -1327,46 +1604,50 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
         ntt_last_box_battery_case_tick = now;
 
-        DBGPRINT("CMD_SEND_BOX_BATTERY_LEVEL crc dat 0x%04x %s",
-                crc_dat, isRightEarbuds ? "Right" : "Left");
+        DBGPRINT(
+            "[BOX_BAT][PROCESS][%s] crc=0x%04X",
+            isRightEarbuds == RIGHT_BUDS ?
+                "RIGHT" : "LEFT",
+            crc_dat);
 
-        DBGPRINT("[NTT_TWS] CMD_SEND_BOX_BATTERY_LEVEL operateLeftOrRight=%d RIGHT_BUDS=%d LEFT_BUDS=%d isRightEarbuds=%d",
-                operateLeftOrRight, RIGHT_BUDS, LEFT_BUDS, isRightEarbuds);
+        wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+
+        DBGPRINT(
+            "[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",
+            isRightEarbuds == RIGHT_BUDS ?
+                "RIGHT" : "LEFT",
+            boxChargerStatus.boxChargerBattery,
+            boxChargerStatus.leftEarBudsBattery,
+            boxChargerStatus.rightEarBudsBattery);
 
         if (isRightEarbuds == RIGHT_BUDS)
         {
-            wired_uart_get_box_battery(&uart_cmd_dat[4], 6);            
-
-            DBGPRINT("[NTT_TWS] bts_tws_if_is_tws_link_connected(%d)",
-                    bts_tws_if_is_tws_link_connected());
+            DBGPRINT(
+                "[NTT_TWS] connected=%d",
+                bts_tws_if_is_tws_link_connected());
 
             if (!bts_tws_if_is_tws_link_connected())
             {
-                DBGPRINT("[NTT_TWS] TWS not connected, start power on tws pairing");
+                DBGPRINT(
+                    "[NTT_TWS] not connected, start TWS pairing");
 
                 app_ibrt_start_power_on_tws_pairing();
             }
             else
             {
-                DBGPRINT("[NTT_TWS] TWS already connected, sync local case state to peer");
+                DBGPRINT(
+                    "[NTT_TWS] RIGHT received box battery, resend case state");
 
-                /*
-                * 將目前本機保存的 IN_CASE / OUT_CASE
-                * 再傳送給 Peer。
-                */
                 ntt_case_state_sync_resend();
             }
         }
-        else 
+        else
         {
-            /*
-            * 左耳若也需要在收到盒子 UART 資料時，
-            * 主動同步自己的 case state，
-            * 同樣可在 TWS 已連線時呼叫 resend。
-            */
             if (bts_tws_if_is_tws_link_connected())
             {
-                DBGPRINT("[NTT_TWS] LEFT TWS connected, sync local case state to peer");
+                DBGPRINT(
+                    "[NTT_TWS] LEFT received box battery, resend case state");
+
                 ntt_case_state_sync_resend();
             }
         }

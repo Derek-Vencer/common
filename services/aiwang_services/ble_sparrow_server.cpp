@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.4" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.4.2" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -321,73 +321,111 @@ static void ntt_api_send_error_notify(uint8_t rsp_cmd, uint8_t err)
 void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
 {
     uint8_t localBattery;
-    uint8_t peerBattery;
+    uint8_t peerBattery = 0xFF;
     uint8_t boxBattery;
+
     bool peerValid = false;
     bool twsConnected = false;
 
-    uint8_t leftBattery  = 0;
-    uint8_t rightBattery = 0;
-    uint8_t batteryArray[3] = {0};
+    uint8_t leftBattery  = 0xFF;
+    uint8_t rightBattery = 0xFF;
+    uint8_t batteryArray[3] = {0xFF, 0xFF, 0xFF};
 
     if ((data == NULL) || (len == 0))
     {
         TRACE(0, "[BAT][REQ] invalid");
-        ntt_api_send_error_notify(0x33, API_ERR_INVALID_PARAM);
+        ntt_api_send_error_notify(0x33,API_ERR_INVALID_PARAM);
         return;
     }
 
-    localBattery = app_battery_current_level();
-    peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
+    /*
+     * App 專用的 0～100% 連續百分比。
+     */
+    localBattery = app_battery_get_percent();
     boxBattery   = getBoxChargerBattery();
-
-    /* 電池尚未更新完成 */
-    if ((localBattery > 100) || (boxBattery > 100))
-    {
-        ntt_api_send_error_notify(0x33, API_ERR_BUSY);
-        return;
-    }
-
     twsConnected = bts_tws_if_is_tws_link_connected();
 
-    if ((peerBattery != 0xFF) && (peerBattery <= 100))
+    if (twsConnected)
     {
-        peerValid = true;
+        /*
+         * TWS peer cache 已統一儲存 0～100%。
+         * 不可再次做 level 轉百分比。
+         */
+        peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+
+        if ((peerBattery != 0xFF) && (peerBattery <= 100))
+        {
+            peerValid = true;
+        }
+        else
+        {
+            peerBattery = 0xFF;
+            peerValid = false;
+        }
+
+        TRACE(0,
+              "[BAT][PEER_PERCENT] percent=%u valid=%d",
+              peerBattery,
+              peerValid);
     }
     else
     {
-        peerBattery = 0;
+        peerBattery = 0xFF;
         peerValid = false;
     }
 
-#ifdef IBRT
-    app_ibrt_customif_cmd_sync_battery_level(localBattery);
+    if ((localBattery > 100) || (boxBattery > 100))
+    {
+        TRACE(0,
+              "[BAT][BUSY] local=%u box=%u",
+              localBattery,
+              boxBattery);
 
+        ntt_api_send_error_notify(0x33,API_ERR_BUSY);
+        return;
+    }
+
+#ifdef IBRT
+
+    /*
+     * 此函數只讀取並回覆電量，
+     * 不在 App 查詢時再次發送 TWS 同步命令。
+     */
     if (app_ibrt_if_is_right_side())
     {
         rightBattery = localBattery;
-        leftBattery  = peerValid ? peerBattery : 0;
+        leftBattery  = peerValid ? peerBattery : 0xFF;
     }
     else
     {
         leftBattery  = localBattery;
-        rightBattery = peerValid ? peerBattery : 0;
+        rightBattery = peerValid ? peerBattery : 0xFF;
     }
+
 #else
-    leftBattery  = localBattery;
-    rightBattery = peerValid ? peerBattery : 0;
+
+    leftBattery = localBattery;
+    rightBattery = peerValid ? peerBattery : 0xFF;
+
 #endif
-	TRACE(0,
-      "[BAT][PEER] tws=%d peer=%d valid=%d",
-      twsConnected,
-      peerBattery,
-      peerValid);
-      
+
+    TRACE(0,
+          "[BAT][PEER] tws=%d peer=%u valid=%d",
+          twsConnected,
+          peerBattery,
+          peerValid);
+
+    TRACE(0,
+          "[BAT][RSP] L=%u R=%u CASE=%u",
+          leftBattery,
+          rightBattery,
+          boxBattery);
+
     batteryArray[0] = leftBattery;
     batteryArray[1] = rightBattery;
     batteryArray[2] = boxBattery;
 
-    sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray));
+    sparraw_tx_msg( 0x31,batteryArray,sizeof(batteryArray));
 }
 
 #define NTT_BT_NAME_MAX_LEN             45
@@ -2956,8 +2994,9 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 				uint8_t rightBattery = 0;
 				uint8_t batteryArray[3] = {0, 0, 0};
 
-				localBattery = app_battery_current_level();
-				peerBattery  = app_ibrt_customif_get_tws_peer_battery_level();
+                localBattery = app_battery_get_precise_percent();
+                peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+
 				boxBattery   = getBoxChargerBattery();
 				twsConnected = bts_tws_if_is_tws_link_connected();
                 peerValid = twsConnected && (peerBattery != 0xFF) && (peerBattery <= 100);

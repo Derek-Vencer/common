@@ -3170,32 +3170,17 @@ void hal_codec_dac2_mute(bool mute)
 static float db_to_amplitude_ratio(float db)
 {
     float coef;
-    float db_input = db;
-    int32_t path;
 
     if (db == ZERODB_DIG_DBVAL) {
-        coef = 1.0f;
-        path = 0;
+        coef = 1;
     } else if (db <= MIN_DIG_DBVAL) {
-        coef = 0.0f;
-        path = 1;
+        coef = 0;
     } else {
         if (db > MAX_DIG_DBVAL) {
             db = MAX_DIG_DBVAL;
         }
-
         coef = db_to_float(db);
-        path = 2;
     }
-
-    HAL_TRACE(6,
-        "[NTT_DB] in_x10=%d used_x10=%d min_x10=%d max_x10=%d path=%d coef_x1m=%d",
-        (int32_t)(db_input * 10.0f),
-        (int32_t)(db * 10.0f),
-        (int32_t)(MIN_DIG_DBVAL * 10.0f),
-        (int32_t)(MAX_DIG_DBVAL * 10.0f),
-        path,
-        (int32_t)(coef * 1000000.0f));
 
     return coef;
 }
@@ -3203,7 +3188,6 @@ static float db_to_amplitude_ratio(float db)
 static float digdac_gain_to_float(int32_t gain)
 {
     float coef;
-    int32_t gain_input = gain;
 
 #if defined(NOISE_GATING) && defined(NOISE_REDUCTION)
     gain += digdac_gain_offset_nr;
@@ -3211,37 +3195,12 @@ static float digdac_gain_to_float(int32_t gain)
 
     coef = db_to_amplitude_ratio(gain);
 
-    /* 尚未經過 DC/ANC 補償 */
-    int32_t coef_before = (int32_t)(coef * 1000000.0f);
-
 #ifdef AUDIO_OUTPUT_DC_CALIB
     coef *= dac_dc_gain_attn;
 #endif
 
-#if defined(ANC_APP) && defined(NTT_ANC_ENABLED)
+#ifdef ANC_APP
     coef *= anc_boost_gain_attn;
-#endif
-
-    /* 最終輸出 */
-    int32_t coef_final = (int32_t)(coef * 1000000.0f);
-
-    HAL_TRACE(4,
-        "[NTT_GAIN] in=%d out=%d coef=%d final=%d",
-        gain_input,
-        gain,
-        coef_before,
-        coef_final);
-
-#ifdef AUDIO_OUTPUT_DC_CALIB
-    HAL_TRACE(1,
-        "[NTT_GAIN] dc_attn=%d",
-        (int32_t)(dac_dc_gain_attn * 1000000.0f));
-#endif
-
-#if defined(ANC_APP) && defined(NTT_ANC_ENABLED)
-    HAL_TRACE(1,
-        "[NTT_GAIN] anc_attn=%d",
-        (int32_t)(anc_boost_gain_attn * 1000000.0f));
 #endif
 
     return coef;
@@ -3264,7 +3223,6 @@ void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
 
 static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
 {
-    HAL_TRACE(1,"[NTT_CODEC] Set Digital DAC Gain=%d",gain);
     uint32_t val;
     float coef;
     bool mute;
@@ -3356,7 +3314,6 @@ static void hal_codec_set_dig_dac2_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain
 #ifdef AUDIO_OUTPUT_SW_GAIN
 static void hal_codec_set_sw_gain(int32_t gain)
 {
-    HAL_TRACE(1,"[NTT_CODEC] Set SW Gain=%d",gain);
     float coef;
     bool mute;
 
@@ -3369,23 +3326,6 @@ static void hal_codec_set_sw_gain(int32_t gain)
     } else {
         coef = digdac_gain_to_float(gain);
     }
-
-        /*
-     * 避免 HAL_TRACE 不支援直接輸出 float，
-     * 將 coefficient 轉成 x1000000 的整數。
-     *
-     * 例如：
-     * coef = 1.000000 -> coef_x1m = 1000000
-     * coef = 0.794328 -> coef_x1m = 794328
-     */
-    int32_t coef_x1m = (int32_t)(coef * 1000000.0f);
-
-    HAL_TRACE(4,
-        "[NTT_CODEC] SW_GAIN gain=%d mute=%d coef_x1m=%d callback=%d",
-        gain,
-        mute ? 1 : 0,
-        coef_x1m,
-        sw_output_coef_callback ? 1 : 0);
 
     if (sw_output_coef_callback) {
         sw_output_coef_callback(coef);
@@ -4296,19 +4236,6 @@ int hal_codec_setup_stream(enum HAL_CODEC_ID_T id, enum AUD_STREAM_T stream, con
             const struct CODEC_DAC_VOL_T * dac_gain_db;
 
             dac_gain_db = hal_codec_get_dac_volume(cfg->vol);
-
-            HAL_TRACE(4,
-                "[NTT_CODEC] vol=%u pa=%d dig=%d sw_gain=%d",
-                cfg->vol,
-                (int32_t)dac_gain_db->tx_pa_gain,
-                dac_gain_db->sdac_volume,
-            #ifdef AUDIO_OUTPUT_SW_GAIN
-                1
-            #else
-                0
-            #endif
-            );
-
 #ifdef AUDIO_OUTPUT_SW_GAIN
             hal_codec_set_sw_gain(dac_gain_db->sdac_volume);
 #else

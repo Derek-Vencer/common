@@ -3374,7 +3374,6 @@ POSSIBLY_UNUSED int32_t audio_eq_set_onoff(int32_t onoff, AUDIO_EQ_TYPE_T audio_
 
 void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
 {
-    AUDIO_PROCESS_TRACE(1,"ntt_audio_drc_apply_by_eq_index=%d",eq_index);
     uint8_t drc_index = eq_index;
 
     if (drc_index >= AUDIO_DRC_CFG_LIST_NUM)

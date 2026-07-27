@@ -792,262 +792,313 @@ static void af_codec_dac3_output_gain_changed(float coef)
 
     return gain_out;
 }*/
-static void af_codec_sw_gain_process(uint8_t *buf,
-                                     uint32_t size,
-                                     enum AUD_BITS_T bits,
-                                     enum AUD_CHANNEL_NUM_T chans,
-                                     SW_GAIN_IIR_T *iir,
-                                     float coef)
+static void af_codec_sw_gain_process(uint8_t *buf, uint32_t size, enum AUD_BITS_T bits,
+                            enum AUD_CHANNEL_NUM_T chans, SW_GAIN_IIR_T *iir, float coef)
 {
-    uint32_t i;
-    uint32_t pcm_len;
-
+    uint32_t i,pcm_len;
     int32_t pcm_out_l;
     int32_t pcm_out_r;
 
-    float iir_gain;
-    float output_gain;
+    float output_gain=1.0f;
 
-    float coefs_b0;
-    float coefs_b1;
-    float coefs_b2;
+    //AUDIOFLINGER_TRACE(1,"af_codec_sw_gain_process:%d",(int32_t)(saved_output_coef*1000));
 
-    float coefs_a1;
-    float coefs_a2;
+    float coefs_b0,coefs_b1,coefs_b2;
+    float coefs_a1,coefs_a2;
+    float history_x0,history_x1;
+    float history_y0,history_y1;
 
-    float history_x0;
-    float history_x1;
+    coefs_b0=iir->coefs_b[0];
+    coefs_b1=iir->coefs_b[1];
+    coefs_b2=iir->coefs_b[2];
 
-    float history_y0;
-    float history_y1;
+    coefs_a1=iir->coefs_a[1];
+    coefs_a2=iir->coefs_a[2];
 
-    /*
-     * NTT TEST:
-     *
-     * 保留 50% SW Gain IIR 平滑效果。
-     *
-     * 原始版本：
-     *     output_gain = iir_gain;
-     *
-     * 完全 bypass：
-     *     output_gain = coef;
-     *
-     * 本版本：
-     *     output_gain = 50% iir_gain + 50% coef;
-     */
-#define NTT_SW_GAIN_IIR_MIX       (0.5f)
-#define NTT_SW_GAIN_DIRECT_MIX    (1.0f - NTT_SW_GAIN_IIR_MIX)
+    history_x0=iir->history_x[0];
+    history_x1=iir->history_x[1];
 
-    if (buf == NULL || size == 0 || iir == NULL) {
-        return;
-    }
+    history_y0=iir->history_y[0];
+    history_y1=iir->history_y[1];
 
-    coefs_b0 = iir->coefs_b[0];
-    coefs_b1 = iir->coefs_b[1];
-    coefs_b2 = iir->coefs_b[2];
+   //AUDIOFLINGER_TRACE(1,"chans:%d,bits:%d,size:%d",chans,bits,size);
 
-    coefs_a1 = iir->coefs_a[1];
-    coefs_a2 = iir->coefs_a[2];
+   // uint32_t lock;
 
-    history_x0 = iir->history_x[0];
-    history_x1 = iir->history_x[1];
+   // lock = int_lock();
 
-    history_y0 = iir->history_y[0];
-    history_y1 = iir->history_y[1];
+   // uint32_t start_ticks = hal_fast_sys_timer_get();
 
-    /*
-     * Mono playback
-     */
-    if (chans == AUD_CHANNEL_NUM_1) {
-        /*
-         * 16-bit PCM
-         */
-        if (bits <= AUD_BITS_16) {
-            int16_t *pcm_buf = (int16_t *)buf;
-
+    if(chans==AUD_CHANNEL_NUM_1)
+    {
+        if (bits <= AUD_BITS_16)
+        {
             pcm_len = size / sizeof(int16_t);
-
-            for (i = 0; i < pcm_len; i++) {
-                /*
-                 * 原始 IIR gain 計算
-                 */
-                iir_gain =
-                    coef * coefs_b0 +
-                    history_x0 * coefs_b1 +
-                    history_x1 * coefs_b2 -
-                    history_y0 * coefs_a1 -
-                    history_y1 * coefs_a2;
-
-                /*
-                 * 更新 IIR history
-                 */
-                history_y1 = history_y0;
-                history_y0 = iir_gain;
-
-                history_x1 = history_x0;
-                history_x0 = coef;
-
-                /*
-                 * 50% IIR + 50% direct gain
-                 */
-                output_gain =
-                    iir_gain * NTT_SW_GAIN_IIR_MIX +
-                    coef * NTT_SW_GAIN_DIRECT_MIX;
-
-                /*
-                 * 保留原有 fade / prompt ducking
-                 */
-                output_gain *=
-                    fade_smooth_gain(&dac1_fade, dac1_algo_gain);
-
-                pcm_out_l =
-                    (int32_t)((float)pcm_buf[i] * output_gain);
-
-                pcm_buf[i] =
-                    (int16_t)__SSAT(pcm_out_l, 16);
-            }
-        }
-        /*
-         * 24-bit PCM stored in int32_t
-         */
-        else {
-            int32_t *pcm_buf = (int32_t *)buf;
-
-            pcm_len = size / sizeof(int32_t);
-
-            for (i = 0; i < pcm_len; i++) {
-                iir_gain =
-                    coef * coefs_b0 +
-                    history_x0 * coefs_b1 +
-                    history_x1 * coefs_b2 -
-                    history_y0 * coefs_a1 -
-                    history_y1 * coefs_a2;
-
-                history_y1 = history_y0;
-                history_y0 = iir_gain;
-
-                history_x1 = history_x0;
-                history_x0 = coef;
-
-                output_gain =
-                    iir_gain * NTT_SW_GAIN_IIR_MIX +
-                    coef * NTT_SW_GAIN_DIRECT_MIX;
-
-                output_gain *=
-                    fade_smooth_gain(&dac1_fade, dac1_algo_gain);
-
-                pcm_out_l =
-                    (int32_t)((float)pcm_buf[i] * output_gain);
-
-                pcm_buf[i] =
-                    __SSAT(pcm_out_l, 24);
-            }
-        }
-    }
-    /*
-     * Stereo playback
-     */
-    else if (chans == AUD_CHANNEL_NUM_2) {
-        /*
-         * 16-bit stereo PCM
-         */
-        if (bits <= AUD_BITS_16) {
             int16_t *pcm_buf = (int16_t *)buf;
-
-            pcm_len = size / sizeof(int16_t);
-
-            for (i = 0; (i + 1) < pcm_len; i += 2) {
-                iir_gain =
-                    coef * coefs_b0 +
-                    history_x0 * coefs_b1 +
-                    history_x1 * coefs_b2 -
-                    history_y0 * coefs_a1 -
-                    history_y1 * coefs_a2;
+            for (i = 0; i < pcm_len;) {
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
 
                 history_y1 = history_y0;
-                history_y0 = iir_gain;
-
+                history_y0 = output_gain;
                 history_x1 = history_x0;
                 history_x0 = coef;
 
-                output_gain =
-                    iir_gain * NTT_SW_GAIN_IIR_MIX +
-                    coef * NTT_SW_GAIN_DIRECT_MIX;
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                i++;
 
-                /*
-                 * Stereo frame 左右聲道共用同一個 gain
-                 */
-                output_gain *=
-                    fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+#ifdef SW_GAIN_OPTI_MIPS_FOR_ALIGN_4
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
 
-                pcm_out_l =
-                    (int32_t)((float)pcm_buf[i] * output_gain);
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
 
-                pcm_out_r =
-                    (int32_t)((float)pcm_buf[i + 1] * output_gain);
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                i++;
 
-                pcm_buf[i] =
-                    (int16_t)__SSAT(pcm_out_l, 16);
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
 
-                pcm_buf[i + 1] =
-                    (int16_t)__SSAT(pcm_out_r, 16);
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                i++;
+
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                i++;
+#endif
             }
         }
-        /*
-         * 24-bit stereo PCM stored in int32_t
-         */
-        else {
-            int32_t *pcm_buf = (int32_t *)buf;
-
+        else
+        {
             pcm_len = size / sizeof(int32_t);
-
-            for (i = 0; (i + 1) < pcm_len; i += 2) {
-                iir_gain =
-                    coef * coefs_b0 +
-                    history_x0 * coefs_b1 +
-                    history_x1 * coefs_b2 -
-                    history_y0 * coefs_a1 -
-                    history_y1 * coefs_a2;
+            int32_t *pcm_buf = (int32_t *)buf;
+            for (i = 0; i < pcm_len;) {
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
 
                 history_y1 = history_y0;
-                history_y0 = iir_gain;
-
+                history_y0 = output_gain;
                 history_x1 = history_x0;
                 history_x0 = coef;
 
-                output_gain =
-                    iir_gain * NTT_SW_GAIN_IIR_MIX +
-                    coef * NTT_SW_GAIN_DIRECT_MIX;
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                i++;
+#ifdef SW_GAIN_OPTI_MIPS_FOR_ALIGN_4
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
 
-                output_gain *=
-                    fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
 
-                pcm_out_l =
-                    (int32_t)((float)pcm_buf[i] * output_gain);
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                i++;
 
-                pcm_out_r =
-                    (int32_t)((float)pcm_buf[i + 1] * output_gain);
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
 
-                pcm_buf[i] =
-                    __SSAT(pcm_out_l, 24);
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
 
-                pcm_buf[i + 1] =
-                    __SSAT(pcm_out_r, 24);
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                i++;
+
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                i++;
+#endif
+            }
+        }
+    }
+    else if(chans == AUD_CHANNEL_NUM_2)
+    {
+        if (bits <= AUD_BITS_16)
+        {
+            pcm_len = size / sizeof(int16_t);
+            int16_t *pcm_buf = (int16_t *)buf;
+            for (i = 0; i < pcm_len;)
+            {
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 16);
+                i=i+2;
+
+#ifdef SW_GAIN_OPTI_MIPS_FOR_ALIGN_4
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 16);
+                i=i+2;
+
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 16);
+                i=i+2;
+
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 16);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 16);
+                i=i+2;
+#endif
+            }
+        }
+        else
+        {
+            pcm_len = size / sizeof(int32_t);
+            int32_t *pcm_buf = (int32_t *)buf;
+            for (i = 0; i < pcm_len;) {
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 24);
+                i=i+2;
+#ifdef SW_GAIN_OPTI_MIPS_FOR_ALIGN_4
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 24);
+                i=i+2;
+
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 24);
+                i=i+2;
+
+                output_gain = coef * coefs_b0 + history_x0 * coefs_b1 + history_x1 * coefs_b2
+                                              - history_y0 * coefs_a1 - history_y1 * coefs_a2;
+
+                history_y1 = history_y0;
+                history_y0 = output_gain;
+                history_x1 = history_x0;
+                history_x0 = coef;
+
+                output_gain *= fade_smooth_gain(&dac1_fade, dac1_algo_gain);
+                pcm_out_l = (int32_t)(pcm_buf[i] * output_gain);
+                pcm_out_r = (int32_t)(pcm_buf[i+1] * output_gain);
+                pcm_buf[i] = __SSAT(pcm_out_l, 24);
+                pcm_buf[i+1] = __SSAT(pcm_out_r, 24);
+                i=i+2;
+#endif
             }
         }
     }
 
-    /*
-     * 寫回 IIR history
-     */
     iir->history_y[1] = history_y1;
     iir->history_y[0] = history_y0;
-
     iir->history_x[1] = history_x1;
     iir->history_x[0] = history_x0;
 
-#undef NTT_SW_GAIN_IIR_MIX
-#undef NTT_SW_GAIN_DIRECT_MIX
+    //uint32_t end_ticks = hal_fast_sys_timer_get();
+
+    //int_unlock(lock);
 }
 #endif /* #if defined(AUDIO_OUTPUT_SW_GAIN) || defined(AUDIO_OUTPUT_DAC2_SW_GAIN) */
 

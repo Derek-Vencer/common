@@ -366,6 +366,172 @@ static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
 	return level;
 }
 
+/*
+ * App 專用精細電量百分比。
+ *
+ * 使用與手機 HFP 相同的電壓分級邊界，
+ * 但在每個 10% 區間內做線性內插。
+ *
+ * 例如：
+ * 3720mV -> 40%
+ * 3735mV -> 45%
+ * 3749mV -> 49%
+ * 3750mV -> 50%
+ */
+uint8_t app_battery_get_precise_percent(void)
+{
+    uint16_t volt = app_battery_measure.currvolt;
+
+    /*
+     * 升冪排列的電壓邊界。
+     *
+     * 3100mV 以下視為接近關機電壓，回傳 0%。
+     * 4040mV 以上手機已顯示 100%，App 也固定為 100%。
+     */
+    static const uint16_t voltage_table[] =
+    {
+        3100,
+        3580,
+        3660,
+        3720,
+        3750,
+        3790,
+        3830,
+        3880,
+        3940,
+        4040
+    };
+
+    static const uint8_t percent_table[] =
+    {
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90,
+        100
+    };
+
+    const uint8_t table_count =
+        sizeof(voltage_table) / sizeof(voltage_table[0]);
+
+    uint8_t percent = 0;
+
+    /*
+     * 低於最低有效電壓時顯示 0%。
+     */
+    if (volt <= voltage_table[0])
+    {
+        percent = 0;
+    }
+    /*
+     * 4040mV 以上，手機與 App 都顯示 100%。
+     */
+    else if (volt >= voltage_table[table_count - 1])
+    {
+        percent = 100;
+    }
+    else
+    {
+        for (uint8_t i = 0; i < (table_count - 1); i++)
+        {
+            uint16_t low_volt  = voltage_table[i];
+            uint16_t high_volt = voltage_table[i + 1];
+
+            if ((volt >= low_volt) &&
+                (volt < high_volt))
+            {
+                uint8_t low_percent =
+                    percent_table[i];
+
+                uint8_t high_percent =
+                    percent_table[i + 1];
+
+                uint32_t volt_offset =
+                    (uint32_t)(volt - low_volt);
+
+                uint32_t volt_range =
+                    (uint32_t)(high_volt - low_volt);
+
+                uint32_t percent_range =
+                    (uint32_t)(high_percent - low_percent);
+
+                percent =
+                    low_percent +
+                    (uint8_t)((volt_offset * percent_range) /
+                              volt_range);
+
+                break;
+            }
+        }
+    }
+
+    BATTERY_TRACE(2,
+                  "[BAT_PRECISE] volt=%d percent=%d",
+                  volt,
+                  percent);
+
+    return percent;
+}
+
+uint8_t app_battery_get_percent(void)
+{
+    uint16_t volt = app_battery_measure.currvolt;
+    uint8_t percent;
+
+    /*
+     * 電池有效範圍：
+     * 3100mV = 0%
+     * 4130mV = 100%
+     */
+    if (volt <= 3100)
+    {
+        percent = 0;
+    }
+    else if (volt >= 4130)
+    {
+        percent = 100;
+    }
+    else
+    {
+        percent =
+            (uint8_t)(((uint32_t)(volt - 3100) * 100) /
+                      (4130 - 3100));
+    }
+
+    BATTERY_TRACE(2,
+                  "[BAT_PERCENT] volt=%d percent=%d",
+                  volt,
+                  percent);
+
+    return percent;
+}
+
+uint8_t app_battery_get_display_percent(void)
+{
+    uint8_t level =
+        aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
+
+    /*
+     * 與目前 app_status_battery_report() 的 BLE 顯示規則一致。
+     *
+     * level 0 -> 10%
+     * level 1 -> 20%
+     * ...
+     * level 8 -> 90%
+     * level 9/10 -> 100%
+     */
+    if (level >= 9)
+    {
+        return 100;
+    }
+
+    return (uint8_t)((level + 1) * 10);
+}
 
 #ifdef BESUI_STEREO_EN
 int app_ui_battery_charger_handle_process(void)
@@ -542,7 +708,12 @@ int app_status_battery_report(uint8_t level)
 #else
 int app_status_battery_report(uint8_t level)
 {
-	BATTERY_TRACE(1,"%s level=%d", __func__, level);
+    /* HFP battery level only supports 0~9 */
+    uint8_t hfp_level = (level >= 9) ? 9 : level;
+
+    BATTERY_TRACE(2,"%s level=%d hfp_level=%d",
+                  __func__, level, hfp_level);
+
 #if defined(APP_10_SECOND_TIMER_EN)
     app_10_second_timer_check();
 #endif
@@ -559,14 +730,19 @@ int app_status_battery_report(uint8_t level)
         {
             BATTERY_TRACE(0,"[PHONE_CONNECTED] request case battery");
             wired_uart_mobile_connected_get_box_battery();
-            BATTERY_TRACE(1,"[BATT] HFP connected level=%d",level);
-            app_hfp_set_battery_level(level);
+
+            BATTERY_TRACE(2,
+                          "[BATT] HFP connected raw=%d report=%d",
+                          level,
+                          hfp_level);
+
+            app_hfp_set_battery_level(hfp_level);
         }
         else
         {
 #if defined(BLE_BATT_ENABLE)
 
-            /* HFP battery level(0~9) -> BLE percent(0~100) */
+            /* BLE 使用百分比，可維持原始 level 換算 */
             uint8_t percent =
                 (level >= 9) ? 100 : ((level + 1) * 10);
 
@@ -590,7 +766,7 @@ int app_status_battery_report(uint8_t level)
 
 #elif defined(BT_HFP_SUPPORT)
 
-        app_hfp_set_battery_level(level);
+        app_hfp_set_battery_level(hfp_level);
 
 #endif
 
@@ -611,36 +787,53 @@ int app_status_battery_report(uint8_t level)
 
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
+    BATTERY_TRACE(0,"app_battery_handle_process_normal status = %d",status);
     int8_t level = 0;
     switch (status)
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
-            BATTERY_TRACE(1,"UNDERVOLT:%d", prams.volt);
-#if (!defined(BESUI_TWS_EN) && !defined(BESUI_STEREO_EN))
+        {
+            BATTERY_TRACE(1, "UNDERVOLT:%d", prams.volt);
             app_status_indication_set(APP_STATUS_INDICATION_CHARGENEED);
-#ifdef MEDIA_PLAYER_SUPPORT
-#if defined(IBRT)
 
-#else
-            media_PlayAudio(AUD_ID_BT_BATTERY_LOW, 0);
-#endif
-#endif
-#endif
+        #ifdef MEDIA_PLAYER_SUPPORT
+
+            BATTERY_TRACE(1,"[LOW_BAT] local ear play, volt=%d",prams.volt);
+            media_PlayAudio(AUD_ID_BT_BATTERY_LOW,0);
+
+        #endif
+        }
             // FALLTHROUGH
         case APP_BATTERY_STATUS_NORMAL:
         case APP_BATTERY_STATUS_OVERVOLT:
+        {
             app_battery_measure.currvolt = prams.volt;
-            level = (prams.volt-APP_BATTERY_PD_MV)/APP_BATTERY_MV_BASE;
 
-            if (level<APP_BATTERY_LEVEL_MIN)
+            level =
+                (prams.volt - APP_BATTERY_PD_MV) /
+                APP_BATTERY_MV_BASE;
+
+            if (level < APP_BATTERY_LEVEL_MIN)
+            {
                 level = APP_BATTERY_LEVEL_MIN;
-            if (level>APP_BATTERY_LEVEL_MAX)
+            }
+
+            if (level > APP_BATTERY_LEVEL_MAX)
+            {
                 level = APP_BATTERY_LEVEL_MAX;
-#ifdef __INTERCONNECTION__
-            APP_BATTERY_INFO_T* pBatteryInfo;
-            pBatteryInfo = (APP_BATTERY_INFO_T*)&app_battery_measure.currentBatteryInfo;
+            }
+
+        #ifdef __INTERCONNECTION__
+
+            APP_BATTERY_INFO_T *pBatteryInfo;
+
+            pBatteryInfo =
+                (APP_BATTERY_INFO_T *)
+                &app_battery_measure.currentBatteryInfo;
+
             pBatteryInfo->batteryLevel = level;
-            if(level == APP_BATTERY_LEVEL_MAX)
+
+            if (level == APP_BATTERY_LEVEL_MAX)
             {
                 level = 9;
             }
@@ -648,43 +841,87 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             {
                 level /= 10;
             }
-#else
 
-#ifdef BESUI_TWS_EN
-            level = app_battery_level_tran_process(app_battery_measure.currvolt);
+        #else
+
+        #ifdef BESUI_TWS_EN
+
+            level =
+                app_battery_level_tran_process(
+                    app_battery_measure.currvolt);
+
             app_battery_measure.currlevel = level;
-            app_battery_low_voice_enable_set(app_battery_measure.currlevel);
+
+            app_battery_low_voice_enable_set(
+                app_battery_measure.currlevel);
+
             level = app_battery_level_compare();
+
             app_battery_low_voice_play_process();
 
-#ifdef BATTERY_SWITCH_ROLE_EN
+        #ifdef BATTERY_SWITCH_ROLE_EN
             besui_battery_role_switch();
-#endif
+        #endif
 
-#else
+        #else
 
-#if defined(BESUI_STEREO_EN)
-            level = stereo_battery_level_process(app_battery_measure.status, app_battery_measure.currvolt);
-#endif
+        #if defined(BESUI_STEREO_EN)
+
+            level =
+                stereo_battery_level_process(
+                    app_battery_measure.status,
+                    app_battery_measure.currvolt);
+
+        #endif
 
             app_battery_measure.currlevel = level;
-#endif
 
-#endif
-            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
+        #endif
+        #endif
+
+        /*
+        * App 與 TWS Peer 使用精細的 0～100%。
+        */
+        uint8_t app_percent = app_battery_get_precise_percent();
+
 #if defined(IBRT)
-            {
-                static int8_t last_sync_level = -1;
+        {
+            static int16_t last_sync_percent = -1;
 
-                if (last_sync_level != level)
-                {
-                    last_sync_level = level;
-                    app_ibrt_customif_cmd_sync_battery_level(level);
-                }
+            if (last_sync_percent != app_percent)
+            {
+                last_sync_percent = app_percent;
+
+                app_ibrt_customif_cmd_sync_battery_level(
+                    app_percent);
+
+                BATTERY_TRACE(1,
+                            "[BAT_SYNC] percent=%d",
+                            app_percent);
             }
+        }
 #endif
+
+/*
+ * 手機 HFP 繼續使用原本的 0～9 level。
+ */
+level =
+    aiWangReportNormalLevelHandler(
+        app_battery_measure.currvolt);
+
+app_status_battery_report(level);
+
+            /*
+            * 手機 HFP 使用 0～9 level。
+            */
+            level =
+                aiWangReportNormalLevelHandler(
+                    app_battery_measure.currvolt);
+
             app_status_battery_report(level);
+
             break;
+        }
 
         case APP_BATTERY_STATUS_PDVOLT:
 #ifndef BT_USB_AUDIO_DUAL_MODE
