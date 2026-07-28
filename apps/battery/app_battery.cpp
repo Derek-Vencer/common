@@ -83,7 +83,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #endif
 
 #ifndef APP_BATTERY_MIN_MV
-#define APP_BATTERY_MIN_MV (3200)
+#define APP_BATTERY_MIN_MV (3350)
 #endif
 
 #ifndef APP_BATTERY_MAX_MV
@@ -385,12 +385,12 @@ uint8_t app_battery_get_precise_percent(void)
     /*
      * 升冪排列的電壓邊界。
      *
-     * 3100mV 以下視為接近關機電壓，回傳 0%。
+     * 3300mV 以下視為接近關機電壓，回傳 0%。
      * 4040mV 以上手機已顯示 100%，App 也固定為 100%。
      */
     static const uint16_t voltage_table[] =
     {
-        3100,
+        3300,
         3580,
         3660,
         3720,
@@ -485,10 +485,10 @@ uint8_t app_battery_get_percent(void)
 
     /*
      * 電池有效範圍：
-     * 3100mV = 0%
+     * 3300mV = 0%
      * 4130mV = 100%
      */
-    if (volt <= 3100)
+    if (volt <= 3300)
     {
         percent = 0;
     }
@@ -499,8 +499,8 @@ uint8_t app_battery_get_percent(void)
     else
     {
         percent =
-            (uint8_t)(((uint32_t)(volt - 3100) * 100) /
-                      (4130 - 3100));
+            (uint8_t)(((uint32_t)(volt - 3300) * 100) /
+                      (4130 - 3300));
     }
 
     BATTERY_TRACE(2,
