@@ -1526,7 +1526,8 @@ static void on_accept_call(void)    {
 	CALL_STATE_E call_state = app_bt_get_call_state();
     if ((call_state == CALL_STATE_INCOMING) || (call_state == CALL_STATE_THREE_WAY_INCOMING))
     {
-       bt_key_handle_call(call_state);
+       //bt_key_handle_call(call_state);
+       app_audio_control_call_answer();
     }
     
 #endif
