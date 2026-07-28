@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.4" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.5" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
