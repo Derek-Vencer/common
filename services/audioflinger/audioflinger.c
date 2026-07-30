@@ -15,7 +15,6 @@
  ****************************************************************************/
 #include "plat_addr_map.h"
 #include "audioflinger.h"
-#include "af_stream_sw_gain.h"
 #include "analog.h"
 #include "cmsis.h"
 #include "codec_tlv32aic32.h"
@@ -742,7 +741,6 @@ static void af_dump_cfg()
 static void af_codec_dac1_output_gain_changed(float coef)
 {
     dac1_saved_output_coef = coef;
-    af_stream_sw_gain_set_gain_coef(AUD_STREAM_ID_0,AUD_STREAM_PLAYBACK,coef);
     //AUDIOFLINGER_TRACE(1, "output_gain_change da1:%08d, final:%08d", (int32_t)(coef * 10000000), (int32_t)(dac1_saved_output_coef * 10000000));
 }
 
@@ -1353,10 +1351,7 @@ static void af_codec_playback_post_handler(uint8_t *buf, uint32_t len, const str
 #if defined(AUDIO_OUTPUT_SW_GAIN) || defined(AUDIO_OUTPUT_DAC2_SW_GAIN) \
     || defined(AUDIO_OUTPUT_DAC3_SW_GAIN)
     if (gain_iir != NULL) {
-
-        af_stream_sw_gain_set_gain_coef(id,AUD_STREAM_PLAYBACK,saved_output_coef);
-        af_stream_sw_gain_process(id,AUD_STREAM_PLAYBACK,buf,len);
-
+        af_codec_sw_gain_process(buf,len,bits,chans,gain_iir,saved_output_coef);
 #if defined(AUDIO_OUTPUT_SW_LIMITER) || defined(AUDIO_OUTPUT_DAC2_SW_LIMITER) \
     || defined(AUDIO_OUTPUT_DAC3_SW_LIMITER)
     } else if (pFLimiter != NULL) {
@@ -2243,7 +2238,6 @@ uint32_t af_stream_open(enum AUD_STREAM_ID_T id, enum AUD_STREAM_T stream, const
 #ifdef AUDIO_OUTPUT_I2S_SW_GAIN
             af_stream_sw_gain_open(id, stream, cfg->sample_rate, cfg->bits, cfg->channel_num,
                                     AUDIO_OUTPUT_SW_GAIN_MODE_IIR);
-            af_stream_sw_gain_set_gain_coef(id,stream,dac1_saved_output_coef);
 #endif
         }
         else if(device == AUD_STREAM_USE_I2S0_SLAVE)
@@ -2261,7 +2255,6 @@ uint32_t af_stream_open(enum AUD_STREAM_ID_T id, enum AUD_STREAM_T stream, const
 #ifdef AUDIO_OUTPUT_I2S_SW_GAIN
             af_stream_sw_gain_open(id, stream, cfg->sample_rate, cfg->bits, cfg->channel_num,
                                     AUDIO_OUTPUT_SW_GAIN_MODE_IIR);
-            af_stream_sw_gain_set_gain_coef(id,stream,dac1_saved_output_coef);
 #endif
         }
         else if(device == AUD_STREAM_USE_I2S1_SLAVE)

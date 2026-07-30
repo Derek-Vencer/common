@@ -71,7 +71,7 @@
 // 串口空闲定时器
 static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
-#define UART_IDLE_TIMEOUT_MS 2000
+#define UART_IDLE_TIMEOUT_MS 500
 // 空闲超时回调函数
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
@@ -96,6 +96,7 @@ bool ntt_first_no_mobile_pair_mode = false;
 extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
 extern "C" void ntt_case_state_sync_local_update(bool in_case);
+static bool aiWang_disconnect_second_phone_for_pairing(void);
 
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
@@ -1010,6 +1011,59 @@ void disconnected_device(bool all_device_flag, uint8_t device_id)
     }
 }
 
+/**
+ * @brief 進入新手機配對前，若目前已有兩支手機連線，
+ *        保留第一支手機，只斷開第二支手機。
+ *
+ * @return true  已觸發第二支手機斷線
+ * @return false 未滿兩支手機，沒有執行斷線
+ */
+bool aiWang_disconnect_second_phone_for_pairing(void)
+{
+    struct BT_DEVICE_T *device0 = app_bt_get_device(0);
+    struct BT_DEVICE_T *device1 = app_bt_get_device(1);
+
+    bool device0_connected =
+        (device0 != NULL) && device0->acl_is_connected;
+
+    bool device1_connected =
+        (device1 != NULL) && device1->acl_is_connected;
+
+    DBGPRINT("[PAIR] phone0=%d phone1=%d",
+             device0_connected,
+             device1_connected);
+
+    /*
+     * 只有兩個手機槽都存在 ACL 連線時，
+     * 才斷開第二支手機 device_id = 1。
+     */
+    if (device0_connected && device1_connected)
+    {
+        /*
+         * TWS 已連線時，只由 MASTER 執行手機斷線。
+         * 避免左右耳同時對手機連線進行操作。
+         */
+        if (bts_tws_if_is_tws_link_connected())
+        {
+            if (TWS_UI_MASTER != app_ibrt_if_get_ui_role())
+            {
+                DBGPRINT("[PAIR] skip disconnect: this earbud is not TWS master");
+                return false;
+            }
+        }
+
+        DBGPRINT("[PAIR] disconnect second phone, device_id=1");
+
+        app_bt_disconnect_link_by_id(1);
+
+        return true;
+    }
+
+    DBGPRINT("[PAIR] less than two phones connected, no disconnect");
+
+    return false;
+}
+
 void aiWang_disconnet_phone_enter_pairmode(void)
 {
     uint8_t conn_devices = aiWang_get_profile_conn_num();
@@ -1462,7 +1516,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1544,17 +1598,28 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	  app_shutdown();
     	  break;
        }
+
     case CMD_SET_EARBUD_ENTER_PAIR:
     {
         if (operateLeftOrRight == isRightEarbuds)
         {
-            DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!", isRightEarbuds);
+            DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!",
+                    isRightEarbuds);
+
+            /*
+            * 如果目前已有兩支手機連線：
+            * 保留 device_id 0，斷開 device_id 1。
+            *
+            * 如果只有一支或沒有手機連線：
+            * 不執行任何斷線。
+            */
+            aiWang_disconnect_second_phone_for_pairing();
 
             enter_pair = 1;
             enter_pair_count = 0;
 
             ntt_first_no_mobile_pair_mode = true;
-            ntt_manual_pairing_mode = true;            
+            ntt_manual_pairing_mode = true;
 
             set_pair_status(0);
             set_er_discover_connectable_status(1);
@@ -1563,12 +1628,9 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
             app_bt_reset_delay_power_off();
-
-            //aiWang_disconnet_phone_enter_pairmode();
         }
         break;
     }
-
     case CMD_SEND_BOX_BATTERY_LEVEL:
     {
         uint32_t now = hal_sys_timer_get();
@@ -1750,6 +1812,14 @@ static void uart_idle_timeout_callback(void const *argument)
             "ignore OUT_CASE");
 
         set_er_inbox_status(1);        
+
+                /*
+         * Update IBRT/UI state.
+         * Without this, UI may remain at IN_BOX_OPEN and CASE_CLOSE /
+         * power-off flow will never be triggered.
+         */
+        app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
+        app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
 
         goto exit;
     }

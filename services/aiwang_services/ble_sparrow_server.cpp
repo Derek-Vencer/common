@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.5" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.5.1" //"01.01.00.04"
 
 typedef struct{
 	uint8_t set_name_status;
@@ -318,116 +318,115 @@ static void ntt_api_send_error_notify(uint8_t rsp_cmd, uint8_t err)
     sparraw_tx_msg(rsp_cmd, buf, detail_len + 3);
 }
 
-void handleGetBatteryLevel(const uint8_t *data, uint16_t len)
+static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
 {
-    uint8_t localBattery;
-    uint8_t peerBattery = 0xFF;
-    uint8_t boxBattery;
+    uint8_t local_battery = 0xFF;
+    uint8_t peer_battery  = 0xFF;
+    uint8_t box_battery   = 0xFF;
 
-    bool peerValid = false;
-    bool twsConnected = false;
+    bool tws_connected = false;
+    bool peer_valid    = false;
 
-    uint8_t leftBattery  = 0xFF;
-    uint8_t rightBattery = 0xFF;
-    uint8_t batteryArray[3] = {0xFF, 0xFF, 0xFF};
+    if (battery_array == NULL)
+    {
+        return false;
+    }
+
+    /*
+     * 與 0x31 使用完全相同的電量來源
+     */
+    local_battery = app_battery_get_percent();
+    peer_battery  = app_ibrt_customif_get_tws_peer_battery_level();
+    box_battery   = getBoxChargerBattery();
+
+    tws_connected = bts_tws_if_is_tws_link_connected();
+
+    peer_valid =
+        tws_connected &&
+        (peer_battery != 0xFF) &&
+        (peer_battery <= 100);
+
+    if (!peer_valid)
+    {
+        peer_battery = 0xFF;
+    }
+
+    battery_array[0] = 0xFF;
+    battery_array[1] = 0xFF;
+    battery_array[2] = box_battery;
+
+    if (app_ibrt_if_is_right_side())
+    {
+        battery_array[0] = peer_battery;
+        battery_array[1] = local_battery;
+    }
+    else
+    {
+        battery_array[0] = local_battery;
+        battery_array[1] = peer_battery;
+    }
+
+    TRACE(0,
+          "[BAT_COMMON] side=%s local=%u peer=%u valid=%d tws=%d box=%u",
+          app_ibrt_if_is_right_side() ? "RIGHT" : "LEFT",
+          local_battery,
+          peer_battery,
+          peer_valid,
+          tws_connected,
+          box_battery);
+
+    TRACE(0,
+          "[BAT_COMMON] report L=%u R=%u C=%u",
+          battery_array[0],
+          battery_array[1],
+          battery_array[2]);
+
+    return true;
+}
+
+void handleGetBatteryLevel(const uint8_t *data,
+                           uint16_t len)
+{
+    uint8_t batteryArray[3] =
+    {
+        0xFF,
+        0xFF,
+        0xFF
+    };
 
     if ((data == NULL) || (len == 0))
     {
-        TRACE(0, "[BAT][REQ] invalid");
-        ntt_api_send_error_notify(0x33,API_ERR_INVALID_PARAM);
+        TRACE(0, "[BAT31][REQ] invalid");
+
+        ntt_api_send_error_notify(
+            0x33,
+            API_ERR_INVALID_PARAM);
+
         return;
     }
 
-    /*
-     * App 專用的 0～100% 連續百分比。
-     */
-    localBattery = app_battery_get_percent();
-    boxBattery   = getBoxChargerBattery();
-    twsConnected = bts_tws_if_is_tws_link_connected();
-
-    if (twsConnected)
+    if (!sparrow_get_battery_report_values(batteryArray))
     {
-        /*
-         * TWS peer cache 已統一儲存 0～100%。
-         * 不可再次做 level 轉百分比。
-         */
-        peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+        TRACE(0, "[BAT31][REQ] battery not ready");
 
-        if ((peerBattery != 0xFF) && (peerBattery <= 100))
-        {
-            peerValid = true;
-        }
-        else
-        {
-            peerBattery = 0xFF;
-            peerValid = false;
-        }
+        ntt_api_send_error_notify(
+            0x33,
+            API_ERR_BUSY);
 
-        TRACE(0,
-              "[BAT][PEER_PERCENT] percent=%u valid=%d",
-              peerBattery,
-              peerValid);
-    }
-    else
-    {
-        peerBattery = 0xFF;
-        peerValid = false;
-    }
-
-    if ((localBattery > 100) || (boxBattery > 100))
-    {
-        TRACE(0,
-              "[BAT][BUSY] local=%u box=%u",
-              localBattery,
-              boxBattery);
-
-        ntt_api_send_error_notify(0x33,API_ERR_BUSY);
         return;
     }
 
-#ifdef IBRT
-
-    /*
-     * 此函數只讀取並回覆電量，
-     * 不在 App 查詢時再次發送 TWS 同步命令。
-     */
-    if (app_ibrt_if_is_right_side())
-    {
-        rightBattery = localBattery;
-        leftBattery  = peerValid ? peerBattery : 0xFF;
-    }
-    else
-    {
-        leftBattery  = localBattery;
-        rightBattery = peerValid ? peerBattery : 0xFF;
-    }
-
-#else
-
-    leftBattery = localBattery;
-    rightBattery = peerValid ? peerBattery : 0xFF;
-
-#endif
-
     TRACE(0,
-          "[BAT][PEER] tws=%d peer=%u valid=%d",
-          twsConnected,
-          peerBattery,
-          peerValid);
+          "[BAT31][RSP] L=%u R=%u CASE=%u",
+          batteryArray[0],
+          batteryArray[1],
+          batteryArray[2]);
 
-    TRACE(0,
-          "[BAT][RSP] L=%u R=%u CASE=%u",
-          leftBattery,
-          rightBattery,
-          boxBattery);
-
-    batteryArray[0] = leftBattery;
-    batteryArray[1] = rightBattery;
-    batteryArray[2] = boxBattery;
-
-    sparraw_tx_msg( 0x31,batteryArray,sizeof(batteryArray));
+    sparraw_tx_msg(
+        0x31,
+        batteryArray,
+        sizeof(batteryArray));
 }
-
 #define NTT_BT_NAME_MAX_LEN             45
 #define NTT_BT_NAME_DELAY_WRITE_MS          10000
 #define NTT_BT_NAME_RETRY_WHEN_BUSY_MS      3000
@@ -2982,109 +2981,51 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 	memset(read_send_data,0,sizeof(read_send_data));
     switch(aiwan_read_data)
     {
-		case GET_BATTERY_LEVEL:
-		{
-				uint8_t localBattery;
-				uint8_t peerBattery;
-				uint8_t boxBattery;
-				bool peerValid = false;
-				bool twsConnected = false;
+        case GET_BATTERY_LEVEL:
+        {
+            uint8_t battery_array[3] = {0xFF, 0xFF, 0xFF};
 
-				uint8_t leftBattery  = 0;
-				uint8_t rightBattery = 0;
-				uint8_t batteryArray[3] = {0, 0, 0};
+            TRACE(0, "[BAT32][READ_REQ] GET_BATTERY_LEVEL");
 
-                localBattery = app_battery_get_precise_percent();
-                peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+            /*
+            * 與 0x31 使用完全相同的電量取得函數。
+            */
+            sparrow_get_battery_report_values(battery_array);
 
-				boxBattery   = getBoxChargerBattery();
-				twsConnected = bts_tws_if_is_tws_link_connected();
-                peerValid = twsConnected && (peerBattery != 0xFF) && (peerBattery <= 100);
-                if (!peerValid)
-                {
-                    peerBattery = 0xFF;
-                }
+            /*
+            * BLE Read Response payload：
+            *
+            * byte 0：status，0x00 表示成功
+            * byte 1：battery data length，固定為 3
+            * byte 2：Left battery
+            * byte 3：Right battery
+            * byte 4：Charging case battery
+            */
+            read_send_data[0] = 0x00;
+            read_send_data[1] = 3;
+            read_send_data[2] = battery_array[0];
+            read_send_data[3] = battery_array[1];
+            read_send_data[4] = battery_array[2];
 
-                leftBattery  = 0xFF;
-                rightBattery = 0xFF;
+            TRACE(0,
+                "[BAT32][READ_RSP] L=%u R=%u C=%u",
+                battery_array[0],
+                battery_array[1],
+                battery_array[2]);
 
-				TRACE(0, "[BAT32][READ_REQ] GET_BATTERY_LEVEL");
-				TRACE(0,
-					"[BAT32][SRC] local=%d peer=%d peerValid=%d tws=%d box=%d",
-					localBattery,
-					peerBattery,
-					peerValid,
-					twsConnected,
-					boxBattery);
+            TRACE(0,
+                "[BAT32][READ_PAYLOAD] rsp_cmd=0x%02X len=5",
+                RSP_GET_BATTERY_LEVEL);
 
-				if (app_ibrt_if_is_right_side())
-				{
-                        rightBattery = localBattery;
-                        leftBattery  = peerBattery;
+            DUMP8("%02X ", read_send_data, 5);
 
-						TRACE(0,
-							"[BAT32][ROLE] RIGHT local=%d tws_peer=%d valid=%d",
-							localBattery,
-							peerBattery,
-							peerValid);
-				}
-				else
-				{
-                            leftBattery  = localBattery;
-                            rightBattery = peerBattery;
-
-						TRACE(0,
-							"[BAT32][ROLE] LEFT local=%d tws_peer=%d valid=%d",
-							localBattery,
-							peerBattery,
-							peerValid);
-				}
-
-
-				batteryArray[0] = leftBattery;
-				batteryArray[1] = rightBattery;
-				batteryArray[2] = boxBattery;
-
-				TRACE(0,
-					"[BAT32][READ_RSP] L=%d R=%d C=%d",
-					batteryArray[0],
-					batteryArray[1],
-					batteryArray[2]);
-
-				read_send_data[0] = 0x00;
-				read_send_data[1] = 3;
-				memcpy(&read_send_data[2], batteryArray, 3);
-
-				TRACE(0, "[BAT32][READ_PAYLOAD] rsp_cmd=0x32 len=%d:", 5);
-				DUMP8("%02X ", read_send_data, 5);
-
-				sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,
-									param->aw_connhdl,
-									param->aw_token,
-									read_send_data,
-									3 + 2);
-				break;
-		}
-		case GET_DEVICE_NAME:{
-			uint8_t* localname =  factory_section_get_bt_name();
-		    if(localname)
-		    {
-#if 1
-		    	char nameBuffer[60+1] = {0};
-				nameBuffer[1] = strlen((const char *)localname);
-				uint16_t name_len = nameBuffer[1] > 60?60:nameBuffer[1];
-				memcpy(&nameBuffer[2],localname,name_len);
-				sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)nameBuffer, name_len+2);
-#else
-		    	read_send_data[1] = strlen((const char *)localname);
-				memcpy(&read_send_data[2],localname,strlen((const char *)localname));
-		    	//sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)localname, strlen((const char *)localname)+1);
-		    	sparraw_read_rsp_msg(RSP_GET_DEVICE_NAME, param->aw_connhdl,param->aw_token,(const uint8_t*)read_send_data, strlen((const char *)localname)+1+2);
-#endif
-		    }
-		
-			break;
-		}
+            sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,
+                                param->aw_connhdl,
+                                param->aw_token,
+                                read_send_data,
+                                5);
+            break;
+        }
 		case SET_DEVICE_NAME:{
 			read_send_data[1] = 0;
 			sparraw_read_rsp_msg(RSP_SET_DEVICE_NAME,param->aw_connhdl,param->aw_token, read_send_data, 0+2);

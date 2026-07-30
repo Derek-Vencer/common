@@ -1284,12 +1284,12 @@ const SpeechConfig WEAK speech_cfg_default = {
         .bypass             = 0,
         .type               = 0,
         .comp_threshold     = -30.f,
-        .comp_ratio         = 1.f,
-        .expand_threshold   = -55.f,
+        .comp_ratio         = 4.f,
+        .expand_threshold   = -60.f,
         .expand_ratio       = 0.333f,
         .attack_time        = 0.008f,
         .release_time       = 0.06f,
-        .makeup_gain        = 0.0,
+        .makeup_gain        = 10,
         .delay              = 128,
         .tav                = 0.2f,
     },
@@ -1340,8 +1340,8 @@ const SpeechConfig WEAK speech_cfg_default = {
         .gain       = 0.f,
         .num        = 1,
         .params = {
-        	{IIR_BIQUARD_HPF, {{100, 0, 0.707f}}},
-			//{IIR_BIQUARD_HIGHSHELF, {{4000, 0, 0.707}}},
+            {IIR_BIQUARD_HPF, {{100, 0, 0.707f}}},
+			//{IIR_BIQUARD_HIGHSHELF, {{4000, 0, 0.707}}}, dvt2
 			//{IIR_BIQUARD_PEAKINGEQ, {{3100, 8, 5}}},
         },
     },
@@ -1362,6 +1362,7 @@ const SpeechConfig WEAK speech_cfg_default = {
 ****************************************************************************************************/
     .tx_post_gain = {
         .bypass     = 0,
+        //.gain_dB    = 6.0f, dvt2
         .gain_dB    = 10.0f,
     },
 #endif
@@ -1485,7 +1486,7 @@ const SpeechConfig WEAK speech_cfg_default = {
             {
                 .bypass             = 0,
                 .type               = 0,
-                .comp_threshold     = -0.f,
+                .comp_threshold     = -10.f,
                 .comp_ratio         = 2.f,
                 .expand_threshold   = -60.f,
                 .expand_ratio       = 0.5556f,
@@ -1498,7 +1499,7 @@ const SpeechConfig WEAK speech_cfg_default = {
             {
                 .bypass             = 0,
                 .type               = 0,
-                .comp_threshold     = -0.f,
+                .comp_threshold     = -10.f,
                 .comp_ratio         = 2.f,
                 .expand_threshold   = -60.f,
                 .expand_ratio       = 0.5556f,
@@ -1523,9 +1524,9 @@ const SpeechConfig WEAK speech_cfg_default = {
 ****************************************************************************************************/
     .rx_agc = {
         .bypass             = 0,
-        .target_level       = 1,
-        .compression_gain   = 1,
-        .limiter_enable     = 0,
+        .target_level       = 3,
+        .compression_gain   = 6,
+        .limiter_enable     = 1,
     },
 #endif
 

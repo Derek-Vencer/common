@@ -619,15 +619,6 @@ int32_t af_stream_sw_gain_open(enum AUD_STREAM_ID_T id, enum AUD_STREAM_T stream
                                 enum AUD_SAMPRATE_T sample_rate, enum AUD_BITS_T bits,
                                 enum AUD_CHANNEL_NUM_T chans, int32_t gain_mode)
 {
-    AUDIOFLINGER_TRACE(6,
-          "[SW_GAIN] open id=%d stream=%d rate=%d bits=%d ch=%d mode=%d",
-          id,
-          stream,
-          sample_rate,
-          bits,
-          chans,
-          gain_mode);
-
     AF_STREAM_SW_GAIN_CONTEXT_T *sw_gain_ctx = NULL;
 
     sw_gain_ctx = get_sw_gain_ctx(id, stream);

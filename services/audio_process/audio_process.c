@@ -1399,7 +1399,7 @@ int SRAM_TEXT_LOC audio_process_run(uint8_t *buf, uint32_t len)
 #ifdef __AUDIO_DRC__
 #ifdef AUDIO_DRC_UPDATE_CFG
 	if(audio_process.drc_update)
-	{
+	{   
         drc_set_config(audio_process.drc_st, &audio_process.drc_cfg);
         audio_process.drc_update =false;
 	}
@@ -1971,6 +1971,7 @@ int audio_process_open(enum AUD_SAMPRATE_T sample_rate, enum AUD_BITS_T sample_b
 
 int audio_process_close(void)
 {
+    AUDIO_PROCESS_TRACE(0,"******** audio_process_close********");
 #ifdef __SW_IIR_EQ_PROCESS__
     iir_close();
 #endif
@@ -3372,17 +3373,50 @@ POSSIBLY_UNUSED int32_t audio_eq_set_onoff(int32_t onoff, AUDIO_EQ_TYPE_T audio_
     return 0;
 }
 
+static const int32_t ntt_drc_band0_value[] = {
+    -24,   /* Balance */
+    -27,   /* More bass */
+    -22,   /* More treble */
+    -20,   /* Clear voice */
+    -26,   /* Dynamic */
+};
+
+static const char * const ntt_drc_mode_name[] = {
+    "Balance",
+    "More bass",
+    "More treble",
+    "Clear voice",
+    "Dynamic",
+};
+
 void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
 {
     uint8_t drc_index = eq_index;
 
     if (drc_index >= AUDIO_DRC_CFG_LIST_NUM)
     {
-        drc_index = 0;
+        AUDIO_PROCESS_TRACE(1,"[DRC] invalid index=%u",drc_index);
+
+        return;
     }
 
-    memcpy(&audio_process.drc_cfg,
-           audio_drc_cfg_list[drc_index],
-           sizeof(DrcConfig));
-}
+    memcpy(&audio_process.drc_cfg,audio_drc_cfg_list[drc_index],sizeof(DrcConfig));
 
+    /*
+     * 音樂正在播放時，通知 audio callback
+     * 在下一個 frame 套用新 DRC config。
+     */
+    if (audio_process.drc_st != NULL)
+    {
+        audio_process.drc_update = true;
+    }
+
+    AUDIO_PROCESS_TRACE(
+        4,
+        "[DRC] index=%u mode=%s band0=%d update=%u",
+        drc_index,
+        ntt_drc_mode_name[drc_index],
+        ntt_drc_band0_value[drc_index],
+        audio_process.drc_update);
+
+}
