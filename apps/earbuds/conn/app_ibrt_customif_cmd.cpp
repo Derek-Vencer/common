@@ -112,6 +112,31 @@ static bool ntt_color_code_is_valid_local(uint8_t color)
             (color == NTT_COLOR_CODE_GOLD));
 }
 
+/*
+ * 本機韌體版本。
+ * 後續版本更新時，這三個值必須一起更新。
+ */
+static const uint8_t g_ntt_local_fw_version
+    [NTT_EARBUD_FW_VERSION_LEN] =
+{
+    0x00,
+    0x09,
+    0x05,
+};
+
+/*
+ * Peer 韌體版本快取。
+ */
+static uint8_t g_ntt_peer_fw_version
+    [NTT_EARBUD_FW_VERSION_LEN] =
+{
+    0xFF,
+    0xFF,
+    0xFF,
+};
+
+static bool g_ntt_peer_fw_version_valid = false;
+
 #if defined(IBRT)
 
 /*********************external function declaration*************************/
@@ -145,6 +170,13 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
 static void ntt_key_reconnect_request_send_handler(uint8_t *p_buff,uint16_t length);
 
 static void ntt_key_reconnect_request_receive_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
+
+static void app_ibrt_customif_get_peer_fw_version_cmd_send(uint8_t *p_buff,uint16_t length);
+static void app_ibrt_customif_get_peer_fw_version_cmd_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
+static void app_ibrt_customif_get_peer_fw_version_rsp_timeout_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
+static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
+static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen);
+
 
 #if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
@@ -1257,6 +1289,15 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         app_ibrt_custom_cmd_tx_done_handler_null,
         APP_TWS_CMD_PRIO_0
     },
+
+    {
+        APP_TWS_CMD_GET_PEER_FW_VERSION,                    "GET_PEER_FW_VERSION",
+        app_ibrt_customif_get_peer_fw_version_cmd_send,
+        app_ibrt_customif_get_peer_fw_version_cmd_handler,      RSP_TIMEOUT_DEFAULT,
+        app_ibrt_customif_get_peer_fw_version_rsp_timeout_handler, app_ibrt_customif_get_peer_fw_version_rsp_handler,
+        app_ibrt_customif_get_peer_fw_version_tx_done_handler,
+        APP_TWS_CMD_PRIO_0
+    },
 };
 
 static app_tws_cmd_timer_instance_t *g_ibrt_custom_cmd_handler_var_table[ARRAY_SIZE(g_ibrt_custom_cmd_handler_table)];
@@ -2091,6 +2132,178 @@ void ntt_key_request_mobile_reconnect(void)
     EARBUDS_TRACE(
         0,
         "[NTT_KEY_RECONNECT] SLAVE no TWS, request ignored");
+}
+
+static void app_ibrt_customif_get_peer_fw_version_cmd_send(uint8_t *p_buff,uint16_t length)
+{
+    EARBUDS_TRACE(1,
+                  "[FW_SYNC][SEND] request peer version len=%u",
+                  length);
+
+    app_ibrt_send_cmd_with_rsp(
+        APP_TWS_CMD_GET_PEER_FW_VERSION,
+        p_buff,
+        length);
+}
+
+/* Peer 收到 request 後，回傳自己的本機版本：  */
+static void app_ibrt_customif_get_peer_fw_version_cmd_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
+{
+    (void)p_buff;
+
+    EARBUDS_TRACE(2,
+                  "[FW_SYNC][RX_REQ] seq=%u len=%u",
+                  rsp_seq,
+                  length);
+
+    EARBUDS_TRACE(3,
+                  "[FW_SYNC][RX_REQ] local version=%02X.%02X.%02X",
+                  g_ntt_local_fw_version[0],
+                  g_ntt_local_fw_version[1],
+                  g_ntt_local_fw_version[2]);
+
+    tws_ctrl_send_rsp(
+        APP_TWS_CMD_GET_PEER_FW_VERSION,
+        rsp_seq,
+        (uint8_t *)g_ntt_local_fw_version,
+        sizeof(g_ntt_local_fw_version));
+}
+
+static void app_ibrt_customif_get_peer_fw_version_rsp_timeout_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
+{
+    (void)p_buff;
+    (void)length;
+
+    g_ntt_peer_fw_version_valid = false;
+
+    memset(g_ntt_peer_fw_version,
+           0xFF,
+           sizeof(g_ntt_peer_fw_version));
+
+    EARBUDS_TRACE(1,
+                  "[FW_SYNC][TIMEOUT] seq=%u",
+                  rsp_seq);
+}
+
+static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
+{
+    EARBUDS_TRACE(2,
+                  "[FW_SYNC][RX_RSP] seq=%u len=%u",
+                  rsp_seq,
+                  length);
+
+    if ((p_buff == NULL) ||
+        (length != NTT_EARBUD_FW_VERSION_LEN))
+    {
+        g_ntt_peer_fw_version_valid = false;
+
+        memset(g_ntt_peer_fw_version,
+               0xFF,
+               sizeof(g_ntt_peer_fw_version));
+
+        EARBUDS_TRACE(1,
+                      "[FW_SYNC][RX_RSP] invalid response len=%u",
+                      length);
+        return;
+    }
+
+    memcpy(g_ntt_peer_fw_version,
+           p_buff,
+           sizeof(g_ntt_peer_fw_version));
+
+    g_ntt_peer_fw_version_valid = true;
+
+    EARBUDS_TRACE(3,
+                  "[FW_SYNC][RX_RSP] peer version=%02X.%02X.%02X",
+                  g_ntt_peer_fw_version[0],
+                  g_ntt_peer_fw_version[1],
+                  g_ntt_peer_fw_version[2]);
+}
+
+static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen)
+{
+    (void)ptrParam;
+
+    EARBUDS_TRACE(4,
+                  "[FW_SYNC][TX_DONE] cmd=0x%04X seq=%u len=%u tws=%d",
+                  cmdcode,
+                  rsp_seq,
+                  paramLen,
+                  bts_tws_if_is_tws_link_connected());
+}
+
+void app_ibrt_customif_request_peer_fw_version(void)
+{
+    uint8_t request = 0x00;
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        app_ibrt_customif_clear_peer_fw_version();
+
+        EARBUDS_TRACE(0,
+                      "[FW_SYNC] request skipped: TWS disconnected");
+        return;
+    }
+
+    /*
+     * 新的一次要求開始前先將 valid 清除。
+     * 但保留原始資料也可以；此處清成 FF 比較不會回傳舊版本。
+     */
+    g_ntt_peer_fw_version_valid = false;
+
+    memset(g_ntt_peer_fw_version,
+           0xFF,
+           sizeof(g_ntt_peer_fw_version));
+
+    EARBUDS_TRACE(0,
+                  "[FW_SYNC] request peer version");
+
+    tws_ctrl_send_cmd(
+        APP_TWS_CMD_GET_PEER_FW_VERSION,
+        &request,
+        sizeof(request));
+}
+
+bool app_ibrt_customif_get_peer_fw_version(
+    uint8_t version[NTT_EARBUD_FW_VERSION_LEN])
+{
+    if (version == NULL)
+    {
+        return false;
+    }
+
+    memset(version,
+           0xFF,
+           NTT_EARBUD_FW_VERSION_LEN);
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        return false;
+    }
+
+    if (!g_ntt_peer_fw_version_valid)
+    {
+        return false;
+    }
+
+    memcpy(version,
+           g_ntt_peer_fw_version,
+           NTT_EARBUD_FW_VERSION_LEN);
+
+    return true;
+}
+
+/*TWS 斷線事件需要呼叫*/
+void app_ibrt_customif_clear_peer_fw_version(void)
+{
+    g_ntt_peer_fw_version_valid = false;
+
+    memset(g_ntt_peer_fw_version,
+           0xFF,
+           sizeof(g_ntt_peer_fw_version));
+
+    EARBUDS_TRACE(0,
+                  "[FW_SYNC] peer version cleared");
 }
 
 #endif /* IBRT */

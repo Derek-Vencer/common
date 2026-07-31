@@ -177,6 +177,11 @@ static void keymap_init_default(void);
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
 #define  DISPLAY_EARBUDS_VERSION   "V0.9.5.2" //"01.01.00.04"
 
+#define NTT_EARBUD_FW_VERSION_LEN         3
+#define NTT_DUAL_EARBUD_FW_VERSION_LEN    6
+
+static void ntt_build_dual_earbud_fw_version(uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN]);
+
 typedef struct{
 	uint8_t set_name_status;
 }bleCmdSetStatus;
@@ -1348,34 +1353,38 @@ void aiWangGetChargerBoxVersion(uint8_t *data)
 
 void handleGetFwVersion(const uint8_t *data, uint16_t len)
 {
-    TRACE(0, "%s.", __func__);
+    uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN];
+    uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
+
+    TRACE(1, "%s", __func__);
 
     if ((data == NULL) || (len < 3))
     {
-        ntt_api_send_error_notify(0x4F, API_ERR_INVALID_PARAM);
+        ntt_api_send_error_notify(
+            0x4F,
+            API_ERR_INVALID_PARAM);
+
         return;
     }
 
-    const char *earbud_ver = DISPLAY_EARBUDS_VERSION;
-    uint16_t fw_len = 0;
-
-    if ((earbud_ver == NULL) || (strlen(earbud_ver) == 0))
+    /*
+     * Peer 已連線但版本尚未取得時，送出讀取要求。
+     *
+     * 注意：TWS response 是非同步，因此本次查詢仍可能回傳 FF。
+     */
+    if (bts_tws_if_is_tws_link_connected() &&
+        !app_ibrt_customif_get_peer_fw_version(peer_version))
     {
-        ntt_api_send_error_notify(0x4F, API_ERR_STORAGE_ERROR);
-        return;
+        app_ibrt_customif_request_peer_fw_version();
     }
 
-    fw_len = strlen(earbud_ver);
-
-    TRACE(0, "GET_FW_VERSION");
-    TRACE(0, "DISPLAY_EARBUDS_VERSION=%s", earbud_ver);
-    TRACE(0, "FW Version Len=%d", fw_len);
-    TRACE(0, "FW Version Send=%s", earbud_ver);
+    ntt_build_dual_earbud_fw_version(version);
 
 #if need_send_data_by_notify
-    sparraw_tx_msg(RSP_GET_FW_VERSION,
-                   (const uint8_t *)earbud_ver,
-                   fw_len);
+    sparraw_tx_msg(
+        RSP_GET_FW_VERSION,
+        version,
+        sizeof(version));
 #endif
 }
 
@@ -3224,5 +3233,91 @@ void sparraw_service_init(void)
     //previous in apps_init,prior settings ICP1205_ADS
     //charger_manager_start();
 }
+
+static void ntt_build_dual_earbud_fw_version(uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN])
+{
+    static const uint8_t local_version[NTT_EARBUD_FW_VERSION_LEN] =
+    {
+        0x00,
+        0x09,
+        0x05,
+    };
+
+    uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
+    bool peer_valid;
+    bool local_is_left;
+
+    if (version == NULL)
+    {
+        return;
+    }
+
+    memset(version,
+           0xFF,
+           NTT_DUAL_EARBUD_FW_VERSION_LEN);
+
+    memset(peer_version,
+           0xFF,
+           sizeof(peer_version));
+
+    local_is_left =
+        bts_tws_if_is_local_left_side();
+
+    peer_valid =
+        app_ibrt_customif_get_peer_fw_version(
+            peer_version);
+
+    if (local_is_left)
+    {
+        /*
+         * Byte 0~2：左耳，本機。
+         */
+        memcpy(&version[0],
+               local_version,
+               NTT_EARBUD_FW_VERSION_LEN);
+
+        /*
+         * Byte 3~5：右耳，Peer。
+         */
+        if (peer_valid)
+        {
+            memcpy(&version[3],
+                   peer_version,
+                   NTT_EARBUD_FW_VERSION_LEN);
+        }
+    }
+    else
+    {
+        /*
+         * Byte 3~5：右耳，本機。
+         */
+        memcpy(&version[3],
+               local_version,
+               NTT_EARBUD_FW_VERSION_LEN);
+
+        /*
+         * Byte 0~2：左耳，Peer。
+         */
+        if (peer_valid)
+        {
+            memcpy(&version[0],
+                   peer_version,
+                   NTT_EARBUD_FW_VERSION_LEN);
+        }
+    }
+
+    TRACE(7,
+          "[FW] side=%s peer_valid=%d "
+          "L=%02X.%02X.%02X R=%02X.%02X.%02X",
+          local_is_left ? "LEFT" : "RIGHT",
+          peer_valid,
+          version[0],
+          version[1],
+          version[2],
+          version[3],
+          version[4],
+          version[5]);
+}
+
 
 

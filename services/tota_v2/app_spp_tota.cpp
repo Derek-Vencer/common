@@ -468,13 +468,34 @@ bool app_spp_tota_send_data(uint8_t *ptrData,uint16_t length)
     TOTA_V2_TRACE(1,"[SPP_TX] len=%u handle=0x%08X data=%p",(unsigned int)length,(unsigned int)rfcommHandle,(void *)ptrData);
     ret = bta_spp_write(rfcommHandle,ptrData,length);
 
-    if (ret != BT_STS_SUCCESS)
+    if ((ret != BT_STS_SUCCESS) &&
+        (ret != BT_STS_PENDING))
     {
-        TOTA_V2_TRACE( 1,"[SPP_TX] write failed ret=%d len=%u handle=0x%08X",(int)ret,(unsigned int)length,(unsigned int)rfcommHandle);
+        TOTA_V2_TRACE(1,
+                      "[SPP_TX] write failed ret=%d len=%u handle=0x%08X",
+                      (int)ret,
+                      (unsigned int)length,
+                      (unsigned int)rfcommHandle);
         return false;
     }
 
-    TOTA_V2_TRACE(1,"[SPP_TX] write accepted len=%u handle=0x%08X",(unsigned int)length,(unsigned int)rfcommHandle);
+    if (ret == BT_STS_PENDING)
+    {
+        TOTA_V2_TRACE(1,
+                      "[SPP_TX] write pending ret=%d len=%u handle=0x%08X",
+                      (int)ret,
+                      (unsigned int)length,
+                      (unsigned int)rfcommHandle);
+    }
+    else
+    {
+        TOTA_V2_TRACE(1,
+                      "[SPP_TX] write accepted ret=%d len=%u handle=0x%08X",
+                      (int)ret,
+                      (unsigned int)length,
+                      (unsigned int)rfcommHandle);
+    }
+
     return true;
 }
 

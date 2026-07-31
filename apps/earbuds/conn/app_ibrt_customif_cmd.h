@@ -17,6 +17,8 @@
 #define __APP_IBRT_IF_CUSTOM_CMD__
 
 #include "app_ibrt_custom_cmd.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 #define APP_TWS_CMD_PRIO_0       (0x0)
 #define APP_TWS_CMD_PRIO_1       (0x1)
@@ -70,6 +72,7 @@ typedef enum
     APP_TWS_CMD_SYNC_COLOR_CODE  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x18,
     APP_TWS_CMD_SYNC_CASE_STATE  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x19,
     APP_TWS_CMD_KEY_RECONNECT_REQUEST = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1A,
+    APP_TWS_CMD_GET_PEER_FW_VERSION = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1B,
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -162,4 +165,11 @@ uint8_t get_tws_peer_battery_percent(void);
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 void ntt_master_sync_all_user_settings_to_peer(void);
+
+#define NTT_EARBUD_FW_VERSION_LEN    3
+
+void app_ibrt_customif_request_peer_fw_version(void);
+bool app_ibrt_customif_get_peer_fw_version(uint8_t version[NTT_EARBUD_FW_VERSION_LEN]);
+void app_ibrt_customif_clear_peer_fw_version(void);
+
 #endif
