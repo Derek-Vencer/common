@@ -657,7 +657,6 @@ extern void a2dp_handleKey(uint8_t a2dp_key)
 
 void app_key_handle_pause_music_on_pogo_in(void)
 {
-#ifdef BT_AVRCP_SUPPORT
     uint8_t a2dp_id = app_bt_audio_get_curr_a2dp_device();
 
     if (a2dp_id == BT_DEVICE_INVALID_ID)
@@ -691,7 +690,6 @@ void app_key_handle_pause_music_on_pogo_in(void)
     BTAPP_TRACE(1, "[POGO_IN][MUSIC] pause music, device=%d", a2dp_id);
 
     a2dp_handleKey(AVRCP_KEY_PAUSE);
-#endif
 }
 
 void hfp_handle_key(uint8_t hfp_key)

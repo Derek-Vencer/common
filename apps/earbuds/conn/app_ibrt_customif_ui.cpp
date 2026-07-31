@@ -2828,9 +2828,21 @@ static void ntt_case_out_slave_push_battery(void)
         local_battery);
 }
 
+/*
+ * 音樂暫停模式：
+ *
+ * 1: 任一耳放入充電盒，立即暫停音樂。
+ *
+ * 0: 雙耳都放入充電盒後，才暫停音樂。
+ */
+#define NTT_PAUSE_ON_ANY_EAR_IN_CASE 1
+
 
 /*
- * 只有雙耳都在盒內時才暫停手機音樂。
+ * Case State 改變時檢查是否需要暫停音樂。
+ *
+ * 為避免 Master 與 Slave 同時發出 AVRCP Pause，
+ * 只允許目前持有手機連線的一耳執行。
  */
 static void ntt_case_check_pause_music_when_both_in(void)
 {
@@ -2843,61 +2855,97 @@ static void ntt_case_check_pause_music_when_both_in(void)
     bool mobile_connected =
         app_bt_ibrt_has_mobile_link_connected();
 
+#if NTT_PAUSE_ON_ANY_EAR_IN_CASE
+
+    bool pause_condition =
+        local_state == NTT_CASE_STATE_IN_CASE ||
+        peer_state == NTT_CASE_STATE_IN_CASE;
+
+#else
+
+    bool pause_condition =
+        local_state == NTT_CASE_STATE_IN_CASE &&
+        peer_state == NTT_CASE_STATE_IN_CASE;
+
+#endif
+
     EARBUDS_TRACE(
-        4,
-        "[NTT_BOTH_IN_PAUSE] local=%d peer=%d "
+        5,
+        "[NTT_CASE_PAUSE] mode=%d local=%d peer=%d "
         "mobile=%d sent=%d",
+        NTT_PAUSE_ON_ANY_EAR_IN_CASE,
         local_state,
         peer_state,
         mobile_connected,
         g_ntt_both_in_pause_sent);
 
     /*
-     * 任一耳不在盒內，重置 Pause 旗標。
+     * 尚未符合 Pause 條件：
+     *
+     * 代表目前雙耳都在盒外，重置旗標。
+     * 下一次任一耳重新入盒時，可以再次送出 Pause。
      */
-    if (local_state != NTT_CASE_STATE_IN_CASE ||
-        peer_state != NTT_CASE_STATE_IN_CASE)
+    if (!pause_condition)
     {
         if (g_ntt_both_in_pause_sent)
         {
             EARBUDS_TRACE(
                 0,
-                "[NTT_BOTH_IN_PAUSE] reset, "
-                "not both IN");
+                "[NTT_CASE_PAUSE] reset, "
+                "pause condition cleared");
         }
 
         g_ntt_both_in_pause_sent = false;
         return;
     }
 
+    /*
+     * 本輪已送過 Pause，不重複送出。
+     */
     if (g_ntt_both_in_pause_sent)
     {
         EARBUDS_TRACE(
             0,
-            "[NTT_BOTH_IN_PAUSE] already sent");
+            "[NTT_CASE_PAUSE] already sent");
 
         return;
     }
 
     /*
-     * 只允許持有手機連線的一耳送 Pause。
+     * 只允許持有手機 Link 的耳機送 AVRCP Pause。
+     *
+     * 通常由目前 Master 執行。
      */
     if (!mobile_connected)
     {
         EARBUDS_TRACE(
             0,
-            "[NTT_BOTH_IN_PAUSE] both IN, "
-            "no mobile link");
+            "[NTT_CASE_PAUSE] pause condition met, "
+            "but no local mobile link");
 
         return;
     }
 
+    /*
+     * 先設定旗標，避免 callback 重入而重複發送。
+     */
     g_ntt_both_in_pause_sent = true;
+
+#if NTT_PAUSE_ON_ANY_EAR_IN_CASE
 
     EARBUDS_TRACE(
         0,
-        "[NTT_BOTH_IN_PAUSE] both IN "
+        "[NTT_CASE_PAUSE] any ear IN "
         "-> pause music");
+
+#else
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_CASE_PAUSE] both ears IN "
+        "-> pause music");
+
+#endif
 
     app_key_handle_pause_music_on_pogo_in();
 }

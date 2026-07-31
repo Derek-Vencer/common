@@ -1707,9 +1707,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
             if (bts_tws_if_is_tws_link_connected())
             {
-                DBGPRINT(
-                    "[NTT_TWS] LEFT received box battery, resend case state");
-
+                DBGPRINT("[NTT_TWS] LEFT received box battery, resend case state");
                 ntt_case_state_sync_resend();
             }
         }
@@ -1732,13 +1730,38 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         break;
     case CMD_SEND_EAR_PUTIN:
     {
+        /*
+        * 更新舊有充電盒狀態。
+        */
         g_case_state = 1;
+
         boxChargerStatus.boxIsOpen = true;
-        boxChargerStatus.needOpenEarbuds = true;        
+        boxChargerStatus.needOpenEarbuds = true;
+
+        /*
+        * 放入充電盒後保持耳機開機，
+        * 不啟動原本的 Pogo-in 關機計時器。
+        */
         earBudsCloseOff_PogonIn_StopTimer();
 
         DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
 
+        /*
+        * 重要：
+        *
+        * 通知新的 TWS Case State Sync：
+        * 本機已經進入充電盒。
+        *
+        * 這裡會觸發：
+        *
+        * ntt_case_state_local_changed_callback(IN_CASE)
+        *     -> ntt_case_check_pause_music_when_both_in()
+        *     -> app_key_handle_pause_music_on_pogo_in()
+        *
+        * 同時會把 IN_CASE 狀態同步給另一耳。
+        */
+        ntt_case_state_sync_local_update(NTT_CASE_STATE_IN_CASE);
+        DBGPRINT("[CASE] EAR_PUTIN -> notify IN_CASE");
         wired_uart_send_cmd_ack_ok();
     }
     break;
