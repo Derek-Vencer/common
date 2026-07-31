@@ -1483,7 +1483,7 @@ static void app_battery_pluginout_debounce_handler(void const *param)
             {
                 BATTERY_TRACE(0,"[NTT_CASE_HW] confirmed PLUGIN -> IN_CASE");
                 ntt_case_state_sync_local_update(true);
-                app_key_handle_pause_music_on_pogo_in();
+                //app_key_handle_pause_music_on_pogo_in();
             }
             else if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
             {

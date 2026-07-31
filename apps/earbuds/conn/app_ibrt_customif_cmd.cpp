@@ -1651,15 +1651,71 @@ static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state)
 extern "C"
 void ntt_case_state_sync_local_update(bool in_case)
 {
-    NTT_CASE_STATE_E new_state = in_case ? NTT_CASE_STATE_IN_CASE : NTT_CASE_STATE_OUT_CASE;
-    NTT_CASE_STATE_E old_state = g_ntt_local_case_state;
+    NTT_CASE_STATE_E new_state =
+        in_case ?
+        NTT_CASE_STATE_IN_CASE :
+        NTT_CASE_STATE_OUT_CASE;
+
+    NTT_CASE_STATE_E old_state =
+        g_ntt_local_case_state;
+
+    /*
+     * 狀態相同時，不能一律直接 return。
+     *
+     * 特別是：
+     * local state 可能在 UART idle timeout 前，
+     * 已經被其他流程設定為 OUT_CASE。
+     *
+     * 此時 UART idle timeout 才是真正確認離盒的事件，
+     * 必須再次觸發 local callback，讓 Master Recovery
+     * 有機會執行手機回連。
+     */
     if (old_state == new_state)
     {
-        EARBUDS_TRACE(2,"[NTT_CASE_SYNC] duplicate local ignored state=%s(%d)",ntt_case_state_to_string(new_state),new_state);
+        EARBUDS_TRACE(
+            3,
+            "[NTT_CASE_SYNC] duplicate local "
+            "state=%s(%d)",
+            ntt_case_state_to_string(new_state),
+            new_state);
+
         /*
-         * 即使狀態未改變，若 TWS 剛恢復連線，
-         * resend() 會負責重新傳送。
+         * 重複 OUT_CASE：
+         *
+         * 再執行一次 callback。
+         * callback 內已有 owner、role、mobile link、
+         * reconnect_started 等防重複條件。
          */
+        if (new_state == NTT_CASE_STATE_OUT_CASE)
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_CASE_SYNC] duplicate OUT "
+                "-> run local recovery callback");
+
+            ntt_case_state_local_changed_callback(
+                new_state);
+
+            /*
+             * 同時重新同步給 Peer。
+             *
+             * 避免本機已經是 OUT，但 Peer 尚未收到
+             * custom case-state packet。
+             */
+            ntt_case_state_send_to_peer(
+                new_state);
+        }
+        else
+        {
+            /*
+             * 重複 IN_CASE 不需要重跑 callback，
+             * 避免反覆執行入盒 reset 或 Pause 檢查。
+             */
+            EARBUDS_TRACE(
+                0,
+                "[NTT_CASE_SYNC] duplicate IN ignored");
+        }
+
         return;
     }
 
@@ -1667,7 +1723,8 @@ void ntt_case_state_sync_local_update(bool in_case)
 
     EARBUDS_TRACE(
         3,
-        "[NTT_CASE_SYNC] local changed %s(%d) -> %s(%d)",
+        "[NTT_CASE_SYNC] local changed "
+        "%s(%d) -> %s(%d)",
         ntt_case_state_to_string(old_state),
         old_state,
         ntt_case_state_to_string(new_state),
@@ -1676,12 +1733,14 @@ void ntt_case_state_sync_local_update(bool in_case)
     /*
      * 先執行本機流程。
      */
-    ntt_case_state_local_changed_callback(new_state);
+    ntt_case_state_local_changed_callback(
+        new_state);
 
     /*
      * 再同步給另一耳。
      */
-    ntt_case_state_send_to_peer(new_state);
+    ntt_case_state_send_to_peer(
+        new_state);
 }
 
 

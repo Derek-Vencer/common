@@ -2280,6 +2280,11 @@ osTimerDef(NTT_FIRST_OUT_ROLE_CHECK_TIMER,ntt_first_out_role_check_handler);
 
 static osTimerId g_ntt_first_out_role_check_timer = NULL;
 
+/*
+ * true:
+ * 本輪雙耳都在盒內時，已送過 Pause。
+ */
+static bool g_ntt_both_in_pause_sent = false;
 
 /*
  * 是否已經是 Master。
@@ -2410,9 +2415,134 @@ static void ntt_first_out_start_mobile_reconnect(void)
 
 
 /*
- * Slave 呼叫 role switch 後，由 timer 等待角色真正變成 Master。
+ * Recovery:
+ *
+ * 發生下列狀態時，由目前 Master 接手：
+ *
+ * 1. 本機已 OUT_CASE
+ * 2. 手機尚未連線
+ * 3. TWS Link 已建立
+ * 4. 本機目前為 Master
  */
-static void ntt_first_out_role_check_handler(void const *param)
+static void ntt_first_out_master_recovery(
+    const char *reason)
+{
+    NTT_CASE_STATE_E local_state =
+        ntt_case_state_get_local();
+
+    NTT_CASE_STATE_E peer_state =
+        ntt_case_state_get_peer();
+
+    bool tws_connected =
+        bts_tws_if_is_tws_link_connected();
+
+    bool mobile_connected =
+        app_bt_ibrt_has_mobile_link_connected();
+
+    TWS_UI_ROLE_E ui_role =
+        app_ibrt_if_get_ui_role();
+
+    EARBUDS_TRACE(
+        8,
+        "[NTT_FIRST_OUT][RECOVERY] reason=%s "
+        "local=%d peer=%d role=%d "
+        "tws=%d mobile=%d owner=%d started=%d",
+        reason ? reason : "NULL",
+        local_state,
+        peer_state,
+        ui_role,
+        tws_connected,
+        mobile_connected,
+        g_ntt_first_out_owner,
+        g_ntt_first_out_reconnect_started);
+
+    /*
+     * 已有手機連線，不需要 Recovery。
+     */
+    if (mobile_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT][RECOVERY] "
+            "mobile already connected");
+
+        g_ntt_first_out_reconnect_started = true;
+        return;
+    }
+
+    /*
+     * 本機必須已離盒。
+     */
+    if (local_state != NTT_CASE_STATE_OUT_CASE)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT][RECOVERY] "
+            "local not OUT");
+
+        return;
+    }
+
+    /*
+     * 必須已有 TWS Link。
+     */
+    if (!tws_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT][RECOVERY] "
+            "TWS disconnected");
+
+        return;
+    }
+
+    /*
+     * Recovery 只能由目前 Master 執行。
+     */
+    if (!ntt_first_out_is_master())
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT][RECOVERY] "
+            "local is SLAVE");
+
+        return;
+    }
+
+    /*
+     * ===== 重點修改 =====
+     *
+     * 不相信上一輪留下來的 owner /
+     * reconnect_started。
+     *
+     * 手機目前沒有連線，
+     * 表示允許重新開始 reconnect。
+     */
+    g_ntt_first_out_owner = true;
+    g_ntt_first_out_role_switch_requested = false;
+    g_ntt_first_out_reconnect_started = false;
+    g_ntt_first_out_role_check_count = 0;
+
+    ntt_first_out_role_check_stop();
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_FIRST_OUT][RECOVERY] "
+        "MASTER force reconnect");
+
+    /*
+     * 真正重新發起 opening reconnect。
+     */
+    ntt_first_out_start_mobile_reconnect();
+}
+
+
+/*
+ * Slave 呼叫 role switch 後，
+ * 由 timer 等待角色真正變成 Master。
+ */
+static void ntt_first_out_role_check_handler(
+    void const *param)
 {
     (void)param;
 
@@ -2453,7 +2583,24 @@ static void ntt_first_out_role_check_handler(void const *param)
     }
 
     /*
-     * 已完成角色切換。
+     * 手機已經連上。
+     */
+    if (app_bt_ibrt_has_mobile_link_connected())
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] role check stop: "
+            "mobile connected");
+
+        g_ntt_first_out_reconnect_started = true;
+        g_ntt_first_out_role_switch_requested = false;
+
+        ntt_first_out_role_check_stop();
+        return;
+    }
+
+    /*
+     * 角色切換已完成。
      */
     if (ntt_first_out_is_master())
     {
@@ -2496,10 +2643,10 @@ static void ntt_first_out_role_check_handler(void const *param)
 /*
  * 先離盒者執行：
  *
- * 1. 標記為 owner。
- * 2. 已是 Master：直接回連手機。
+ * 1. 設定 owner。
+ * 2. 已是 Master：直接回連。
  * 3. 是 Slave：要求切成 Master。
- * 4. timer 等待角色切換完成後再回連。
+ * 4. Timer 等待切換完成後回連。
  */
 void ntt_first_out_take_master_and_reconnect(void)
 {
@@ -2509,6 +2656,11 @@ void ntt_first_out_take_master_and_reconnect(void)
             0,
             "[NTT_FIRST_OUT] owner already set");
 
+        /*
+         * Owner 已經存在，但尚未回連時，
+         * 再嘗試啟動一次。
+         */
+        ntt_first_out_start_mobile_reconnect();
         return;
     }
 
@@ -2534,6 +2686,8 @@ void ntt_first_out_take_master_and_reconnect(void)
         EARBUDS_TRACE(
             0,
             "[NTT_FIRST_OUT] already MASTER -> reconnect");
+
+        g_ntt_first_out_role_switch_requested = false;
 
         ntt_first_out_start_mobile_reconnect();
         return;
@@ -2561,35 +2715,32 @@ void ntt_first_out_take_master_and_reconnect(void)
 /*
  * 後離盒者執行：
  *
- * 不切 Master、不回連手機。
+ * 不搶 owner、不切 Master、不回連手機。
  */
 static void ntt_later_out_keep_slave(void)
 {
-    /*
-     * 後離盒者不能取得 reconnect owner。
-     */
     g_ntt_first_out_owner = false;
     g_ntt_first_out_role_switch_requested = false;
     g_ntt_first_out_reconnect_started = false;
+    g_ntt_first_out_role_check_count = 0;
 
     ntt_first_out_role_check_stop();
 
     EARBUDS_TRACE(
         4,
-        "[NTT_FIRST_OUT] later-out keep role=%d "
-        "local=%d peer=%d",
+        "[NTT_FIRST_OUT] later-out keep follower "
+        "role=%d local=%d peer=%d",
         app_ibrt_if_get_ui_role(),
         ntt_case_state_get_local(),
         ntt_case_state_get_peer());
 
     /*
-     * 不呼叫：
+     * 後離盒者不執行：
      *
      * app_ui_user_role_switch(true);
      * app_bt_profile_connect_manager_opening_reconnect();
      */
 }
-
 
 /*
  * 本機重新入盒時清除本輪 first-out 狀態。
@@ -2610,6 +2761,10 @@ static void ntt_first_out_reset_local(void)
     ntt_first_out_role_check_stop();
 }
 
+
+/*
+ * Slave 離盒時，主動將本機電量推送給 Master。
+ */
 static void ntt_case_out_slave_push_battery(void)
 {
     bool tws_connected;
@@ -2628,9 +2783,6 @@ static void ntt_case_out_slave_push_battery(void)
         tws_connected,
         ui_role);
 
-    /*
-     * TWS 尚未連線時無法推送。
-     */
     if (!tws_connected)
     {
         EARBUDS_TRACE(
@@ -2663,6 +2815,7 @@ static void ntt_case_out_slave_push_battery(void)
             1,
             "[BAT][CASE_OUT_PUSH] invalid battery=%u",
             local_battery);
+
         return;
     }
 
@@ -2675,6 +2828,84 @@ static void ntt_case_out_slave_push_battery(void)
         local_battery);
 }
 
+
+/*
+ * 只有雙耳都在盒內時才暫停手機音樂。
+ */
+static void ntt_case_check_pause_music_when_both_in(void)
+{
+    NTT_CASE_STATE_E local_state =
+        ntt_case_state_get_local();
+
+    NTT_CASE_STATE_E peer_state =
+        ntt_case_state_get_peer();
+
+    bool mobile_connected =
+        app_bt_ibrt_has_mobile_link_connected();
+
+    EARBUDS_TRACE(
+        4,
+        "[NTT_BOTH_IN_PAUSE] local=%d peer=%d "
+        "mobile=%d sent=%d",
+        local_state,
+        peer_state,
+        mobile_connected,
+        g_ntt_both_in_pause_sent);
+
+    /*
+     * 任一耳不在盒內，重置 Pause 旗標。
+     */
+    if (local_state != NTT_CASE_STATE_IN_CASE ||
+        peer_state != NTT_CASE_STATE_IN_CASE)
+    {
+        if (g_ntt_both_in_pause_sent)
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_BOTH_IN_PAUSE] reset, "
+                "not both IN");
+        }
+
+        g_ntt_both_in_pause_sent = false;
+        return;
+    }
+
+    if (g_ntt_both_in_pause_sent)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_BOTH_IN_PAUSE] already sent");
+
+        return;
+    }
+
+    /*
+     * 只允許持有手機連線的一耳送 Pause。
+     */
+    if (!mobile_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_BOTH_IN_PAUSE] both IN, "
+            "no mobile link");
+
+        return;
+    }
+
+    g_ntt_both_in_pause_sent = true;
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_BOTH_IN_PAUSE] both IN "
+        "-> pause music");
+
+    app_key_handle_pause_music_on_pogo_in();
+}
+
+
+/*
+ * 本機 Case State 改變 callback。
+ */
 extern "C"
 void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 {
@@ -2684,34 +2915,49 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     bool tws_connected =
         bts_tws_if_is_tws_link_connected();
 
+    bool mobile_connected =
+        app_bt_ibrt_has_mobile_link_connected();
+
+    TWS_UI_ROLE_E ui_role =
+        app_ibrt_if_get_ui_role();
+
     EARBUDS_TRACE(
         6,
         "[NTT_CASE_CB][LOCAL] state=%d peer=%d "
         "role=%d tws=%d mobile=%d owner=%d",
         state,
         peer_state,
-        app_ibrt_if_get_ui_role(),
+        ui_role,
         tws_connected,
-        app_bt_ibrt_has_mobile_link_connected(),
+        mobile_connected,
         g_ntt_first_out_owner);
 
+    /*
+     * 本機入盒。
+     */
     if (state == NTT_CASE_STATE_IN_CASE)
     {
         EARBUDS_TRACE(
             0,
             "[NTT_CASE_CB][LOCAL] IN_CASE");
 
-        app_key_handle_pause_music_on_pogo_in();
+        ntt_case_check_pause_music_when_both_in();
+
         ntt_first_out_reset_local();
         return;
     }
 
+    /*
+     * 非有效 OUT_CASE 狀態。
+     */
     if (state != NTT_CASE_STATE_OUT_CASE)
     {
         EARBUDS_TRACE(
             1,
             "[NTT_CASE_CB][LOCAL] invalid state=%d",
             state);
+
+        ntt_case_check_pause_music_when_both_in();
         return;
     }
 
@@ -2720,9 +2966,12 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         "[NTT_CASE_CB][LOCAL] OUT_CASE");
 
     /*
-     * 耳機離盒且 TWS 已連線時：
-     *
-     * 若本機目前是 Slave，主動將本機電量推送給 Master。
+     * 本機離盒，重置雙耳入盒 Pause 旗標。
+     */
+    ntt_case_check_pause_music_when_both_in();
+
+    /*
+     * Slave 離盒時推送本機電量。
      */
     if (tws_connected)
     {
@@ -2741,10 +2990,35 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     earBudsCloseOff_PogonIn_StopTimer();
 
     /*
-     * 判斷是否為先離盒者。
-     *
-     * 本機已 OUT、Peer 仍 IN：
-     * 本機就是先離盒者。
+     * 已有手機連線，不需要回連。
+     */
+    if (mobile_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] local OUT, "
+            "mobile already connected");
+
+        g_ntt_first_out_reconnect_started = true;
+        return;
+    }
+
+    /*
+     * 本功能目前以 TWS Link 存在為前提。
+     */
+    if (!tws_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] local OUT, "
+            "wait TWS connection");
+
+        return;
+    }
+
+    /*
+     * Local OUT，Peer IN：
+     * 本機明確是先離盒者。
      */
     if (peer_state == NTT_CASE_STATE_IN_CASE)
     {
@@ -2757,80 +3031,193 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     }
 
     /*
-     * Peer 已經 OUT：
-     * 表示 Peer 先離盒，本機是後離盒者。
+     * Local OUT，Peer UNKNOWN：
+     *
+     * Peer 狀態可能尚未同步。
+     * 若本機已是 Master，由本機先接手回連；
+     * 若本機是 Slave，只等待，不清除整輪狀態。
      */
-    if (peer_state == NTT_CASE_STATE_OUT_CASE)
+    if (peer_state == NTT_CASE_STATE_UNKNOWN)
     {
         EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] peer already OUT, local later OUT");
+            2,
+            "[NTT_FIRST_OUT] peer UNKNOWN, role=%d",
+            ui_role);
 
-        ntt_later_out_keep_slave();
+        if (ntt_first_out_is_master())
+        {
+            ntt_first_out_master_recovery(
+                "LOCAL_OUT_PEER_UNKNOWN_MASTER");
+        }
+        else
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_FIRST_OUT] peer UNKNOWN, "
+                "SLAVE waits");
+        }
+
         return;
     }
 
     /*
-     * Peer UNKNOWN：
-     * 不應貿然搶 Master，避免兩耳同時回連。
+     * Local OUT，Peer 也 OUT。
      *
-     * 正常情況下，兩耳在盒內收到有效 UART packet 後，
-     * peer 應該是 IN_CASE。
+     * 正常可能代表本機後離盒；
+     * 但如果沒有 owner，必須讓目前 Master Recovery，
+     * 避免雙耳都 OUT 卻沒有人回連。
      */
+    if (peer_state == NTT_CASE_STATE_OUT_CASE)
+    {
+        if (ntt_first_out_is_master())
+        {
+            EARBUDS_TRACE(
+                3,
+                "[NTT_FIRST_OUT] BOTH OUT, "
+                "MASTER force recovery owner=%d started=%d",
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started);
+
+            g_ntt_first_out_owner = true;
+            g_ntt_first_out_role_switch_requested = false;
+            g_ntt_first_out_reconnect_started = false;
+            g_ntt_first_out_role_check_count = 0;
+
+            ntt_first_out_role_check_stop();
+
+            ntt_first_out_start_mobile_reconnect();
+        }
+        else
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_FIRST_OUT] BOTH OUT, "
+                "SLAVE stays follower");
+
+            ntt_later_out_keep_slave();
+        }
+
+        return;
+    }
+
     EARBUDS_TRACE(
         1,
-        "[NTT_FIRST_OUT] peer UNKNOWN, wait peer state");
-
-    ntt_later_out_keep_slave();
+        "[NTT_FIRST_OUT] unexpected peer state=%d",
+        peer_state);
 }
 
+
+/*
+ * Peer Case State 改變 callback。
+ */
 extern "C"
-void ntt_case_state_peer_changed_callback(NTT_CASE_STATE_E state)
+void ntt_case_state_peer_changed_callback(
+    NTT_CASE_STATE_E state)
 {
-    NTT_CASE_STATE_E local_state = ntt_case_state_get_local();
+    NTT_CASE_STATE_E local_state =
+        ntt_case_state_get_local();
+
+    bool tws_connected =
+        bts_tws_if_is_tws_link_connected();
+
+    bool mobile_connected =
+        app_bt_ibrt_has_mobile_link_connected();
+
+    TWS_UI_ROLE_E ui_role =
+        app_ibrt_if_get_ui_role();
+
+    bool both_out =
+        local_state == NTT_CASE_STATE_OUT_CASE &&
+        state == NTT_CASE_STATE_OUT_CASE;
+
     EARBUDS_TRACE(
-        6,
+        8,
         "[NTT_CASE_CB][PEER] peer=%d local=%d "
-        "role=%d owner=%d both_out=%d",
+        "role=%d owner=%d both_out=%d "
+        "tws=%d mobile=%d",
         state,
         local_state,
-        app_ibrt_if_get_ui_role(),
+        ui_role,
         g_ntt_first_out_owner,
-        ntt_case_state_are_both_out());
+        both_out,
+        tws_connected,
+        mobile_connected);
 
+    /*
+     * Peer 狀態更新後，也要檢查雙耳入盒 Pause。
+     */
+    ntt_case_check_pause_music_when_both_in();
+
+    /*
+     * Peer IN_CASE。
+     */
     if (state == NTT_CASE_STATE_IN_CASE)
     {
-        EARBUDS_TRACE(0,"[NTT_CASE_CB][PEER] peer IN_CASE");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CASE_CB][PEER] peer IN_CASE");
+
         /*
-         * 若本機已 OUT，而 Peer 現在明確是 IN，
-         * 表示本機是先離盒者。
-         *
-         * 這也處理 local OUT 時 peer 尚為 UNKNOWN 的情況。
+         * Local 已 OUT、Peer 明確 IN：
+         * Local 是先離盒者。
          */
-        if (local_state == NTT_CASE_STATE_OUT_CASE && !g_ntt_first_out_owner)
+        if (local_state == NTT_CASE_STATE_OUT_CASE &&
+            !mobile_connected &&
+            !g_ntt_first_out_owner)
         {
-            EARBUDS_TRACE(0,"[NTT_FIRST_OUT] local OUT + peer IN -> claim owner");
+            EARBUDS_TRACE(
+                0,
+                "[NTT_FIRST_OUT] local OUT + peer IN "
+                "-> claim owner");
+
             ntt_first_out_take_master_and_reconnect();
         }
 
         return;
     }
 
+    /*
+     * 非 OUT_CASE 不處理。
+     */
     if (state != NTT_CASE_STATE_OUT_CASE)
     {
+        EARBUDS_TRACE(
+            1,
+            "[NTT_CASE_CB][PEER] invalid state=%d",
+            state);
+
         return;
     }
 
-    EARBUDS_TRACE(0,"[NTT_CASE_CB][PEER] peer OUT_CASE");
+    EARBUDS_TRACE(
+        0,
+        "[NTT_CASE_CB][PEER] peer OUT_CASE");
+
     /*
-     * Peer 先送來 OUT，而本機仍在盒內：
-     * 明確表示 Peer 是先離盒者。
-     *
-     * 本機之後離盒時必須保持 Slave、不回連。
+     * 手機已連線，不需回連。
+     */
+    if (mobile_connected)
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] peer OUT, "
+            "mobile already connected");
+
+        g_ntt_first_out_reconnect_started = true;
+        return;
+    }
+
+    /*
+     * Peer 先 OUT，而 Local 還在盒內。
+     * Local 不可 claim owner。
      */
     if (local_state == NTT_CASE_STATE_IN_CASE)
     {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] peer is first OUT, local remains IN");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_FIRST_OUT] peer is first OUT, "
+            "local remains IN");
+
         g_ntt_first_out_owner = false;
         g_ntt_first_out_role_switch_requested = false;
         g_ntt_first_out_reconnect_started = false;
@@ -2839,17 +3226,55 @@ void ntt_case_state_peer_changed_callback(NTT_CASE_STATE_E state)
         return;
     }
 
-    if (local_state == NTT_CASE_STATE_OUT_CASE)
+    /*
+     * 雙耳都 OUT。
+     */
+    if (both_out)
     {
-        if (g_ntt_first_out_owner)
+        if (!tws_connected)
         {
-            EARBUDS_TRACE(1,"[NTT_FIRST_OUT] BOTH OUT, local keeps owner tws=%d",bts_tws_if_is_tws_link_connected());
+            EARBUDS_TRACE(
+                0,
+                "[NTT_FIRST_OUT] BOTH OUT, "
+                "TWS disconnected");
+
+            return;
+        }
+
+        if (ntt_first_out_is_master())
+        {
+            EARBUDS_TRACE(
+                3,
+                "[NTT_FIRST_OUT] BOTH OUT peer callback, "
+                "MASTER force recovery owner=%d started=%d",
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started);
+
+            g_ntt_first_out_owner = true;
+            g_ntt_first_out_role_switch_requested = false;
+            g_ntt_first_out_reconnect_started = false;
+            g_ntt_first_out_role_check_count = 0;
+
+            ntt_first_out_role_check_stop();
+
             ntt_first_out_start_mobile_reconnect();
         }
         else
         {
-            EARBUDS_TRACE(0,"[NTT_FIRST_OUT] BOTH OUT, local stays follower");
-        }
-    }
-}
+            EARBUDS_TRACE(
+                0,
+                "[NTT_FIRST_OUT] BOTH OUT peer callback, "
+                "SLAVE stays follower");
 
+            ntt_later_out_keep_slave();
+        }
+
+        return;
+    }
+
+    EARBUDS_TRACE(
+        2,
+        "[NTT_FIRST_OUT] peer OUT, "
+        "unexpected local=%d",
+        local_state);
+}

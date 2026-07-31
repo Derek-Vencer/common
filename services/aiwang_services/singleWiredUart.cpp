@@ -71,7 +71,7 @@
 // 串口空闲定时器
 static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
-#define UART_IDLE_TIMEOUT_MS 500
+#define UART_IDLE_TIMEOUT_MS 2000
 // 空闲超时回调函数
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
@@ -1516,7 +1516,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;

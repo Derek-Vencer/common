@@ -1600,7 +1600,7 @@ const SpeechConfig WEAK speech_cfg_default = {
 ****************************************************************************************************/
     .rx_post_gain = {
         .bypass     = 0,
-        .gain_dB    = 10.0f,
+        .gain_dB    = 0.0f,
     },
 #endif
 
