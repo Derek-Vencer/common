@@ -675,6 +675,13 @@ static void wired_uart_factory_reset_app_nv(void)
         return;
     }
 
+    nvrecord_env->stale_mobile_valid = 0;
+
+    memset(
+        nvrecord_env->stale_mobile_addr,
+        0,
+        sizeof(nvrecord_env->stale_mobile_addr));
+
     nvrecord_env->eq_index_data = 0;
     nvrecord_env->key_map_number = sizeof(default_action);
 
@@ -1623,7 +1630,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             set_pair_status(0);
             set_er_discover_connectable_status(1);
-
+            //ntt_stale_mobile_tombstone_clear_all();
             app_ibrt_if_init_open_box_state_for_evb();
 
             app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);

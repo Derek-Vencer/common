@@ -641,6 +641,9 @@ void app_bt_register_search_ui_callback(app_ibrt_search_ui_cb_t *cbs);
 void app_bt_notify_profile_evt_callback(uint8_t device_id, uint64_t profile,void *param1,void *param2,void* param3);
 void app_bt_notify_global_callback(const btif_event_t *event);
 void app_bt_rs_profile_protect_ind(uint8_t device_id, int profile_id, uint8_t enable, bool is_connect_profile);
+void ntt_stale_mobile_tombstone_clear(const bt_bdaddr_t *mobile_addr);
+void ntt_stale_mobile_tombstone_clear_all(void);
+
 #ifdef __cplusplus
 }
 #endif

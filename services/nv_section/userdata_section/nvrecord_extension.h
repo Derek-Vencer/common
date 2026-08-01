@@ -364,6 +364,18 @@ struct nvrecord_env_t {
     uint8_t color_code;
     //fixed storage for box version
     //uint8_t chargerBoxVersion[16+1];
+/*
+ * NTT stale mobile bond tombstone.
+ *
+ * stale_mobile_valid:
+ *   0xA5 = valid
+ *   other = invalid
+ *
+ * stale_mobile_addr:
+ *   phone Bluetooth address that has deleted the earbud bond.
+ */
+uint8_t stale_mobile_valid;
+uint8_t stale_mobile_addr[6];
 //----------------------------------------------------------------------------------------------
 };
 
