@@ -197,12 +197,29 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
  * Implementations are located after app_bt_global_handle(),
  * so prototypes are required before the AUTH event handler.
  */
-static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr);
-static bool ntt_stale_mobile_addr_equal(const bt_bdaddr_t *addr1,const bt_bdaddr_t *addr2);
-static bool ntt_stale_mobile_tombstone_get(bt_bdaddr_t *stale_addr);
-static bool ntt_stale_mobile_tombstone_match(const bt_bdaddr_t *mobile_addr);
-static void ntt_stale_mobile_tombstone_set(const bt_bdaddr_t *mobile_addr);
+static bool ntt_bt_addr_is_invalid(
+    const bt_bdaddr_t *addr);
 
+static bool ntt_stale_mobile_addr_is_valid(
+    const uint8_t *addr);
+
+static int ntt_stale_mobile_tombstone_find_slot(
+    const bt_bdaddr_t *mobile_addr);
+
+static int ntt_stale_mobile_tombstone_find_free_slot(void);
+
+static bool ntt_stale_mobile_tombstone_match(
+    const bt_bdaddr_t *mobile_addr);
+
+static void ntt_stale_mobile_tombstone_set(
+    const bt_bdaddr_t *mobile_addr);
+
+static bool ntt_delete_stale_mobile_record_local(
+    const bt_bdaddr_t *mobile_addr);
+
+
+static int ntt_stale_mobile_tombstone_find_free_slot(void);
+static bool ntt_stale_mobile_tombstone_match(const bt_bdaddr_t *mobile_addr);
 
 static bool ntt_delete_stale_mobile_record_local(const bt_bdaddr_t *mobile_addr);
 
@@ -230,6 +247,48 @@ osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 #if BT_DEVICE_NUM > 2
 osTimerDef (BT_PROFILE_CONNECT_TIMER2, app_bt_profile_reconnect_timehandler);
 #endif
+
+static void ntt_stale_mobile_tombstone_dump(
+    const char *tag)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        DEBUG_INFO(
+            1,
+            "[NTT_STALE_V3] dump %s env=NULL",
+            tag ? tag : "NULL");
+        return;
+    }
+
+    DEBUG_INFO(
+        15,
+        "[NTT_STALE_V3] dump %s "
+        "s0_valid=0x%02x "
+        "s0=%02x:%02x:%02x:%02x:%02x:%02x "
+        "s1_valid=0x%02x "
+        "s1=%02x:%02x:%02x:%02x:%02x:%02x",
+        tag ? tag : "NULL",
+
+        nvrecord_env->stale_mobile_valid,
+        nvrecord_env->stale_mobile_addr[5],
+        nvrecord_env->stale_mobile_addr[4],
+        nvrecord_env->stale_mobile_addr[3],
+        nvrecord_env->stale_mobile_addr[2],
+        nvrecord_env->stale_mobile_addr[1],
+        nvrecord_env->stale_mobile_addr[0],
+
+        nvrecord_env->stale_mobile_valid_2,
+        nvrecord_env->stale_mobile_addr_2[5],
+        nvrecord_env->stale_mobile_addr_2[4],
+        nvrecord_env->stale_mobile_addr_2[3],
+        nvrecord_env->stale_mobile_addr_2[2],
+        nvrecord_env->stale_mobile_addr_2[1],
+        nvrecord_env->stale_mobile_addr_2[0]);
+}
 
 static bool app_bt_ntt_fix_empty_phone_cod(uint8_t device_id)
 {
@@ -5176,143 +5235,195 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
 }
 
 #define NTT_STALE_MOBILE_VALID_MAGIC    0xA5
+#define NTT_STALE_MOBILE_SLOT_COUNT     2
+#define NTT_STALE_MOBILE_ADDR_LEN       6
 
-static bool ntt_stale_mobile_addr_equal(const bt_bdaddr_t *addr1,const bt_bdaddr_t *addr2)
+static uint8_t ntt_stale_mobile_slot_valid_get(const struct nvrecord_env_t *nvrecord_env,uint8_t slot)
 {
-    if ((addr1 == NULL) || (addr2 == NULL))
+    if (nvrecord_env == NULL)
     {
-        return false;
+        return 0;
     }
 
-    return memcmp(
-               addr1->address,
-               addr2->address,
-               sizeof(addr1->address)) == 0;
+    if (slot == 0)
+    {
+        return nvrecord_env->stale_mobile_valid;
+    }
+
+    if (slot == 1)
+    {
+        return nvrecord_env->stale_mobile_valid_2;
+    }
+
+    return 0;
 }
 
-static bool ntt_stale_mobile_tombstone_get(bt_bdaddr_t *stale_addr)
+static const uint8_t *ntt_stale_mobile_slot_addr_get(const struct nvrecord_env_t *nvrecord_env,uint8_t slot)
+{
+    if (nvrecord_env == NULL)
+    {
+        return NULL;
+    }
+
+    if (slot == 0)
+    {
+        return nvrecord_env->stale_mobile_addr;
+    }
+
+    if (slot == 1)
+    {
+        return nvrecord_env->stale_mobile_addr_2;
+    }
+
+    return NULL;
+}
+
+static void ntt_stale_mobile_slot_write(
+    struct nvrecord_env_t *nvrecord_env,
+    uint8_t slot,
+    uint8_t valid,
+    const uint8_t *addr)
+{
+    uint8_t *slot_addr = NULL;
+
+    if (nvrecord_env == NULL)
+    {
+        return;
+    }
+
+    if (slot == 0)
+    {
+        nvrecord_env->stale_mobile_valid = valid;
+        slot_addr = nvrecord_env->stale_mobile_addr;
+    }
+    else if (slot == 1)
+    {
+        nvrecord_env->stale_mobile_valid_2 = valid;
+        slot_addr = nvrecord_env->stale_mobile_addr_2;
+    }
+    else
+    {
+        return;
+    }
+
+    if (addr != NULL)
+    {
+        memcpy(
+            slot_addr,
+            addr,
+            BTIF_BD_ADDR_SIZE);
+    }
+    else
+    {
+        memset(
+            slot_addr,
+            0,
+            BTIF_BD_ADDR_SIZE);
+    }
+}
+
+static int ntt_stale_mobile_tombstone_find_slot(
+    const bt_bdaddr_t *mobile_addr)
 {
     struct nvrecord_env_t *nvrecord_env = NULL;
 
-    if (stale_addr == NULL)
+    if ((mobile_addr == NULL) ||
+        ntt_bt_addr_is_invalid(mobile_addr))
     {
-        return false;
+        return -1;
     }
 
-    memset(
-        stale_addr,
-        0,
-        sizeof(*stale_addr));
-
-    nv_record_env_get(
-        &nvrecord_env);
+    nv_record_env_get(&nvrecord_env);
 
     if (nvrecord_env == NULL)
     {
         DEBUG_INFO(
             0,
-            "[NTT_STALE] NV env is NULL");
+            "[NTT_STALE_V3] find slot failed: NV env NULL");
 
-        return false;
+        return -1;
     }
 
-    if (nvrecord_env->stale_mobile_valid !=
-        NTT_STALE_MOBILE_VALID_MAGIC)
+    for (uint8_t slot = 0; slot < 2; slot++)
+    {
+        uint8_t valid =
+            ntt_stale_mobile_slot_valid_get(
+                nvrecord_env,
+                slot);
+
+        const uint8_t *addr =
+            ntt_stale_mobile_slot_addr_get(
+                nvrecord_env,
+                slot);
+
+        if (valid != NTT_STALE_MOBILE_VALID_MAGIC)
+        {
+            continue;
+        }
+
+        if (!ntt_stale_mobile_addr_is_valid(addr))
+        {
+            DEBUG_INFO(
+                2,
+                "[NTT_STALE_V3] find skip corrupted slot=%d "
+                "valid=0x%02x",
+                slot,
+                valid);
+
+            continue;
+        }
+
+        if (memcmp(
+                addr,
+                mobile_addr->address,
+                BTIF_BD_ADDR_SIZE) == 0)
+        {
+            return (int)slot;
+        }
+    }
+
+    return -1;
+}
+
+static bool ntt_stale_mobile_addr_is_valid(
+    const uint8_t *addr)
+{
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0, 0, 0, 0, 0, 0
+    };
+
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF
+    };
+
+    if (addr == NULL)
     {
         return false;
     }
 
-    memcpy(
-        stale_addr->address,
-        nvrecord_env->stale_mobile_addr,
-        sizeof(stale_addr->address));
-
-    if (ntt_bt_addr_is_invalid(stale_addr))
+    if (memcmp(
+            addr,
+            zero_addr,
+            BTIF_BD_ADDR_SIZE) == 0)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_STALE] invalid tombstone, clear");
+        return false;
+    }
 
-        nvrecord_env->stale_mobile_valid = 0;
-
-        memset(
-            nvrecord_env->stale_mobile_addr,
-            0,
-            sizeof(nvrecord_env->stale_mobile_addr));
-
-        nv_record_env_set(
-            nvrecord_env);
-
-        nv_record_flash_flush();
-
+    if (memcmp(
+            addr,
+            ff_addr,
+            BTIF_BD_ADDR_SIZE) == 0)
+    {
         return false;
     }
 
     return true;
 }
 
-static bool ntt_stale_mobile_tombstone_match(const bt_bdaddr_t *mobile_addr)
-{
-    bt_bdaddr_t stale_addr;
-
-    if (mobile_addr == NULL)
-    {
-        return false;
-    }
-
-    memset(&stale_addr,0,sizeof(stale_addr));
-
-    if (!ntt_stale_mobile_tombstone_get(&stale_addr))
-    {
-        return false;
-    }
-
-    return ntt_stale_mobile_addr_equal(mobile_addr,&stale_addr);
-}
-
-static void ntt_stale_mobile_tombstone_set(const bt_bdaddr_t *mobile_addr)
-{
-    struct nvrecord_env_t *nvrecord_env = NULL;
-
-    if ((mobile_addr == NULL) || ntt_bt_addr_is_invalid(mobile_addr))
-    {
-        DEBUG_INFO(0,"[NTT_STALE] set rejected: invalid address");
-
-        return;
-    }
-
-    nv_record_env_get(
-        &nvrecord_env);
-
-    if (nvrecord_env == NULL)
-    {
-        DEBUG_INFO(0,"[NTT_STALE] set failed: NV env NULL");
-
-        return;
-    }
-
-    nvrecord_env->stale_mobile_valid = NTT_STALE_MOBILE_VALID_MAGIC;
-    memcpy(nvrecord_env->stale_mobile_addr,mobile_addr->address,sizeof(nvrecord_env->stale_mobile_addr));
-    nv_record_env_set(nvrecord_env);
-
-    /*
-     * 此資訊必須在重新開機後仍存在，因此使用同步 flush。
-     */
-    nv_record_flash_flush();
-
-    DEBUG_INFO(
-        6,
-        "[NTT_STALE] tombstone saved "
-        "%02x:%02x:%02x:%02x:%02x:%02x",
-        mobile_addr->address[5],
-        mobile_addr->address[4],
-        mobile_addr->address[3],
-        mobile_addr->address[2],
-        mobile_addr->address[1],
-        mobile_addr->address[0]);
-}
-
-void ntt_stale_mobile_tombstone_clear_all(void)
+static int ntt_stale_mobile_tombstone_find_free_slot(void)
 {
     struct nvrecord_env_t *nvrecord_env = NULL;
 
@@ -5320,51 +5431,146 @@ void ntt_stale_mobile_tombstone_clear_all(void)
 
     if (nvrecord_env == NULL)
     {
-        DEBUG_INFO(0,"[NTT_STALE] clear all failed: NV env NULL");
-        return;
+        DEBUG_INFO(
+            0,
+            "[NTT_STALE_V3] find free slot failed: NV env NULL");
+
+        return -1;
     }
 
-    nvrecord_env->stale_mobile_valid = 0;
+    for (uint8_t slot = 0; slot < 2; slot++)
+    {
+        uint8_t valid =
+            ntt_stale_mobile_slot_valid_get(
+                nvrecord_env,
+                slot);
 
-    memset(nvrecord_env->stale_mobile_addr,0,sizeof(nvrecord_env->stale_mobile_addr));
+        const uint8_t *addr =
+            ntt_stale_mobile_slot_addr_get(
+                nvrecord_env,
+                slot);
 
-    nv_record_env_set(nvrecord_env);
-    nv_record_execute_async_flush();
+        /*
+         * Valid flag 不是 magic，直接視為空 slot。
+         */
+        if (valid != NTT_STALE_MOBILE_VALID_MAGIC)
+        {
+            DEBUG_INFO(
+                2,
+                "[NTT_STALE_V3] free slot=%d valid=0x%02x",
+                slot,
+                valid);
 
-    DEBUG_INFO(0,"[NTT_STALE] tombstone clear all");
+            return (int)slot;
+        }
+
+        /*
+         * valid == 0xA5，但地址為全 0 或全 FF：
+         * 這是舊 NV、版本遷移或之前錯誤寫入留下的損壞 slot。
+         *
+         * 必須回收，否則永遠出現 no free slot。
+         */
+        if (!ntt_stale_mobile_addr_is_valid(addr))
+        {
+            DEBUG_INFO(
+                2,
+                "[NTT_STALE_V3] reclaim corrupted slot=%d "
+                "valid=0x%02x",
+                slot,
+                valid);
+
+            ntt_stale_mobile_slot_write(
+                nvrecord_env,
+                slot,
+                0,
+                NULL);
+
+            nv_record_env_set(nvrecord_env);
+            nv_record_flash_flush();
+
+            return (int)slot;
+        }
+
+        DEBUG_INFO(
+            9,
+            "[NTT_STALE_V3] occupied slot=%d "
+            "valid=0x%02x "
+            "%02x:%02x:%02x:%02x:%02x:%02x",
+            slot,
+            valid,
+            addr[5],
+            addr[4],
+            addr[3],
+            addr[2],
+            addr[1],
+            addr[0]);
+    }
+
+    return -1;
 }
 
-void ntt_stale_mobile_tombstone_clear(const bt_bdaddr_t *mobile_addr)
+static bool ntt_stale_mobile_tombstone_match(
+    const bt_bdaddr_t *mobile_addr)
+{
+    int slot = ntt_stale_mobile_tombstone_find_slot(mobile_addr);
+
+    if (slot < 0)
+    {
+        return false;
+    }
+
+    DEBUG_INFO(
+        7,
+        "[NTT_STALE_V3] match slot=%d "
+        "%02x:%02x:%02x:%02x:%02x:%02x",
+        slot,
+        mobile_addr->address[5],
+        mobile_addr->address[4],
+        mobile_addr->address[3],
+        mobile_addr->address[2],
+        mobile_addr->address[1],
+        mobile_addr->address[0]);
+
+    return true;
+}
+
+static void ntt_stale_mobile_tombstone_set(const bt_bdaddr_t *mobile_addr)
 {
     struct nvrecord_env_t *nvrecord_env = NULL;
-    bt_bdaddr_t stale_addr;
+    int slot;
 
-    if (mobile_addr == NULL)
+    if ((mobile_addr == NULL) ||
+        ntt_bt_addr_is_invalid(mobile_addr))
     {
+        DEBUG_INFO(
+            0,
+            "[NTT_STALE_V3] set rejected: invalid address");
+
         return;
     }
 
-    memset(&stale_addr,0,sizeof(stale_addr));
+    slot =
+        ntt_stale_mobile_tombstone_find_slot(
+            mobile_addr);
 
-    /*
-     * 沒有有效 tombstone，直接返回。
-     */
-    if (!ntt_stale_mobile_tombstone_get(&stale_addr))
+    if (slot >= 0)
     {
+        DEBUG_INFO(
+            1,
+            "[NTT_STALE_V3] address already saved slot=%d",
+            slot);
+
         return;
     }
 
-    /*
-     * 新 Link Key 地址不是被封鎖的手機地址。
-     *
-     * TWS Peer Link Key 會在這裡直接返回，
-     * 不會清除手機 tombstone。
-     */
-    if (!ntt_stale_mobile_addr_equal(mobile_addr,&stale_addr))
+    slot =
+        ntt_stale_mobile_tombstone_find_free_slot();
+
+    if (slot < 0)
     {
         DEBUG_INFO(
             6,
-            "[NTT_STALE] clear skip, address mismatch "
+            "[NTT_STALE_V3] no free slot for "
             "%02x:%02x:%02x:%02x:%02x:%02x",
             mobile_addr->address[5],
             mobile_addr->address[4],
@@ -5380,26 +5586,186 @@ void ntt_stale_mobile_tombstone_clear(const bt_bdaddr_t *mobile_addr)
 
     if (nvrecord_env == NULL)
     {
-        DEBUG_INFO(0,"[NTT_STALE] clear failed: NV env NULL");
+        DEBUG_INFO(
+            0,
+            "[NTT_STALE_V3] set failed: NV env NULL");
 
         return;
     }
 
-    nvrecord_env->stale_mobile_valid = 0;
+    /*
+     * 寫入前直接印目前指標內容。
+     *
+     * 不可呼叫 ntt_stale_mobile_tombstone_dump()，
+     * 因為該函數會再次執行 nv_record_env_get()。
+     */
+    DEBUG_INFO(
+        15,
+        "[NTT_STALE_V3] before write "
+        "slot=%d "
+        "s0_valid=0x%02x "
+        "s0=%02x:%02x:%02x:%02x:%02x:%02x "
+        "s1_valid=0x%02x "
+        "s1=%02x:%02x:%02x:%02x:%02x:%02x",
+        slot,
 
-    memset(nvrecord_env->stale_mobile_addr,0,sizeof(nvrecord_env->stale_mobile_addr));
+        nvrecord_env->stale_mobile_valid,
+        nvrecord_env->stale_mobile_addr[5],
+        nvrecord_env->stale_mobile_addr[4],
+        nvrecord_env->stale_mobile_addr[3],
+        nvrecord_env->stale_mobile_addr[2],
+        nvrecord_env->stale_mobile_addr[1],
+        nvrecord_env->stale_mobile_addr[0],
 
+        nvrecord_env->stale_mobile_valid_2,
+        nvrecord_env->stale_mobile_addr_2[5],
+        nvrecord_env->stale_mobile_addr_2[4],
+        nvrecord_env->stale_mobile_addr_2[3],
+        nvrecord_env->stale_mobile_addr_2[2],
+        nvrecord_env->stale_mobile_addr_2[1],
+        nvrecord_env->stale_mobile_addr_2[0]);
+
+    /*
+     * 修改同一份 nvrecord_env。
+     */
+    ntt_stale_mobile_slot_write(
+        nvrecord_env,
+        (uint8_t)slot,
+        NTT_STALE_MOBILE_VALID_MAGIC,
+        mobile_addr->address);
+
+    /*
+     * 直接檢查目前指標內容。
+     *
+     * 這裡不能再次呼叫 nv_record_env_get()。
+     */
+    DEBUG_INFO(
+        15,
+        "[NTT_STALE_V3] after RAM write "
+        "slot=%d "
+        "s0_valid=0x%02x "
+        "s0=%02x:%02x:%02x:%02x:%02x:%02x "
+        "s1_valid=0x%02x "
+        "s1=%02x:%02x:%02x:%02x:%02x:%02x",
+        slot,
+
+        nvrecord_env->stale_mobile_valid,
+        nvrecord_env->stale_mobile_addr[5],
+        nvrecord_env->stale_mobile_addr[4],
+        nvrecord_env->stale_mobile_addr[3],
+        nvrecord_env->stale_mobile_addr[2],
+        nvrecord_env->stale_mobile_addr[1],
+        nvrecord_env->stale_mobile_addr[0],
+
+        nvrecord_env->stale_mobile_valid_2,
+        nvrecord_env->stale_mobile_addr_2[5],
+        nvrecord_env->stale_mobile_addr_2[4],
+        nvrecord_env->stale_mobile_addr_2[3],
+        nvrecord_env->stale_mobile_addr_2[2],
+        nvrecord_env->stale_mobile_addr_2[1],
+        nvrecord_env->stale_mobile_addr_2[0]);
+
+    /*
+     * 必須在任何其他 nv_record_env_get() 前先提交。
+     */
     nv_record_env_set(nvrecord_env);
 
     /*
-     * 不要在 BT callback 中同步阻塞 flash。
+     * 立即保存，避免重启前資料尚未落盤。
      */
+    nv_record_flash_flush();
+
+    DEBUG_INFO(
+        7,
+        "[NTT_STALE_V3] saved slot=%d "
+        "%02x:%02x:%02x:%02x:%02x:%02x",
+        slot,
+        mobile_addr->address[5],
+        mobile_addr->address[4],
+        mobile_addr->address[3],
+        mobile_addr->address[2],
+        mobile_addr->address[1],
+        mobile_addr->address[0]);
+
+    /*
+     * 已完成 nv_record_env_set() 與 flash flush，
+     * 此時才可以重新 get 並 dump。
+     */
+    ntt_stale_mobile_tombstone_dump(
+        "after committed");
+}
+
+void ntt_stale_mobile_tombstone_clear_all(void)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        DEBUG_INFO(0, "[NTT_STALE_V3] clear all failed: NV env NULL");
+        return;
+    }
+
+    ntt_stale_mobile_slot_write(nvrecord_env, 0, 0, NULL);
+    ntt_stale_mobile_slot_write(nvrecord_env, 1, 0, NULL);
+
+    nv_record_env_set(nvrecord_env);
+    nv_record_execute_async_flush();
+
+    DEBUG_INFO(0, "[NTT_STALE_V3] all tombstones cleared");
+}
+
+void ntt_stale_mobile_tombstone_clear(
+    const bt_bdaddr_t *mobile_addr)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+    int slot;
+
+    if (mobile_addr == NULL)
+    {
+        return;
+    }
+
+    slot = ntt_stale_mobile_tombstone_find_slot(mobile_addr);
+
+    if (slot < 0)
+    {
+        DEBUG_INFO(
+            6,
+            "[NTT_STALE_V3] clear skip, no matching slot "
+            "%02x:%02x:%02x:%02x:%02x:%02x",
+            mobile_addr->address[5],
+            mobile_addr->address[4],
+            mobile_addr->address[3],
+            mobile_addr->address[2],
+            mobile_addr->address[1],
+            mobile_addr->address[0]);
+        return;
+    }
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        DEBUG_INFO(0, "[NTT_STALE_V3] clear failed: NV env NULL");
+        return;
+    }
+
+    ntt_stale_mobile_slot_write(
+        nvrecord_env,
+        (uint8_t)slot,
+        0,
+        NULL);
+
+    nv_record_env_set(nvrecord_env);
     nv_record_execute_async_flush();
 
     DEBUG_INFO(
-        6,
-        "[NTT_STALE] tombstone cleared "
+        7,
+        "[NTT_STALE_V3] cleared slot=%d "
         "%02x:%02x:%02x:%02x:%02x:%02x",
+        slot,
         mobile_addr->address[5],
         mobile_addr->address[4],
         mobile_addr->address[3],

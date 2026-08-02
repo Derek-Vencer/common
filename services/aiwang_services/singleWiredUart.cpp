@@ -682,6 +682,13 @@ static void wired_uart_factory_reset_app_nv(void)
         0,
         sizeof(nvrecord_env->stale_mobile_addr));
 
+    nvrecord_env->stale_mobile_valid_2 = 0;
+
+    memset(
+        nvrecord_env->stale_mobile_addr_2,
+        0,
+        sizeof(nvrecord_env->stale_mobile_addr_2));
+
     nvrecord_env->eq_index_data = 0;
     nvrecord_env->key_map_number = sizeof(default_action);
 
