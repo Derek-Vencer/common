@@ -1517,7 +1517,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1636,15 +1636,15 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         uint32_t now = hal_sys_timer_get();
 
-        DBGPRINT(
-            "[BOX_BAT][RX][%s] len=%u target=0x%02X",
-            isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
-            uart_dat_len,
-            uart_cmd_dat[3]);
+        //DBGPRINT(
+        //    "[BOX_BAT][RX][%s] len=%u target=0x%02X",
+        //    isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
+        //    uart_dat_len,
+        //    uart_cmd_dat[3]);
 
-        DUMP8("[BOX_BAT][RX_RAW] ",
-            uart_cmd_dat,
-            uart_dat_len);
+        //DUMP8("[BOX_BAT][RX_RAW] ",
+        //    uart_cmd_dat,
+        //    uart_dat_len);
 
         if (ntt_last_box_battery_case_tick != 0)
         {
