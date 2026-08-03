@@ -675,20 +675,6 @@ static void wired_uart_factory_reset_app_nv(void)
         return;
     }
 
-    nvrecord_env->stale_mobile_valid = 0;
-
-    memset(
-        nvrecord_env->stale_mobile_addr,
-        0,
-        sizeof(nvrecord_env->stale_mobile_addr));
-
-    nvrecord_env->stale_mobile_valid_2 = 0;
-
-    memset(
-        nvrecord_env->stale_mobile_addr_2,
-        0,
-        sizeof(nvrecord_env->stale_mobile_addr_2));
-
     nvrecord_env->eq_index_data = 0;
     nvrecord_env->key_map_number = sizeof(default_action);
 
@@ -1637,7 +1623,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             set_pair_status(0);
             set_er_discover_connectable_status(1);
-            //ntt_stale_mobile_tombstone_clear_all();
+
             app_ibrt_if_init_open_box_state_for_evb();
 
             app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
@@ -1649,15 +1635,15 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         uint32_t now = hal_sys_timer_get();
 
-        DBGPRINT(
-            "[BOX_BAT][RX][%s] len=%u target=0x%02X",
-            isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
-            uart_dat_len,
-            uart_cmd_dat[3]);
+        //DBGPRINT(
+        //    "[BOX_BAT][RX][%s] len=%u target=0x%02X",
+        //    isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
+        //    uart_dat_len,
+        //    uart_cmd_dat[3]);
 
-        DUMP8("[BOX_BAT][RX_RAW] ",
-            uart_cmd_dat,
-            uart_dat_len);
+        //DUMP8("[BOX_BAT][RX_RAW] ",
+        //    uart_cmd_dat,
+        //    uart_dat_len);
 
         if (ntt_last_box_battery_case_tick != 0)
         {
@@ -1698,21 +1684,30 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
         if (isRightEarbuds == RIGHT_BUDS)
         {
+            bool tws_connected =
+                bts_tws_if_is_tws_link_connected();
+
             DBGPRINT(
                 "[NTT_TWS] connected=%d",
-                bts_tws_if_is_tws_link_connected());
+                tws_connected);
 
-            if (!bts_tws_if_is_tws_link_connected())
+            if (!tws_connected)
             {
+                /*
+                * 充電盒電量通知不是使用者手動配對要求。
+                *
+                * 不能在此呼叫 app_ibrt_start_power_on_tws_pairing()，
+                * 否則每次盒子送電量時，都可能重新啟動 pairing FSM。
+                */
                 DBGPRINT(
-                    "[NTT_TWS] not connected, start TWS pairing");
-
-                app_ibrt_start_power_on_tws_pairing();
+                    "[NTT_NO_AUTO_PAIR] TWS not connected, "
+                    "skip pairing from box battery event");
             }
             else
             {
                 DBGPRINT(
-                    "[NTT_TWS] RIGHT received box battery, resend case state");
+                    "[NTT_TWS] RIGHT received box battery, "
+                    "resend case state");
 
                 ntt_case_state_sync_resend();
             }

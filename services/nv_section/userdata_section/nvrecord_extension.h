@@ -26,7 +26,7 @@
 #endif
 
 // increase by 1 if the nvrecord's whole data structure is changed and the content needs to be rebuilt
-#define NV_EXTENSION_MAJOR_VERSION 20 //18
+#define NV_EXTENSION_MAJOR_VERSION 19 //18
 // increase by 1 if the new items are appended to the tail of the former nvrecord's data structure
 #define NV_EXTENSION_MINOR_VERSION 1
 
@@ -364,29 +364,6 @@ struct nvrecord_env_t {
     uint8_t color_code;
     //fixed storage for box version
     //uint8_t chargerBoxVersion[16+1];
-/*
- * NTT stale mobile bond tombstone.
- *
- * stale_mobile_valid:
- *   0xA5 = valid
- *   other = invalid
- *
- * stale_mobile_addr:
- *   phone Bluetooth address that has deleted the earbud bond.
- */
-uint8_t stale_mobile_valid;
-uint8_t stale_mobile_addr[6];
-
-/*
- * NTT stale mobile bond tombstone slot 1 (v3).
- *
- * IMPORTANT:
- * Keep the original v1 fields above unchanged as slot 0.
- * This second slot is appended at the tail for backward-compatible
- * NV migration. NV_EXTENSION_MINOR_VERSION must be increased.
- */
-uint8_t stale_mobile_valid_2;
-uint8_t stale_mobile_addr_2[6];
 //----------------------------------------------------------------------------------------------
 };
 

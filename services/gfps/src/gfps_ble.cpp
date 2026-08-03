@@ -80,6 +80,8 @@ static struct ble_dult_cb_t gfps_ble_dult_callback = {
 };
 #endif
 
+extern bool ntt_manual_pairing_mode;
+
 void big_little_switch(const uint8_t *in, uint8_t *out, uint8_t len)
 {
     if (len < 1)
@@ -1743,13 +1745,60 @@ uint8_t gfps_ble_get_hashed_value(void)
 
 #endif
 
-static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr, uint32 numeric_value)
+extern bool ntt_manual_pairing_mode;
+
+static void gfps_process_bt_user_confirmation(
+    struct bdaddr_t *bdaddr,
+    uint32 numeric_value)
 {
     uint8_t passkey[GFPS_PASSKEY_LEN];
-    memcpy(passkey, &numeric_value, GFPS_PASSKEY_LEN);
-    big_little_switch(passkey, gfps_ble_env.passkey, GFPS_PASSKEY_LEN);
 
-    bes_bt_me_confirmation_resp(bdaddr, true);
+    if (bdaddr == NULL)
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR] GFPS confirmation addr NULL");
+
+        return;
+    }
+
+    memcpy(
+        passkey,
+        &numeric_value,
+        GFPS_PASSKEY_LEN);
+
+    big_little_switch(
+        passkey,
+        gfps_ble_env.passkey,
+        GFPS_PASSKEY_LEN);
+
+    GFPS_TRACE(
+        2,
+        "[NTT_NO_AUTO_PAIR] GFPS confirmation "
+        "manual=%d value=%u",
+        ntt_manual_pairing_mode,
+        numeric_value);
+
+    if (ntt_manual_pairing_mode)
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR] accept manual GFPS SSP");
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+    }
+    else
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR] reject automatic GFPS SSP");
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            false);
+    }
 }
 
 static void gfps_process_ble_user_confirmation(ble_event_handled_t param, ble_evnet_type_e type)
