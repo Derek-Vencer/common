@@ -1192,6 +1192,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         DBGPRINT("wiredUart cmd_event=0x%02X", cmd_event);
         s_last_cmd_event = cmd_event;
+        ntt_case_state_sync_local_update(NTT_CASE_STATE_IN_CASE);
     }
 
 	uart_rx_handle_data_count = 0;
@@ -1279,7 +1280,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                 boxChargerStatus.rightEarBudsBattery = peer_battery;
             }
         }
-
+#if 0
         /*
         * 顯示本機與 Peer 電量。
         * 無效值使用 INVALID，避免顯示成 255%。
@@ -1342,7 +1343,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                     boxChargerStatus.rightEarBudsBattery,
                     boxChargerStatus.boxChargerBattery);
         }
-
+#endif
         /*
         * 目前只有右耳保存充電盒版本。
         *
@@ -1635,15 +1636,15 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         uint32_t now = hal_sys_timer_get();
 
-        //DBGPRINT(
-        //    "[BOX_BAT][RX][%s] len=%u target=0x%02X",
-        //    isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
-        //    uart_dat_len,
-        //    uart_cmd_dat[3]);
+        DBGPRINT(
+            "[BOX_BAT][RX][%s] len=%u target=0x%02X",
+            isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
+            uart_dat_len,
+            uart_cmd_dat[3]);
 
-        //DUMP8("[BOX_BAT][RX_RAW] ",
-        //    uart_cmd_dat,
-        //    uart_dat_len);
+        DUMP8("[BOX_BAT][RX_RAW] ",
+            uart_cmd_dat,
+            uart_dat_len);
 
         if (ntt_last_box_battery_case_tick != 0)
         {
@@ -1684,30 +1685,21 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
         if (isRightEarbuds == RIGHT_BUDS)
         {
-            bool tws_connected =
-                bts_tws_if_is_tws_link_connected();
-
             DBGPRINT(
                 "[NTT_TWS] connected=%d",
-                tws_connected);
+                bts_tws_if_is_tws_link_connected());
 
-            if (!tws_connected)
+            if (!bts_tws_if_is_tws_link_connected())
             {
-                /*
-                * 充電盒電量通知不是使用者手動配對要求。
-                *
-                * 不能在此呼叫 app_ibrt_start_power_on_tws_pairing()，
-                * 否則每次盒子送電量時，都可能重新啟動 pairing FSM。
-                */
                 DBGPRINT(
-                    "[NTT_NO_AUTO_PAIR] TWS not connected, "
-                    "skip pairing from box battery event");
+                    "[NTT_TWS] not connected, start TWS pairing");
+
+                app_ibrt_start_power_on_tws_pairing();
             }
             else
             {
                 DBGPRINT(
-                    "[NTT_TWS] RIGHT received box battery, "
-                    "resend case state");
+                    "[NTT_TWS] RIGHT received box battery, resend case state");
 
                 ntt_case_state_sync_resend();
             }

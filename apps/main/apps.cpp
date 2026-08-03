@@ -55,7 +55,6 @@
 #include "bt_if.h"
 #include "intersyshci.h"
 #include "bt_app_api.h"
-#include "bes_me_api.h"
 
 #ifdef SUPPORT_SINGLE_WIRE_COM
 #include "communication_svr.h"
@@ -91,7 +90,6 @@
 #if defined(APP_USB_A2DP_SOURCE) && defined(BT_SOURCE)
 #include "app_bt_stream.h"
 #endif
-extern bool ntt_manual_pairing_mode;
 bool ntt_manual_pairing_mode = false;
 
 #ifdef BIS_SELFSCAN_ENABLED
@@ -2147,8 +2145,7 @@ void app_ibrt_init(void)
         if (has_tws_peer)
         {
             MAIN_TRACE(1,
-                "[NTT_NO_AUTO_PAIR] valid peer exists, "
-                "skip power-on TWS pairing: "
+                "[NTT_TWS] valid peer, start TWS reconnect: "
                 "%02X:%02X:%02X:%02X:%02X:%02X",
                 config.peer_addr.address[0],
                 config.peer_addr.address[1],
@@ -2157,13 +2154,7 @@ void app_ibrt_init(void)
                 config.peer_addr.address[4],
                 config.peer_addr.address[5]);
 
-            /*
-            * 禁止一般開機自動送出 TWS_PAIRING event。
-            *
-            * app_ibrt_start_power_on_tws_pairing() 會啟動共用
-            * pairing FSM，可能使手機進入 SSP 並彈出配對請求。
-            */
-            // app_ibrt_start_power_on_tws_pairing();
+            app_ibrt_start_power_on_tws_pairing();
         }
         else
         {
@@ -3255,10 +3246,11 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
         stereo_poweron_pairing_timer_on();
 #else
+        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT_A_ !!!!!!");
         app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
-        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT__ !!!!!!");
+        MAIN_TRACE(0,"!!!!!! __BTIF_BT_RECONNECT_B_ !!!!!!");
         app_bt_profile_connect_manager_opening_reconnect();
 #endif
 #endif
@@ -3362,62 +3354,38 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                 case APP_POWERON_CASE_CALIB:
                     break;
                 case APP_POWERON_CASE_BOTHSCAN:
-                #ifdef BESUI_TWS_EN
-                    if (ntt_manual_pairing_mode)
-                    {
-                        MAIN_TRACE(
-                            0,
-                            "[NTT_NO_AUTO_PAIR] manual BOTHSCAN");
-
-                        besui_enter_pairmode();
-                    }
-                    else
-                    {
-                        MAIN_TRACE(
-                            0,
-                            "[NTT_NO_AUTO_PAIR] reject automatic BOTHSCAN, "
-                            "stay CONNECTABLE_ONLY");
-
-                        set_er_discover_connectable_status(0);
-
-                        app_bt_set_access_mode(
-                            BTIF_BAM_CONNECTABLE_ONLY);
-                    }
-                #else
-                    if (ntt_manual_pairing_mode)
-                    {
-                        app_status_indication_set(
-                            APP_STATUS_INDICATION_BOTHSCAN);
-
-                #ifdef MEDIA_PLAYER_SUPPORT
-                        media_PlayAudio(
-                            AUD_ID_BT_PAIR_ENABLE,
-                            0);
-                #endif
-
-                #ifndef BT_BUILD_WITH_CUSTOMER_HOST
-                        bes_bt_me_write_access_mode(
-                            BTIF_BT_DEFAULT_ACCESS_MODE_PAIR,
-                            1);
-
-                #ifdef GFPS_ENABLED
-                        app_enter_fastpairing_mode();
-                #endif
-                #endif
-                    }
-                    else
-                    {
-                        MAIN_TRACE(
-                            0,
-                            "[NTT_NO_AUTO_PAIR] skip automatic "
-                            "power-on pairing");
-
-                        set_er_discover_connectable_status(0);
-
-                        app_bt_set_access_mode(
-                            BTIF_BAM_CONNECTABLE_ONLY);
-                    }
-                #endif
+#ifdef BESUI_TWS_EN
+                    besui_enter_pairmode();
+#else
+                    app_status_indication_set(APP_STATUS_INDICATION_BOTHSCAN);
+#ifdef MEDIA_PLAYER_SUPPORT
+                    media_PlayAudio(AUD_ID_BT_PAIR_ENABLE, 0);
+#endif
+#ifndef BT_BUILD_WITH_CUSTOMER_HOST
+#if defined(APP_10_SECOND_TIMER_EN)
+#if defined(IBRT)
+#ifdef IBRT_SEARCH_UI
+                    if(false==is_charging_poweron)
+                        app_ibrt_enter_limited_mode();
+#endif
+#else
+                    MAIN_TRACE(1,"power on case:%d BT_DEFAULT_ACCESS_MODE_PAIR!!\n", pwron_case);
+                    bes_bt_me_write_access_mode(BTIF_BT_DEFAULT_ACCESS_MODE_PAIR,1);
+#endif //IBRT
+#ifdef GFPS_ENABLED
+                    app_enter_fastpairing_mode();
+#endif
+#if defined(__BTIF_AUTOPOWEROFF__)
+                    app_start_10_second_timer(APP_PAIR_TIMER_ID);
+#endif
+#endif //APP_10_SECOND_TIMER_EN
+#ifdef __THIRDPARTY
+#if defined(__AI_VOICE__)
+                    app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_NO2,THIRDPARTY_BT_DISCOVERABLE, AI_SPEC_INIT);
+#endif
+#endif
+#endif //BT_BUILD_WITH_CUSTOMER_HOST
+#endif //#ifdef BESUI_TWS_EN
                     break;
                 case APP_POWERON_CASE_NORMAL:
 #ifndef BT_BUILD_WITH_CUSTOMER_HOST
@@ -3465,7 +3433,19 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 #ifdef BESUI_STEREO_EN
                     stereo_poweron_pairing_timer_on();
 #else
-                    app_bt_profile_connect_manager_opening_reconnect();
+                    if (!app_ibrt_middleware_is_ui_slave())
+                    {
+                        ntt_set_poweron_reconnect(true);
+
+                        MAIN_TRACE(0, "!!!!!! __BTIF_BT_RECONNECT_C_ !!!!!!");
+
+                        app_bt_profile_connect_manager_opening_reconnect();
+                    }
+                    else
+                    {
+                        MAIN_TRACE(0,
+                            "[NTT_RECONNECT] POWERON skip opening reconnect (SLAVE)");
+                    }
 #endif
 
 #endif

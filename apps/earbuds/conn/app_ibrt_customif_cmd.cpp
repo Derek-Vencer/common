@@ -592,7 +592,7 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
 
     if ((s_last_level == current_level) &&
         (s_last_box_level == box_level) &&
-        ((now_ms - s_last_sync_ms) < 120000))
+        ((now_ms - s_last_sync_ms) < 3000))
     {
         return;
     }

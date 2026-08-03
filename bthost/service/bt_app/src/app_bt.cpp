@@ -54,7 +54,6 @@
 #include "app_tws_ibrt_cmd_handler.h"
 #include "bts_ibrt_if.h"
 #include "audio_trigger_a2dp.h"
-#include "bes_me_api.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -209,10 +208,6 @@ osTimerId accessmode_timer_id = NULL;
 
 osTimerDef (BT_PROFILE_CONNECT_TIMER0, app_bt_profile_reconnect_timehandler);
 
-extern bool ntt_manual_pairing_mode;
-
-static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 numeric_value);
-
 #if BT_DEVICE_NUM > 1
 osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 #endif
@@ -220,6 +215,8 @@ osTimerDef (BT_PROFILE_CONNECT_TIMER1, app_bt_profile_reconnect_timehandler);
 #if BT_DEVICE_NUM > 2
 osTimerDef (BT_PROFILE_CONNECT_TIMER2, app_bt_profile_reconnect_timehandler);
 #endif
+
+static bool g_ntt_poweron_reconnect = false;
 
 static bool app_bt_ntt_fix_empty_phone_cod(uint8_t device_id)
 {
@@ -1248,55 +1245,6 @@ void app_bt_reset_delay_power_off(void)
     }	
 }
 
-static void ntt_bt_user_confirmation_callback(
-    struct bdaddr_t *bdaddr,
-    uint32 numeric_value)
-{
-    if (bdaddr == NULL)
-    {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR] confirmation addr NULL");
-
-        return;
-    }
-
-    DEBUG_INFO(
-        8,
-        "[NTT_NO_AUTO_PAIR] confirmation "
-        "manual=%d value=%u "
-        "addr=%02x:%02x:%02x:%02x:%02x:%02x",
-        ntt_manual_pairing_mode,
-        numeric_value,
-        bdaddr->address[5],
-        bdaddr->address[4],
-        bdaddr->address[3],
-        bdaddr->address[2],
-        bdaddr->address[1],
-        bdaddr->address[0]);
-
-    if (ntt_manual_pairing_mode)
-    {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR] accept manual SSP");
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
-    }
-    else
-    {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR] reject automatic SSP");
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            false);
-    }
-}
-
 void app_bt_manager_init(void)
 {
     struct BT_DEVICE_T *curr_device;
@@ -1314,15 +1262,6 @@ void app_bt_manager_init(void)
     nv_op.link_key_notify = app_bt_link_key_notify,
     nv_op.encrypt_changed = app_bt_encypt_changed,
     btif_me_register_nv_operator(&nv_op);
-
-        /*
-     * Override BT Stack default SSP auto-accept behavior.
-     *
-     * 自動回連時拒絕 SSP；
-     * 只有使用者手動配對時才接受。
-     */
-    bes_bt_me_confirmation_register_callback(ntt_bt_user_confirmation_callback);
-    DEBUG_INFO(0,"[NTT_NO_AUTO_PAIR] confirmation callback registered");
 
     app_bt_manager.current_a2dp_conhdl = 0xffff;
     app_bt_manager.device_routed_sco_to_phone = BT_DEVICE_INVALID_ID;
@@ -1772,56 +1711,46 @@ static void ntt_tws_reconnect_after_profile_stop(void)
 
 static void ntt_tws_reconnect_after_profile_timer_handler(void const *param)
 {
-    (void)param;
-
-    DEBUG_INFO(
-        0,
-        "[NTT_TWS] reconnect-after-profile timer fired");
-
     if (app_ibrt_middleware_is_ui_slave())
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_TWS] stop retry: ui slave");
-
+        DEBUG_INFO(0, "[NTT_TWS] stop retry: ui slave");
         ntt_tws_reconnect_after_profile_stop();
         return;
     }
 
     if (bts_tws_if_is_tws_link_connected())
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_TWS] stop retry: TWS already connected");
-
+        DEBUG_INFO(0, "[NTT_TWS] stop retry: tws already connected");
         ntt_tws_reconnect_after_profile_stop();
         return;
     }
 
     if (!app_bt_ibrt_has_mobile_link_connected())
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_TWS] stop retry: mobile disconnected");
-
+        DEBUG_INFO(0, "[NTT_TWS] stop retry: mobile disconnected");
         ntt_tws_reconnect_after_profile_stop();
         return;
     }
 
-    /*
-     * 禁止自動流程呼叫：
-     *
-     * app_ibrt_start_power_on_tws_pairing();
-     *
-     * 此 API 會啟動 pairing FSM，手機可能收到 SSP
-     * User Confirmation Request。
-     */
-    DEBUG_INFO(
-        0,
-        "[NTT_NO_AUTO_PAIR] skip automatic "
-        "TWS pairing retry");
+    ntt_tws_reconnect_after_profile_retry_cnt++;
 
-    ntt_tws_reconnect_after_profile_stop();
+    DEBUG_INFO(2,
+        "[NTT_TWS] retry tws connect %d/%d",
+        ntt_tws_reconnect_after_profile_retry_cnt,
+        NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY);
+
+    app_ibrt_start_power_on_tws_pairing();
+
+    if (ntt_tws_reconnect_after_profile_retry_cnt >=
+        NTT_TWS_RECONNECT_AFTER_PROFILE_MAX_RETRY)
+    {
+        DEBUG_INFO(0, "[NTT_TWS] stop retry: max retry reached");
+        ntt_tws_reconnect_after_profile_stop();
+        return;
+    }
+
+    osTimerStart(ntt_tws_reconnect_after_profile_timer,
+                 NTT_TWS_RECONNECT_AFTER_PROFILE_DELAY_MS);
 }
 
 osTimerDef(NTT_TWS_RECONNECT_AFTER_PROFILE_TIMER,
@@ -4114,6 +4043,8 @@ void app_bt_global_handle(const btif_event_t *Event)
 #endif
         case BTIF_BTEVENT_AUTHENTICATED:
         {
+            bool delete_record_link_key_only = true;
+
             DEBUG_INFO(1,"[BTEVENT] HANDER AUTH error=%x", error_code);
 
             //after authentication completes, re-enable sniff mode.
@@ -4130,66 +4061,60 @@ void app_bt_global_handle(const btif_event_t *Event)
                     app_bt_Me_SetLinkPolicy(conn_handle, BTIF_BLP_SNIFF_MODE);
                 }
             }
-            else if ((error_code == BTIF_BEC_AUTHENTICATE_FAILURE) || (error_code == BTIF_BEC_MISSING_KEY))
+            else if (error_code == BTIF_BEC_AUTHENTICATE_FAILURE || error_code == BTIF_BEC_MISSING_KEY)
             {
-                bt_bdaddr_t *bd_addr =
-                    btif_me_get_callback_event_address(Event);
-
-                btif_remote_device_t *rem_dev =
-                    btif_me_get_callback_event_rem_dev(Event);
-
-                uint16_t acl_handle =
-                    btif_me_get_callback_event_handle(Event);
-
-                DEBUG_INFO(
-                    2,
-                    "[NTT_NO_AUTO_PAIR] auth failed "
-                    "error=0x%x handle=0x%x",
-                    error_code,
-                    acl_handle);
-
-                if (bd_addr != NULL)
+                //auth failed should clear nv record link key
+                bt_bdaddr_t *bd_ddr = btif_me_get_callback_event_address(Event);
+                btif_device_record_t record;
+                DUMP8("%02x ", bd_ddr->address, 6);
+                if (ddbif_find_record(bd_ddr, &record) == BT_STS_SUCCESS)
                 {
-                    DEBUG_INFO(
-                        6,
-                        "[NTT_NO_AUTO_PAIR] keep bond and reject pairing "
-                        "%02x:%02x:%02x:%02x:%02x:%02x",
-                        bd_addr->address[5],
-                        bd_addr->address[4],
-                        bd_addr->address[3],
-                        bd_addr->address[2],
-                        bd_addr->address[1],
-                        bd_addr->address[0]);
+                    DEBUG_INFO(0,"delete link key as authen fail");
+                    char remote_dev_name[BTM_NAME_MAX_LEN];
+                    strcpy(remote_dev_name, record.remote_dev_name);
+                    bluetooth_nv_mgr_bt_record_del(BT_NV_REC_DEL_AUTHEN_FAILED, bd_ddr->address);
+
+                    if (g_bt_pair_state_callback)
+                    {
+                        g_bt_pair_state_callback(&record.bdAddr, APP_BT_PAIR_NONE);
+                    }
+
+#if defined(IBRT)
+                    bool delete_record_when_remote_key_missing = false;
+                    btm_conn = app_bt_get_remote_dev_by_address(bd_ddr);
+                    if (app_tws_ibrt_mobile_pair_canceled(bd_ddr))
+                    {
+                        delete_record_link_key_only = false;
+                    }
+                    else if (delete_record_when_remote_key_missing && btm_conn &&
+                        error_code == BTIF_BEC_MISSING_KEY &&
+                        btif_me_get_remote_device_initiator(btm_conn) &&
+                        MOBILE_LINK == app_tws_ibrt_get_link_type_by_addr((bt_bdaddr_t *)bd_ddr))
+                    {
+                        delete_record_link_key_only = false;
+                    }
+#endif
+
+                    if (error_code == BTIF_BEC_MISSING_KEY &&
+                        bt_callback_cfg_disc_acl_after_auth_key_missing())
+                    {
+                        delete_record_link_key_only = false;
+                    }
+
+                    if (delete_record_link_key_only)
+                    {
+                        DEBUG_INFO(0, "app_bt_global_handle: delete link key");
+                        memset(&record, 0, sizeof(record));
+                        record.bdAddr = *bd_ddr;
+                        strcpy(record.remote_dev_name, remote_dev_name);
+                        bluetooth_nv_mgr_bt_record_add(BT_NV_REC_ADD_AUTH_FAIL_KEEP, &record);
+                    }
+                    else
+                    {
+                        DEBUG_INFO(0, "app_bt_global_handle: delete record");
+                    }
+                    nv_record_execute_async_flush();
                 }
-
-                /*
-                * 重要：
-                *
-                * 1. 不刪除手機 NV record。
-                * 2. 不刪除 Link Key。
-                * 3. 不建立 BT_NV_REC_ADD_AUTH_FAIL_KEEP record。
-                * 4. 不進入 pairing mode。
-                *
-                * 保留原配對資料，讓原本 reconnect timer
-                * 下次仍可再次嘗試連線。
-                */
-
-                if ((rem_dev != NULL) &&
-                    (acl_handle != BT_INVALID_CONN_HANDLE))
-                {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_NO_AUTO_PAIR] disconnect failed-auth ACL");
-
-                    app_bt_MeDisconnectLink(
-                        acl_handle);
-                }
-
-                /*
-                * 不在這裡停止 reconnect timer。
-                * 不把 reconnect_mode 改成 null。
-                * 後續仍由原本 reconnect 流程決定下一次嘗試。
-                */
             }
         }
         break;
@@ -5067,257 +4992,150 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
 
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
-    int ret = 0;
-    int find_invalid_record_cnt = 0;
-
+    int ret;
     btif_device_record_t record1;
     btif_device_record_t record2;
-    btdevice_profile *btdevice_plf_p = NULL;
-
+    btdevice_profile *btdevice_plf_p;
+    int find_invalid_record_cnt;
     bool reconnect_added = false;
 
-    DEBUG_INFO(
-        0,
-        "[NTT_RECONNECT] opening reconnect enter");
-
-    /*
-     * 保留原本行為：
-     * 左右耳都可以進入 opening reconnect 流程。
-     */
-    /*
-    if (app_ibrt_middleware_is_ui_slave())
+    DEBUG_INFO(0, "[NTT_RECONNECT] opening reconnect enter");
+/*
+    if (!ntt_is_poweron_reconnect())
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] UI slave skip opening reconnect");
+        if (bts_core_get_ui_role() == TWS_UI_SLAVE)
+        {
+            DEBUG_INFO(
+                0,
+                "[NTT_RECONNECT] UI SLAVE skip");
 
-        return;
-    }
-    */
-
-    /*
-     * 沒有 pending connection，且目前沒有手機 ACL 時，
-     * 重設 reconnect context。
-     */
-    if (!btif_me_get_pendCons() &&
-        !app_bt_ibrt_has_mobile_link_connected())
-    {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] reset reconnect context");
-
-        ntt_bt_reconnect_context_reset();
+            return;
+        }
     }
     else
     {
         DEBUG_INFO(
-            3,
-            "[NTT_RECONNECT] skip context reset "
-            "pend=%d tws=%d mobile=%d",
+            0,
+            "[NTT_RECONNECT] poweron mode skip slave check");
+    }
+*/
+    if (!btif_me_get_pendCons() &&
+        !app_bt_ibrt_has_mobile_link_connected())
+    {
+        DEBUG_INFO(0, "[NTT_RECONNECT] reset reconnect context");
+        ntt_bt_reconnect_context_reset();
+    }
+    else
+    {
+        DEBUG_INFO(3,
+            "[NTT_RECONNECT] skip context reset pend=%d tws=%d mobile=%d",
             btif_me_get_pendCons(),
             bts_tws_if_is_tws_link_connected(),
             app_bt_ibrt_has_mobile_link_connected());
     }
 
-    bthost_cfg_t *bt_host_cfg = bt_host_get_cfg();
-
-    if ((bt_host_cfg == NULL) ||
-        !bt_host_cfg->bt_sink_enable)
+    bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
+    if (!bt_host_cfg->bt_sink_enable)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] bt sink disabled, return");
-
+        DEBUG_INFO(0, "[NTT_RECONNECT] bt sink disabled, return");
         return;
     }
 
-    if ((BT_DEVICE_NUM == 1) &&
-        (app_bt_get_active_cons() != 0))
+    if (BT_DEVICE_NUM == 1 && app_bt_get_active_cons() != 0)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] BT disconnect not complete, "
-            "ignore this reconnect");
-
+        DEBUG_INFO(0,
+            "bt link disconnect not complete,ignore this time reconnect");
         return;
     }
 
-    memset(
-        &record1,
-        0,
-        sizeof(record1));
+    memset(&record1, 0, sizeof(record1));
+    memset(&record2, 0, sizeof(record2));
 
-    memset(
-        &record2,
-        0,
-        sizeof(record2));
-
-    /*
-     * 清除地址無效或 Profile 記錄無效的 NV record。
-     *
-     * 每刪除一筆後重新 enum，直到剩餘記錄均有效。
-     */
     do
     {
         find_invalid_record_cnt = 0;
+        ret = nv_record_enum_latest_two_paired_dev(&record1, &record2);
 
-        memset(
-            &record1,
-            0,
-            sizeof(record1));
-
-        memset(
-            &record2,
-            0,
-            sizeof(record2));
-
-        ret =
-            nv_record_enum_latest_two_paired_dev(
-                &record1,
-                &record2);
-
-        /*
-         * 檢查第一支手機。
-         */
         if (ret >= 1)
         {
-            if (ntt_bt_addr_is_invalid(
-                    &record1.bdAddr))
+            if (ntt_bt_addr_is_invalid(&record1.bdAddr))
             {
-                DEBUG_INFO(
-                    0,
-                    "[NTT_RECONNECT] delete record1 "
-                    "invalid address");
-
-                nv_record_ddbrec_delete(
-                    (bt_bdaddr_t *)&record1.bdAddr);
-
+                DEBUG_INFO(0, "[NTT_RECONNECT] delete record1 local/peer");
+                nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
                 find_invalid_record_cnt++;
             }
             else
             {
                 btdevice_plf_p =
-                    (btdevice_profile *)
-                    app_bt_profile_active_store_ptr_get(
+                    (btdevice_profile *)app_bt_profile_active_store_ptr_get(
                         record1.bdAddr.address);
 
-                if ((btdevice_plf_p == NULL) ||
-                    (!(btdevice_plf_p->hfp_act) &&
-                     !(btdevice_plf_p->a2dp_act)))
+                if (!(btdevice_plf_p->hfp_act) &&
+                    !(btdevice_plf_p->a2dp_act))
                 {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_RECONNECT] delete record1 "
-                        "inactive/null profile");
-
-                    nv_record_ddbrec_delete(
-                        (bt_bdaddr_t *)&record1.bdAddr);
-
+                    DEBUG_INFO(0,
+                        "[NTT_RECONNECT] delete record1 inactive profile");
+                    nv_record_ddbrec_delete((bt_bdaddr_t *)&record1.bdAddr);
                     find_invalid_record_cnt++;
                 }
             }
         }
 
-        /*
-         * 檢查第二支手機。
-         */
+#if 1
         if (ret >= 2)
-        {
-            if (ntt_bt_addr_is_invalid(
-                    &record2.bdAddr))
+        {           
+            if (ntt_bt_addr_is_invalid(&record2.bdAddr))
             {
-                DEBUG_INFO(
-                    0,
-                    "[NTT_RECONNECT] delete record2 "
-                    "invalid address");
-
-                nv_record_ddbrec_delete(
-                    (bt_bdaddr_t *)&record2.bdAddr);
-
+                DEBUG_INFO(0, "[NTT_RECONNECT] delete record2 local/peer");
+                nv_record_ddbrec_delete((bt_bdaddr_t *)&record2.bdAddr);
                 find_invalid_record_cnt++;
             }
             else
             {
                 btdevice_plf_p =
-                    (btdevice_profile *)
-                    app_bt_profile_active_store_ptr_get(
+                    (btdevice_profile *)app_bt_profile_active_store_ptr_get(
                         record2.bdAddr.address);
 
-                if ((btdevice_plf_p == NULL) ||
-                    (!(btdevice_plf_p->hfp_act) &&
-                     !(btdevice_plf_p->a2dp_act)))
+                if (!(btdevice_plf_p->hfp_act) &&
+                    !(btdevice_plf_p->a2dp_act))
                 {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_RECONNECT] delete record2 "
-                        "inactive/null profile");
-
-                    nv_record_ddbrec_delete(
-                        (bt_bdaddr_t *)&record2.bdAddr);
-
+                    DEBUG_INFO(0,
+                        "[NTT_RECONNECT] delete record2 inactive profile");
+                    nv_record_ddbrec_delete((bt_bdaddr_t *)&record2.bdAddr);
                     find_invalid_record_cnt++;
                 }
             }
         }
+#endif
     }
-    while (find_invalid_record_cnt > 0);
+    while (find_invalid_record_cnt);
 
-    DEBUG_INFO(
-        1,
-        "[NTT_RECONNECT] paired devices=%d",
-        ret);
+    DEBUG_INFO(1, "!!!app_bt_opening_reconnect: devices %d", ret);
 
     if (ret >= 1)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] phone1 address");
-
-        DUMP8(
-            "%02x ",
-            &record1.bdAddr,
-            BT_ADDR_OUTPUT_PRINT_NUM);
+        DUMP8("%02x ", &record1.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
     }
 
     if (ret >= 2)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] phone2 address");
-
-        DUMP8(
-            "%02x ",
-            &record2.bdAddr,
-            BT_ADDR_OUTPUT_PRINT_NUM);
+        DUMP8("%02x ", &record2.bdAddr, BT_ADDR_OUTPUT_PRINT_NUM);
     }
 
     if (ret > 0)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] start reconnect devices");
+        DEBUG_INFO(0, "!!!start reconnect devices");
 
 #if defined(FREEMAN_ENABLED_STERO)
-
 #ifdef IBRT_UI
-        app_ibrt_if_event_entry(
-            APP_UI_EV_CASE_OPEN);
+        app_ibrt_if_event_entry(APP_UI_EV_CASE_OPEN);
 #endif
-
 #else
-
         if (btif_me_get_pendCons() == 0)
         {
-            /*
-             * 加入第一支手機。
-             */
-            if ((ret >= 1) &&
-                !ntt_bt_addr_is_invalid(
-                    &record1.bdAddr))
+            if (ret >= 1 && !ntt_bt_addr_is_invalid(&record1.bdAddr))
             {
-                DEBUG_INFO(
-                    0,
-                    "[NTT_RECONNECT] append phone1");
+                DEBUG_INFO(0, "[NTT_RECONNECT] append phone1");
 
                 app_bt_append_to_reconnect_list(
                     bt_profile_reconnect_openreconnecting,
@@ -5327,17 +5145,11 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
                 reconnect_added = true;
             }
 
-            /*
-             * 加入第二支手機。
-             */
-            if ((ret >= 2) &&
-                (BT_DEVICE_NUM > 1) &&
-                !ntt_bt_addr_is_invalid(
-                    &record2.bdAddr))
+            if (ret >= 2 &&
+                BT_DEVICE_NUM > 1 &&
+                !ntt_bt_addr_is_invalid(&record2.bdAddr))
             {
-                DEBUG_INFO(
-                    0,
-                    "[NTT_RECONNECT] append phone2");
+                DEBUG_INFO(0, "[NTT_RECONNECT] append phone2");
 
                 app_bt_append_to_reconnect_list(
                     bt_profile_reconnect_openreconnecting,
@@ -5349,65 +5161,46 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
         }
         else
         {
-            DEBUG_INFO(
-                1,
-                "[NTT_RECONNECT] pending connection exists, "
-                "pend=%d",
-                btif_me_get_pendCons());
+            DEBUG_INFO(0,
+                "[NTT_RECONNECT] pending connection exists, skip reconnect");
         }
 
         if (reconnect_added)
         {
-            DEBUG_INFO(
-                0,
-                "[NTT_RECONNECT] start power-on reconnect");
+            DEBUG_INFO(0,
+                "[NTT_RECONNECT] start poweron reconnect after slave disconnect");
 
-            /*
-             * 保留 SDK 原本 reconnect timer／retry 機制。
-             *
-             * 連線失敗之後仍然可以再次嘗試，
-             * 此處不刪除 paired record。
-             */
             app_bt_start_poweron_reconnect();
+            ntt_set_poweron_reconnect(false);
         }
         else
         {
-            DEBUG_INFO(
-                0,
-                "[NTT_RECONNECT] no reconnect started, "
-                "stay CONNECTABLE_ONLY");
+            DEBUG_INFO(0,
+                "[NTT_RECONNECT] no reconnect started -> CONNECTABLE_ONLY");
 
-            /*
-             * 不切換 GENERAL_ACCESSIBLE，
-             * 避免自動流程進入可搜尋／可配對模式。
-             */
-            set_er_discover_connectable_status(0);
-
-            app_bt_set_access_mode(
-                BTIF_BAM_CONNECTABLE_ONLY);
+            app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
         }
-
 #endif
     }
     else
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_RECONNECT] no paired device, "
-            "stay CONNECTABLE_ONLY, do not auto pair");
+        DEBUG_INFO(0, "!!!go to pairing");
+        set_er_discover_connectable_status(1);
 
-        /*
-         * 重要修改：
-         *
-         * 沒有配對記錄時，也不允許開機流程自動進入
-         * GENERAL_ACCESSIBLE。
-         *
-         * 只有使用者按鍵、UART 或 App 明確要求進入
-         * pairing mode 時，才由對應手動流程開啟配對。
-         */
-        set_er_discover_connectable_status(0);
-
-        app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+#ifdef FREEMAN_ENABLED_STERO
+#error FREEMAN_ENABLED_STERO
+        app_ibrt_internal_enter_freeman_pairing();
+#ifdef GFPS_ENABLED
+        app_enter_fastpairing_mode();
+#endif
+#else
+#ifdef __EARPHONE_STAY_BOTH_SCAN__
+#error __EARPHONE_STAY_BOTH_SCAN__
+        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+#else
+        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+#endif
+#endif
     }
 }
 
@@ -9130,3 +8923,16 @@ void app_bt_calibration_event_handler(uint16_t opcode, uint8_t *data)
             break;
     }
 }
+
+void ntt_set_poweron_reconnect(bool enable)
+{
+    g_ntt_poweron_reconnect = enable;
+    DEBUG_INFO(1,"[NTT_RECONNECT] poweron flag=%d",enable);
+}
+
+bool ntt_is_poweron_reconnect(void)
+{
+    DEBUG_INFO(1,"[NTT_RECONNECT] is poweron flag=%d",g_ntt_poweron_reconnect);
+    return g_ntt_poweron_reconnect;
+}
+

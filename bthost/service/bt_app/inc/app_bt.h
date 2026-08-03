@@ -588,7 +588,8 @@ void app_bt_coex_register_page_event_handle(void (*func)(uint8_t is_page));
 uint32_t app_bt_get_class_of_device_headset(void);
 
 uint32_t app_bt_get_class_of_device_watch(void);
-
+void ntt_set_poweron_reconnect(bool enable);
+bool ntt_is_poweron_reconnect(void);
 
 /**
  * @brief bt sink core event callback structure define
