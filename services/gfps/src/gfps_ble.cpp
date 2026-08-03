@@ -355,105 +355,18 @@ uint8_t gfps_ble_generate_accountkey_data(uint8_t *outputData)
 
 static bool gfps_ble_adv_activity_prepare(ble_adv_activity_t *adv)
 {
-    gap_adv_param_t *adv_param = &adv->adv_param;
-    char gfps_tx_power;
-    uint8_t *txPwr;
-    bool isUseRPA = true;
+    /*
+     * NTT:
+     * Disable Google Fast Pair FE2C advertisement only.
+     *
+     * Keep GFPS_ENABLE enabled to preserve GFPS-related APIs and
+     * project dependencies, but reject creation of USER_GFPS ADV.
+     */
+    (void)adv;
 
-    if (!ble_adv_is_allowed())
-    {
-        return false;
-    }
+    GFPS_TRACE(0, "[NTT][GFPS] FE2C advertisement disabled");
 
-#if defined(IBRT)
-    if (!app_ble_check_ibrt_allow_adv(USER_GFPS))
-    {
-        return false;
-    }
-#endif
-
-    adv->user = USER_GFPS;
-    adv_param->connectable = true;
-    adv_param->scannable = true;
-    adv_param->use_legacy_pdu = true;
-    adv_param->include_tx_power_data = true;
-    adv_param->fast_advertising = false; // BLE_FASTPAIR_NORMAL_ADVERTISING_INTERVAL
-
-    if (gfps_is_in_fastpairing_mode())
-    {
-        adv_param->fast_advertising = true; // BLE_FASTPAIR_FAST_ADVERTISING_INTERVAL
-    }
-
-#if BLE_AUDIO_ENABLED
-    uint8_t cas_uuid[2];
-    cas_uuid[0] = (APP_CAS_SERVICE_UUID >> 0) & 0xFF;
-    cas_uuid[1] = (APP_CAS_SERVICE_UUID >> 8) & 0xFF;
-#endif
-
-    app_ble_set_adv_tx_power_level(adv, BLE_ADV_TX_POWER_LEVEL_1);
-
-    app_ble_dt_set_flags(adv_param, true);
-
-    txPwr = gfps_ble_get_tx_power_in_adv();
-    gfps_tx_power = txPwr[APP_GFPS_ADV_POWER_UUID_LEN-1];
-    if (gfps_is_in_fastpairing_mode())
-    {
-        uint32_t modelId = 0;
-        uint8_t model_id_data[3];
-        GFPS_TRACE(0, "fast pair mode");
-
-#if BLE_AUDIO_ENABLED
-        if(gfps_ble_env.bondMode == GFPS_BOND_OVER_BLE)
-        {
-            isUseRPA = false;
-        }
-#endif
-        modelId = gfps_get_model_id();
-        model_id_data[0] = (modelId >> 16) & 0xFF;
-        model_id_data[1] = (modelId >> 8) & 0xFF;
-        model_id_data[2] = (modelId >> 0) & 0xFF;
-
-        gap_dt_add_service_data(&adv_param->adv_data, APP_GFPS_SERVICE_UUID, model_id_data, sizeof(model_id_data));
-
-        gap_dt_add_tx_power(&adv_param->adv_data, gfps_tx_power);
-
-#if BLE_AUDIO_ENABLED
-        gap_dt_add_data_type(&adv_param->adv_data, GAP_DT_SERVICE_DATA_16BIT_UUID, cas_uuid, sizeof(cas_uuid));
-#endif
-    }
-    else
-    {
-        GFPS_TRACE(0, "not in fast pair mode");
-#if BLE_APP_GFPS_VER == FAST_PAIR_REV_2_0
-        uint8_t service_data[32];
-        uint16_t data_len = 0;
-
-        data_len = gfps_ble_generate_accountkey_data(service_data);
-
-        gap_dt_add_service_data(&adv_param->adv_data, APP_GFPS_SERVICE_UUID, service_data, data_len);
-
-        gap_dt_add_tx_power(&adv_param->adv_data, gfps_tx_power);
-
-#if BLE_AUDIO_ENABLED
-        gap_dt_add_data_type(&adv_param->scan_rsp_data, GAP_DT_SERVICE_DATA_16BIT_UUID, cas_uuid, sizeof(cas_uuid));
-#endif
-#endif
-    }
-
-    if (isUseRPA)
-    {
-        adv_param->own_addr_use_rpa = true;
-        adv_param->use_custom_local_addr = false;
-        adv_param->use_fake_btc_rpa_when_no_irk_exist = true;
-    }
-    else
-    {
-        adv_param->own_addr_use_rpa = false;
-    }
-
-    app_ble_dt_set_local_name(adv_param, NULL);
-
-    return true;
+    return false;
 }
 
 #ifdef SPOT_ENABLED

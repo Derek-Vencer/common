@@ -175,7 +175,7 @@ static void keymap_init_default(void);
 
 
 // #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.5.2" //"01.01.00.04"
+#define  DISPLAY_EARBUDS_VERSION   "V0.9.6" //"01.01.00.04"
 
 #define NTT_EARBUD_FW_VERSION_LEN         3
 #define NTT_DUAL_EARBUD_FW_VERSION_LEN    6
@@ -3240,7 +3240,7 @@ static void ntt_build_dual_earbud_fw_version(uint8_t version[NTT_DUAL_EARBUD_FW_
     {
         0x00,
         0x09,
-        0x05,
+        0x06,
     };
 
     uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];

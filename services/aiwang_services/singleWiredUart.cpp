@@ -517,14 +517,14 @@ static void wired_uart_get_battery_level(void)
 
     buff[4] = crc8(buff, 4);
 
-    DBGPRINT("[EAR_POWER][UART_TX][%s] raw=%d report=%u pair=%u crc=0x%02X",
-            isRightEarbuds ? "RIGHT" : "LEFT",
-            raw_level,
-            report_level,
-            pair_status,
-            buff[4]);
+    //DBGPRINT("[EAR_POWER][UART_TX][%s] raw=%d report=%u pair=%u crc=0x%02X",
+    //        isRightEarbuds ? "RIGHT" : "LEFT",
+    //        raw_level,
+    //        report_level,
+    //        pair_status,
+    //        buff[4]);
 
-    DUMP8("[EAR_POWER][UART_TX_RAW] ", buff, sizeof(buff));
+    //DUMP8("[EAR_POWER][UART_TX_RAW] ", buff, sizeof(buff));
 
     communication_send_buf(buff, 5);
 }
@@ -1387,18 +1387,18 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
                 boxChargerStatus.boxSoftVersion[version_payload_len] = '\0';
 
-                DBGPRINT("[EAR_POWER][BOX] version=\"%s\" payload_len=%u frame_len=%u",
-                        boxChargerStatus.boxSoftVersion,
-                        version_payload_len,
-                        uart_dat_len);
+                //DBGPRINT("[EAR_POWER][BOX] version=\"%s\" payload_len=%u frame_len=%u",
+                //        boxChargerStatus.boxSoftVersion,
+                //        version_payload_len,
+                //        uart_dat_len);
 
                 aiWangSetBoxVersion(boxChargerStatus.boxSoftVersion,
                                     version_payload_len);
             }
             else
             {
-                DBGPRINT("[EAR_POWER][BOX] no version payload frame_len=%u",
-                        uart_dat_len);
+                //DBGPRINT("[EAR_POWER][BOX] no version payload frame_len=%u",
+                //        uart_dat_len);
             }
         }
 
@@ -1406,7 +1406,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         * 回報本機耳機電量給充電盒。
         * 此函式是 UART TX，不是讀取充電盒三組電量。
         */
-        DBGPRINT("[EAR_POWER][CALL] wired_uart_get_battery_level()");
+        //DBGPRINT("[EAR_POWER][CALL] wired_uart_get_battery_level()");
 
         wired_uart_get_battery_level();
 

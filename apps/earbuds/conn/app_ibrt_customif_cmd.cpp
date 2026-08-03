@@ -121,7 +121,7 @@ static const uint8_t g_ntt_local_fw_version
 {
     0x00,
     0x09,
-    0x05,
+    0x06,
 };
 
 /*
