@@ -84,6 +84,12 @@ extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 
 uint8_t g_ntt_color_code = NTT_COLOR_CODE_DEFAULT;
 
+static uint8_t aiwan_read_data = 0;
+
+static bool g_sparrow_last_cmd_success = true;
+static uint8_t g_sparrow_last_error_rsp_cmd = 0;
+static uint8_t g_sparrow_last_error_code = 0;
+
 static bool ntt_color_code_is_valid(uint8_t color)
 {
     return (color == NTT_COLOR_CODE_BLACK) ||
@@ -307,20 +313,51 @@ static const char *ntt_api_error_string(uint8_t err)
     }
 }
 
-static void ntt_api_send_error_notify(uint8_t rsp_cmd, uint8_t err)
+static void ntt_api_send_error_notify(uint8_t rsp_cmd,uint8_t err)
 {
-    uint8_t buf[64] = {0};
+    uint8_t payload[64] = {0};
     const char *detail = ntt_api_error_string(err);
-    uint16_t detail_len = strlen(detail);
-    uint16_t value_len = detail_len + 1;
+    uint16_t detail_len;
+    uint16_t payload_len;
 
-    buf[0] = (value_len >> 8) & 0xFF;
-    buf[1] = value_len & 0xFF;
-    buf[2] = err;
-    memcpy(&buf[3], detail, detail_len);
+    if (detail == NULL)
+    {
+        detail = "Unknown error";
+    }
 
-    TRACE(0, "[API_ERR][NOTIFY] rsp=0x%02X err=0x%02X detail=%s", rsp_cmd, err, detail);
-    sparraw_tx_msg(rsp_cmd, buf, detail_len + 3);
+    detail_len = (uint16_t)strlen(detail);
+    payload_len = (uint16_t)(detail_len + 1U);
+
+    if (payload_len > sizeof(payload))
+    {
+        TRACE(0,
+              "[API_ERR][NOTIFY] overflow payload_len=%u",
+              payload_len);
+        return;
+    }
+
+    g_sparrow_last_cmd_success = false;
+    g_sparrow_last_error_rsp_cmd = rsp_cmd;
+    g_sparrow_last_error_code = err;
+
+    payload[0] = err;
+
+    memcpy(&payload[1],
+           detail,
+           detail_len);
+
+    TRACE(0,
+          "[API_ERR][NOTIFY] rsp=0x%02X err=0x%02X "
+          "payload_len=%u detail=%s",
+          rsp_cmd,
+          err,
+          payload_len,
+          detail);
+
+    sparraw_tx_msg(
+        rsp_cmd,
+        payload,
+        payload_len);
 }
 
 static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
@@ -399,12 +436,34 @@ void handleGetBatteryLevel(const uint8_t *data,
         0xFF
     };
 
-    if ((data == NULL) || (len == 0))
+    TRACE(0,
+          "[BAT31][REQ] data=%p len=%u",
+          data,
+          (unsigned)len);
+
+    if (data != NULL)
     {
-        TRACE(0, "[BAT31][REQ] invalid");
+        DUMP8("%02X ", data, len);
+    }
+
+    /*
+     * Valid request:
+     *
+     *   30 00 00
+     *
+     * GET_BATTERY_LEVEL has no payload.
+     */
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_BATTERY_LEVEL) ||
+        (data[1] != 0x00) ||
+        (data[2] != 0x00))
+    {
+        TRACE(0,
+              "[BAT31][REQ] invalid packet");
 
         ntt_api_send_error_notify(
-            0x33,
+            ERR_GET_BATTERY_LEVEL,
             API_ERR_INVALID_PARAM);
 
         return;
@@ -412,10 +471,11 @@ void handleGetBatteryLevel(const uint8_t *data,
 
     if (!sparrow_get_battery_report_values(batteryArray))
     {
-        TRACE(0, "[BAT31][REQ] battery not ready");
+        TRACE(0,
+              "[BAT31][REQ] battery not ready");
 
         ntt_api_send_error_notify(
-            0x33,
+            ERR_GET_BATTERY_LEVEL,
             API_ERR_BUSY);
 
         return;
@@ -427,11 +487,22 @@ void handleGetBatteryLevel(const uint8_t *data,
           batteryArray[1],
           batteryArray[2]);
 
+#if need_send_data_by_notify
+    /*
+     * Battery protocol:
+     *
+     * Write request : 0x30
+     * Notify reply  : 0x31
+     * Read reply    : 0x32
+     */
     sparraw_tx_msg(
         0x31,
         batteryArray,
         sizeof(batteryArray));
+#endif
 }
+
+
 #define NTT_BT_NAME_MAX_LEN             45
 #define NTT_BT_NAME_DELAY_WRITE_MS          10000
 #define NTT_BT_NAME_RETRY_WHEN_BUSY_MS      3000
@@ -450,16 +521,41 @@ static uint8_t ntt_bt_name_retry_count = 0;
 
 void handleGetDeviceName(const uint8_t *data, uint16_t len)
 {
-    TRACE(0, "%s.", __func__);
+    TRACE(0,
+          "[GET_NAME][REQ] data=%p len=%u",
+          data,
+          (unsigned)len);
+
+    if (data != NULL)
+    {
+        DUMP8("%02X ", data, len);
+    }
+
+    /*
+     * Valid request:
+     *
+     *   34 00 00
+     *
+     * GET_DEVICE_NAME has no payload.
+     */
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_DEVICE_NAME) ||
+        (data[1] != 0x00) ||
+        (data[2] != 0x00))
+    {
+        TRACE(0,
+              "[GET_NAME][REQ] invalid packet");
+
+        ntt_api_send_error_notify(
+            ERR_GET_DEVICE_NAME,
+            API_ERR_INVALID_PARAM);
+
+        return;
+    }
 
     const uint8_t *localname = NULL;
     uint16_t name_len = 0;
-
-    if ((data == NULL) || (len == 0))
-    {
-        ntt_api_send_error_notify(0x37, API_ERR_INVALID_PARAM);
-        return;
-    }
 
     /*
      * If device name was just set but not written to flash yet,
@@ -473,27 +569,37 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
         localname = ntt_bt_name_sync_buf;
         name_len = ntt_bt_name_sync_len;
 
-        TRACE(1, "[GET_NAME] return pending RAM name: %s", localname);
+        TRACE(1,
+              "[GET_NAME] return pending RAM name: %s",
+              localname);
     }
     else
     {
         localname = factory_section_get_bt_name();
 
-        if ((localname == NULL) || (strlen((char *)localname) == 0))
+        if ((localname == NULL) ||
+            (strlen((char *)localname) == 0))
         {
-            ntt_api_send_error_notify(0x37, API_ERR_STORAGE_ERROR);
+            ntt_api_send_error_notify(
+                ERR_GET_DEVICE_NAME,
+                API_ERR_STORAGE_ERROR);
+
             return;
         }
 
-        name_len = strlen((char *)localname) + 1;
+        name_len =
+            (uint16_t)strlen((char *)localname) + 1U;
 
-        TRACE(1, "[GET_NAME] return flash name: %s", localname);
+        TRACE(1,
+              "[GET_NAME] return flash name: %s",
+              localname);
     }
 
 #if need_send_data_by_notify
-    sparraw_tx_msg(RSP_GET_DEVICE_NAME,
-                   localname,
-                   name_len);
+    sparraw_tx_msg(
+        RSP_GET_DEVICE_NAME,
+        localname,
+        name_len);
 #endif
 }
 
@@ -665,35 +771,73 @@ void handleSetDeviceName(const uint8_t *data, uint16_t len)
 
 extern void handleGetKeyMapNumber(uint8_t *index);
 extern void handleGetKeyMapActionAndFunc(uint8_t index, uint8_t *action, uint8_t *func);
-void handleGetKeyMapping(const uint8_t *data, uint16_t len)
+void handleGetKeyMapping(const uint8_t *data,uint16_t len)
 {
-    TRACE(0, "%s.", __func__);
+    TRACE(0,
+          "[KEYMAP][GET_REQ] data=%p len=%u",
+          data,
+          (unsigned)len);
 
-    if ((data == NULL) || (len == 0))
+    if (data != NULL)
     {
-        ntt_api_send_error_notify(0x3F, API_ERR_INVALID_PARAM);
+        DUMP8("%02X ", data, len);
+    }
+
+    /*
+     * Valid request:
+     *
+     *   3C 00 00
+     *
+     * GET_KEY_MAPPING has no payload.
+     */
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_KEY_MAPPING) ||
+        (data[1] != 0x00) ||
+        (data[2] != 0x00))
+    {
+        TRACE(0,
+              "[KEYMAP][GET_REQ] invalid packet");
+
+        ntt_api_send_error_notify(
+            ERR_GET_KEY_MAPPING,
+            API_ERR_INVALID_PARAM);
+
         return;
     }
 
     struct nvrecord_env_t *nvrecord_env = NULL;
+
     nv_record_env_get(&nvrecord_env);
 
     if (nvrecord_env == NULL)
     {
-        ntt_api_send_error_notify(0x3F, API_ERR_STORAGE_ERROR);
+        TRACE(0,
+              "[KEYMAP][GET_REQ] nvrecord_env is NULL");
+
+        ntt_api_send_error_notify(
+            ERR_GET_KEY_MAPPING,
+            API_ERR_STORAGE_ERROR);
+
         return;
     }
 
     uint8_t key_number = nvrecord_env->key_map_number;
-    uint8_t read_key_map_data[40] = {0};   // 20 keys * 2 bytes
+    uint8_t read_key_map_data[40] = {0};
     bool use_default_map = false;
     bool all_empty = true;
 
-    TRACE(0, "[KEYMAP] nv key_number=%d", key_number);
+    TRACE(0,
+          "[KEYMAP][GET] nv key_number=%u",
+          (unsigned)key_number);
 
-    if ((key_number == 0) || (key_number > 20))
+    if ((key_number == 0) ||
+        (key_number > 20))
     {
-        TRACE(0, "[KEYMAP] invalid nv key_number=%d, use default", key_number);
+        TRACE(0,
+              "[KEYMAP][GET] invalid key_number=%u, use default",
+              (unsigned)key_number);
+
         key_number = 20;
         use_default_map = true;
     }
@@ -711,7 +855,9 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
 
         if (all_empty)
         {
-            TRACE(0, "[KEYMAP] nv keymap empty, use default");
+            TRACE(0,
+                  "[KEYMAP][GET] NV mapping empty, use default");
+
             key_number = 20;
             use_default_map = true;
         }
@@ -719,8 +865,8 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
 
     for (uint8_t i = 0; i < key_number; i++)
     {
-        uint8_t action = 0;
-        uint8_t func = 0;
+        uint8_t action;
+        uint8_t func;
 
         if (use_default_map)
         {
@@ -733,23 +879,32 @@ void handleGetKeyMapping(const uint8_t *data, uint16_t len)
             func   = nvrecord_env->key_map_func[i];
         }
 
-        TRACE(0, "[KEYMAP] i=%d action=0x%02X func=0x%02X",
-              i, action, func);
+        read_key_map_data[i * 2U]     = action;
+        read_key_map_data[i * 2U + 1U] = func;
 
-        read_key_map_data[i * 2]     = action;
-        read_key_map_data[i * 2 + 1] = func;
+        TRACE(0,
+              "[KEYMAP][GET] i=%u action=0x%02X func=0x%02X",
+              (unsigned)i,
+              action,
+              func);
     }
 
-    TRACE(0, "[KEYMAP] number=%d payload_len=%d source=%s",
-          key_number,
-          key_number * 2,
+    TRACE(0,
+          "[KEYMAP][GET_RSP] count=%u payload_len=%u source=%s",
+          (unsigned)key_number,
+          (unsigned)(key_number * 2U),
           use_default_map ? "default" : "nv");
 
-    DUMP8("%02X ", read_key_map_data, key_number * 2);
+    DUMP8("%02X ",
+          read_key_map_data,
+          key_number * 2U);
 
-    sparraw_tx_msg(RSP_GET_KEY_MAPPING,
-                   read_key_map_data,
-                   key_number * 2);
+#if need_send_data_by_notify
+    sparraw_tx_msg(
+        RSP_GET_KEY_MAPPING,
+        read_key_map_data,
+        (uint16_t)(key_number * 2U));
+#endif
 }
 
 void handleSetKeyMapping(const uint8_t *data, uint16_t len)
@@ -1133,11 +1288,34 @@ void handleGetEqIndex(uint8_t *index)
 
 void handleGetEqPresent(const uint8_t *data, uint16_t len)
 {
-    TRACE(0, "%s.", __func__);
+    TRACE(0,
+          "[EQ][REQ] data=%p len=%u",
+          data,
+          (unsigned)len);
 
-    if ((data == NULL) || (len == 0))
+    if (data != NULL)
     {
-        ntt_api_send_error_notify(0x47, API_ERR_INVALID_PARAM);
+        DUMP8("%02X ", data, len);
+    }
+
+    /*
+     * Valid request:
+     *
+     *   44 00 00
+     */
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_EQ_PRESET) ||
+        (data[1] != 0x00) ||
+        (data[2] != 0x00))
+    {
+        TRACE(0,
+              "[EQ][REQ] invalid packet");
+
+        ntt_api_send_error_notify(
+            ERR_GET_EQ_PRESET,
+            API_ERR_INVALID_PARAM);
+
         return;
     }
 
@@ -1147,15 +1325,21 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
 
     if (index >= 6)
     {
-        ntt_api_send_error_notify(0x47, API_ERR_STORAGE_ERROR);
+        ntt_api_send_error_notify(
+            ERR_GET_EQ_PRESET,
+            API_ERR_STORAGE_ERROR);
+
         return;
     }
 
-    TRACE(0, "[EQ] preset=%d", index);
+    TRACE(0,
+          "[EQ][RSP] preset=%u",
+          (unsigned)index);
 
-    sparraw_tx_msg(RSP_GET_EQ_PRESET,
-                   &index,
-                   sizeof(index));
+    sparraw_tx_msg(
+        RSP_GET_EQ_PRESET,
+        &index,
+        sizeof(index));
 }
 
 #include "hw_codec_iir_process.h"
@@ -1356,12 +1540,38 @@ void handleGetFwVersion(const uint8_t *data, uint16_t len)
     uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN];
     uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
 
-    TRACE(1, "%s", __func__);
+    TRACE(0,
+          "[FW][REQ] data=%p len=%u",
+          data,
+          (unsigned)len);
 
-    if ((data == NULL) || (len < 3))
+    if (data != NULL)
     {
+        DUMP8("%02X ", data, len);
+    }
+
+    /*
+     * Valid request packet:
+     *
+     *   4C 00 00
+     *
+     * data[0] : command
+     * data[1] : payload length high
+     * data[2] : payload length low
+     *
+     * GET_FW_VERSION has no payload, so total packet length must be 3.
+     */
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_FW_VERSION) ||
+        (data[1] != 0x00) ||
+        (data[2] != 0x00))
+    {
+        TRACE(0,
+              "[FW][REQ] invalid packet");
+
         ntt_api_send_error_notify(
-            0x4F,
+            ERR_GET_FW_VERSION,
             API_ERR_INVALID_PARAM);
 
         return;
@@ -1372,13 +1582,28 @@ void handleGetFwVersion(const uint8_t *data, uint16_t len)
      *
      * 注意：TWS response 是非同步，因此本次查詢仍可能回傳 FF。
      */
+    memset(peer_version,
+           0xFF,
+           sizeof(peer_version));
+
     if (bts_tws_if_is_tws_link_connected() &&
         !app_ibrt_customif_get_peer_fw_version(peer_version))
     {
+        TRACE(0,
+              "[FW][REQ] peer version not ready, request now");
+
         app_ibrt_customif_request_peer_fw_version();
     }
 
     ntt_build_dual_earbud_fw_version(version);
+
+    TRACE(0,
+          "[FW][RSP] payload_len=%u",
+          (unsigned)sizeof(version));
+
+    DUMP8("%02X ",
+          version,
+          sizeof(version));
 
 #if need_send_data_by_notify
     sparraw_tx_msg(
@@ -1644,20 +1869,39 @@ static void sparraw_rx_cmd_parse_v2(const uint8_t *data, uint16_t len);
 #if 1
 static uint8_t neet_notify_send_flash = 0;
 #endif
-static uint8_t aiwan_read_data = 0;
+
 #if 1
 static void need_notify_send(uint8_t *param, uint16_t len)
 {
-	aiwan_read_data = param[0];
-	switch(param[0])
-	{
-		case GET_BATTERY_LEVEL:		
-		{
-			neet_notify_send_flash = 1;
-		}break;
-		
-		default:neet_notify_send_flash = 1;break;
-	}
+    if ((param == NULL) || (len == 0))
+    {
+        return;
+    }
+
+    aiwan_read_data = param[0];
+
+    /*
+     * Start a new command transaction.
+     * Assume success until a handler calls ntt_api_send_error_notify().
+     */
+    g_sparrow_last_cmd_success = true;
+    g_sparrow_last_error_rsp_cmd = 0;
+    g_sparrow_last_error_code = 0;
+
+    switch (param[0])
+    {
+        case GET_BATTERY_LEVEL:
+        {
+            neet_notify_send_flash = 1;
+        }
+        break;
+
+        default:
+        {
+            neet_notify_send_flash = 1;
+        }
+        break;
+    }
 }
 #endif
 int sparraw_mailbox_put(uint8_t devId, uint8_t event, uint8_t *param, uint16_t len)
@@ -2422,7 +2666,6 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_CLICK:
         {
             ntt_cancel_double_hold_state("single click");
-
             TRACE(0, "[KEYMAP] CLICK_SINGLE");
             handle_key_event(CLICK_SINGLE, key_side);
         }
@@ -2433,18 +2676,14 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
     #ifdef SUPPORT_SIRI
             if (ntt_voice_assist_is_active())
             {
-                TRACE(0,
-                    "[KEY] DOUBLE_CLICK -> CLOSE_VOICE_ASSIST");
-
+                TRACE(0,"[KEY] DOUBLE_CLICK -> CLOSE_VOICE_ASSIST");
                 ntt_cancel_double_hold_state("double click close voice assist");
-
                 ntt_voice_assist_close();
                 break;
             }
     #endif
 
             ntt_cancel_double_hold_state("normal double click");
-
             TRACE(0, "[KEYMAP] CLICK_DOUBLE");
             handle_key_event(CLICK_DOUBLE, key_side);
         }
@@ -2453,7 +2692,6 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_TRIPLE_CLICK:
         {
             ntt_cancel_double_hold_state("triple click");
-
             TRACE(0, "[KEYMAP] CLICK_TRIPLE");
             handle_key_event(CLICK_TRIPLE, key_side);
         }
@@ -2462,12 +2700,9 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_DOUBLE_HOLD_CLICK:
         {
             TRACE(0, "[KEYMAP] CLICK_DOUBLE_HOLD");
-
-           ntt_cancel_double_hold_state ("start new double hold");
-
+            ntt_cancel_double_hold_state ("start new double hold");
             g_button_hold_side = key_side;
             button_hold_type = CLICK_DOUBLE_HOLD;
-
             handle_key_event(CLICK_DOUBLE_HOLD, key_side);
             double_hold_idle_detection_init();
         }
@@ -2476,9 +2711,7 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_HOLD_CLICK:
         {
             TRACE(0, "[KEYMAP] CLICK_HOLD_2S");
-
             ntt_cancel_double_hold_state("hold 2s event");
-
             handle_key_event(CLICK_HOLD_2S, key_side);
         }
         break;
@@ -2486,7 +2719,6 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_UP:
         {
             TRACE(0, "[KEYMAP] KEY_UP");
-
             ntt_cancel_double_hold_state("key up");
             aparraw_set_key_event_left(0);
         }
@@ -2494,9 +2726,7 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 
         default:
         {
-            TRACE(0,
-                "[KEYMAP] UNKNOWN kick=%d",
-                kick_type);
+            TRACE(0,"[KEYMAP] UNKNOWN kick=%d",kick_type);
         }
         break;
     }
@@ -2505,9 +2735,7 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 //#if need_send_data_by_notify
 extern bool app_spp_tota_send_data(uint8_t *ptrData, uint16_t length);
 
-static void sparraw_tx_msg(uint8_t rsp_type,
-                           const uint8_t *data,
-                           uint16_t len)
+static void sparraw_tx_msg(uint8_t rsp_type,const uint8_t *data,uint16_t len)
 {
     uint8_t rsp_buffer[256] = {0};
     const uint16_t rsp_len = (uint16_t)(len + 3U);
@@ -2530,74 +2758,118 @@ static void sparraw_tx_msg(uint8_t rsp_type,
     if (g_sparrow_api_transport == SPARROW_API_TRANSPORT_SPP)
     {
         bool ret = false;
-
-        TRACE(0, "[SPARROW_TX][SPP] rsp=0x%02X payload_len=%u total=%u",
-              rsp_type,
-              (unsigned)len,
-              (unsigned)rsp_len);
-
+        TRACE(0, "[SPARROW_TX][SPP] rsp=0x%02X payload_len=%u total=%u",rsp_type,(unsigned)len,(unsigned)rsp_len);
         DUMP8("%02X ", rsp_buffer, rsp_len);
-
         ret = app_spp_tota_send_data(rsp_buffer, rsp_len);
-
         TRACE(0, "[SPARROW_TX][SPP] send ret=%d", ret ? 1 : 0);
         return;
     }
 
     if (app_sparraw_env.notifyEnable)
     {
-        TRACE(0, "[SPARROW_TX][BLE] rsp=0x%02X payload_len=%u total=%u",
-              rsp_type,
-              (unsigned)len,
-              (unsigned)rsp_len);
-
+        TRACE(0, "[SPARROW_TX][BLE] rsp=0x%02X payload_len=%u total=%u",rsp_type,(unsigned)len,(unsigned)rsp_len);
         ble_aiwang_srv_send_data_via_notification(rsp_buffer, rsp_len);
     }
     else
     {
-        TRACE(0, "[SPARROW_TX][BLE] notify disabled rsp=0x%02X len=%u",
-              rsp_type,
-              (unsigned)rsp_len);
+        TRACE(0, "[SPARROW_TX][BLE] notify disabled rsp=0x%02X len=%u",rsp_type,(unsigned)rsp_len);
     }
 }
 //#endif
-static void sparraw_read_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token, const uint8_t* data, uint16_t len) {
-	uint8_t  rsp_buffer[64];
-	rsp_buffer[0] = rsp_type;
-	if (NULL != data && len > 0)
-	{
-		memcpy(&rsp_buffer[1], data, len);
-	}
-	gatts_send_read_rsp(aw_connhdl, aw_token, 0, rsp_buffer, len + 1);
+static void sparraw_read_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token,const uint8_t *data,uint16_t len)
+{
+    uint8_t rsp_buffer[256] = {0};
+    uint16_t rsp_len = (uint16_t)(len + 3U);
+
+    if (rsp_len > sizeof(rsp_buffer))
+    {
+        TRACE(0,
+              "[SPARROW_READ] overflow rsp=0x%02X "
+              "payload_len=%u total=%u",
+              rsp_type,
+              len,
+              rsp_len);
+
+        gatts_send_read_rsp(aw_connhdl,aw_token,1,NULL,0);
+
+        return;
+    }
+
+    rsp_buffer[0] = rsp_type;
+    rsp_buffer[1] = (uint8_t)((len >> 8) & 0xFF);
+    rsp_buffer[2] = (uint8_t)(len & 0xFF);
+
+    if ((data != NULL) && (len > 0))
+    {
+        memcpy(&rsp_buffer[3],data,len);
+    }
+
+    TRACE(0,"[SPARROW_READ] rsp=0x%02X payload_len=%u total=%u",rsp_type,len,rsp_len);
+    DUMP8("%02X ",rsp_buffer,rsp_len);
+    gatts_send_read_rsp(aw_connhdl,aw_token,0,rsp_buffer,rsp_len);
 }
 
-static void sparraw_read_error_rsp_msg(uint8_t rsp_type,
-                                       uint16_t aw_connhdl,
-                                       uint32_t aw_token,
-                                       uint8_t error_code)
+static void sparraw_read_error_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token,uint8_t error_code)
 {
-    uint8_t rsp_data[32] = {0};
+    uint8_t payload[64] = {0};
     const char *detail = ntt_api_error_string(error_code);
-    uint16_t detail_len = strlen(detail);
-    uint16_t value_len = detail_len + 1;
+    uint16_t detail_len;
+    uint16_t payload_len;
 
-    rsp_data[0] = (value_len >> 8) & 0xFF;
-    rsp_data[1] = value_len & 0xFF;
-    rsp_data[2] = error_code;
+    if (detail == NULL)
+    {
+        detail = "Unknown error";
+    }
 
-    memcpy(&rsp_data[3], detail, detail_len);
+    detail_len = (uint16_t)strlen(detail);
+
+    /*
+     * Error payload format:
+     *
+     * byte 0    : error code
+     * byte 1... : error detail string
+     *
+     * CMD and LEN_H/LEN_L are added by
+     * sparraw_read_rsp_msg().
+     */
+    payload_len = (uint16_t)(detail_len + 1U);
+
+    if (payload_len > sizeof(payload))
+    {
+        TRACE(0,
+              "[API_ERR][READ_RSP] overflow payload_len=%u",
+              (unsigned)payload_len);
+
+        gatts_send_read_rsp(
+            aw_connhdl,
+            aw_token,
+            1,
+            NULL,
+            0);
+
+        return;
+    }
+
+    payload[0] = error_code;
+
+    memcpy(&payload[1],
+           detail,
+           detail_len);
 
     TRACE(0,
-          "[API_ERR][READ_RSP] rsp=0x%02X err=0x%02X detail=%s",
+          "[API_ERR][READ_RSP] rsp=0x%02X err=0x%02X "
+          "payload_len=%u detail=%s",
           rsp_type,
           error_code,
+          (unsigned)payload_len,
           detail);
 
-    sparraw_read_rsp_msg(rsp_type,
-                         aw_connhdl,
-                         aw_token,
-                         rsp_data,
-                         value_len + 2);
+    sparraw_read_rsp_msg(
+        rsp_type,
+        aw_connhdl,
+        aw_token,
+        payload,
+        payload_len);
 }
 
 static void sparraw_rx_cmd_init(void){
@@ -2986,35 +3258,61 @@ void sparraw_event_handle(ble_aiwang_param_u *param)
 
 void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 {
-	uint8_t read_send_data[20] = {0};
-	memset(read_send_data,0,sizeof(read_send_data));
+    uint8_t read_send_data[20] = {0};
+
+    memset(read_send_data,
+           0,
+           sizeof(read_send_data));
+
+    /*
+     * If the previous Write command failed, Read must return
+     * the same error instead of generating a normal response.
+     */
+    if (!g_sparrow_last_cmd_success)
+    {
+        TRACE(0,
+              "[SPARROW_READ] return previous error "
+              "cmd=0x%02X rsp=0x%02X err=0x%02X",
+              aiwan_read_data,
+              g_sparrow_last_error_rsp_cmd,
+              g_sparrow_last_error_code);
+
+        sparraw_read_error_rsp_msg(
+            g_sparrow_last_error_rsp_cmd,
+            param->aw_connhdl,
+            param->aw_token,
+            g_sparrow_last_error_code);
+
+        return;
+    }
     switch(aiwan_read_data)
     {
         case GET_BATTERY_LEVEL:
         {
-            uint8_t battery_array[3] = {0xFF, 0xFF, 0xFF};
+            uint8_t battery_array[3] =
+            {
+                0xFF,
+                0xFF,
+                0xFF
+            };
 
-            TRACE(0, "[BAT32][READ_REQ] GET_BATTERY_LEVEL");
+            TRACE(0,
+                "[BAT32][READ_REQ] GET_BATTERY_LEVEL");
 
-            /*
-            * 與 0x31 使用完全相同的電量取得函數。
-            */
-            sparrow_get_battery_report_values(battery_array);
+            if (!sparrow_get_battery_report_values(
+                    battery_array))
+            {
+                TRACE(0,
+                    "[BAT32][READ_REQ] battery not ready");
 
-            /*
-            * BLE Read Response payload：
-            *
-            * byte 0：status，0x00 表示成功
-            * byte 1：battery data length，固定為 3
-            * byte 2：Left battery
-            * byte 3：Right battery
-            * byte 4：Charging case battery
-            */
-            read_send_data[0] = 0x00;
-            read_send_data[1] = 3;
-            read_send_data[2] = battery_array[0];
-            read_send_data[3] = battery_array[1];
-            read_send_data[4] = battery_array[2];
+                sparraw_read_error_rsp_msg(
+                    ERR_GET_BATTERY_LEVEL,
+                    param->aw_connhdl,
+                    param->aw_token,
+                    API_ERR_BUSY);
+
+                break;
+            }
 
             TRACE(0,
                 "[BAT32][READ_RSP] L=%u R=%u C=%u",
@@ -3022,17 +3320,76 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
                 battery_array[1],
                 battery_array[2]);
 
-            TRACE(0,
-                "[BAT32][READ_PAYLOAD] rsp_cmd=0x%02X len=5",
-                RSP_GET_BATTERY_LEVEL);
+            DUMP8("%02X ",
+                battery_array,
+                sizeof(battery_array));
 
-            DUMP8("%02X ", read_send_data, 5);
+            /*
+            * sparraw_read_rsp_msg() adds:
+            *
+            *   CMD LEN_H LEN_L
+            *
+            * Therefore only pass the real battery payload here.
+            */
+            sparraw_read_rsp_msg(
+                RSP_GET_BATTERY_LEVEL,
+                param->aw_connhdl,
+                param->aw_token,
+                battery_array,
+                sizeof(battery_array));
 
-            sparraw_read_rsp_msg(RSP_GET_BATTERY_LEVEL,
-                                param->aw_connhdl,
-                                param->aw_token,
-                                read_send_data,
-                                5);
+            break;
+        }
+        case GET_DEVICE_NAME:
+        {
+            const uint8_t *localname = NULL;
+            uint16_t name_len = 0;
+
+            if (ntt_bt_name_pending &&
+                (ntt_bt_name_sync_len > 1) &&
+                (ntt_bt_name_sync_len <= sizeof(ntt_bt_name_sync_buf)) &&
+                (ntt_bt_name_sync_buf[0] != 0))
+            {
+                localname = ntt_bt_name_sync_buf;
+                name_len = ntt_bt_name_sync_len;
+
+                TRACE(1,
+                    "[GET_NAME][READ] pending name=%s len=%d",
+                    localname,
+                    name_len);
+            }
+            else
+            {
+                localname = factory_section_get_bt_name();
+
+                if ((localname == NULL) ||
+                    (strlen((const char *)localname) == 0))
+                {
+                    sparraw_read_error_rsp_msg(
+                        ERR_GET_DEVICE_NAME,
+                        param->aw_connhdl,
+                        param->aw_token,
+                        API_ERR_STORAGE_ERROR);
+
+                    break;
+                }
+
+                name_len =
+                    (uint16_t)strlen((const char *)localname) + 1U;
+
+                TRACE(1,
+                    "[GET_NAME][READ] flash name=%s len=%d",
+                    localname,
+                    name_len);
+            }
+
+            sparraw_read_rsp_msg(
+                RSP_GET_DEVICE_NAME,
+                param->aw_connhdl,
+                param->aw_token,
+                localname,
+                name_len);
+
             break;
         }
 		case SET_DEVICE_NAME:{
@@ -3040,61 +3397,94 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			sparraw_read_rsp_msg(RSP_SET_DEVICE_NAME,param->aw_connhdl,param->aw_token, read_send_data, 0+2);
 			break;
 		}
-		case GET_KEY_MAPPING:
-		{
-			uint8_t read_key_map_data[50] = {0};
-			uint8_t key_number = 0;
+        case GET_KEY_MAPPING:
+        {
+            uint8_t key_map_data[40] = {0};
+            uint8_t key_number = 0;
+            bool use_default_map = false;
+            bool all_empty = true;
+            struct nvrecord_env_t *nvrecord_env = NULL;
 
-			handleGetKeyMapNumber(&key_number);
+            nv_record_env_get(&nvrecord_env);
 
-			if (key_number > 20)
-			{
-				sparraw_read_error_rsp_msg(0x3F,
-										param->aw_connhdl,
-										param->aw_token,
-										API_ERR_STORAGE_ERROR);
-				break;
-			}
+            if (nvrecord_env == NULL)
+            {
+                TRACE(0,"[KEYMAP][READ] nvrecord_env is NULL");
 
-			if (key_number == 0)
-			{
-				key_number = 20;
+                sparraw_read_error_rsp_msg(
+                    ERR_GET_KEY_MAPPING,
+                    param->aw_connhdl,
+                    param->aw_token,
+                    API_ERR_STORAGE_ERROR);
 
-				read_key_map_data[0] = 0x00;
-				read_key_map_data[1] = key_number * 2;
+                break;
+            }
 
-				for (int i = 0; i < key_number; i++)
-				{
-					read_key_map_data[i * 2 + 2] = s_key_default_map[i].actions;
-					read_key_map_data[i * 2 + 3] = s_key_default_map[i].function;
-				}
-			}
-			else
-			{
-				read_key_map_data[0] = 0x00;
-				read_key_map_data[1] = key_number * 2;
+            key_number = nvrecord_env->key_map_number;
 
-				for (int i = 0; i < key_number; i++)
-				{
-					uint8_t action = 0;
-					uint8_t func = 0;
+            if ((key_number == 0) || (key_number > 20))
+            {
+                key_number = 20;
+                use_default_map = true;
+            }
+            else
+            {
+                for (uint8_t i = 0; i < key_number; i++)
+                {
+                    if ((nvrecord_env->key_map_action[i] != 0) || (nvrecord_env->key_map_func[i] != 0))
+                    {
+                        all_empty = false;
+                        break;
+                    }
+                }
 
-					handleGetKeyMapActionAndFunc(i, &action, &func);
+                if (all_empty)
+                {
+                    key_number = 20;
+                    use_default_map = true;
+                }
+            }
 
-					read_key_map_data[i * 2 + 2] = action;
-					read_key_map_data[i * 2 + 3] = func;
-				}
-			}
+            for (uint8_t i = 0; i < key_number; i++)
+            {
+                if (use_default_map)
+                {
+                    key_map_data[i * 2U] = s_key_default_map[i].actions;
 
-			uint8_t data_len = key_number * 2 + 2;
+                    key_map_data[i * 2U + 1U] = s_key_default_map[i].function;
+                }
+                else
+                {
+                    key_map_data[i * 2U] = nvrecord_env->key_map_action[i];
 
-			sparraw_read_rsp_msg(RSP_GET_KEY_MAPPING,
-								param->aw_connhdl,
-								param->aw_token,
-								read_key_map_data,
-								data_len);
-			break;
-		}
+                    key_map_data[i * 2U + 1U] = nvrecord_env->key_map_func[i];
+                }
+            }
+
+            TRACE(0,
+                "[KEYMAP][READ_RSP] count=%u payload_len=%u source=%s",
+                (unsigned)key_number,
+                (unsigned)(key_number * 2U),
+                use_default_map ? "default" : "nv");
+
+            DUMP8("%02X ",key_map_data,key_number * 2U);
+
+            /*
+            * sparraw_read_rsp_msg() adds:
+            *
+            *   CMD LEN_H LEN_L
+            *
+            * Therefore do not prepend 00 28 here.
+            */
+            sparraw_read_rsp_msg(
+                RSP_GET_KEY_MAPPING,
+                param->aw_connhdl,
+                param->aw_token,
+                key_map_data,
+                (uint16_t)(key_number * 2U));
+
+            break;
+        }
 		case SET_KEY_MAPPING:{
 			//const uint8_t keyMaps[2] = {0x00,0x14};
 			
@@ -3102,33 +3492,69 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			
 			break;
 		}
-		case GET_EQ_PRESET:{
-			uint8_t index = 0;
-			handleGetEqIndex(&index);
-			read_send_data[1] = 1;
-			read_send_data[2] = index;
-			sparraw_read_rsp_msg(RSP_GET_EQ_PRESET,param->aw_connhdl,param->aw_token, read_send_data, 1+2);
-			
-			break;
-		}
+        case GET_EQ_PRESET:
+        {
+            uint8_t index = 0xFF;
+
+            handleGetEqIndex(&index);
+
+            if (index >= 6)
+            {
+                TRACE(0,
+                    "[EQ][READ] invalid preset=%u",
+                    (unsigned)index);
+
+                sparraw_read_error_rsp_msg(
+                    ERR_GET_EQ_PRESET,
+                    param->aw_connhdl,
+                    param->aw_token,
+                    API_ERR_STORAGE_ERROR);
+
+                break;
+            }
+
+            TRACE(0,
+                "[EQ][READ] preset=%u",
+                (unsigned)index);
+
+            /*
+            * sparraw_read_rsp_msg() already adds:
+            *
+            *   CMD LEN_H LEN_L
+            *
+            * Only pass the real payload here.
+            */
+            sparraw_read_rsp_msg(
+                RSP_GET_EQ_PRESET,
+                param->aw_connhdl,
+                param->aw_token,
+                &index,
+                sizeof(index));
+
+            break;
+        }
 		case SET_EQ_PRESET:{
 			
 			sparraw_read_rsp_msg(RSP_SET_EQ_PRESET, param->aw_connhdl,param->aw_token,read_send_data, 0+2);			
 			break;
 		}
-		case GET_FW_VERSION:{
-			uint8_t version[11+11+1] = {0};
-			memcpy(&version[0], DISPLAY_EARBUDS_VERSION, strlen(DISPLAY_EARBUDS_VERSION));
-			//aiWangGetChargerBoxVersion(&version[strlen(DISPLAY_EARBUDS_VERSION)]);
-			TRACE(0, "GET_FW_VERSION");
-    		TRACE(0, "DISPLAY_EARBUDS_VERSION=%s", version);
-			read_send_data[1] = strlen((char*)version);
-			memcpy(&read_send_data[2],version,strlen((char*)version));
-			TRACE(0, "FW Version Len=%d", read_send_data[1]);
-    		TRACE(0, "FW Version Send=%s", &read_send_data[2]);
-			sparraw_read_rsp_msg(RSP_GET_FW_VERSION, param->aw_connhdl,param->aw_token,read_send_data, strlen((char*)version)+2);		
-			break;
-		}
+        case GET_FW_VERSION:
+        {
+            uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN];
+            uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
+
+            if (bts_tws_if_is_tws_link_connected() && !app_ibrt_customif_get_peer_fw_version(peer_version))
+            {
+                app_ibrt_customif_request_peer_fw_version();
+            }
+
+            ntt_build_dual_earbud_fw_version(version);
+            TRACE(0,"[FW][READ] rsp len=%u",(unsigned)sizeof(version));
+            DUMP8("%02X ",version,sizeof(version));
+            sparraw_read_rsp_msg(RSP_GET_FW_VERSION,param->aw_connhdl,param->aw_token,version,sizeof(version));
+
+            break;
+        }
 		case SET_COLOR_CODE:
 		{
 			uint8_t color_code = NTT_COLOR_CODE_DEFAULT;
