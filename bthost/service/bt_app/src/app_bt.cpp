@@ -54,6 +54,7 @@
 #include "app_tws_ibrt_cmd_handler.h"
 #include "bts_ibrt_if.h"
 #include "audio_trigger_a2dp.h"
+#include "nvrecord_extension.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -189,6 +190,14 @@ extern uint8_t bt_media_current_sco_get(void);
 extern void bt_media_clear_media_type(uint16_t media_type, int device_id);
 extern void bt_media_clear_current_media(uint16_t media_type);
 extern void app_ibrt_start_power_on_tws_pairing(void);
+extern bool ntt_manual_pairing_mode;
+
+extern "C" bool ntt_bt_addr_is_tws_peer(
+    const struct bdaddr_t *bdaddr);
+
+static void ntt_bt_user_confirmation_callback(
+    struct bdaddr_t *bdaddr,
+    uint32 numeric_value);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
@@ -1235,6 +1244,194 @@ static bool app_bt_encypt_changed(const bt_bdaddr_t *bd_addr)
 
 struct BT_DEVICE_MANAGER_T app_bt_manager;
 
+extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr)
+{
+#ifdef IBRT
+    ibrt_ctrl_t *ibrt_ctrl = NULL;
+    uint8_t reversed_addr[BTIF_BD_ADDR_SIZE];
+
+    static const uint8_t zero_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0, 0, 0, 0, 0, 0
+    };
+
+    static const uint8_t ff_addr[BTIF_BD_ADDR_SIZE] =
+    {
+        0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF
+    };
+
+    if (bdaddr == NULL)
+    {
+        return false;
+    }
+
+    ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
+
+    if (ibrt_ctrl == NULL)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_NO_AUTO_PAIR] IBRT ctrl NULL");
+
+        return false;
+    }
+
+    for (uint8_t i = 0;
+         i < BTIF_BD_ADDR_SIZE;
+         i++)
+    {
+        reversed_addr[i] =
+            bdaddr->address[
+                BTIF_BD_ADDR_SIZE - 1 - i];
+    }
+
+    /*
+     * 某些 TWS SSP 流程回報的是 IBRT local address，
+     * 某些流程回報的是 peer address。
+     *
+     * 因此 local_addr 與 peer_addr 都必須放行。
+     */
+    if ((memcmp(
+             ibrt_ctrl->local_addr.address,
+             zero_addr,
+             BTIF_BD_ADDR_SIZE) != 0) &&
+        (memcmp(
+             ibrt_ctrl->local_addr.address,
+             ff_addr,
+             BTIF_BD_ADDR_SIZE) != 0))
+    {
+        if ((memcmp(
+                 bdaddr->address,
+                 ibrt_ctrl->local_addr.address,
+                 BTIF_BD_ADDR_SIZE) == 0) ||
+            (memcmp(
+                 reversed_addr,
+                 ibrt_ctrl->local_addr.address,
+                 BTIF_BD_ADDR_SIZE) == 0))
+        {
+            DEBUG_INFO(
+                0,
+                "[NTT_NO_AUTO_PAIR] "
+                "matched TWS local address");
+
+            return true;
+        }
+    }
+
+    if ((memcmp(
+             ibrt_ctrl->peer_addr.address,
+             zero_addr,
+             BTIF_BD_ADDR_SIZE) != 0) &&
+        (memcmp(
+             ibrt_ctrl->peer_addr.address,
+             ff_addr,
+             BTIF_BD_ADDR_SIZE) != 0))
+    {
+        if ((memcmp(
+                 bdaddr->address,
+                 ibrt_ctrl->peer_addr.address,
+                 BTIF_BD_ADDR_SIZE) == 0) ||
+            (memcmp(
+                 reversed_addr,
+                 ibrt_ctrl->peer_addr.address,
+                 BTIF_BD_ADDR_SIZE) == 0))
+        {
+            DEBUG_INFO(
+                0,
+                "[NTT_NO_AUTO_PAIR] "
+                "matched TWS peer address");
+
+            return true;
+        }
+    }
+
+    DEBUG_INFO(
+        0,
+        "[NTT_NO_AUTO_PAIR] "
+        "not TWS local/peer address");
+
+    return false;
+#else
+    (void)bdaddr;
+
+    return false;
+#endif
+}
+
+static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 numeric_value)
+{
+    bool is_tws_peer = false;
+
+    DEBUG_INFO(
+        0,
+        "[NTT_NO_AUTO_PAIR][APP_BT_CB] ENTER");
+
+    if (bdaddr == NULL)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_NO_AUTO_PAIR][APP_BT_CB] addr NULL");
+
+        return;
+    }
+
+    is_tws_peer =
+        ntt_bt_addr_is_tws_peer(bdaddr);
+
+    DEBUG_INFO(
+        9,
+        "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
+        "manual=%d tws_peer=%d value=%u "
+        "addr=%02x:%02x:%02x:%02x:%02x:%02x",
+        ntt_manual_pairing_mode,
+        is_tws_peer,
+        numeric_value,
+        bdaddr->address[5],
+        bdaddr->address[4],
+        bdaddr->address[3],
+        bdaddr->address[2],
+        bdaddr->address[1],
+        bdaddr->address[0]);
+
+    if (is_tws_peer)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
+            "accept TWS peer SSP");
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+
+        return;
+    }
+
+    if (ntt_manual_pairing_mode)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
+            "accept manual mobile SSP");
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+
+        return;
+    }
+
+    DEBUG_INFO(
+        0,
+        "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
+        "reject automatic mobile SSP");
+
+    bes_bt_me_confirmation_resp(
+        bdaddr,
+        false);
+}
+
 void app_bt_reset_delay_power_off(void)
 {
 	if(bt_disconnected_keep_alive_timer_id)
@@ -1262,6 +1459,12 @@ void app_bt_manager_init(void)
     nv_op.link_key_notify = app_bt_link_key_notify,
     nv_op.encrypt_changed = app_bt_encypt_changed,
     btif_me_register_nv_operator(&nv_op);
+
+    bes_bt_me_confirmation_register_callback(
+        ntt_bt_user_confirmation_callback);
+
+    DEBUG_INFO(0,
+        "[NTT_NO_AUTO_PAIR] confirmation callback registered");
 
     app_bt_manager.current_a2dp_conhdl = 0xffff;
     app_bt_manager.device_routed_sco_to_phone = BT_DEVICE_INVALID_ID;
@@ -4998,6 +5201,12 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     btdevice_profile *btdevice_plf_p;
     int find_invalid_record_cnt;
     bool reconnect_added = false;
+
+    /*
+     * GFPS callback 可能在初始化後覆蓋全域 Classic SSP callback。
+     * 每次開機回連前重新安裝 NTT callback。
+     */
+    bes_bt_me_confirmation_register_callback(ntt_bt_user_confirmation_callback);
 
     DEBUG_INFO(0, "[NTT_RECONNECT] opening reconnect enter");
 /*

@@ -2154,6 +2154,7 @@ void app_ibrt_init(void)
                 mobile_record_count);
 
             ntt_first_no_mobile_pair_mode = false;
+            ntt_manual_pairing_mode = false;
         }
 
         /*

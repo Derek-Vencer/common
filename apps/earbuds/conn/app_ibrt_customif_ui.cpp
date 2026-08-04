@@ -107,6 +107,7 @@ extern bool app_ui_user_role_switch(bool switch2master);
 extern "C" void btif_hfp_ibrt_role_switch_handle(const bt_bdaddr_t *remote);
 extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
 extern uint8_t out_of_case_reconnect;
+extern bool ntt_manual_pairing_mode;
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
 extern void earBudsCloseOff_PogonIn_StopTimer(void);
@@ -341,6 +342,10 @@ static void ntt_role_switch_delay_handler(void const *param)
 void app_ibrt_customif_pairing_mode_exit()
 {
     app_ui_config_t* p_app_ui_config = app_ui_get_config();
+
+    ntt_manual_pairing_mode = false;
+    EARBUDS_TRACE(0,
+        "[NTT_NO_AUTO_PAIR] pairing mode exit, manual=0");
     uint8_t resume_sco_device = g_device_id_need_resume_sco;
 
     EARBUDS_TRACE(0,"custom_ui pairing mode exit: resume_sco_device %x", resume_sco_device);

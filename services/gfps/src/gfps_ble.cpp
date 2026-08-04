@@ -51,6 +51,10 @@
 
 /************************extern function declearation***********************/
 extern int rand(void);
+extern bool ntt_manual_pairing_mode;
+
+extern "C" bool ntt_bt_addr_is_tws_peer(
+    const struct bdaddr_t *bdaddr);
 
 /**********************private function declearation************************/
 #ifdef SPOT_ENABLED
@@ -1743,13 +1747,81 @@ uint8_t gfps_ble_get_hashed_value(void)
 
 #endif
 
-static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr, uint32 numeric_value)
+static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr,uint32 numeric_value)
 {
     uint8_t passkey[GFPS_PASSKEY_LEN];
-    memcpy(passkey, &numeric_value, GFPS_PASSKEY_LEN);
-    big_little_switch(passkey, gfps_ble_env.passkey, GFPS_PASSKEY_LEN);
+    bool is_tws_peer = false;
 
-    bes_bt_me_confirmation_resp(bdaddr, true);
+    GFPS_TRACE(
+        0,
+        "[NTT_NO_AUTO_PAIR][GFPS_CB] ENTER");
+
+    if (bdaddr == NULL)
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR][GFPS_CB] addr NULL");
+
+        return;
+    }
+
+    memcpy(
+        passkey,
+        &numeric_value,
+        GFPS_PASSKEY_LEN);
+
+    big_little_switch(
+        passkey,
+        gfps_ble_env.passkey,
+        GFPS_PASSKEY_LEN);
+
+    is_tws_peer =
+        ntt_bt_addr_is_tws_peer(bdaddr);
+
+    GFPS_TRACE(
+        3,
+        "[NTT_NO_AUTO_PAIR][GFPS_CB] "
+        "manual=%d tws_peer=%d value=%u",
+        ntt_manual_pairing_mode,
+        is_tws_peer,
+        numeric_value);
+
+    if (is_tws_peer)
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR][GFPS_CB] "
+            "accept TWS peer SSP");
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+
+        return;
+    }
+
+    if (ntt_manual_pairing_mode)
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR][GFPS_CB] "
+            "accept manual mobile SSP");
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+
+        return;
+    }
+
+    GFPS_TRACE(
+        0,
+        "[NTT_NO_AUTO_PAIR][GFPS_CB] "
+        "reject automatic mobile SSP");
+
+    bes_bt_me_confirmation_resp(
+        bdaddr,
+        false);
 }
 
 static void gfps_process_ble_user_confirmation(ble_event_handled_t param, ble_evnet_type_e type)
@@ -1793,6 +1865,7 @@ static uint8_t gfps_ble_handle_decrypted_keybase_pairing_request(gfps_ble_req_re
 
     if(!raw_req->rx_tx.key_based_pairing_req.flags_retroactively_write_account_key)
     {
+        GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR] GFPS callback registered");
         bes_bt_me_confirmation_register_callback(gfps_process_bt_user_confirmation);
     }
 
