@@ -28,6 +28,7 @@
 #include "audio_player_adapter.h"
 
 uint8_t pair_status = 0;
+uint8_t enter_pair_status = 0;
 uint8_t er_into_discover_connectable = 0;
 static void app_pair_handler_func(enum pair_event evt, const btif_event_t *event)
 {
@@ -109,6 +110,16 @@ uint8_t get_pair_status(void)
 void set_pair_status(uint8_t status)
 {
 	pair_status = status;
+}
+
+uint8_t get_enable_pair_status(void)
+{
+	return enter_pair_status;
+}
+
+void enable_pair_status(uint8_t status)
+{
+	enter_pair_status = status;
 }
 
 uint8_t get_er_discover_connectable_status(void)

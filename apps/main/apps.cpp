@@ -414,6 +414,7 @@ extern bool aiWangBoxIsUsed(void);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
 //extern void charger_manager_start(void);
 extern void earBudsCloseOff_PogonIn_StartTimer(void);
+extern void wired_uart_get_battery_level(void);
 #ifdef IBRT
 #include "app_ibrt_customif_cmd.h"
 #endif
@@ -1919,6 +1920,8 @@ extern "C" bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr)
     return false;
 }
 
+extern uint8_t enter_pair_count;
+
 void app_ibrt_init(void)
 {
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
@@ -2114,7 +2117,21 @@ void app_ibrt_init(void)
                 ntt_first_no_mobile_pair_mode = true;
                 ntt_manual_pairing_mode = true;
 
+                /* buff[3] = 0：
+                * 不是配對成功，不通知充電盒熄燈。
+                */
                 set_pair_status(0);
+
+                /*
+                * buff[4] = 1：
+                * 通知充電盒開始閃配對燈。
+                */
+                enable_pair_status(1);
+
+                /*
+                * 建議同時重設 buff[4] 的重送計數。
+                */
+                enter_pair_count = 0;
                 set_er_discover_connectable_status(1);
 
                 app_bt_set_access_mode(
@@ -2184,6 +2201,8 @@ void app_ibrt_init(void)
                 ntt_manual_pairing_mode = true;
 
                 set_pair_status(0);
+                enable_pair_status(1);
+                enter_pair_count = 0;
                 set_er_discover_connectable_status(1);
 
                 app_bt_set_access_mode(
@@ -2232,6 +2251,7 @@ void app_ibrt_init(void)
 #if defined(IBRT_UI) && defined(BT_SVC_FW_PRODUCT_EARBUDS)
     app_tws_ibrt_ui_cmd_init();
 #endif
+    wired_uart_get_battery_level();
 }
 
 void app_earbud_mode_init()

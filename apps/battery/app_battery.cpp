@@ -107,7 +107,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #endif
 
 #ifndef CHARGER_PLUGINOUT_DEBOUNCE_MS
-#define CHARGER_PLUGINOUT_DEBOUNCE_MS (50)
+#define CHARGER_PLUGINOUT_DEBOUNCE_MS (200)//50
 #endif
 
 #ifndef CHARGER_PLUGINOUT_DEBOUNCE_CNT
@@ -1456,14 +1456,13 @@ static void app_battery_pluginout_debounce_handler(void const *param)
 #endif
 #endif
 
-    if (status_charger == APP_BATTERY_CHARGER_PLUGOUT)
-    {
-        BATTERY_TRACE(0,"@communication_stop");
-    }
-    else
-    {
-        BATTERY_TRACE(0,"@communication_init");
-    }
+    BATTERY_TRACE(3,
+                "[CHG_DEBOUNCE] sample=%u cnt=%u ctx=%u",
+                status_charger,
+                app_battery_pluginout_debounce_cnt,
+                app_battery_pluginout_debounce_ctx);
+
+    BATTERY_TRACE(0,"[CHG_DEBOUNCE] app_battery_pluginout_debounce_cnt =%d",app_battery_pluginout_debounce_cnt);
 
     if (app_battery_pluginout_debounce_cnt >= CHARGER_PLUGINOUT_DEBOUNCE_CNT)
     {

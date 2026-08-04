@@ -449,13 +449,17 @@ uint8_t get_tws_peer_battery_percent(void)
     return g_tws_peer_battery_percent;
 }
 
-static uint8_t enter_pair = 0;
-static uint8_t enter_pair_count = 0;
-
 static uint8_t pair_status = 0;
-static void wired_uart_get_battery_level(void)
+static uint8_t enter_pair_status = 0;
+
+static uint8_t pair_success_count = 0;
+uint8_t enter_pair_count = 0;
+
+#define PAIR_NOTIFY_REPEAT_COUNT    3
+
+void wired_uart_get_battery_level(void)
 {
-    uint8_t buff[5] = {0};
+    uint8_t buff[6] = {0};
     int8_t raw_level = 0;
     uint8_t report_level = 0;
 
@@ -463,15 +467,12 @@ static void wired_uart_get_battery_level(void)
 
 #if defined(IBRT)
     static int8_t s_last_tws_connected = -1;
-
     bool tws_connected = bts_tws_if_is_tws_link_connected();
 
-    if (s_last_tws_connected != tws_connected)
+    if (s_last_tws_connected != (int8_t)tws_connected)
     {
-
-        s_last_tws_connected = tws_connected;
+        s_last_tws_connected = (int8_t)tws_connected;
     }
-
 
     app_ibrt_customif_cmd_sync_battery_level(raw_level);
 #endif
@@ -486,47 +487,74 @@ static void wired_uart_get_battery_level(void)
     }
     else
     {
-        report_level = raw_level / 10;
+        report_level = (uint8_t)(raw_level / 10);
     }
 
     buff[0] = 0x55;
     buff[1] = 0xAA;
     buff[2] = report_level;
 
-    if (1)
+    /*
+     * buff[3] = 1：
+     * 配對成功，通知充電盒停止閃燈並熄燈。
+     */
+    pair_status = get_pair_status();
+    buff[3] = pair_status;
+
+    if (pair_status)
     {
-        pair_status = get_pair_status();
-        buff[3] = pair_status;
-        DBGPRINT("[PHONE_CONNECTED][BOX_BAT] wired_uart_get_battery_level pair_status =%d",pair_status);
-        if (enter_pair_count > 1)
+        pair_success_count++;
+
+        if (pair_success_count >= PAIR_NOTIFY_REPEAT_COUNT)
         {
-            enter_pair = 0;
             set_pair_status(0);
-            enter_pair_count = 0;
-        }
-        else
-        {
-            enter_pair_count++;
+            pair_success_count = 0;
         }
     }
     else
     {
-        buff[3] = 0;
+        pair_success_count = 0;
+    }
+
+    /*
+     * buff[4] = 1：
+     * 耳機進入配對模式，通知充電盒開始閃配對燈。
+     */
+    enter_pair_status = get_enable_pair_status();
+    buff[4] = enter_pair_status;
+
+    if (enter_pair_status)
+    {
+        enter_pair_count++;
+
+        if (enter_pair_count >= PAIR_NOTIFY_REPEAT_COUNT)
+        {
+            enable_pair_status(0);
+            enter_pair_count = 0;
+        }
+    }
+    else
+    {
         enter_pair_count = 0;
     }
 
-    buff[4] = crc8(buff, 4);
+    /*
+     * CRC 計算 buff[0] ~ buff[4]。
+     */
+    buff[5] = crc8(buff, 5);
 
-    //DBGPRINT("[EAR_POWER][UART_TX][%s] raw=%d report=%u pair=%u crc=0x%02X",
-    //        isRightEarbuds ? "RIGHT" : "LEFT",
-    //        raw_level,
-    //        report_level,
-    //        pair_status,
-    //        buff[4]);
+    DBGPRINT(
+        "[PHONE_CONNECTED][BOX_BAT] "
+        "level=%u pair_success=%u pair_success_cnt=%u "
+        "enter_pair=%u enter_pair_cnt=%u crc=0x%02X",
+        report_level,
+        pair_status,
+        pair_success_count,
+        enter_pair_status,
+        enter_pair_count,
+        buff[5]);
 
-    //DUMP8("[EAR_POWER][UART_TX_RAW] ", buff, sizeof(buff));
-
-    communication_send_buf(buff, 5);
+    communication_send_buf(buff, sizeof(buff));
 }
 
 extern "C" void wired_uart_mobile_connected_get_box_battery(void)
@@ -1517,7 +1545,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1616,7 +1644,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             */
             aiWang_disconnect_second_phone_for_pairing();
 
-            enter_pair = 1;
+            enable_pair_status(1);
             enter_pair_count = 0;
 
             ntt_first_no_mobile_pair_mode = true;
@@ -1629,6 +1657,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
             app_bt_reset_delay_power_off();
+            wired_uart_get_battery_level();
         }
         break;
     }

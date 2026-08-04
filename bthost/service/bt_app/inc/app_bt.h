@@ -551,6 +551,8 @@ bt_pair_state_change_cb_t app_bt_get_pair_state_callback(void);
 int bt_pairing_init(void);
 uint8_t get_pair_status(void);
 void set_pair_status(uint8_t status);
+uint8_t get_enable_pair_status(void);
+void enable_pair_status(uint8_t status);
 uint8_t get_er_discover_connectable_status(void);
 void set_er_discover_connectable_status(uint8_t status);
 
