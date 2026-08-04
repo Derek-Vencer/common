@@ -53,8 +53,8 @@
 extern int rand(void);
 extern bool ntt_manual_pairing_mode;
 
-extern "C" bool ntt_bt_addr_is_tws_peer(
-    const struct bdaddr_t *bdaddr);
+extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
+extern "C" bool ntt_bt_has_mobile_paired_record(void);
 
 /**********************private function declearation************************/
 #ifdef SPOT_ENABLED
@@ -1751,6 +1751,7 @@ static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr,uint32 num
 {
     uint8_t passkey[GFPS_PASSKEY_LEN];
     bool is_tws_peer = false;
+    bool has_mobile_record = false;
 
     GFPS_TRACE(
         0,
@@ -1775,17 +1776,34 @@ static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr,uint32 num
         gfps_ble_env.passkey,
         GFPS_PASSKEY_LEN);
 
+    /*
+     * 判斷本次 SSP 是否屬於左右耳 TWS。
+     */
     is_tws_peer =
         ntt_bt_addr_is_tws_peer(bdaddr);
 
+    /*
+     * 直接檢查 NV 是否真的存在手機配對紀錄。
+     *
+     * 不只依賴 ntt_manual_pairing_mode，
+     * 因為左右耳各自的 RAM 狀態可能不同步。
+     */
+    has_mobile_record =
+        ntt_bt_has_mobile_paired_record();
+
     GFPS_TRACE(
-        3,
+        4,
         "[NTT_NO_AUTO_PAIR][GFPS_CB] "
-        "manual=%d tws_peer=%d value=%u",
+        "manual=%d mobile_record=%d "
+        "tws_peer=%d value=%u",
         ntt_manual_pairing_mode,
+        has_mobile_record,
         is_tws_peer,
         numeric_value);
 
+    /*
+     * 左右耳 TWS SSP 永遠放行。
+     */
     if (is_tws_peer)
     {
         GFPS_TRACE(
@@ -1800,6 +1818,34 @@ static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr,uint32 num
         return;
     }
 
+    /*
+     * 完全沒有任何手機配對紀錄：
+     * 必須允許第一支手機完成配對。
+     *
+     * 即使這一耳的 ntt_manual_pairing_mode
+     * 因為 TWS 狀態切換而變成 false，也仍然放行。
+     */
+    if (!has_mobile_record)
+    {
+        GFPS_TRACE(
+            0,
+            "[NTT_NO_AUTO_PAIR][GFPS_CB] "
+            "accept first mobile SSP: "
+            "no mobile record");
+
+        ntt_manual_pairing_mode = true;
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+
+        return;
+    }
+
+    /*
+     * 已有手機紀錄，但使用者明確進入配對模式：
+     * 允許新增或重新配對手機。
+     */
     if (ntt_manual_pairing_mode)
     {
         GFPS_TRACE(
@@ -1814,6 +1860,12 @@ static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr,uint32 num
         return;
     }
 
+    /*
+     * 已有手機紀錄的一般開機自動回連：
+     *
+     * 若手機端已刪除 Link Key，
+     * 禁止自動轉成新的 SSP 配對。
+     */
     GFPS_TRACE(
         0,
         "[NTT_NO_AUTO_PAIR][GFPS_CB] "

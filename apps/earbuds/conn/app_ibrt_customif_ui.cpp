@@ -114,6 +114,8 @@ extern void earBudsCloseOff_PogonIn_StopTimer(void);
 #endif
 extern uint8_t out_of_case_reconnect;
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
+extern bool ntt_manual_pairing_mode;
+extern bool ntt_first_no_mobile_pair_mode;
 
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 /*
@@ -341,23 +343,42 @@ static void ntt_role_switch_delay_handler(void const *param)
 *****************************************************************************/
 void app_ibrt_customif_pairing_mode_exit()
 {
-    app_ui_config_t* p_app_ui_config = app_ui_get_config();
+    /*
+     * 開機時完全沒有手機配對紀錄：
+     *
+     * app_ibrt_start_power_on_tws_pairing() 完成後也可能進入這個
+     * pairing exit callback。
+     *
+     * 此時不能清除 manual pairing 狀態，否則新手機發起 SSP 時，
+     * APP_BT callback 會把它當成 automatic mobile SSP 而拒絕。
+     */
+    if (ntt_first_no_mobile_pair_mode)
+    {
+        ntt_manual_pairing_mode = true;
+        EARBUDS_TRACE(0,"[NTT_PAIR] pairing exit from TWS flow, keep first-no-mobile manual mode=1");
+    }
+    else
+    {
+        ntt_manual_pairing_mode = false;
+        EARBUDS_TRACE(0,"[NTT_PAIR] pairing exit, manual mode=0");
+    }
 
-    ntt_manual_pairing_mode = false;
-    EARBUDS_TRACE(0,
-        "[NTT_NO_AUTO_PAIR] pairing mode exit, manual=0");
+    app_ui_config_t *p_app_ui_config = app_ui_get_config();
     uint8_t resume_sco_device = g_device_id_need_resume_sco;
+    EARBUDS_TRACE(0,"custom_ui pairing mode exit: resume_sco_device %x",resume_sco_device);
 
-    EARBUDS_TRACE(0,"custom_ui pairing mode exit: resume_sco_device %x", resume_sco_device);
-
-    if (p_app_ui_config->pairing_with_disc_hf_cfg == IBRT_PAIRING_DISC_SCO && resume_sco_device != BT_DEVICE_INVALID_ID)
+    if ((p_app_ui_config->pairing_with_disc_hf_cfg == IBRT_PAIRING_DISC_SCO) && (resume_sco_device != BT_DEVICE_INVALID_ID))
     {
         app_ibrt_if_hf_create_audio_link(resume_sco_device);
     }
 
     g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
-    if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->ibrt_mgr_pairing_mode_exit_hook) {
-        ibrt_mgr_status_changed_client_cb->ibrt_mgr_pairing_mode_exit_hook();
+
+    if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb
+            ->ibrt_mgr_pairing_mode_exit_hook)
+    {
+        ibrt_mgr_status_changed_client_cb
+            ->ibrt_mgr_pairing_mode_exit_hook();
     }
 }
 

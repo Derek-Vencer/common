@@ -191,9 +191,9 @@ extern void bt_media_clear_media_type(uint16_t media_type, int device_id);
 extern void bt_media_clear_current_media(uint16_t media_type);
 extern void app_ibrt_start_power_on_tws_pairing(void);
 extern bool ntt_manual_pairing_mode;
-
-extern "C" bool ntt_bt_addr_is_tws_peer(
-    const struct bdaddr_t *bdaddr);
+extern bool ntt_first_no_mobile_pair_mode;
+extern bool ntt_manual_pairing_mode;
+extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
 
 static void ntt_bt_user_confirmation_callback(
     struct bdaddr_t *bdaddr,
@@ -204,7 +204,7 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 
 //reconnect = (INTERVAL+PAGETO)*CNT = (3000ms+5000ms)*15 = 120s
 #define APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS (3000)
-#define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (2)
+#define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (3)//2
 #define APP_BT_PROFILE_RECONNECT_RETRY_LIMIT_CNT (15)
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000)
@@ -1225,9 +1225,22 @@ static bool app_bt_find_record_device(const bt_bdaddr_t *bd_addr, btif_device_re
     return (status == BT_STS_SUCCESS);
 }
 
-static bool app_bt_link_key_notify(const bt_bdaddr_t *bd_addr, btif_device_record_t *rec_dev)
+static bool app_bt_link_key_notify(const bt_bdaddr_t *bd_addr,btif_device_record_t *rec_dev)
 {
-    bt_status_t status = bluetooth_nv_mgr_bt_record_add(BT_NV_REC_ADD_LINKKEY_GENERATED, rec_dev);
+    bt_status_t status = bluetooth_nv_mgr_bt_record_add(BT_NV_REC_ADD_LINKKEY_GENERATED,rec_dev);
+
+    /*
+     * 第一支手機已成功產生 Link Key，
+     * 離開「零手機紀錄自動配對」狀態。
+     */
+    if ((status == BT_STS_SUCCESS) && ntt_first_no_mobile_pair_mode && (bd_addr != NULL) &&
+        !ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)bd_addr))
+    {
+        ntt_first_no_mobile_pair_mode = false;
+        ntt_manual_pairing_mode = false;
+        DEBUG_INFO(0,"[NTT_PAIR] first mobile paired, manual mode cleared");
+    }
+
     return (status == BT_STS_SUCCESS);
 }
 
@@ -1359,9 +1372,169 @@ extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr)
 #endif
 }
 
-static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 numeric_value)
+extern "C" bool ntt_bt_has_mobile_paired_record(void)
+{
+    btif_device_record_t record;
+    ibrt_ctrl_t *ibrt_ctrl = NULL;
+    int paired_count = 0;
+
+#ifdef IBRT
+    ibrt_ctrl =
+        app_tws_ibrt_get_bt_ctrl_ctx();
+#endif
+
+    paired_count =
+        nv_record_get_paired_dev_count();
+
+    DEBUG_INFO(
+        1,
+        "[NTT_PAIR][RECORD_SCAN] paired_count=%d",
+        paired_count);
+
+#ifdef IBRT
+    if (ibrt_ctrl != NULL)
+    {
+        DEBUG_INFO(
+            6,
+            "[NTT_PAIR][RECORD_SCAN] local="
+            "%02x:%02x:%02x:%02x:%02x:%02x",
+            ibrt_ctrl->local_addr.address[5],
+            ibrt_ctrl->local_addr.address[4],
+            ibrt_ctrl->local_addr.address[3],
+            ibrt_ctrl->local_addr.address[2],
+            ibrt_ctrl->local_addr.address[1],
+            ibrt_ctrl->local_addr.address[0]);
+
+        DEBUG_INFO(
+            6,
+            "[NTT_PAIR][RECORD_SCAN] peer="
+            "%02x:%02x:%02x:%02x:%02x:%02x",
+            ibrt_ctrl->peer_addr.address[5],
+            ibrt_ctrl->peer_addr.address[4],
+            ibrt_ctrl->peer_addr.address[3],
+            ibrt_ctrl->peer_addr.address[2],
+            ibrt_ctrl->peer_addr.address[1],
+            ibrt_ctrl->peer_addr.address[0]);
+    }
+    else
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_PAIR][RECORD_SCAN] ibrt_ctrl=NULL");
+    }
+#endif
+
+    for (int index = 0;
+         index < paired_count;
+         index++)
+    {
+        bt_status_t enum_status;
+        bool is_local = false;
+        bool is_peer = false;
+
+        memset(
+            &record,
+            0,
+            sizeof(record));
+
+        enum_status =
+            nv_record_enum_dev_records(
+                index,
+                &record);
+
+        if (enum_status != BT_STS_SUCCESS)
+        {
+            DEBUG_INFO(
+                2,
+                "[NTT_PAIR][RECORD_SCAN] "
+                "enum index=%d failed status=%d",
+                index,
+                enum_status);
+
+            continue;
+        }
+
+        DEBUG_INFO(
+            7,
+            "[NTT_PAIR][RECORD_SCAN] "
+            "record[%d]=%02x:%02x:%02x:%02x:%02x:%02x",
+            index,
+            record.bdAddr.address[5],
+            record.bdAddr.address[4],
+            record.bdAddr.address[3],
+            record.bdAddr.address[2],
+            record.bdAddr.address[1],
+            record.bdAddr.address[0]);
+
+#ifdef IBRT
+        if (ibrt_ctrl != NULL)
+        {
+            is_local =
+                (memcmp(
+                     record.bdAddr.address,
+                     ibrt_ctrl->local_addr.address,
+                     BTIF_BD_ADDR_SIZE) == 0);
+
+            is_peer =
+                (memcmp(
+                     record.bdAddr.address,
+                     ibrt_ctrl->peer_addr.address,
+                     BTIF_BD_ADDR_SIZE) == 0);
+
+            DEBUG_INFO(
+                3,
+                "[NTT_PAIR][RECORD_SCAN] "
+                "record[%d] is_local=%d is_peer=%d",
+                index,
+                is_local,
+                is_peer);
+
+            /*
+             * 排除左右耳 TWS Local 與 Peer 紀錄。
+             */
+            if (is_local || is_peer)
+            {
+                DEBUG_INFO(
+                    1,
+                    "[NTT_PAIR][RECORD_SCAN] "
+                    "record[%d] skipped as TWS",
+                    index);
+
+                continue;
+            }
+        }
+#endif
+
+        DEBUG_INFO(
+            7,
+            "[NTT_PAIR][RECORD_SCAN] "
+            "mobile record found index=%d "
+            "%02x:%02x:%02x:%02x:%02x:%02x",
+            index,
+            record.bdAddr.address[5],
+            record.bdAddr.address[4],
+            record.bdAddr.address[3],
+            record.bdAddr.address[2],
+            record.bdAddr.address[1],
+            record.bdAddr.address[0]);
+
+        return true;
+    }
+
+    DEBUG_INFO(
+        0,
+        "[NTT_PAIR][RECORD_SCAN] "
+        "no mobile paired record");
+
+    return false;
+}
+
+static void ntt_bt_user_confirmation_callback(
+    struct bdaddr_t *bdaddr,
+    uint32 numeric_value)
 {
     bool is_tws_peer = false;
+    bool has_mobile_record = false;
 
     DEBUG_INFO(
         0,
@@ -1379,12 +1552,17 @@ static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 num
     is_tws_peer =
         ntt_bt_addr_is_tws_peer(bdaddr);
 
+    has_mobile_record =
+        ntt_bt_has_mobile_paired_record();
+
     DEBUG_INFO(
-        9,
+        10,
         "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
-        "manual=%d tws_peer=%d value=%u "
+        "manual=%d mobile_record=%d tws_peer=%d "
+        "value=%u "
         "addr=%02x:%02x:%02x:%02x:%02x:%02x",
         ntt_manual_pairing_mode,
+        has_mobile_record,
         is_tws_peer,
         numeric_value,
         bdaddr->address[5],
@@ -1394,6 +1572,9 @@ static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 num
         bdaddr->address[1],
         bdaddr->address[0]);
 
+    /*
+     * 左右耳 TWS SSP 永遠放行。
+     */
     if (is_tws_peer)
     {
         DEBUG_INFO(
@@ -1408,6 +1589,31 @@ static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 num
         return;
     }
 
+    /*
+     * 完全沒有手機記錄：
+     * 必須允許第一支手機完成配對。
+     *
+     * 不依賴左右耳各自的 manual RAM 狀態。
+     */
+    if (!has_mobile_record)
+    {
+        DEBUG_INFO(
+            0,
+            "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
+            "accept first mobile SSP: no mobile record");
+
+        ntt_manual_pairing_mode = true;
+
+        bes_bt_me_confirmation_resp(
+            bdaddr,
+            true);
+
+        return;
+    }
+
+    /*
+     * 有手機記錄，但使用者明確進入配對模式。
+     */
     if (ntt_manual_pairing_mode)
     {
         DEBUG_INFO(
@@ -1422,6 +1628,10 @@ static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 num
         return;
     }
 
+    /*
+     * 有手機記錄的一般開機回連：
+     * 手機若已刪除舊 Link Key，禁止自動重新配對。
+     */
     DEBUG_INFO(
         0,
         "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
