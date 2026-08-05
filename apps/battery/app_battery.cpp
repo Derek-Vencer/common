@@ -793,16 +793,16 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
         {
-            BATTERY_TRACE(1, "UNDERVOLT:%d", prams.volt);
+            BATTERY_TRACE(1,"UNDERVOLT:%d",prams.volt);
+
             app_status_indication_set(APP_STATUS_INDICATION_CHARGENEED);
 
-        #ifdef MEDIA_PLAYER_SUPPORT
-
-            BATTERY_TRACE(1,"[LOW_BAT] local ear play, volt=%d",prams.volt);
-            media_PlayAudio(AUD_ID_BT_BATTERY_LOW,0);
-
-        #endif
+            /*
+            * Low-battery prompt playback is controlled by
+            * app_battery_low_voice_play_process().
+            */
         }
+    // FALLTHROUGH
             // FALLTHROUGH
         case APP_BATTERY_STATUS_NORMAL:
         case APP_BATTERY_STATUS_OVERVOLT:
