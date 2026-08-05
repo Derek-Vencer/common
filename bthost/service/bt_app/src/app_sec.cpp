@@ -59,6 +59,8 @@ static void app_pair_handler_func(enum pair_event evt, const btif_event_t *event
     }
 }
 
+extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success);
+
 static void pair_handler_func(enum pair_event event, void *data)
 {
     event_t _event;
@@ -80,16 +82,19 @@ static void pair_handler_func(enum pair_event event, void *data)
         }
 		pair_status = 1;
 		set_er_discover_connectable_status(0);
+        ntt_mobile_pairing_mode_exit(true);
         break;
     case PAIRING_TIMEOUT:
 		pair_status = 1;
 		set_er_discover_connectable_status(0);
+        ntt_mobile_pairing_mode_exit(true);
         break;
     case PAIRING_FAILED:
         err_code = 1;
         app_pair_evt = PAIR_EVENT_COMPLETE;
 		pair_status = 1;
 		set_er_discover_connectable_status(0);
+        ntt_mobile_pairing_mode_exit(true);
         break;
     default:
         break;
@@ -129,7 +134,13 @@ uint8_t get_er_discover_connectable_status(void)
 
 void set_er_discover_connectable_status(uint8_t status)
 {
-	er_into_discover_connectable = status;
+    DEBUG_INFO(3,
+        "[NTT][DISCOVER_STATUS] old=%d new=%d LR=%p",
+        er_into_discover_connectable,
+        status,
+        __builtin_return_address(0));
+
+    er_into_discover_connectable = status;
 }
 
 int bt_pairing_init(void)

@@ -729,7 +729,7 @@ int app_status_battery_report(uint8_t level)
         if (curr_device->hf_conn_flag)
         {
             BATTERY_TRACE(0,"[PHONE_CONNECTED] request case battery");
-            wired_uart_mobile_connected_get_box_battery();
+            //wired_uart_mobile_connected_get_box_battery();
 
             BATTERY_TRACE(2,
                           "[BATT] HFP connected raw=%d report=%d",

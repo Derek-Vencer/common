@@ -157,11 +157,18 @@ void app_swift_enter_pairing_mode(void)
 {
     enable_swift = true;
     bes_bt_me_write_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE, 0);
+    //DEBUG_INFO(0,"[NTT][SWIFT] enter pairing -> GENERAL_ACCESSIBLE");
 }
 
 void app_swift_exit_pairing_mode(void)
 {
     enable_swift = false;
+
+    //app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+
+    //app_ble_refresh_adv_state_generic();
+
+    //DEBUG_INFO(0,"[NTT][SWIFT] exit pairing -> CONNECTABLE_ONLY");
 }
 
 #endif /* SWIFT_ENABLED */

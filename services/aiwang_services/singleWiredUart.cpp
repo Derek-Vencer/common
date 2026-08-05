@@ -459,7 +459,9 @@ uint8_t enter_pair_count = 0;
 
 void wired_uart_get_battery_level(void)
 {
-    uint8_t buff[6] = {0};
+    uint8_t buff5[5] = {0};
+    uint8_t buff6[6] = {0};
+
     int8_t raw_level = 0;
     uint8_t report_level = 0;
 
@@ -490,17 +492,42 @@ void wired_uart_get_battery_level(void)
         report_level = (uint8_t)(raw_level / 10);
     }
 
-    buff[0] = 0x55;
-    buff[1] = 0xAA;
-    buff[2] = report_level;
+    pair_status = get_pair_status();
+    enter_pair_status = get_enable_pair_status();
 
     /*
-     * buff[3] = 1：
-     * 配對成功，通知充電盒停止閃燈並熄燈。
+     * ---------------------------------------------------------
+     * Old protocol
+     * 55 AA BAT PAIR CRC
+     * ---------------------------------------------------------
      */
-    pair_status = get_pair_status();
-    buff[3] = pair_status;
+    buff5[0] = 0x55;
+    buff5[1] = 0xAA;
+    buff5[2] = report_level;
+    buff5[3] = pair_status;
+    buff5[4] = crc8(buff5, 4);
 
+    communication_send_buf(buff5, sizeof(buff5));
+
+    hal_sys_timer_delay(MS_TO_TICKS(2));
+    /*
+     * ---------------------------------------------------------
+     * New protocol
+     * 55 AA BAT PAIR ENTER_PAIR CRC
+     * ---------------------------------------------------------
+     */
+    buff6[0] = 0x55;
+    buff6[1] = 0xAA;
+    buff6[2] = report_level;
+    buff6[3] = pair_status;
+    buff6[4] = enter_pair_status;
+    buff6[5] = crc8(buff6, 5);
+
+    communication_send_buf(buff6, sizeof(buff6));
+
+    /*
+     * Pair success notify repeat counter.
+     */
     if (pair_status)
     {
         pair_success_count++;
@@ -517,12 +544,8 @@ void wired_uart_get_battery_level(void)
     }
 
     /*
-     * buff[4] = 1：
-     * 耳機進入配對模式，通知充電盒開始閃配對燈。
+     * Enter pairing notify repeat counter.
      */
-    enter_pair_status = get_enable_pair_status();
-    buff[4] = enter_pair_status;
-
     if (enter_pair_status)
     {
         enter_pair_count++;
@@ -538,33 +561,51 @@ void wired_uart_get_battery_level(void)
         enter_pair_count = 0;
     }
 
-    /*
-     * CRC 計算 buff[0] ~ buff[4]。
-     */
-    buff[5] = crc8(buff, 5);
-
     DBGPRINT(
-        "[PHONE_CONNECTED][BOX_BAT] "
-        "level=%u pair_success=%u pair_success_cnt=%u "
-        "enter_pair=%u enter_pair_cnt=%u crc=0x%02X",
+        "[BOX_BAT] level=%u pair=%u enter=%u",
         report_level,
         pair_status,
-        pair_success_count,
-        enter_pair_status,
-        enter_pair_count,
-        buff[5]);
+        enter_pair_status);
+}
 
-    communication_send_buf(buff, sizeof(buff));
+extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
+{
+    DBGPRINT(
+        "[NTT_PAIR] exit pair mode success=%d before discover=%d access=%d",
+        pairing_success,
+        get_er_discover_connectable_status(),
+        app_bt_get_curr_access_mode());
+
+    enable_pair_status(0);
+    enter_pair_count = 0;
+    set_pair_status(1);//disable cc pair led.
+
+    ntt_first_no_mobile_pair_mode = false;
+    ntt_manual_pairing_mode = false;
+
+    /*
+     * Disable permission to enter discoverable mode first.
+     */
+    set_er_discover_connectable_status(0);
+
+    /*
+     * Then disable Inquiry Scan while retaining Page Scan.
+     */
+    app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+
+    set_pair_status(pairing_success ? 1 : 0);
+
+    DBGPRINT(
+        "[NTT_PAIR] exit done discover=%d access=%d",
+        get_er_discover_connectable_status(),
+        app_bt_get_curr_access_mode());
+        
+    wired_uart_get_battery_level();
 }
 
 extern "C" void wired_uart_mobile_connected_get_box_battery(void)
 {
     set_pair_status(1);
-    //if (operateLeftOrRight != isRightEarbuds)
-    //{
-    //    DBGPRINT("[PHONE_CONNECTED][BOX_BAT] skip, not right earbuds");
-    //    return;
-    //}
 
     DBGPRINT("[PHONE_CONNECTED][BOX_BAT] read case battery");
 
@@ -1545,7 +1586,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1632,22 +1673,29 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         if (operateLeftOrRight == isRightEarbuds)
         {
-            DBGPRINT("CMD_SET_EARBUD_ENTER_PAIR isRightEarbuds=%d!!!",
-                    isRightEarbuds);
+            bool tws_connected =
+                bts_tws_if_is_tws_link_connected();
+
+            uint8_t ui_role =
+                app_ibrt_if_get_ui_role();
+
+            DBGPRINT(
+                "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",
+                isRightEarbuds,
+                tws_connected,
+                ui_role,
+                app_ui_in_pairing_mode());
 
             /*
-            * 如果目前已有兩支手機連線：
-            * 保留 device_id 0，斷開 device_id 1。
-            *
-            * 如果只有一支或沒有手機連線：
-            * 不執行任何斷線。
+            * If two mobile phones are connected, keep device 0
+            * and disconnect device 1 before entering pairing mode.
             */
             aiWang_disconnect_second_phone_for_pairing();
 
             enable_pair_status(1);
             enter_pair_count = 0;
 
-            ntt_first_no_mobile_pair_mode = true;
+            ntt_first_no_mobile_pair_mode = false;
             ntt_manual_pairing_mode = true;
 
             set_pair_status(0);
@@ -1655,10 +1703,50 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             app_ibrt_if_init_open_box_state_for_evb();
 
-            app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+            /*
+            * Enter the official BES UI pairing state.
+            */
+            if (tws_connected)
+            {
+                if (TWS_UI_MASTER == ui_role)
+                {
+                    app_ibrt_if_enter_pairing_after_tws_connected();
+
+                    DBGPRINT(
+                        "[NTT_PAIR] enter after TWS connected");
+                }
+                else
+                {
+                    DBGPRINT(
+                        "[NTT_PAIR] skip local enter: not UI master");
+                }
+            }
+            else
+            {
+                app_ui_enter_pairing_mode(
+                    IBRT_UI_DISABLE_BT_SCAN_TIMEOUT,
+                    false);
+
+                DBGPRINT(
+                    "[NTT_PAIR] enter local UI pairing");
+            }
+
+            /*
+            * Keep this as a fallback only.
+            * The UI pairing flow should normally update access mode.
+            */
+            app_bt_set_access_mode(
+                BTIF_BAM_GENERAL_ACCESSIBLE);
+
             app_bt_reset_delay_power_off();
             wired_uart_get_battery_level();
+
+            DBGPRINT(
+                "[NTT_PAIR] enter requested ui_pairing=%d discover=%d",
+                app_ui_in_pairing_mode(),
+                get_er_discover_connectable_status());
         }
+
         break;
     }
     case CMD_SEND_BOX_BATTERY_LEVEL:

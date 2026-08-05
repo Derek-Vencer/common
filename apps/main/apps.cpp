@@ -2218,7 +2218,7 @@ void app_ibrt_init(void)
                 ntt_first_no_mobile_pair_mode = false;
                 ntt_manual_pairing_mode = false;
 
-                set_er_discover_connectable_status(1);
+                set_er_discover_connectable_status(0);
 
                 app_bt_set_access_mode(
                     BTIF_BAM_CONNECTABLE_ONLY);

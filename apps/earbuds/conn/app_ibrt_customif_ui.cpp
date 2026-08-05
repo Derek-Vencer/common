@@ -341,6 +341,7 @@ static void ntt_role_switch_delay_handler(void const *param)
  Modification : Created function
 
 *****************************************************************************/
+extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success);
 void app_ibrt_customif_pairing_mode_exit()
 {
     /*
@@ -360,12 +361,13 @@ void app_ibrt_customif_pairing_mode_exit()
     else
     {
         ntt_manual_pairing_mode = false;
-        EARBUDS_TRACE(0,"[NTT_PAIR] pairing exit, manual mode=0");
+        EARBUDS_TRACE(0,"[NTT_PAIR] pairing exit, manual mode=0");        
     }
 
     app_ui_config_t *p_app_ui_config = app_ui_get_config();
     uint8_t resume_sco_device = g_device_id_need_resume_sco;
     EARBUDS_TRACE(0,"custom_ui pairing mode exit: resume_sco_device %x",resume_sco_device);
+    ntt_mobile_pairing_mode_exit(true);
 
     if ((p_app_ui_config->pairing_with_disc_hf_cfg == IBRT_PAIRING_DISC_SCO) && (resume_sco_device != BT_DEVICE_INVALID_ID))
     {
@@ -1244,7 +1246,7 @@ void app_ibrt_customif_on_ibrt_state_changed(const bt_bdaddr_t *addr, ibrt_conne
             break;
         case IBRT_CONN_IBRT_ACL_CONNECTED:
             EARBUDS_TRACE(0,"<<IBRT_CONN_IBRT_ACL_CONNECTED>>");
-            wired_uart_mobile_connected_get_box_battery();
+            //wired_uart_mobile_connected_get_box_battery();
             bts_ibrt_clear_profile_connect_protect(state->device_id, APP_IBRT_HFP_PROFILE_ID);
             bts_ibrt_clear_profile_connect_protect(state->device_id, APP_IBRT_A2DP_PROFILE_ID);
             bts_ibrt_clear_profile_connect_protect(state->device_id, APP_IBRT_AVRCP_PROFILE_ID);
