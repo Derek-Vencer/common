@@ -65,6 +65,7 @@
 #define TRACE(attr, fmt, ...) do {} while (0)
 
 #endif
+
 extern void ntt_ble_adv_refresh_data(void);
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern "C" uint8_t ntt_color_code_nv_get(void);
@@ -1535,65 +1536,11 @@ void aiWangGetChargerBoxVersion(uint8_t *data)
 //MM.NN.RR.AA Earbuds version format, MM: major version, NN: minor version, RR: revision version, AA: additional info
 //MM.NN.RR.AA     Box version format, MM: major version, NN: minor version, RR: revision version, AA: additional info
 
-void handleGetFwVersion(const uint8_t *data, uint16_t len)
+static bool g_ntt_fw_version_request_pending = false;
+
+static void ntt_send_dual_earbud_fw_version(void)
 {
     uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN];
-    uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
-
-    TRACE(0,
-          "[FW][REQ] data=%p len=%u",
-          data,
-          (unsigned)len);
-
-    if (data != NULL)
-    {
-        DUMP8("%02X ", data, len);
-    }
-
-    /*
-     * Valid request packet:
-     *
-     *   4C 00 00
-     *
-     * data[0] : command
-     * data[1] : payload length high
-     * data[2] : payload length low
-     *
-     * GET_FW_VERSION has no payload, so total packet length must be 3.
-     */
-    if ((data == NULL) ||
-        (len != 3U) ||
-        (data[0] != GET_FW_VERSION) ||
-        (data[1] != 0x00) ||
-        (data[2] != 0x00))
-    {
-        TRACE(0,
-              "[FW][REQ] invalid packet");
-
-        ntt_api_send_error_notify(
-            ERR_GET_FW_VERSION,
-            API_ERR_INVALID_PARAM);
-
-        return;
-    }
-
-    /*
-     * Peer 已連線但版本尚未取得時，送出讀取要求。
-     *
-     * 注意：TWS response 是非同步，因此本次查詢仍可能回傳 FF。
-     */
-    memset(peer_version,
-           0xFF,
-           sizeof(peer_version));
-
-    if (bts_tws_if_is_tws_link_connected() &&
-        !app_ibrt_customif_get_peer_fw_version(peer_version))
-    {
-        TRACE(0,
-              "[FW][REQ] peer version not ready, request now");
-
-        app_ibrt_customif_request_peer_fw_version();
-    }
 
     ntt_build_dual_earbud_fw_version(version);
 
@@ -1611,6 +1558,101 @@ void handleGetFwVersion(const uint8_t *data, uint16_t len)
         version,
         sizeof(version));
 #endif
+}
+
+extern "C" void ntt_fw_version_peer_ready_notify(void)
+{
+    uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
+
+    if (!g_ntt_fw_version_request_pending)
+    {
+        return;
+    }
+
+    memset(peer_version,
+           0xFF,
+           sizeof(peer_version));
+
+    if (!app_ibrt_customif_get_peer_fw_version(peer_version))
+    {
+        TRACE(0,
+              "[FW][PEER] version still invalid");
+
+        return;
+    }
+
+    TRACE(0,
+          "[FW][PEER] version ready");
+
+    DUMP8("%02X ",
+          peer_version,
+          sizeof(peer_version));
+
+    g_ntt_fw_version_request_pending = false;
+
+    ntt_send_dual_earbud_fw_version();
+}
+
+void handleGetFwVersion(const uint8_t *data, uint16_t len)
+{
+    uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];
+
+    TRACE(0,
+          "[FW][REQ] data=%p len=%u",
+          data,
+          (unsigned)len);
+
+    if (data != NULL)
+    {
+        DUMP8("%02X ", data, len);
+    }
+
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_FW_VERSION) ||
+        (data[1] != 0x00U) ||
+        (data[2] != 0x00U))
+    {
+        TRACE(0,
+              "[FW][REQ] invalid packet");
+
+        ntt_api_send_error_notify(
+            ERR_GET_FW_VERSION,
+            API_ERR_INVALID_PARAM);
+
+        return;
+    }
+
+    memset(peer_version,
+           0xFF,
+           sizeof(peer_version));
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        TRACE(0,
+              "[FW][REQ] TWS disconnected");
+
+        g_ntt_fw_version_request_pending = false;
+        ntt_send_dual_earbud_fw_version();
+        return;
+    }
+
+    if (app_ibrt_customif_get_peer_fw_version(peer_version))
+    {
+        TRACE(0,
+              "[FW][REQ] peer version ready");
+
+        g_ntt_fw_version_request_pending = false;
+        ntt_send_dual_earbud_fw_version();
+        return;
+    }
+
+    TRACE(0,
+          "[FW][REQ] peer version not ready, request now");
+
+    g_ntt_fw_version_request_pending = true;
+
+    app_ibrt_customif_request_peer_fw_version();
 }
 
 void handleFactoryCmdSys(const uint8_t *data, uint16_t len)

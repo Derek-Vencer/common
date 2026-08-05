@@ -40,7 +40,7 @@ GATT_DECL_CUDD_DESCRIPTOR(g_ble_tx_cudd,
 
 GATT_DECL_128_LE_CHAR(g_ble_rx_character,
 	BLE_COMMUNICATE_PRIMARY_SERVICE_RX,
-    GATT_WR_REQ|GATT_WR_CMD|GATT_RD_REQ,
+    GATT_WR_REQ | GATT_WR_CMD,
     ATT_SEC_NONE);
 
 GATT_DECL_CUDD_DESCRIPTOR(g_ble_rx_cudd,
@@ -84,7 +84,7 @@ uint8_t ble_aiwang_srv_send_data_via_notification(uint8_t* data, uint32_t len)
         .service = g_ble_primary_service,
     };
 
-	gatts_send_read_rsp(aw_connhdl, aw_token, 0, (uint8_t *)"@@ADB", 5);
+	//gatts_send_read_rsp(aw_connhdl, aw_token, 0, (uint8_t *)"@@ADB", 5);
 
     return gatts_send_value_notification(gap_conn_bf(gap_zero_based_conidx_to_ble_conidx(conidx)), &val_ntf, data, len);
 }

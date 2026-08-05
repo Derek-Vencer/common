@@ -176,7 +176,7 @@ static void app_ibrt_customif_get_peer_fw_version_cmd_handler(uint16_t rsp_seq,u
 static void app_ibrt_customif_get_peer_fw_version_rsp_timeout_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
 static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
 static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen);
-
+extern "C" void ntt_fw_version_peer_ready_notify(void);
 
 #if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
@@ -2187,23 +2187,19 @@ static void app_ibrt_customif_get_peer_fw_version_rsp_timeout_handler(uint16_t r
 
 static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
 {
-    EARBUDS_TRACE(2,
-                  "[FW_SYNC][RX_RSP] seq=%u len=%u",
-                  rsp_seq,
-                  length);
-
     if ((p_buff == NULL) ||
         (length != NTT_EARBUD_FW_VERSION_LEN))
     {
+        EARBUDS_TRACE(0,
+                "[FW][TWS][RSP] invalid data len=%u",
+                (unsigned)length);
+
         g_ntt_peer_fw_version_valid = false;
 
         memset(g_ntt_peer_fw_version,
                0xFF,
                sizeof(g_ntt_peer_fw_version));
 
-        EARBUDS_TRACE(1,
-                      "[FW_SYNC][RX_RSP] invalid response len=%u",
-                      length);
         return;
     }
 
@@ -2213,11 +2209,17 @@ static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,u
 
     g_ntt_peer_fw_version_valid = true;
 
-    EARBUDS_TRACE(3,
-                  "[FW_SYNC][RX_RSP] peer version=%02X.%02X.%02X",
-                  g_ntt_peer_fw_version[0],
-                  g_ntt_peer_fw_version[1],
-                  g_ntt_peer_fw_version[2]);
+    EARBUDS_TRACE(0,
+                "[FW][TWS][RSP] peer version=%u.%u.%u",
+                g_ntt_peer_fw_version[0],
+                g_ntt_peer_fw_version[1],
+                g_ntt_peer_fw_version[2]);
+
+    /*
+     * Complete the pending BLE firmware version request after the peer
+     * version cache has been updated.
+     */
+    ntt_fw_version_peer_ready_notify();
 }
 
 static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen)
