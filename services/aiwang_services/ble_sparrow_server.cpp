@@ -180,13 +180,6 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func);
 void handleSetKeyMapNumber(uint8_t index);
 static void keymap_init_default(void);
 
-
-// #define  DISPLAY_EARBUDS_VERSION "01.01.00.03"
-#define  DISPLAY_EARBUDS_VERSION   "V0.9.6.1" //"01.01.00.04"
-
-#define NTT_EARBUD_FW_VERSION_LEN         3
-#define NTT_DUAL_EARBUD_FW_VERSION_LEN    6
-
 static void ntt_build_dual_earbud_fw_version(uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN]);
 
 typedef struct{
@@ -3706,9 +3699,9 @@ static void ntt_build_dual_earbud_fw_version(uint8_t version[NTT_DUAL_EARBUD_FW_
 {
     static const uint8_t local_version[NTT_EARBUD_FW_VERSION_LEN] =
     {
-        0x00,
-        0x09,
-        0x06,
+        NTT_FW_VER_MAJOR,
+        NTT_FW_VER_MINOR,
+        NTT_FW_VER_PATCH,
     };
 
     uint8_t peer_version[NTT_EARBUD_FW_VERSION_LEN];

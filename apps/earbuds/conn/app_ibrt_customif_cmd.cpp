@@ -119,9 +119,9 @@ static bool ntt_color_code_is_valid_local(uint8_t color)
 static const uint8_t g_ntt_local_fw_version
     [NTT_EARBUD_FW_VERSION_LEN] =
 {
-    0x00,
-    0x09,
-    0x06,
+    NTT_FW_VER_MAJOR,
+    NTT_FW_VER_MINOR,
+    NTT_FW_VER_PATCH,
 };
 
 /*

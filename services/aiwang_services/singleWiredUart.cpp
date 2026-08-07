@@ -459,7 +459,7 @@ uint8_t enter_pair_count = 0;
 
 void wired_uart_get_battery_level(void)
 {
-    uint8_t buff5[5] = {0};
+    //uint8_t buff5[5] = {0};
     uint8_t buff6[6] = {0};
 
     int8_t raw_level = 0;
@@ -493,7 +493,7 @@ void wired_uart_get_battery_level(void)
     }
 
     pair_status = get_pair_status();
-    enter_pair_status = get_enable_pair_status();
+    enter_pair_status = get_er_discover_connectable_status();
 
     /*
      * ---------------------------------------------------------
@@ -501,15 +501,15 @@ void wired_uart_get_battery_level(void)
      * 55 AA BAT PAIR CRC
      * ---------------------------------------------------------
      */
-    buff5[0] = 0x55;
-    buff5[1] = 0xAA;
-    buff5[2] = report_level;
-    buff5[3] = pair_status;
-    buff5[4] = crc8(buff5, 4);
+    //buff5[0] = 0x55;
+    //buff5[1] = 0xAA;
+    //buff5[2] = report_level;
+    //buff5[3] = pair_status;
+    //buff5[4] = crc8(buff5, 4);
 
-    communication_send_buf(buff5, sizeof(buff5));
+    ///communication_send_buf(buff5, sizeof(buff5));
 
-    hal_sys_timer_delay(MS_TO_TICKS(2));
+    //hal_sys_timer_delay(MS_TO_TICKS(2));
     /*
      * ---------------------------------------------------------
      * New protocol

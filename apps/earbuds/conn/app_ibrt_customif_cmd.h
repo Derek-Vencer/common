@@ -20,6 +20,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+
+#define DuAL_EARBUDS_VERSION   "0.9.11" 
+
+#define NTT_FW_VER_MAJOR  (DuAL_EARBUDS_VERSION[0] - '0')
+#define NTT_FW_VER_MINOR  (DuAL_EARBUDS_VERSION[2] - '0')
+#define NTT_FW_VER_PATCH  (((DuAL_EARBUDS_VERSION[4] - '0') * 10) + \
+                           (DuAL_EARBUDS_VERSION[5] - '0'))
+
+#define NTT_EARBUD_FW_VERSION_LEN         3
+#define NTT_DUAL_EARBUD_FW_VERSION_LEN    6
+
 #define APP_TWS_CMD_PRIO_0       (0x0)
 #define APP_TWS_CMD_PRIO_1       (0x1)
 #define APP_TWS_CMD_PRIO_2       (0x2)

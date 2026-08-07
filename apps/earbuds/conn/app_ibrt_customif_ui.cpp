@@ -2863,7 +2863,7 @@ static void ntt_case_out_slave_push_battery(void)
  *
  * 0: 雙耳都放入充電盒後，才暫停音樂。
  */
-#define NTT_PAUSE_ON_ANY_EAR_IN_CASE 0
+#define NTT_PAUSE_ON_ANY_EAR_IN_CASE 1
 
 
 /*
@@ -3041,6 +3041,29 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         0,
         "[NTT_CASE_CB][LOCAL] OUT_CASE");
 
+    EARBUDS_TRACE(
+        3,
+        "[NTT_CASE_CB][LOCAL] OUT_CASE "
+        "ui_pair=%d discover=%d enable_pair=%d",
+        app_ui_in_pairing_mode(),
+        get_er_discover_connectable_status(),
+        get_enable_pair_status());
+
+    /*
+    * Exit SDK pairing mode immediately when the earbud
+    * changes to OUT_CASE.
+    *
+    * This uses the BES UI pairing state machine instead of
+    * directly calling the custom pairing-exit callback.
+    */
+    if (app_ui_in_pairing_mode())
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_PAIR] OUT_CASE -> force SDK pairing exit");
+
+        app_ui_exit_pairing_mode(true);
+    }
     /*
      * 本機離盒，重置雙耳入盒 Pause 旗標。
      */
