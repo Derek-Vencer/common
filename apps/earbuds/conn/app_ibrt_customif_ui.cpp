@@ -116,7 +116,7 @@ extern uint8_t out_of_case_reconnect;
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 extern bool ntt_manual_pairing_mode;
 extern bool ntt_first_no_mobile_pair_mode;
-
+bool pairing_exited_on_out = false;
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 /*
  * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
@@ -2372,6 +2372,12 @@ static void ntt_first_out_role_check_start(void)
  */
 static void ntt_first_out_start_mobile_reconnect(void)
 {
+    if (pairing_exited_on_out)
+    {        
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] skip first out mobile reconnect after pairing exit");
+        return;
+    }
+
     if (!g_ntt_first_out_owner)
     {
         EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: not owner");
@@ -2452,9 +2458,14 @@ static void ntt_first_out_start_mobile_reconnect(void)
  * 3. TWS Link 已建立
  * 4. 本機目前為 Master
  */
-static void ntt_first_out_master_recovery(
-    const char *reason)
+static void ntt_first_out_master_recovery(const char *reason)
 {
+    if (pairing_exited_on_out)
+    {        
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] skip reconnect after pairing exit");
+        return;
+    }
+
     NTT_CASE_STATE_E local_state =
         ntt_case_state_get_local();
 
@@ -3017,6 +3028,8 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
             0,
             "[NTT_CASE_CB][LOCAL] IN_CASE");
 
+        pairing_exited_on_out = false;
+
         ntt_case_check_pause_music_when_both_in();
 
         ntt_first_out_reset_local();
@@ -3049,21 +3062,29 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         get_er_discover_connectable_status(),
         get_enable_pair_status());
 
-    /*
-    * Exit SDK pairing mode immediately when the earbud
-    * changes to OUT_CASE.
-    *
-    * This uses the BES UI pairing state machine instead of
-    * directly calling the custom pairing-exit callback.
-    */
-    if (app_ui_in_pairing_mode())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_PAIR] OUT_CASE -> force SDK pairing exit");
+        /*
+        * Exit SDK pairing mode immediately when the earbud
+        * changes to OUT_CASE.
+        *
+        * This uses the BES UI pairing state machine instead of
+        * directly calling the custom pairing-exit callback.
+        */
+        if (app_ui_in_pairing_mode() || get_er_discover_connectable_status())
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_PAIR] OUT_CASE -> force SDK pairing exit");
 
-        app_ui_exit_pairing_mode(true);
-    }
+            app_ui_exit_pairing_mode(true);
+
+            /*
+            * Do not start mobile opening reconnect in the same
+            * OUT_CASE event. Factory reset may have no mobile record,
+            * and opening reconnect would enter pairing mode again.
+            */
+            pairing_exited_on_out = true;
+
+        }
     /*
      * 本機離盒，重置雙耳入盒 Pause 旗標。
      */
