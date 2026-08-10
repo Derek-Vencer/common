@@ -28,6 +28,11 @@
 #include "app_bt.h"
 #include "apps.h"
 #include "app_hfp.h"
+#include "bts_tws_if.h"
+#include "earbud_ux_api.h"
+#include "bts_core_type.h"
+#include "app_ui_api.h"
+#include "../earbuds/conn/app_ibrt_customif_cmd.h"
 #include "../btapp/bt_app/app_keyhandle.h"
 
 #ifdef APP_BATTERY_ENABLE
@@ -83,7 +88,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #endif
 
 #ifndef APP_BATTERY_MIN_MV
-#define APP_BATTERY_MIN_MV (3350)
+#define APP_BATTERY_MIN_MV (3400)//3350
 #endif
 
 #ifndef APP_BATTERY_MAX_MV
@@ -140,9 +145,14 @@ extern "C" bool app_usbaudio_mode_on(void);
 #ifdef BLE_ONLY_ENABLED
 #define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (25000)
 #else
-#define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (10*1000)
+#define APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS (10*1000) // 10sec
 #endif
 #define APP_BATTERY_CHARGING_PERIODIC_MS (APP_BATTERY_MEASURE_PERIODIC_NORMAL_MS)
+
+#define LOW_BAT_VOICE_INTERVAL_COUNT    (30) //5min
+
+static uint16_t g_low_bat_voice_count = 0;
+static bool g_low_bat_voice_first = true;
 
 #define APP_BATTERY_SET_MESSAGE(appevt, status, volt) (appevt = (((uint32_t)status&0xffff)<<16)|(volt&0xffff))
 #define APP_BATTERY_GET_STATUS(appevt, status) (status = (appevt>>16)&0xffff)
@@ -209,6 +219,9 @@ static uint32_t app_battery_pluginout_debounce_cnt = 0;
 #ifdef IBRT
 extern "C" void ntt_case_close_role_switch_reset(void);
 extern "C" bool ntt_case_close_role_switch_can_shutdown(void);
+static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage);
+
+
 #endif
 #ifdef IBRT
 extern "C" void ntt_case_state_sync_local_update(
@@ -241,6 +254,147 @@ extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void);
 void earBudsCloseOff_PogonIn_StartTimer(void);
 extern bool ntt_charging_pwron_pending_shutdown;
 extern "C" void wired_uart_mobile_connected_get_box_battery(void);
+
+#define LOW_BAT_ROLE_SWITCH_PENDING_TIMEOUT_COUNT    (3)
+
+static bool g_low_bat_role_switch_pending = false;
+static uint8_t g_low_bat_role_switch_pending_count = 0;
+
+static void ntt_low_battery_role_switch_check(void)
+{
+    uint8_t local_level;
+    uint8_t peer_percent;
+    uint8_t peer_level;
+    TWS_UI_ROLE_E current_role;
+
+    current_role = app_ibrt_if_get_ui_role();
+
+    /*
+     * Clear pending state after local ear becomes Slave.
+     */
+    if (current_role != TWS_UI_MASTER)
+    {
+        if (g_low_bat_role_switch_pending)
+        {
+            BATTERY_TRACE(0,
+                          "[LOW_BAT_ROLE] switch complete, local is SLAVE");
+        }
+
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+        return;
+    }
+
+    /*
+     * TWS link must be connected.
+     */
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+
+        BATTERY_TRACE(0,
+                      "[LOW_BAT_ROLE] TWS disconnected, skip");
+        return;
+    }
+
+    /*
+     * Avoid repeated requests while role switch is in progress.
+     * Battery check runs every 10 seconds.
+     */
+    if (g_low_bat_role_switch_pending)
+    {
+        g_low_bat_role_switch_pending_count++;
+
+        BATTERY_TRACE(2,
+                      "[LOW_BAT_ROLE] switch pending cnt=%d",
+                      g_low_bat_role_switch_pending_count);
+
+        /*
+         * If role switch does not complete within about 30 seconds,
+         * clear pending state and allow another request.
+         */
+        if (g_low_bat_role_switch_pending_count <
+            LOW_BAT_ROLE_SWITCH_PENDING_TIMEOUT_COUNT)
+        {
+            return;
+        }
+
+        BATTERY_TRACE(0,
+                      "[LOW_BAT_ROLE] switch pending timeout, retry allowed");
+
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+    }
+
+    /*
+     * Local battery uses the same HFP level table.
+     */
+    local_level =
+        aiWangReportNormalLevelHandler(
+            app_battery_measure.currvolt);
+
+    /*
+     * Peer battery is synchronized as 0~100%.
+     */
+    peer_percent =
+        app_ibrt_customif_get_tws_peer_battery_level();
+
+    if ((peer_percent == 0xFF) ||
+        (peer_percent > 100))
+    {
+        BATTERY_TRACE(1,
+                      "[LOW_BAT_ROLE] invalid peer=%d",
+                      peer_percent);
+        return;
+    }
+
+    /*
+     * Convert peer percentage to HFP-style 0~9 level.
+     */
+    if (peer_percent >= 100)
+    {
+        peer_level = 9;
+    }
+    else if (peer_percent < 10)
+    {
+        peer_level = 0;
+    }
+    else
+    {
+        peer_level =
+            (uint8_t)((peer_percent / 10) - 1);
+    }
+
+    BATTERY_TRACE(5,
+                  "[LOW_BAT_ROLE] role=%d volt=%d local=L%d peer=%d%% L%d",
+                  current_role,
+                  app_battery_measure.currvolt,
+                  local_level,
+                  peer_percent,
+                  peer_level);
+
+    /*
+     * Peer must be at least one level higher.
+     */
+    if (peer_level <= local_level)
+    {
+        BATTERY_TRACE(0,
+                      "[LOW_BAT_ROLE] no switch");
+        return;
+    }
+
+    BATTERY_TRACE(0,
+                  "[LOW_BAT_ROLE] peer higher -> role switch");
+
+    /*
+     * Set pending before sending the asynchronous role-switch request.
+     */
+    g_low_bat_role_switch_pending = true;
+    g_low_bat_role_switch_pending_count = 0;
+
+    app_ui_user_role_switch(false);
+}
 
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
@@ -351,7 +505,7 @@ void earBudsCloseOff_PowerOff_StartTimer(void)
 extern "C" void aw_ntc_detect_process(uint16_t ad_volt);
 static int app_battery_charger_handle_process(void);
 static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
-	static const int battery_table_level[11] = {4130,4040,3940,3880,3830,3790,3750,3720,3660,3580,3100}; //unit:mv
+	static const int battery_table_level[11] = {4040,3940,3880,3830,3790,3750,3720,3660,3580,3300}; //unit:mv
 	uint8_t level = 0;
 	uint8_t index = 0;
 	//uint16_t last_mv = battery_table_level[0];
@@ -793,20 +947,73 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
     {
         case APP_BATTERY_STATUS_UNDERVOLT:
         {
-            BATTERY_TRACE(1,"UNDERVOLT:%d",prams.volt);
+            BATTERY_TRACE(1, "UNDERVOLT:%d", prams.volt);
 
-            app_status_indication_set(APP_STATUS_INDICATION_CHARGENEED);
+            app_status_indication_set(
+                APP_STATUS_INDICATION_CHARGENEED);
 
             /*
-            * Low-battery prompt playback is controlled by
-            * app_battery_low_voice_play_process().
+            * Check whether Master should be switched
+            * to the higher-battery peer.
             */
+            //ntt_low_battery_role_switch_check();
+
+        #ifdef MEDIA_PLAYER_SUPPORT
+
+            /*
+            * Battery check runs every 10 seconds.
+            * Play immediately on first low-battery detection,
+            * then repeat every 5 minutes.
+            */
+            if (g_low_bat_voice_first)
+            {
+                g_low_bat_voice_first = false;
+                g_low_bat_voice_count = 0;
+
+                BATTERY_TRACE(1,
+                            "[LOW_BAT] first play, volt=%d",
+                            prams.volt);
+
+                media_PlayAudio(
+                    AUD_ID_BT_BATTERY_LOW,
+                    0);
+            }
+            else
+            {
+                g_low_bat_voice_count++;
+
+                if (g_low_bat_voice_count >=
+                    LOW_BAT_VOICE_INTERVAL_COUNT)
+                {
+                    g_low_bat_voice_count = 0;
+
+                    BATTERY_TRACE(1,
+                                "[LOW_BAT] 5min repeat play, volt=%d",
+                                prams.volt);
+
+                    media_PlayAudio(
+                        AUD_ID_BT_BATTERY_LOW,
+                        0);
+                }
+            }
+
+        #endif
         }
     // FALLTHROUGH
             // FALLTHROUGH
         case APP_BATTERY_STATUS_NORMAL:
         case APP_BATTERY_STATUS_OVERVOLT:
         {
+            /*
+            * Reset low-battery voice state only when
+            * battery is no longer under-voltage.
+            */
+            if (status != APP_BATTERY_STATUS_UNDERVOLT)
+            {
+                g_low_bat_voice_count = 0;
+                g_low_bat_voice_first = true;
+            }
+
             app_battery_measure.currvolt = prams.volt;
 
             level =
@@ -822,6 +1029,54 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             {
                 level = APP_BATTERY_LEVEL_MAX;
             }
+
+            /*
+            * App 與 TWS Peer 使用精細的 0～100%。
+            */
+            /*
+            * App and TWS Peer use precise 0~100% battery level.
+            */
+            uint8_t app_percent = app_battery_get_precise_percent();
+
+#if defined(IBRT)
+        {
+            static int16_t last_sync_percent = -1;
+
+            if (last_sync_percent != app_percent)
+            {
+                last_sync_percent = app_percent;
+
+                app_ibrt_customif_cmd_sync_battery_level(
+                    app_percent);
+
+                BATTERY_TRACE(1,
+                            "[BAT_SYNC] percent=%d",
+                            app_percent);
+            }
+
+            /*
+            * Battery role-switch policy:
+            *
+            * <= 75% : Start checking whether Peer should become Master.
+            * <= 50% : Continue checking with the same conditions.
+            * Low battery is naturally included in this range.
+            *
+            * Actual role switch still requires:
+            * 1. TWS connected
+            * 2. Local ear is Master
+            * 3. Peer battery is valid
+            * 4. Peer battery level is at least one level higher
+            */
+            if (app_percent <= 75)
+            {
+                BATTERY_TRACE(2,
+                            "[BAT_ROLE_POLICY] local=%d%% -> check role switch",
+                            app_percent);
+
+                ntt_low_battery_role_switch_check();
+            }
+        }
+#endif
 
         #ifdef __INTERCONNECTION__
 
@@ -860,6 +1115,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             app_battery_low_voice_play_process();
 
         #ifdef BATTERY_SWITCH_ROLE_EN
+            BATTERY_TRACE(0, "[BAT_ROLE] call besui_battery_role_switch");
             besui_battery_role_switch();
         #endif
 
@@ -882,7 +1138,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
         /*
         * App 與 TWS Peer 使用精細的 0～100%。
         */
-        uint8_t app_percent = app_battery_get_precise_percent();
+        //uint8_t app_percent = app_battery_get_precise_percent();
 
 #if defined(IBRT)
         {

@@ -1775,8 +1775,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                     isRightEarbuds == RIGHT_BUDS ?
                         "RIGHT" : "LEFT",
                     diff_ms);
-
-                break;
             }
         }
 

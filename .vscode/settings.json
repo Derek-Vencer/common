@@ -1,3 +1,4 @@
 {
-    "C_Cpp.dimInactiveRegions": false
+    "C_Cpp.dimInactiveRegions": false,
+    "cmake.sourceDirectory": "C:/Project/common/nn/cmsis-nn/Source/SoftmaxFunctions"
 }

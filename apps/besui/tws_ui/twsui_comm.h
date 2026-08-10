@@ -151,9 +151,9 @@ bool app_ibrt_get_history_paired_device(void);
 void app_open_box_fast_get_battery_level(void);
 bool app_get_history_phone_paired_device(void);
 void app_poweroff_shutdown_ui_modual_init(void);
-#ifdef BATTERY_SWITCH_ROLE_EN
+//#ifdef BATTERY_SWITCH_ROLE_EN
 void besui_battery_role_switch(void);
-#endif
+//#endif
 
 bool    app_get_mic_hfp_enc_onoff(void);
 uint8_t app_get_software_version_high(void);
