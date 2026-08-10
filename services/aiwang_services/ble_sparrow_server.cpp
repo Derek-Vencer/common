@@ -375,6 +375,17 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     peer_battery  = app_ibrt_customif_get_tws_peer_battery_level();
     box_battery   = getBoxChargerBattery();
 
+    /*
+     * Debug APP battery read path.
+     */
+    COMMUNICATION_TRACE(
+        4,
+        "[APP_BAT_READ] local=%d peer=%d box=%d valid=%d",
+        local_battery,
+        peer_battery,
+        box_battery,
+        app_battery_is_measurement_valid());
+
     tws_connected = bts_tws_if_is_tws_link_connected();
 
     peer_valid =

@@ -220,7 +220,17 @@ static uint32_t app_battery_pluginout_debounce_cnt = 0;
 extern "C" void ntt_case_close_role_switch_reset(void);
 extern "C" bool ntt_case_close_role_switch_can_shutdown(void);
 static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage);
+/*
+ * Battery measurement valid flag.
+ * False means currvolt/currlevel still contain boot default values.
+ */
+static bool g_battery_measure_valid = false;
 
+/*
+ * Last valid battery percentage.
+ * Used to prevent boot default 4200mV from being reported as 100%.
+ */
+static uint8_t g_battery_last_valid_percent = 0xFF;
 
 #endif
 #ifdef IBRT
@@ -534,13 +544,33 @@ static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
  */
 uint8_t app_battery_get_precise_percent(void)
 {
-    uint16_t volt = app_battery_measure.currvolt;
+    uint16_t volt;
+    uint8_t percent = 0;
 
     /*
-     * 升冪排列的電壓邊界。
+     * Do not use the boot default voltage before the first
+     * valid ADC battery measurement is available.
+     */
+    if (!g_battery_measure_valid)
+    {
+        BATTERY_TRACE(2,
+                      "[BAT_PRECISE] invalid, boot volt=%d last=%d",
+                      app_battery_measure.currvolt,
+                      g_battery_last_valid_percent);
+
+        return 0xFF;
+    }
+
+    /*
+     * Battery voltage is valid after the first ADC measurement.
+     */
+    volt = app_battery_measure.currvolt;
+
+    /*
+     * Battery voltage thresholds in ascending order.
      *
-     * 3300mV 以下視為接近關機電壓，回傳 0%。
-     * 4040mV 以上手機已顯示 100%，App 也固定為 100%。
+     * 3300mV or below returns 0%.
+     * 4040mV or above returns 100%.
      */
     static const uint16_t voltage_table[] =
     {
@@ -571,19 +601,18 @@ uint8_t app_battery_get_precise_percent(void)
     };
 
     const uint8_t table_count =
-        sizeof(voltage_table) / sizeof(voltage_table[0]);
-
-    uint8_t percent = 0;
+        sizeof(voltage_table) /
+        sizeof(voltage_table[0]);
 
     /*
-     * 低於最低有效電壓時顯示 0%。
+     * Voltage below the minimum threshold is reported as 0%.
      */
     if (volt <= voltage_table[0])
     {
         percent = 0;
     }
     /*
-     * 4040mV 以上，手機與 App 都顯示 100%。
+     * Voltage at or above the maximum threshold is reported as 100%.
      */
     else if (volt >= voltage_table[table_count - 1])
     {
@@ -591,10 +620,15 @@ uint8_t app_battery_get_precise_percent(void)
     }
     else
     {
-        for (uint8_t i = 0; i < (table_count - 1); i++)
+        for (uint8_t i = 0;
+             i < (table_count - 1);
+             i++)
         {
-            uint16_t low_volt  = voltage_table[i];
-            uint16_t high_volt = voltage_table[i + 1];
+            uint16_t low_volt =
+                voltage_table[i];
+
+            uint16_t high_volt =
+                voltage_table[i + 1];
 
             if ((volt >= low_volt) &&
                 (volt < high_volt))
@@ -612,17 +646,24 @@ uint8_t app_battery_get_precise_percent(void)
                     (uint32_t)(high_volt - low_volt);
 
                 uint32_t percent_range =
-                    (uint32_t)(high_percent - low_percent);
+                    (uint32_t)(high_percent -
+                               low_percent);
 
                 percent =
                     low_percent +
-                    (uint8_t)((volt_offset * percent_range) /
-                              volt_range);
+                    (uint8_t)(
+                        (volt_offset * percent_range) /
+                        volt_range);
 
                 break;
             }
         }
     }
+
+    /*
+     * Save the latest valid percentage.
+     */
+    g_battery_last_valid_percent = percent;
 
     BATTERY_TRACE(2,
                   "[BAT_PRECISE] volt=%d percent=%d",
@@ -939,6 +980,11 @@ int app_status_battery_report(uint8_t level)
 }
 #endif
 
+bool app_battery_is_measurement_valid(void)
+{
+    return g_battery_measure_valid;
+}
+
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     BATTERY_TRACE(0,"app_battery_handle_process_normal status = %d",status);
@@ -1014,7 +1060,20 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 g_low_bat_voice_first = true;
             }
 
+            /*
+            * prams.volt is an actual ADC measurement.
+            * From this point battery voltage can be used for reporting.
+            */
             app_battery_measure.currvolt = prams.volt;
+
+            if (!g_battery_measure_valid)
+            {
+                g_battery_measure_valid = true;
+
+                BATTERY_TRACE(2,
+                            "[BAT_VALID] first ADC valid, volt=%d",
+                            app_battery_measure.currvolt);
+            }              
 
             level =
                 (prams.volt - APP_BATTERY_PD_MV) /
@@ -1042,7 +1101,13 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
         {
             static int16_t last_sync_percent = -1;
 
-            if (last_sync_percent != app_percent)
+            /*
+            * 0xFF means battery ADC is not valid yet.
+            * Never synchronize the boot default battery value.
+            */
+            if ((app_percent != 0xFF) &&
+                (app_percent <= 100) &&
+                (last_sync_percent != app_percent))
             {
                 last_sync_percent = app_percent;
 
@@ -1052,6 +1117,11 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,
                             "[BAT_SYNC] percent=%d",
                             app_percent);
+            }
+            else if (app_percent == 0xFF)
+            {
+                BATTERY_TRACE(0,
+                            "[BAT_SYNC] skip - battery not valid");
             }
 
             /*
@@ -1067,7 +1137,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             * 3. Peer battery is valid
             * 4. Peer battery level is at least one level higher
             */
-            if (app_percent <= 75)
+            if ((app_percent != 0xFF) && (app_percent <= 75))
             {
                 BATTERY_TRACE(2,
                             "[BAT_ROLE_POLICY] local=%d%% -> check role switch",
@@ -1191,6 +1261,16 @@ app_status_battery_report(level);
 #endif
             break;
         case APP_BATTERY_STATUS_CHARGING:
+            /*
+            * Debug actual charger plug-in / plug-out event.
+            */
+            BATTERY_TRACE(4,
+                        "[BAT_CHG] evt=%d charger=%d volt=%d level=%d",
+                        status,
+                        prams.charger,
+                        app_battery_measure.currvolt,
+                        app_battery_measure.currlevel);
+
             BATTERY_TRACE(1,"CHARGING-->APP_BATTERY_CHARGER :%d", prams.charger);
             if (prams.charger == APP_BATTERY_CHARGER_PLUGIN)
             {
@@ -1420,6 +1500,11 @@ int app_battery_open(void)
     BATTERY_TRACE(3,"%s batt range:%d~%d",__func__, APP_BATTERY_MIN_MV, APP_BATTERY_MAX_MV);
 
     int nRet = APP_BATTERY_OPEN_MODE_INVALID;
+        /*
+     * Battery ADC data is not valid yet.
+     */
+    g_battery_measure_valid = false;
+    g_battery_last_valid_percent = 0xFF;
 
 #ifdef MORE_THAN_ONE_TYPE_OF_CHARGER
     app_battery_gpadc_configuration_init();
@@ -1455,6 +1540,16 @@ int app_battery_open(void)
     app_battery_measure.charger_status.slope_1000_index = 0;
     app_battery_measure.charger_status.cnt = 0;
 
+    /*
+     * Debug:
+     * Check the initialized battery values before charger detection.
+     */
+    BATTERY_TRACE(3,
+                  "[BAT_BOOT] status=%d volt=%d level=%d",
+                  app_battery_measure.status,
+                  app_battery_measure.currvolt,
+                  app_battery_measure.currlevel);
+
     app_set_threadhandle(APP_MODULE_BATTERY, app_battery_handle_process);
 
     if (app_battery_ext_charger_detecter_cfg.pin != HAL_IOMUX_PIN_NUM)
@@ -1483,6 +1578,17 @@ int app_battery_open(void)
         }
 #endif
 
+        /*
+         * Debug:
+         * Check whether battery voltage/level still contains
+         * the initialized MAX values after charger detection.
+         */
+        BATTERY_TRACE(3,
+                      "[BAT_BOOT_CHG] status=%d volt=%d level=%d",
+                      app_battery_measure.status,
+                      app_battery_measure.currvolt,
+                      app_battery_measure.currlevel);
+
 #if (CHARGER_PLUGINOUT_RESET == 0)
         nRet = APP_BATTERY_OPEN_MODE_CHARGING_PWRON;
 #else
@@ -1494,6 +1600,14 @@ int app_battery_open(void)
         app_battery_measure.status = APP_BATTERY_STATUS_NORMAL;
         //pmu_charger_plugout_config();
         nRet = APP_BATTERY_OPEN_MODE_NORMAL;
+        /*
+         * Debug normal power-on state.
+         */
+        BATTERY_TRACE(3,
+                      "[BAT_BOOT_NORMAL] status=%d volt=%d level=%d",
+                      app_battery_measure.status,
+                      app_battery_measure.currvolt,
+                      app_battery_measure.currlevel);
     }
     return nRet;
 }

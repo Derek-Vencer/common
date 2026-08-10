@@ -117,7 +117,7 @@ void app_battery_opened_callback(void);
 uint8_t app_battery_get_display_percent(void);
 uint8_t app_battery_get_percent(void);
 uint8_t app_battery_get_precise_percent(void);
-
+bool app_battery_is_measurement_valid(void);
 #if defined(BESUI_TWS_EN)
 void app_battery_clear_index(void);
 #endif

@@ -93,8 +93,6 @@
 // GATT and GAP service and tbs and mcs
 #define BLE_CACHE_DESC_NUM_MAX          (10)
 
-extern bool bts_tws_if_is_tws_link_connected(void);
-
 /* EXTERN */
 #if (APP_BLE_DEMO_APP_ENABLED)
 extern int ble_demo_app_init(uint8_t adv_hdl_shared, const bt_bdaddr_t *p_app_ia_shared, const uint8_t *p_irk_shared);
@@ -2266,11 +2264,11 @@ static void app_ble_refresh_advertising(uint8_t adv_handle, gap_adv_param_t *adv
     if (adv_handle == 0)
     {
         /*
-        * Keep BASIC advertising scannable.
-        *
-        * Scan Response contains:
+        * USER_STUB uses Scan Response for:
         * - Manufacturer Specific Data
-        * - Complete BLE Local Name
+        * - Complete Local Name
+        *
+        * Therefore Legacy advertising must remain scannable.
         */
         adv_param->directed_adv = false;
         adv_param->connectable = true;
@@ -2278,7 +2276,7 @@ static void app_ble_refresh_advertising(uint8_t adv_handle, gap_adv_param_t *adv
         adv_param->include_tx_power_data = false;
 
         DEBUG_INFO(0,
-            "[BLE_ADV_REFRESH] handle=0 public adv conn=%d scan=%d directed=%d",
+            "[BLE_ADV_REFRESH] handle=0 conn=%d scan=%d directed=%d",
             adv_param->connectable,
             adv_param->scannable,
             adv_param->directed_adv);
@@ -2606,7 +2604,6 @@ static uint16_t app_ble_parse_out_service_uuid(uint8_t *data, uint16_t len, gap_
 bool app_ble_check_ibrt_allow_adv(BLE_ADV_USER_E user)
 {
     ibrt_ctrl_t *p_ibrt_ctrl = app_tws_ibrt_get_bt_ctrl_ctx();
-
     if (!p_ibrt_ctrl->init_done)
     {
         return false;
@@ -2619,49 +2616,12 @@ bool app_ble_check_ibrt_allow_adv(BLE_ADV_USER_E user)
 #if defined(FREEMAN_ENABLED_STERO)
     return true;
 #else
-    bool tws_connected = bts_tws_if_is_tws_link_connected();
-    TWS_UI_ROLE_E ui_role = bts_core_get_ui_role();
 
-    /*
-     * Standalone earbud:
-     * Always allow BLE advertising even if the retained
-     * UI role is TWS_UI_SLAVE.
-     */
-    if (!tws_connected)
+    if (bts_core_is_freeman_mode())
     {
-        DEBUG_INFO(2,
-            "[BLE_ADV_ALLOW] standalone user=%d role=%d -> allow",
-            user,
-            ui_role);
-
         return true;
     }
-
-    /*
-     * TWS connected:
-     * Do not allow the Slave side to expose public
-     * BLE advertising.
-     */
-    if (ui_role == TWS_UI_SLAVE)
-    {
-        DEBUG_INFO(2,
-            "[BLE_ADV_ALLOW] TWS connected user=%d role=%d -> reject",
-            user,
-            ui_role);
-
-        return false;
-    }
-
-    /*
-     * TWS connected Master side:
-     * Allow BLE advertising.
-     */
-    DEBUG_INFO(2,
-        "[BLE_ADV_ALLOW] TWS connected user=%d role=%d -> allow",
-        user,
-        ui_role);
-
-    return true;
+    return (bts_core_get_ui_role() != TWS_UI_SLAVE);
 #endif
 }
 #endif
@@ -2960,8 +2920,8 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
     adv->user = USER_STUB;
 
     /*
-     * Keep USER_STUB advertising connectable
-     * and scannable.
+     * Use Legacy Advertising for maximum
+     * iOS and Android compatibility.
      */
     adv_param->connectable = true;
     adv_param->scannable = true;
@@ -2973,49 +2933,43 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
         BLE_ADV_TX_POWER_LEVEL_0);
 
     /*
-     * Add Flags into ADV Data.
+     * ADV:
+     * - Flags
+     * - 128-bit Service UUID
      */
     app_ble_dt_set_flags(
         adv_param,
         false);
 
-    /*
-     * Add 128-bit UUID into ADV Data.
-     * Manufacturer Data and BLE Name remain
-     * in Scan Response.
-     */
     app_ble_dt_add_adv_data(
         adv,
         &legacy_param,
         NULL);
 
     /*
-     * Do NOT call app_ble_dt_set_local_name().
-     * BLE name is already inserted into
+     * Do not add local name into ADV Data.
+     * Local name is already inserted into
      * Scan Response by USER_STUB data fill.
      */
+    // app_ble_dt_set_local_name(adv_param, NULL);
 
     DEBUG_INFO(0,
         "[STUB_FINAL_ADV_LEN]=%d",
-        gap_dt_buf_len(
-            &adv_param->adv_data));
+        gap_dt_buf_len(&adv_param->adv_data));
 
-    DUMP8("%02X ",
-        gap_dt_buf_data(
-            &adv_param->adv_data),
-        gap_dt_buf_len(
-            &adv_param->adv_data));
+    DUMP8(
+        "%02X ",
+        gap_dt_buf_data(&adv_param->adv_data),
+        gap_dt_buf_len(&adv_param->adv_data));
 
     DEBUG_INFO(0,
         "[STUB_FINAL_SCAN_LEN]=%d",
-        gap_dt_buf_len(
-            &adv_param->scan_rsp_data));
+        gap_dt_buf_len(&adv_param->scan_rsp_data));
 
-    DUMP8("%02X ",
-        gap_dt_buf_data(
-            &adv_param->scan_rsp_data),
-        gap_dt_buf_len(
-            &adv_param->scan_rsp_data));
+    DUMP8(
+        "%02X ",
+        gap_dt_buf_data(&adv_param->scan_rsp_data),
+        gap_dt_buf_len(&adv_param->scan_rsp_data));
 
     return true;
 }
@@ -3686,7 +3640,6 @@ void ble_core_disable_stub_adv(void)
     app_ble_disable_advertising(BLE_BASIC_ADV_HANDLE);
     app_ble_refresh_adv_state_generic();
 }
-
 POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 {
     bool adv_enable = false;
@@ -3701,38 +3654,27 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
         0x76, 0x4F, 0xAE, 0xCA
     };
 
-    /*
-     * ADV Data:
-     * 128-bit Service UUID
-     */
     memset(ble_adv->advData, 0, sizeof(ble_adv->advData));
     ble_adv->advDataLen = 0;
 
     ble_adv->advData[ble_adv->advDataLen++] = 17;
     ble_adv->advData[ble_adv->advDataLen++] = 0x07;
-
     memcpy(&ble_adv->advData[ble_adv->advDataLen],
            aiWangPrimaryService,
            sizeof(aiWangPrimaryService));
-
     ble_adv->advDataLen += sizeof(aiWangPrimaryService);
 
-    /*
-     * Scan Response:
-     * Manufacturer Specific Data
-     */
     memset(ble_adv->scanRspData, 0, sizeof(ble_adv->scanRspData));
     ble_adv->scanRspDataLen = 17;
 
     /*
      * Manufacturer Specific Data:
-     *
-     * 0:     AD Len = 0x10
-     * 1:     AD Type = 0xFF
-     * 2-3:   Manufacturer ID = 0x9B, 0x0C
-     * 4-9:   Sparrow ID = "MBE003"
-     * 10:    Color Code
-     * 11-16: Device Address
+     * 0:    AD Len = 0x10
+     * 1:    AD Type = 0xFF
+     * 2-3:  Manufacturer ID = 0x9B, 0x0C
+     * 4-9:  Sparrow ID = "MBE003"
+     * 10:   Color Code
+     * 11-16 Device Address
      */
     ble_adv->scanRspData[0] = 0x10;
     ble_adv->scanRspData[1] = 0xFF;
@@ -3769,31 +3711,48 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
         memcmp(local_bt_addr, invalid_00, 6) &&
         (local_bt_addr[0] & 0x01))
     {
-        memcpy(&ble_adv->scanRspData[11],
-               local_bt_addr,
-               6);
+        memcpy(&ble_adv->scanRspData[11], local_bt_addr, 6);
     }
     else if (peer_nv_addr &&
              memcmp(peer_nv_addr, invalid_ff, 6) &&
              memcmp(peer_nv_addr, invalid_00, 6) &&
              (peer_nv_addr[0] & 0x01))
     {
-        memcpy(&ble_adv->scanRspData[11],
-               peer_nv_addr,
-               6);
+        memcpy(&ble_adv->scanRspData[11], peer_nv_addr, 6);
     }
     else
     {
-        factory_section_original_btaddr_get(
-            &ble_adv->scanRspData[11]);
+        factory_section_original_btaddr_get(&ble_adv->scanRspData[11]);
     }
 
+    DEBUG_INFO(0, "[ADV] aiWangGetEarBudsColor=0x%02X", earBudsColor);
+    DEBUG_INFO(0, "[ADV] ntt_color_code_nv_get=0x%02X", nvColor);
+    DEBUG_INFO(0, "[ADV] final color scanRspData[10]=0x%02X",
+            ble_adv->scanRspData[10]);
+
+    DEBUG_INFO(0, "[ADV] Full Manufacturer Data:");
+    DUMP8("%02X ", &ble_adv->scanRspData[0], 17);
+
+    DEBUG_INFO(0, "[ADV] Local BT Addr:");
+    DUMP8("%02X ", local_bt_addr, 6);
+
+    DEBUG_INFO(0, "[ADV] Peer NV BT Addr:");
+    DUMP8("%02X ", peer_nv_addr, 6);
+
+    DEBUG_INFO(0, "[ADV] Manufacturer BT Addr:");
+    DUMP8("%02X ", &ble_adv->scanRspData[11], 6);
+
     /*
-     * Append complete BLE local name to Scan Response.
-     *
-     * The name is obtained from current programmed
-     * BLE device name instead of hard-coded text.
-     */
+    * Append programmed local BLE name to Scan Response.
+    *
+    * Target configuration:
+    *
+    * Manufacturer Data = 17 bytes
+    * Local Name Header = 2 bytes
+    * "LE nwm CLIPS"    = 12 bytes
+    *
+    * Total = 31 bytes
+    */
     {
         const char *ble_name =
             (const char *)app_ble_get_dev_name();
@@ -3802,9 +3761,6 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
         {
             uint8_t name_len =
                 (uint8_t)strlen(ble_name);
-
-            uint8_t required_len =
-                name_len + 2;
 
             uint8_t remain_len =
                 sizeof(ble_adv->scanRspData) -
@@ -3816,19 +3772,18 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
                 name_len,
                 remain_len);
 
-            if (required_len <= remain_len)
+            /*
+            * Complete Local Name requires:
+            * 1 byte Length
+            * 1 byte AD Type
+            * N bytes Name
+            */
+            if ((name_len + 2) <= remain_len)
             {
-                /*
-                 * AD Length includes:
-                 * 1 byte AD Type + name data length.
-                 */
                 ble_adv->scanRspData[
                     ble_adv->scanRspDataLen++] =
                     name_len + 1;
 
-                /*
-                 * Complete Local Name.
-                 */
                 ble_adv->scanRspData[
                     ble_adv->scanRspDataLen++] =
                     GAP_DT_COMPLETE_LOCAL_NAME;
@@ -3843,85 +3798,39 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
                     name_len;
 
                 DEBUG_INFO(2,
-                    "[ADV_NAME] Complete name added: %s len=%d",
+                    "[ADV_NAME] Complete Local Name=%s len=%d",
                     ble_name,
                     name_len);
             }
             else
             {
                 DEBUG_INFO(3,
-                    "[ADV_NAME] Name too long: len=%d required=%d remain=%d",
+                    "[ADV_NAME] Name too long len=%d need=%d remain=%d",
                     name_len,
-                    required_len,
+                    name_len + 2,
                     remain_len);
             }
         }
         else
         {
             DEBUG_INFO(0,
-                "[ADV_NAME] BLE local name is NULL");
+                "[ADV_NAME] Local BLE name is NULL");
         }
     }
 
-    DEBUG_INFO(0,
-        "[ADV] aiWangGetEarBudsColor=0x%02X",
-        earBudsColor);
-
-    DEBUG_INFO(0,
-        "[ADV] ntt_color_code_nv_get=0x%02X",
-        nvColor);
-
-    DEBUG_INFO(0,
-        "[ADV] final color scanRspData[10]=0x%02X",
-        ble_adv->scanRspData[10]);
-
-    DEBUG_INFO(0,
-        "[ADV] Full Manufacturer + Name Data:");
-
-    DUMP8("%02X ",
-          &ble_adv->scanRspData[0],
-          ble_adv->scanRspDataLen);
-
-    DEBUG_INFO(0,
-        "[ADV] Local BT Addr:");
-
-    DUMP8("%02X ",
-          local_bt_addr,
-          6);
-
-    DEBUG_INFO(0,
-        "[ADV] Peer NV BT Addr:");
-
-    DUMP8("%02X ",
-          peer_nv_addr,
-          6);
-
-    DEBUG_INFO(0,
-        "[ADV] Manufacturer BT Addr:");
-
-    DUMP8("%02X ",
-          &ble_adv->scanRspData[11],
-          6);
-
-    do
-    {
+    do {
 #if (BLE_APP_HID)
-        BLE_ADV_PARAM_T *cmd =
-            (BLE_ADV_PARAM_T *)param;
+        BLE_ADV_PARAM_T *cmd = (BLE_ADV_PARAM_T *)param;
 
         memcpy(&cmd->advData[cmd->advDataLen],
                APP_HID_ADV_DATA_UUID,
                APP_HID_ADV_DATA_UUID_LEN);
-
-        cmd->advDataLen +=
-            APP_HID_ADV_DATA_UUID_LEN;
+        cmd->advDataLen += APP_HID_ADV_DATA_UUID_LEN;
 
         memcpy(&cmd->advData[cmd->advDataLen],
                APP_HID_ADV_DATA_APPEARANCE,
                APP_ADV_DATA_APPEARANCE_LEN);
-
-        cmd->advDataLen +=
-            APP_ADV_DATA_APPEARANCE_LEN;
+        cmd->advDataLen += APP_ADV_DATA_APPEARANCE_LEN;
 
         adv_enable = true;
         break;
@@ -3931,9 +3840,7 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
         set_rsp_dist_lk_bit_field_func dist_lk_set_cb =
             app_sec_reg_dist_lk_bit_get_callback();
 
-        if ((dist_lk_set_cb &&
-             dist_lk_set_cb()) ||
-            (!dist_lk_set_cb))
+        if ((dist_lk_set_cb && dist_lk_set_cb()) || (!dist_lk_set_cb))
         {
             adv_enable = true;
         }
@@ -3948,26 +3855,15 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
 #endif
     } while (0);
 
-    DEBUG_INFO(1,
-        "[ADV] USER_STUB adv_enable=%d",
-        adv_enable);
+    DEBUG_INFO(1, "[ADV] USER_STUB adv_enable=%d", adv_enable);
+    DEBUG_INFO(2, "[ADV] advDataLen=%d scanRspDataLen=%d",
+            ble_adv->advDataLen,
+            ble_adv->scanRspDataLen);
 
-    DEBUG_INFO(2,
-        "[ADV] advDataLen=%d scanRspDataLen=%d",
-        ble_adv->advDataLen,
-        ble_adv->scanRspDataLen);
+    DUMP8("%02X ", ble_adv->advData, ble_adv->advDataLen);
+    DUMP8("%02X ", ble_adv->scanRspData, ble_adv->scanRspDataLen);
 
-    DUMP8("%02X ",
-          ble_adv->advData,
-          ble_adv->advDataLen);
-
-    DUMP8("%02X ",
-          ble_adv->scanRspData,
-          ble_adv->scanRspDataLen);
-
-    app_ble_data_fill_enable(
-        USER_STUB,
-        adv_enable);
+    app_ble_data_fill_enable(USER_STUB, adv_enable);
 }
 
 void app_ble_stub_user_init(void)

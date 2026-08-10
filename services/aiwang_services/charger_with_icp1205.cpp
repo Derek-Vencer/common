@@ -37,7 +37,7 @@
 #define HAL_I2C_ID_3                 ((HAL_I2C_ID_T)3)
 #endif
 
-#define GOC_1205_DEBUG_ENABLE 0
+#define GOC_1205_DEBUG_ENABLE 1
 
 #undef printf
 #undef DBGPRINT
@@ -547,25 +547,28 @@ static void Icp1205UpdataIntSts(void)
 		}
 
 	    //Reg 0x21 ICP1205_INT_STAT1
-        //PlugIn
-		if (u8RegTable[0] & INT1_PLGIN_FLG) {
-			Icp1205SetChrgFunEnable();		//test
+		// PlugIn
+		if (u8RegTable[0] & INT1_PLGIN_FLG)
+		{
 			u8dat1 = INT1_PLGIN_FLG;
-			printf("Charger In Icp1205SetChrgFunEnable");
-			writeDataTo_ICP1205(ICP1205_INT_STAT1, &u8dat1, 1);
-			//hds_status_set_chargemode(true);
+
+			DBGPRINT("[ICP1205_CHG] PlugIn -> Charge Enable");
+
+			writeDataTo_ICP1205(ICP1205_INT_STAT1,&u8dat1,1);
+
 			Icp1205SetChrgFunEnable();
-			//hds_thread_msg_send(THREAD_MSG_INPUT_EVENT_INBOX);
 		}
-		//PlugOut
-		if (u8RegTable[0] & INT1_PLGOUT_FLG) {
-			Icp1205SetChrgFunEnable();
+
+		// PlugOut
+		if (u8RegTable[0] & INT1_PLGOUT_FLG)
+		{
 			u8dat1 = INT1_PLGOUT_FLG;
-			printf("Charger In INT1_PLGOUT_FLG");
-			writeDataTo_ICP1205(ICP1205_INT_STAT1, &u8dat1, 1);
-			//hds_status_set_chargemode(false);
-			Icp1205SetChrgFunEnable();
-			//hds_thread_msg_send(THREAD_MSG_INPUT_EVENT_OUTBOX);
+
+			DBGPRINT("[ICP1205_CHG] PlugOut -> Charge Disable");
+
+			writeDataTo_ICP1205(ICP1205_INT_STAT1,&u8dat1,1);
+
+			Icp1205SetChrgFunDisable();
 		}
 		//chrg_err
 		if (u8RegTable[0] & INT1_CHRGERR_FLG) {
