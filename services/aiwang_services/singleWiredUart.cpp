@@ -449,9 +449,6 @@ uint8_t get_tws_peer_battery_percent(void)
     return g_tws_peer_battery_percent;
 }
 
-static uint8_t pair_status = 0;
-static uint8_t enter_pair_status = 0;
-
 static uint8_t pair_success_count = 0;
 uint8_t enter_pair_count = 0;
 
@@ -459,17 +456,22 @@ uint8_t enter_pair_count = 0;
 
 void wired_uart_get_battery_level(void)
 {
-    //uint8_t buff5[5] = {0};
-    uint8_t buff6[6] = {0};
+    uint8_t buff5[5] = {0};
 
     int8_t raw_level = 0;
     uint8_t report_level = 0;
+
+    uint8_t pair_success_status = 0;
+    uint8_t enter_pair_status = 0;
+    uint8_t pair_status = 0;
+    bool tws_connected = false;
 
     raw_level = app_battery_current_level();
 
 #if defined(IBRT)
     static int8_t s_last_tws_connected = -1;
-    bool tws_connected = bts_tws_if_is_tws_link_connected();
+
+    tws_connected = bts_tws_if_is_tws_link_connected();
 
     if (s_last_tws_connected != (int8_t)tws_connected)
     {
@@ -492,8 +494,47 @@ void wired_uart_get_battery_level(void)
         report_level = (uint8_t)(raw_level / 10);
     }
 
-    pair_status = get_pair_status();
+    /*
+     * Get current pairing states.
+     */
+    pair_success_status = get_pair_status();
     enter_pair_status = get_er_discover_connectable_status();
+
+#if defined(IBRT)
+    tws_connected = bts_tws_if_is_tws_link_connected();
+#else
+    tws_connected = false;
+#endif
+
+    /*
+     * Pair status reported to charging case:
+     *
+     * 0 = Normal / no pairing status
+     * 1 = Pairing success
+     * 2 = TWS connected and currently in pairing mode
+     *
+     * Pairing success has the highest priority.
+     */
+    if (pair_success_status)
+    {
+        pair_status = 1;
+    }
+    else if (tws_connected && enter_pair_status)
+    {
+        pair_status = 2;
+    }
+    else
+    {
+        pair_status = 0;
+    }
+
+    DBGPRINT(
+        "[BOX_BAT] Send level=%u pair=%u success=%u enter=%u tws=%u",
+        report_level,
+        pair_status,
+        pair_success_status,
+        enter_pair_status,
+        tws_connected);
 
     /*
      * ---------------------------------------------------------
@@ -501,34 +542,18 @@ void wired_uart_get_battery_level(void)
      * 55 AA BAT PAIR CRC
      * ---------------------------------------------------------
      */
-    //buff5[0] = 0x55;
-    //buff5[1] = 0xAA;
-    //buff5[2] = report_level;
-    //buff5[3] = pair_status;
-    //buff5[4] = crc8(buff5, 4);
+    buff5[0] = 0x55;
+    buff5[1] = 0xAA;
+    buff5[2] = report_level;
+    buff5[3] = pair_status;
+    buff5[4] = crc8(buff5, 4);
 
-    ///communication_send_buf(buff5, sizeof(buff5));
-
-    //hal_sys_timer_delay(MS_TO_TICKS(2));
-    /*
-     * ---------------------------------------------------------
-     * New protocol
-     * 55 AA BAT PAIR ENTER_PAIR CRC
-     * ---------------------------------------------------------
-     */
-    buff6[0] = 0x55;
-    buff6[1] = 0xAA;
-    buff6[2] = report_level;
-    buff6[3] = pair_status;
-    buff6[4] = enter_pair_status;
-    buff6[5] = crc8(buff6, 5);
-
-    communication_send_buf(buff6, sizeof(buff6));
+    communication_send_buf(buff5, sizeof(buff5));
 
     /*
      * Pair success notify repeat counter.
      */
-    if (pair_status)
+    if (pair_success_status)
     {
         pair_success_count++;
 
@@ -562,10 +587,12 @@ void wired_uart_get_battery_level(void)
     }
 
     DBGPRINT(
-        "[BOX_BAT] level=%u pair=%u enter=%u",
+        "[BOX_BAT] level=%u pair=%u success=%u enter=%u tws=%u",
         report_level,
         pair_status,
-        enter_pair_status);
+        pair_success_status,
+        enter_pair_status,
+        tws_connected);
 }
 
 extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
