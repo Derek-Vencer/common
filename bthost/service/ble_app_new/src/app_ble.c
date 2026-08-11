@@ -107,6 +107,17 @@ extern uint32_t ble_datapath_restore_ctx(uint8_t conidx, uint8_t *buf, uint32_t 
 extern uint8_t aiWangGetEarBudsColor(void);
 
 static void app_ble_impl_refresh_adv(void);
+static void app_ble_stub_user_data_fill_handler(void *param);
+
+/*
+ * NTT role-switch BLE restart state.
+ *
+ * The BASIC advertising activity is stopped first.  A fresh advertising set
+ * is rebuilt only after GAP_ADV_EVENT_STOPPED is received, avoiding a race
+ * between role switching and Scan Response programming in the controller.
+ */
+static bool g_ntt_basic_adv_restart_pending = false;
+
 static void app_ble_check_load_server_cache(const gap_conn_item_t *conn);
 static void app_ble_check_load_client_cache(const gap_conn_item_t *conn);
 static void app_ble_gatt_server_cache(const gap_conn_item_t *conn, const gatt_server_cache_t *cache);
@@ -2111,6 +2122,51 @@ static void app_ble_adv_started(ble_adv_activity_t *p_actv)
     }
 }
 
+/*
+ * Restart BASIC advertising after a TWS UI role switch.
+ *
+ * This API may be called from a non-BT thread.  It is deferred to the BT
+ * thread before touching the advertising activity.
+ *
+ * Sequence:
+ *   role switch complete
+ *       -> stop BASIC advertising
+ *       -> wait GAP_ADV_EVENT_STOPPED
+ *       -> rebuild advertising from USER_STUB
+ *
+ * If BASIC advertising is already stopped, rebuild it immediately.
+ */
+void app_ble_restart_basic_adv_after_role_switch(void)
+{
+    ble_adv_activity_t *adv = NULL;
+
+    if (bt_defer_curr_func_0(app_ble_restart_basic_adv_after_role_switch))
+    {
+        return;
+    }
+
+    adv = app_ble_get_advertising(BLE_BASIC_ADV_HANDLE);
+
+    /*
+     * Mark pending before requesting stop so the STOPPED event can safely
+     * trigger the rebuild.
+     */
+    g_ntt_basic_adv_restart_pending = true;
+
+    if (adv && adv->adv_is_started)
+    {
+        app_ble_disable_advertising(BLE_BASIC_ADV_HANDLE);
+        return;
+    }
+
+    /*
+     * No active BASIC advertising exists.  There will be no STOPPED event,
+     * so rebuild immediately.
+     */
+    g_ntt_basic_adv_restart_pending = false;
+    app_ble_refresh_adv_state_generic();
+}
+
 int app_ble_server_callback(uintptr_t connhdl, gap_adv_event_t event, gap_adv_callback_param_t param)
 {
     if (event < GAP_ADV_EVENT_CONN_OPENED)
@@ -2150,6 +2206,26 @@ int app_ble_server_callback(uintptr_t connhdl, gap_adv_event_t event, gap_adv_ca
 #if defined(BLE_MESH_ENABLE)
             bt_mesh_adv_callback(MESH_ADV_STOPPED_EVT, adv_handle);
 #endif
+
+            /*
+             * Role-switch restart:
+             * Rebuild BASIC advertising only after the controller has
+             * confirmed that the old advertising activity is stopped.
+             *
+             * On the new Master, USER_STUB is rebuilt with:
+             *   - 128-bit Service UUID
+             *   - Manufacturer Specific Data
+             *   - Complete Local Name
+             *
+             * On the new Slave, the normal IBRT role gate rejects USER_STUB,
+             * therefore BASIC advertising remains stopped.
+             */
+            if ((adv_handle == BLE_BASIC_ADV_HANDLE) &&
+                g_ntt_basic_adv_restart_pending)
+            {
+                g_ntt_basic_adv_restart_pending = false;
+                app_ble_refresh_adv_state_generic();
+            }
         }
     }
     else
@@ -2906,11 +2982,23 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
     }
 #endif
 
+    /*
+     * Build USER_STUB payload in isolation.
+     *
+     * USER_STUB, USER_INTERCONNECTION, USER_TILE and USER_OTA normally share
+     * BLE_ADV_ACTIVITY_USER_0 and therefore share the same BLE_ADV_PARAM_T.
+     * A later user callback can modify or clear scanRspData after USER_STUB
+     * has populated Manufacturer Data and Complete Local Name.
+     *
+     * For this validation build, construct the public product advertising
+     * payload from USER_STUB only.  This lets us verify whether the missing
+     * left-ear Scan Response is caused by another group-0 data-fill callback.
+     */
+    memset(&legacy_param, 0, sizeof(legacy_param));
+    app_ble_stub_user_data_fill_handler(&legacy_param);
+
     adv_legacy_enable =
-        app_ble_get_user_adv_data(
-            adv,
-            &legacy_param,
-            BLE_ADV_ACTIVITY_USER_0);
+        ble_get_global()->data_fill_enable[USER_STUB];
 
     if (!adv_legacy_enable)
     {
