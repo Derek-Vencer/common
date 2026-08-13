@@ -1650,7 +1650,7 @@ static const char *ntt_case_state_to_string(NTT_CASE_STATE_E state)
 }
 
 
-static bool ntt_case_state_is_valid(uint8_t state)
+bool ntt_case_state_is_valid(uint8_t state)
 {
     return state == NTT_CASE_STATE_IN_CASE || state == NTT_CASE_STATE_OUT_CASE;
 }

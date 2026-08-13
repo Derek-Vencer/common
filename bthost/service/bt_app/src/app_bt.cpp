@@ -207,7 +207,7 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (3)//2
 #define APP_BT_PROFILE_RECONNECT_RETRY_LIMIT_CNT (15)
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
-#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000)
+#define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
 static void app_bt_profile_reconnect_timehandler(void const *param);
 static void app_bt_accessmode_timehandler(void const *param);
@@ -997,14 +997,16 @@ static void app_bt_disconnected_keepAlinve_timeouthandler(void const *param)
 {
     int activeCons = 0;
     int activeSourceCons = 0;
+    int state = 0;
     activeCons = app_bt_get_active_cons();
+    state = ntt_case_state_get_local();
     (void)activeCons;
     uint8_t active_cons_phone = app_bt_count_mobile_link();
     activeSourceCons = btif_me_get_source_activeCons();
-    DEBUG_INFO(0,"%s activeCons==%d activeSourceCons=%d %d\n", __func__, activeCons, activeSourceCons, active_cons_phone);
+    DEBUG_INFO(0,"%s activeCons==%d activeSourceCons=%d %d case state = %d\n", __func__, activeCons, activeSourceCons, active_cons_phone, state);
 
-    if(active_cons_phone == 0 && activeSourceCons == 0) {
-    	DEBUG_INFO(0,"!!!bt_disconnected_keep_alive_timer CloseEarphone\n");
+    if(active_cons_phone == 0 && activeSourceCons == 0 && state != 1) {
+    	DEBUG_INFO(0,"!!!bt_disconnected_keep_alive_timer CloseEarphone state = %d \n",state);
 #ifdef IBRT
 		if (bts_tws_if_is_tws_link_connected())
 		{
@@ -1017,6 +1019,9 @@ static void app_bt_disconnected_keepAlinve_timeouthandler(void const *param)
 		}
 #endif
         app_shutdown();
+    }
+    else {
+        DEBUG_INFO(0,"!!!bt_disconnected_keep_alive_timer Skip CloseEarphone state = IN-CASE");
     }
 }
 

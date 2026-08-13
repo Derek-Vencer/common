@@ -176,7 +176,7 @@ uint8_t get_tws_peer_battery_percent(void);
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 void ntt_master_sync_all_user_settings_to_peer(void);
-
+bool ntt_case_state_is_valid(uint8_t state);
 #define NTT_EARBUD_FW_VERSION_LEN    3
 
 void app_ibrt_customif_request_peer_fw_version(void);
