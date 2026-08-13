@@ -4475,7 +4475,17 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
                 ntt_audio_drc_apply_by_eq_index(eq_index);
 			}
-			app_ibrt_customif_cmd_sync_music_eq(eq_index);
+
+			if (app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+            {
+                AUDIO_BT_TRACE(2,"[EQ_SYNC] Master sync EQ, index=%d",eq_index);
+
+                app_ibrt_customif_cmd_sync_music_eq(eq_index);
+            }
+            else
+            {
+                AUDIO_BT_TRACE(2,"[EQ_SYNC] Slave skip EQ sync, index=%d",eq_index);
+            }
 		}
 #endif
 

@@ -107,17 +107,6 @@ extern uint32_t ble_datapath_restore_ctx(uint8_t conidx, uint8_t *buf, uint32_t 
 extern uint8_t aiWangGetEarBudsColor(void);
 
 static void app_ble_impl_refresh_adv(void);
-static void app_ble_stub_user_data_fill_handler(void *param);
-
-/*
- * NTT role-switch BLE restart state.
- *
- * The BASIC advertising activity is stopped first.  A fresh advertising set
- * is rebuilt only after GAP_ADV_EVENT_STOPPED is received, avoiding a race
- * between role switching and Scan Response programming in the controller.
- */
-static bool g_ntt_basic_adv_restart_pending = false;
-
 static void app_ble_check_load_server_cache(const gap_conn_item_t *conn);
 static void app_ble_check_load_client_cache(const gap_conn_item_t *conn);
 static void app_ble_gatt_server_cache(const gap_conn_item_t *conn, const gatt_server_cache_t *cache);
@@ -2122,51 +2111,6 @@ static void app_ble_adv_started(ble_adv_activity_t *p_actv)
     }
 }
 
-/*
- * Restart BASIC advertising after a TWS UI role switch.
- *
- * This API may be called from a non-BT thread.  It is deferred to the BT
- * thread before touching the advertising activity.
- *
- * Sequence:
- *   role switch complete
- *       -> stop BASIC advertising
- *       -> wait GAP_ADV_EVENT_STOPPED
- *       -> rebuild advertising from USER_STUB
- *
- * If BASIC advertising is already stopped, rebuild it immediately.
- */
-void app_ble_restart_basic_adv_after_role_switch(void)
-{
-    ble_adv_activity_t *adv = NULL;
-
-    if (bt_defer_curr_func_0(app_ble_restart_basic_adv_after_role_switch))
-    {
-        return;
-    }
-
-    adv = app_ble_get_advertising(BLE_BASIC_ADV_HANDLE);
-
-    /*
-     * Mark pending before requesting stop so the STOPPED event can safely
-     * trigger the rebuild.
-     */
-    g_ntt_basic_adv_restart_pending = true;
-
-    if (adv && adv->adv_is_started)
-    {
-        app_ble_disable_advertising(BLE_BASIC_ADV_HANDLE);
-        return;
-    }
-
-    /*
-     * No active BASIC advertising exists.  There will be no STOPPED event,
-     * so rebuild immediately.
-     */
-    g_ntt_basic_adv_restart_pending = false;
-    app_ble_refresh_adv_state_generic();
-}
-
 int app_ble_server_callback(uintptr_t connhdl, gap_adv_event_t event, gap_adv_callback_param_t param)
 {
     if (event < GAP_ADV_EVENT_CONN_OPENED)
@@ -2206,26 +2150,6 @@ int app_ble_server_callback(uintptr_t connhdl, gap_adv_event_t event, gap_adv_ca
 #if defined(BLE_MESH_ENABLE)
             bt_mesh_adv_callback(MESH_ADV_STOPPED_EVT, adv_handle);
 #endif
-
-            /*
-             * Role-switch restart:
-             * Rebuild BASIC advertising only after the controller has
-             * confirmed that the old advertising activity is stopped.
-             *
-             * On the new Master, USER_STUB is rebuilt with:
-             *   - 128-bit Service UUID
-             *   - Manufacturer Specific Data
-             *   - Complete Local Name
-             *
-             * On the new Slave, the normal IBRT role gate rejects USER_STUB,
-             * therefore BASIC advertising remains stopped.
-             */
-            if ((adv_handle == BLE_BASIC_ADV_HANDLE) &&
-                g_ntt_basic_adv_restart_pending)
-            {
-                g_ntt_basic_adv_restart_pending = false;
-                app_ble_refresh_adv_state_generic();
-            }
         }
     }
     else
@@ -2340,19 +2264,16 @@ static void app_ble_refresh_advertising(uint8_t adv_handle, gap_adv_param_t *adv
     if (adv_handle == 0)
     {
         /*
-        * USER_STUB uses Scan Response for:
-        * - Manufacturer Specific Data
-        * - Complete Local Name
-        *
-        * Therefore Legacy advertising must remain scannable.
+        * Hide public BLE advertising after paired/connected.
+        * Do not expose local name and do not allow new phones to connect.
         */
         adv_param->directed_adv = false;
         adv_param->connectable = true;
-        adv_param->scannable = true;
+        adv_param->scannable = false;
         adv_param->include_tx_power_data = false;
 
         DEBUG_INFO(0,
-            "[BLE_ADV_REFRESH] handle=0 conn=%d scan=%d directed=%d",
+            "[BLE_ADV_REFRESH] handle=0 hide public adv conn=%d scan=%d directed=%d",
             adv_param->connectable,
             adv_param->scannable,
             adv_param->directed_adv);
@@ -2964,10 +2885,8 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
     }
 #endif
 
-#ifdef CTKD_ENABLE
-    set_rsp_dist_lk_bit_field_func dist_lk_set_cb =
-        app_sec_reg_dist_lk_bit_get_callback();
-
+#ifdef CTKD_ENABLE // ctkd needs ble adv no matter whether a mobile bt link has been established or not
+    set_rsp_dist_lk_bit_field_func dist_lk_set_cb = app_sec_reg_dist_lk_bit_get_callback();
     if (dist_lk_set_cb && !dist_lk_set_cb())
     {
         CO_LOG_WAR_0(BT_STS_NOT_ALLOW);
@@ -2975,89 +2894,44 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
     }
 #else
     ble_global_t *g = ble_get_global();
-
     if (!g->ble_stub_adv_enable)
     {
         return false;
     }
 #endif
 
-    /*
-     * Build USER_STUB payload in isolation.
-     *
-     * USER_STUB, USER_INTERCONNECTION, USER_TILE and USER_OTA normally share
-     * BLE_ADV_ACTIVITY_USER_0 and therefore share the same BLE_ADV_PARAM_T.
-     * A later user callback can modify or clear scanRspData after USER_STUB
-     * has populated Manufacturer Data and Complete Local Name.
-     *
-     * For this validation build, construct the public product advertising
-     * payload from USER_STUB only.  This lets us verify whether the missing
-     * left-ear Scan Response is caused by another group-0 data-fill callback.
-     */
-    memset(&legacy_param, 0, sizeof(legacy_param));
-    app_ble_stub_user_data_fill_handler(&legacy_param);
-
-    adv_legacy_enable =
-        ble_get_global()->data_fill_enable[USER_STUB];
-
+    adv_legacy_enable = app_ble_get_user_adv_data(adv, &legacy_param, BLE_ADV_ACTIVITY_USER_0);
     if (!adv_legacy_enable)
     {
         return false;
     }
 
     adv->user = USER_STUB;
-
-    /*
-     * Use Legacy Advertising for maximum
-     * iOS and Android compatibility.
-     */
     adv_param->connectable = true;
     adv_param->scannable = true;
     adv_param->use_legacy_pdu = true;
     adv_param->include_tx_power_data = true;
 
-    app_ble_set_adv_tx_power_level(
-        adv,
-        BLE_ADV_TX_POWER_LEVEL_0);
+    app_ble_set_adv_tx_power_level(adv, BLE_ADV_TX_POWER_LEVEL_0);
 
-    /*
-     * ADV:
-     * - Flags
-     * - 128-bit Service UUID
-     */
-    app_ble_dt_set_flags(
-        adv_param,
-        false);
+    app_ble_dt_set_flags(adv_param, false);
 
-    app_ble_dt_add_adv_data(
-        adv,
-        &legacy_param,
-        NULL);
+    app_ble_dt_add_adv_data(adv, &legacy_param, NULL);
 
-    /*
-     * Do not add local name into ADV Data.
-     * Local name is already inserted into
-     * Scan Response by USER_STUB data fill.
-     */
-    // app_ble_dt_set_local_name(adv_param, NULL);
+    //app_ble_dt_set_local_name(adv_param, NULL);
 
-    DEBUG_INFO(0,
-        "[STUB_FINAL_ADV_LEN]=%d",
+        DEBUG_INFO(0, "[STUB_FINAL_ADV_LEN]=%d",
         gap_dt_buf_len(&adv_param->adv_data));
-
-    DUMP8(
-        "%02X ",
+    DUMP8("%02X ",
         gap_dt_buf_data(&adv_param->adv_data),
         gap_dt_buf_len(&adv_param->adv_data));
 
-    DEBUG_INFO(0,
-        "[STUB_FINAL_SCAN_LEN]=%d",
+    DEBUG_INFO(0, "[STUB_FINAL_SCAN_LEN]=%d",
         gap_dt_buf_len(&adv_param->scan_rsp_data));
-
-    DUMP8(
-        "%02X ",
+    DUMP8("%02X ",
         gap_dt_buf_data(&adv_param->scan_rsp_data),
         gap_dt_buf_len(&adv_param->scan_rsp_data));
+
 
     return true;
 }
@@ -3830,81 +3704,7 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     DEBUG_INFO(0, "[ADV] Manufacturer BT Addr:");
     DUMP8("%02X ", &ble_adv->scanRspData[11], 6);
 
-    /*
-    * Append programmed local BLE name to Scan Response.
-    *
-    * Target configuration:
-    *
-    * Manufacturer Data = 17 bytes
-    * Local Name Header = 2 bytes
-    * "LE nwm CLIPS"    = 12 bytes
-    *
-    * Total = 31 bytes
-    */
-    {
-        const char *ble_name =
-            (const char *)factory_section_get_ble_name();
-
-        if (ble_name != NULL)
-        {
-            uint8_t name_len =
-                (uint8_t)strlen(ble_name);
-
-            uint8_t remain_len =
-                sizeof(ble_adv->scanRspData) -
-                ble_adv->scanRspDataLen;
-
-            DEBUG_INFO(3,
-                "[ADV_NAME] name=%s len=%d remain=%d",
-                ble_name,
-                name_len,
-                remain_len);
-
-            /*
-            * Complete Local Name requires:
-            * 1 byte Length
-            * 1 byte AD Type
-            * N bytes Name
-            */
-            if ((name_len + 2) <= remain_len)
-            {
-                ble_adv->scanRspData[
-                    ble_adv->scanRspDataLen++] =
-                    name_len + 1;
-
-                ble_adv->scanRspData[
-                    ble_adv->scanRspDataLen++] =
-                    GAP_DT_COMPLETE_LOCAL_NAME;
-
-                memcpy(
-                    &ble_adv->scanRspData[
-                        ble_adv->scanRspDataLen],
-                    ble_name,
-                    name_len);
-
-                ble_adv->scanRspDataLen +=
-                    name_len;
-
-                DEBUG_INFO(2,
-                    "[ADV_NAME] Complete Local Name=%s len=%d",
-                    ble_name,
-                    name_len);
-            }
-            else
-            {
-                DEBUG_INFO(3,
-                    "[ADV_NAME] Name too long len=%d need=%d remain=%d",
-                    name_len,
-                    name_len + 2,
-                    remain_len);
-            }
-        }
-        else
-        {
-            DEBUG_INFO(0,
-                "[ADV_NAME] Local BLE name is NULL");
-        }
-    }
+    DEBUG_INFO(0, "%s skip BleName in USER_STUB adv", __func__);
 
     do {
 #if (BLE_APP_HID)

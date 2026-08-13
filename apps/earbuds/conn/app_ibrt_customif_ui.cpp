@@ -1449,37 +1449,17 @@ static void app_ibrt_customif_evt_run_complete_callback(app_ui_evt_t evt)
  Modification : Created function
 
 *****************************************************************************/
-/*
- * Apply to:
- *   apps/earbuds/conn/app_ibrt_customif_ui.cpp
- *
- * A) Near the existing BLE/TWS declarations, add:
- *
- *   extern "C" void app_ble_restart_basic_adv_after_role_switch(void);
- *
- * B) Replace app_ibrt_customif_switch_ui_role_run_complete_callback()
- *    with the implementation below.
- *
- * Keep all other source code unchanged.
- */
-
-extern "C" void app_ble_restart_basic_adv_after_role_switch(void);
-
-void app_ibrt_customif_switch_ui_role_run_complete_callback(
-    TWS_UI_ROLE_E current_role,
-    uint8_t errCode)
+void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E current_role, uint8_t errCode)
 {
     if (!errCode)
     {
-        EARBUDS_TRACE(
-            0,
+        EARBUDS_TRACE(0,
             "custom_ui:switch ibrt role to %d run complete",
             current_role);
     }
     else
     {
-        EARBUDS_TRACE(
-            0,
+        EARBUDS_TRACE(0,
             "custom_ui:exist device doing ibrt role switch to %d failed",
             current_role);
     }
@@ -1487,8 +1467,7 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(
 #ifdef IBRT
     if (g_ntt_case_close_wait_poweroff)
     {
-        EARBUDS_TRACE(
-            2,
+        EARBUDS_TRACE(2,
             "[ROLE_SWITCH][CASE_CLOSE] complete role=%d err=%d",
             current_role,
             errCode);
@@ -1497,40 +1476,24 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(
         {
             if (current_role == TWS_UI_SLAVE)
             {
-                EARBUDS_TRACE(
-                    0,
+                EARBUDS_TRACE(0,
                     "[ROLE_SWITCH][CASE_CLOSE] old master switched to slave, wait timer shutdown");
 
                 g_ntt_case_close_wait_poweroff = false;
             }
             else if (current_role == TWS_UI_MASTER)
             {
-                EARBUDS_TRACE(
-                    0,
+                EARBUDS_TRACE(0,
                     "[ROLE_SWITCH][CASE_CLOSE] new master ready");
             }
         }
         else
         {
-            EARBUDS_TRACE(
-                0,
+            EARBUDS_TRACE(0,
                 "[ROLE_SWITCH][CASE_CLOSE] role switch failed");
 
             g_ntt_case_close_wait_poweroff = false;
         }
-    }
-
-    /*
-     * Do not refresh advertising immediately here.
-     *
-     * The BLE module first stops BASIC advertising and waits for
-     * GAP_ADV_EVENT_STOPPED before rebuilding it.  This prevents the new
-     * Master from inheriting a stale advertising activity that contains
-     * primary ADV data but no Scan Response.
-     */
-    if (!errCode)
-    {
-        app_ble_restart_basic_adv_after_role_switch();
     }
 #endif
 
