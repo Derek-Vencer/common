@@ -3843,7 +3843,7 @@ POSSIBLY_UNUSED static void app_ble_stub_user_data_fill_handler(void *param)
     */
     {
         const char *ble_name =
-            (const char *)app_ble_get_dev_name();
+            (const char *)factory_section_get_ble_name();
 
         if (ble_name != NULL)
         {

@@ -88,7 +88,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #endif
 
 #ifndef APP_BATTERY_MIN_MV
-#define APP_BATTERY_MIN_MV (3400)//3350
+#define APP_BATTERY_MIN_MV (3385)//3350
 #endif
 
 #ifndef APP_BATTERY_MAX_MV
@@ -232,6 +232,8 @@ static bool g_battery_measure_valid = false;
  */
 static uint8_t g_battery_last_valid_percent = 0xFF;
 
+extern void wired_uart_get_battery_level(void);
+
 #endif
 #ifdef IBRT
 extern "C" void ntt_case_state_sync_local_update(
@@ -267,8 +269,15 @@ extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 
 #define LOW_BAT_ROLE_SWITCH_PENDING_TIMEOUT_COUNT    (3)
 
+/*
+ * ntt_low_battery_role_switch_check() is called every 10 seconds.
+ * 30 calls = 300 seconds.
+ */
+#define LOW_BAT_ROLE_BATTERY_CHECK_COUNT             (30)
+
 static bool g_low_bat_role_switch_pending = false;
 static uint8_t g_low_bat_role_switch_pending_count = 0;
+static uint8_t g_low_bat_role_battery_check_count = 0;
 
 static void ntt_low_battery_role_switch_check(void)
 {
@@ -292,6 +301,7 @@ static void ntt_low_battery_role_switch_check(void)
 
         g_low_bat_role_switch_pending = false;
         g_low_bat_role_switch_pending_count = 0;
+        g_low_bat_role_battery_check_count = 0;
         return;
     }
 
@@ -302,6 +312,7 @@ static void ntt_low_battery_role_switch_check(void)
     {
         g_low_bat_role_switch_pending = false;
         g_low_bat_role_switch_pending_count = 0;
+        g_low_bat_role_battery_check_count = 0;
 
         BATTERY_TRACE(0,
                       "[LOW_BAT_ROLE] TWS disconnected, skip");
@@ -310,7 +321,7 @@ static void ntt_low_battery_role_switch_check(void)
 
     /*
      * Avoid repeated requests while role switch is in progress.
-     * Battery check runs every 10 seconds.
+     * This function is called every 10 seconds.
      */
     if (g_low_bat_role_switch_pending)
     {
@@ -336,6 +347,25 @@ static void ntt_low_battery_role_switch_check(void)
         g_low_bat_role_switch_pending = false;
         g_low_bat_role_switch_pending_count = 0;
     }
+
+    /*
+     * Battery comparison is performed once every 300 seconds.
+     *
+     * This function is called every 10 seconds:
+     * 10 seconds x 30 = 300 seconds.
+     */
+    g_low_bat_role_battery_check_count++;
+
+    if (g_low_bat_role_battery_check_count <
+        LOW_BAT_ROLE_BATTERY_CHECK_COUNT)
+    {
+        return;
+    }
+
+    g_low_bat_role_battery_check_count = 0;
+
+    BATTERY_TRACE(0,
+                  "[LOW_BAT_ROLE] 300s battery check");
 
     /*
      * Local battery uses the same HFP level table.
@@ -424,6 +454,8 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         {
             if (ntt_case_close_role_switch_can_shutdown())
             {
+                set_pair_status(1);
+                wired_uart_get_battery_level();
                 BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
                 s_role_switch_requested = false;
                 s_role_switch_wait_cnt = 0;

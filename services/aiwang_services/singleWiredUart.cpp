@@ -519,7 +519,7 @@ void wired_uart_get_battery_level(void)
     {
         pair_status = 1;
     }
-    else if (tws_connected && enter_pair_status)
+    else if (tws_connected && (enter_pair_status || ntt_manual_pairing_mode))
     {
         pair_status = 2;
     }
@@ -529,12 +529,13 @@ void wired_uart_get_battery_level(void)
     }
 
     DBGPRINT(
-        "[BOX_BAT] Send level=%u pair=%u success=%u enter=%u tws=%u",
+        "[BOX_BAT] Send level=%u pair=%u success=%u enter=%u tws=%u manual_pairing=%u",
         report_level,
         pair_status,
         pair_success_status,
         enter_pair_status,
-        tws_connected);
+        tws_connected,
+        ntt_manual_pairing_mode);
 
     /*
      * ---------------------------------------------------------

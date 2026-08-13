@@ -194,7 +194,7 @@ extern bool ntt_manual_pairing_mode;
 extern bool ntt_first_no_mobile_pair_mode;
 extern bool ntt_manual_pairing_mode;
 extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
-
+extern void wired_uart_enter_pairmode(void);
 static void ntt_bt_user_confirmation_callback(
     struct bdaddr_t *bdaddr,
     uint32 numeric_value);
@@ -1521,10 +1521,8 @@ extern "C" bool ntt_bt_has_mobile_paired_record(void)
         return true;
     }
 
-    DEBUG_INFO(
-        0,
-        "[NTT_PAIR][RECORD_SCAN] "
-        "no mobile paired record");
+    DEBUG_INFO(0,"[NTT_PAIR][RECORD_SCAN] no mobile paired record");
+    wired_uart_enter_pairmode();
 
     return false;
 }

@@ -1286,12 +1286,12 @@ const SpeechConfig WEAK speech_cfg_default = {
         .comp_threshold     = -30.f,
         .comp_ratio         = 4.f,
         .expand_threshold   = -60.f,
-        .expand_ratio       = 0.333f,
-        .attack_time        = 0.008f,
+        .expand_ratio       = 1.0f,
+        .attack_time        = 0.003f,
         .release_time       = 0.06f,
         .makeup_gain        = 10,
         .delay              = 128,
-        .tav                = 0.2f,
+        .tav                = 0.05f,
     },
 #endif
 
@@ -1363,7 +1363,7 @@ const SpeechConfig WEAK speech_cfg_default = {
     .tx_post_gain = {
         .bypass     = 0,
         //.gain_dB    = 6.0f, dvt2
-        .gain_dB    = 10.0f,
+        .gain_dB    = 1.0f,
     },
 #endif
 

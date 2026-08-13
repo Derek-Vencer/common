@@ -133,7 +133,9 @@ int factory_section_open(void)
 
         memcpy(bt_global_addr, factory_section_p->data.rev2_bt_addr, 6);
         memcpy(ble_global_addr, factory_section_p->data.rev2_ble_addr, 6);
-        NV_SECTION_TRACE(2,"%s sucess btname:%s", __func__, (char *)factory_section_p->data.rev2_bt_name);
+        NV_SECTION_TRACE(3,"%s success btname:%s blename:%s",__func__,
+                        (char *)factory_section_p->data.rev2_bt_name,
+                        (char *)factory_section_p->data.rev2_ble_name);
     }
 #endif
     NV_SECTION_DUMP8("%02x ", bt_global_addr, BT_ADDR_OUTPUT_PRINT_NUM);

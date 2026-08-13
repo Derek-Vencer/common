@@ -131,7 +131,8 @@ void app_ibrt_slave_ble_cmd_complete_callback(uint16_t opcode, uint8_t *param, u
 void app_ibrt_ble_adv_para_data_init(void)
 {
     app_ble_adv_para_data_t *adv_para_cfg = &app_ble_adv_para_data_cfg;
-    EARBUDS_TRACE(0,"%s", __func__);
+
+    EARBUDS_TRACE(0, "%s", __func__);
 
     adv_para_cfg->adv_type = ADV_CONN_UNDIR;
     adv_para_cfg->advInterval_Ms = APP_IBRT_BLE_ADV_INTERVAL;
@@ -139,82 +140,185 @@ void app_ibrt_ble_adv_para_data_init(void)
     adv_para_cfg->peer_addr_type = BES_ADDR_PUBLIC;
     adv_para_cfg->adv_chanmap = ADV_ALL_CHNLS_EN;
     adv_para_cfg->adv_filter_policy = ADV_ALLOW_SCAN_ANY_CON_ANY;
+
     memset(adv_para_cfg->bd_addr.address, 0, BTIF_BD_ADDR_SIZE);
 
-    const char* ble_name_in_nv = (const char*)factory_section_get_ble_name();
-    uint32_t nameLen = strlen(ble_name_in_nv);
-    
-    ASSERT(APP_IBRT_BLE_ADV_DATA_MAX_LEN >= nameLen, "ble adv data exceed");
-    
+    /*
+     * Always use the BLE name programmed in Factory Sector.
+     */
+    const char *ble_name_in_nv = (const char *)factory_section_get_ble_name();
+
+    uint32_t nameLen = 0;
+
+    if (ble_name_in_nv != NULL)
+    {
+        nameLen = strlen(ble_name_in_nv);
+    }
+
+    /*
+     * Advertising Data:
+     * Complete 128-bit Service UUID.
+     */
     adv_para_cfg->adv_data_len = 0;
-#if 0
-    adv_para_cfg->adv_data[adv_para_cfg->adv_data_len++] = nameLen+1;
-    adv_para_cfg->adv_data[adv_para_cfg->adv_data_len++] = 0x08;
-    memcpy(&adv_para_cfg->adv_data[adv_para_cfg->adv_data_len], ble_name_in_nv, nameLen);
-    adv_para_cfg->adv_data_len += nameLen;
-#else
-const uint8_t aiWangPrimaryService[16] = { 0xCD, 0x4B, 0xEF, 0xBA, 0x10, 0xDA, 0xFA, 0x9D, 0x65, 0x43, 0x20, 0x6D, 0x76, 0x4F, 0xAE, 0xCA};
+
+    const uint8_t aiWangPrimaryService[16] =
+    {
+        0xCD, 0x4B, 0xEF, 0xBA,
+        0x10, 0xDA, 0xFA, 0x9D,
+        0x65, 0x43, 0x20, 0x6D,
+        0x76, 0x4F, 0xAE, 0xCA
+    };
+
     adv_para_cfg->adv_data[adv_para_cfg->adv_data_len++] = 17;
+
     adv_para_cfg->adv_data[adv_para_cfg->adv_data_len++] = 0x07;
-    memcpy(&adv_para_cfg->adv_data[adv_para_cfg->adv_data_len], aiWangPrimaryService, 16);
-    adv_para_cfg->adv_data_len += 16;
 
-#endif
-    
+    memcpy(&adv_para_cfg->adv_data[adv_para_cfg->adv_data_len],aiWangPrimaryService,sizeof(aiWangPrimaryService));
 
+    adv_para_cfg->adv_data_len += sizeof(aiWangPrimaryService);
+
+    /*
+     * Scan Response:
+     *
+     * Manufacturer Data:
+     *   Length      : 1 byte
+     *   AD Type     : 1 byte
+     *   Company ID  : 2 bytes
+     *   BT Address  : 6 bytes
+     *   Product ID  : 6 bytes
+     *   Color       : 1 byte
+     *
+     * Total = 17 bytes.
+     */
     memset(adv_para_cfg->scan_rsp_data,0,sizeof(adv_para_cfg->scan_rsp_data));
     adv_para_cfg->scan_rsp_data_len = 16;
+    adv_para_cfg->scan_rsp_data[0] = 0x10;
+    adv_para_cfg->scan_rsp_data[1] = 0xFF;
 
-    adv_para_cfg->scan_rsp_data[0]  = 0x10;
-    adv_para_cfg->scan_rsp_data[1]  = 0xFF; //manufactory tag
-
-    adv_para_cfg->scan_rsp_data[2]  = 0x9B;
-    adv_para_cfg->scan_rsp_data[3]  = 0x0C;
-
-    factory_section_original_bleaddr_get(&adv_para_cfg->scan_rsp_data[4]); //6Bytes
+    adv_para_cfg->scan_rsp_data[2] = 0x9B;
+    adv_para_cfg->scan_rsp_data[3] = 0x0C;
 
     /*
-     * Keep real BLE advertising address unchanged.
+     * Read original programmed BLE address first.
      */
-    memcpy(adv_para_cfg->bd_addr.address,
-           &adv_para_cfg->scan_rsp_data[4],
-           BTIF_BD_ADDR_SIZE);
+    factory_section_original_bleaddr_get(&adv_para_cfg->scan_rsp_data[4]);
 
     /*
-     * Manufacturer data must carry right ear BT address.
-     * Example:
-     *   right: 66 00 50 99 D1 88 -> 88:D1:99:05:00:66
-     *   left : 65 00 50 99 D1 88 -> 88:D1:99:05:00:65
+     * Keep the real BLE advertising address unchanged.
+     */
+    memcpy(adv_para_cfg->bd_addr.address,&adv_para_cfg->scan_rsp_data[4],BTIF_BD_ADDR_SIZE);
+
+    /*
+     * Manufacturer Data must carry the right-ear BT address.
      */
     uint8_t right_bt_addr[6] = {0};
 
     if (ntt_get_right_ear_bt_addr(right_bt_addr))
     {
-        memcpy(&adv_para_cfg->scan_rsp_data[4], right_bt_addr, 6);
-        EARBUDS_TRACE(0, "[NTT_ADV] manufacturer use right BT addr");
-        DUMP8("%02x ", right_bt_addr, 6);
+        memcpy(
+            &adv_para_cfg->scan_rsp_data[4],
+            right_bt_addr,
+            sizeof(right_bt_addr));
+
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADV] manufacturer use right BT addr");
+
+        DUMP8("%02x ",
+              right_bt_addr,
+              sizeof(right_bt_addr));
     }
     else
     {
-        EARBUDS_TRACE(0, "[NTT_ADV] get right BT addr failed, keep original BLE addr");
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADV] get right BT addr failed, keep original BLE addr");
     }
 
-    memcpy(&adv_para_cfg->scan_rsp_data[10], "MBE003", 6);
+    memcpy(
+        &adv_para_cfg->scan_rsp_data[10],
+        "MBE003",
+        6);
 
-    adv_para_cfg->scan_rsp_data[16] = ntt_color_code_nv_get();
+    adv_para_cfg->scan_rsp_data[16] =
+        ntt_color_code_nv_get();
 
-    EARBUDS_TRACE(1,
+    /*
+     * Manufacturer Data occupies bytes 0 ~ 16.
+     */
+    adv_para_cfg->scan_rsp_data_len = 17;
+
+    EARBUDS_TRACE(
+        1,
         "[COLOR_CODE][ADV] manufacturer color=0x%02X",
         adv_para_cfg->scan_rsp_data[16]);
 
-        uint32_t scan_rsp_nameLen = strlen(ble_name_in_nv) >=12 ?12:strlen(ble_name_in_nv);
-        adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len++] = scan_rsp_nameLen + 1;
-        adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len++] = 0x08;
-        memcpy(&adv_para_cfg->scan_rsp_data[adv_para_cfg->scan_rsp_data_len], ble_name_in_nv, scan_rsp_nameLen);
-        adv_para_cfg->scan_rsp_data_len += scan_rsp_nameLen;
+    /*
+     * Append the complete BLE local name from Factory Sector.
+     *
+     * For "LE nwm CLIPS":
+     *
+     * Manufacturer Data = 17 bytes
+     * Name AD Header    =  2 bytes
+     * Local Name        = 12 bytes
+     * --------------------------------
+     * Total             = 31 bytes
+     */
+    if ((ble_name_in_nv != NULL) &&
+        (nameLen > 0))
+    {
+        uint32_t remain_len =
+            sizeof(adv_para_cfg->scan_rsp_data) -
+            adv_para_cfg->scan_rsp_data_len;
 
-        memset(&slaveBleMode, 0, sizeof(slaveBleMode));
+        if ((nameLen + 2) <= remain_len)
+        {
+            adv_para_cfg->scan_rsp_data[
+                adv_para_cfg->scan_rsp_data_len++] =
+                (uint8_t)(nameLen + 1);
+
+            /*
+             * 0x09 = Complete Local Name.
+             */
+            adv_para_cfg->scan_rsp_data[
+                adv_para_cfg->scan_rsp_data_len++] =
+                0x09;
+
+            memcpy(
+                &adv_para_cfg->scan_rsp_data[
+                    adv_para_cfg->scan_rsp_data_len],
+                ble_name_in_nv,
+                nameLen);
+
+            adv_para_cfg->scan_rsp_data_len +=
+                nameLen;
+
+            EARBUDS_TRACE(
+                2,
+                "[NTT_ADV] BLE name=%s len=%d",
+                ble_name_in_nv,
+                nameLen);
+        }
+        else
+        {
+            EARBUDS_TRACE(
+                3,
+                "[NTT_ADV] BLE name too long len=%d remain=%d",
+                nameLen,
+                remain_len);
+        }
     }
+    else
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_ADV] Factory BLE name invalid");
+    }
+
+    memset(&slaveBleMode,
+           0,
+           sizeof(slaveBleMode));
+}
 
 void ntt_ble_adv_refresh_data(void)
 {

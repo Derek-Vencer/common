@@ -6722,6 +6722,11 @@ static int bt_sco_player(bool on, enum APP_SYSFREQ_FREQ_T freq)
         freq = APP_SYSFREQ_USER_BT_SCO_MASTER;
         app_sysfreq_req(APP_SYSFREQ_USER_BT_SCO, freq);
 
+        AUDIO_BT_TRACE(2,
+               "[SCO_FREQ] req=%d actual=%d",
+               freq,
+               hal_sys_timer_calc_cpu_freq(5, 0));
+
 #if defined(ENABLE_CALCU_CPU_FREQ_LOG)
         AUDIO_BT_TRACE(0,"[SCO_PLAYER] sysfreq calc[%d]: %d\n", freq, hal_sys_timer_calc_cpu_freq(5, 0));
 #endif
