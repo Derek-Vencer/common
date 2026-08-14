@@ -1828,14 +1828,56 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
         if (isRightEarbuds == RIGHT_BUDS)
         {
+            uint8_t *peer_addr =
+                app_ibrt_if_get_bt_peer_address();
+
             DBGPRINT(
                 "[NTT_TWS] connected=%d",
                 bts_tws_if_is_tws_link_connected());
 
-            if (!bts_tws_if_is_tws_link_connected())
+            if (peer_addr != NULL)
             {
                 DBGPRINT(
-                    "[NTT_TWS] not connected, start TWS pairing");
+                    "[NTT_TWS] peer addr="
+                    "%02X:%02X:%02X:%02X:%02X:%02X",
+                    peer_addr[0],
+                    peer_addr[1],
+                    peer_addr[2],
+                    peer_addr[3],
+                    peer_addr[4],
+                    peer_addr[5]);
+            }
+            else
+            {
+                DBGPRINT(
+                    "[NTT_TWS] peer addr=NULL");
+            }
+
+            if (!bts_tws_if_is_tws_link_connected())
+            {
+                uint8_t *peer_addr =
+                    app_ibrt_if_get_bt_peer_address();
+
+                if (peer_addr != NULL)
+                {
+                    DBGPRINT(
+                        "[NTT_TWS] not connected, target peer="
+                        "%02X:%02X:%02X:%02X:%02X:%02X",
+                        peer_addr[0],
+                        peer_addr[1],
+                        peer_addr[2],
+                        peer_addr[3],
+                        peer_addr[4],
+                        peer_addr[5]);
+                }
+                else
+                {
+                    DBGPRINT(
+                        "[NTT_TWS] not connected, peer address=NULL");
+                }
+
+                DBGPRINT(
+                    "[NTT_TWS] start TWS pairing");
 
                 app_ibrt_start_power_on_tws_pairing();
             }
