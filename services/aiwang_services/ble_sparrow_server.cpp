@@ -192,7 +192,7 @@ bleCmdSetStatus bleCmdSet_status;
 // 空闲定时器
 static osTimerId double_hold_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
-#define DOUBLE_HOLD_IDLE_TIMEOUT_MS 200
+#define DOUBLE_HOLD_IDLE_TIMEOUT_MS 500
 uint8_t button_hold_type = 0xff;
 
 static void double_hold_idle_timeout_callback(void const *argument);

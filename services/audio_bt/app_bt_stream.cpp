@@ -8511,43 +8511,50 @@ static uint8_t app_bt_stream_volumedown_generic(bool isToUpdateLocalVolumeLevel)
     struct BT_DEVICE_T *curr_device = NULL;
     uint8_t volume_changed_device_id = BT_DEVICE_INVALID_ID;
 
-#if defined AUDIO_LINEIN
-    if(app_bt_stream_isrun(APP_PLAY_LINEIN_AUDIO))
+#if defined(AUDIO_LINEIN)
+    if (app_bt_stream_isrun(APP_PLAY_LINEIN_AUDIO))
     {
-        stream_linein_volume --;
+        stream_linein_volume--;
+
         if (stream_linein_volume < TGT_VOLUME_LEVEL_MUTE)
+        {
             stream_linein_volume = TGT_VOLUME_LEVEL_MUTE;
+        }
+
         app_bt_stream_volumeset(stream_linein_volume);
-        AUDIO_BT_TRACE(1,"set linein volume %d\n", stream_linein_volume);
-    }else
+        AUDIO_BT_TRACE(1,"[STRM_PLAYER][VOL][DOWN] set linein volume %d",stream_linein_volume);
+    }
+    else
 #endif
     if (app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM))
     {
         AUD_ID_ENUM prompt_id = AUD_ID_INVALID;
         uint8_t hfp_local_vol = 0;
-
         curr_device = app_bt_get_device(bt_media_current_sco_get());
 
         if (!curr_device)
         {
-            AUDIO_BT_TRACE(2, "%s invalid sco id %x", __func__, bt_media_current_sco_get());
+            AUDIO_BT_TRACE(2,"%s invalid sco id %x",__func__,bt_media_current_sco_get());
             return BT_DEVICE_INVALID_ID;
         }
 
-        AUDIO_BT_TRACE(1, "%s set hfp volume", __func__);
-
+        AUDIO_BT_TRACE(1,"%s set hfp volume",__func__);
         hfp_local_vol = hfp_volume_local_get(curr_device->device_id);
 
-        if(isToUpdateLocalVolumeLevel)
+        if (isToUpdateLocalVolumeLevel)
         {
-            // get current local volume
-            if (hfp_local_vol)
+            /*
+             * Decrease local HFP volume by one step.
+             */
+            if (hfp_local_vol > TGT_VOLUME_LEVEL_MUTE)
             {
                 hfp_local_vol--;
             }
+
             if (hfp_local_vol <= TGT_VOLUME_LEVEL_MUTE)
             {
                 hfp_local_vol = TGT_VOLUME_LEVEL_MUTE;
+
 #ifndef BESUI_TWS_EN
                 prompt_id = AUD_ID_BT_WARNING;
 #endif
@@ -8555,12 +8562,14 @@ static uint8_t app_bt_stream_volumedown_generic(bool isToUpdateLocalVolumeLevel)
         }
         else
         {
-            // get current bt volume
             uint8_t currentBtVol = hfp_convert_local_vol_to_bt_vol(hfp_local_vol);
-
-            if (currentBtVol <= 0)
+            /*
+             * Decrease Bluetooth HFP volume by one step.
+             */
+            if (currentBtVol == 0)
             {
                 currentBtVol = 0;
+
 #ifndef BESUI_TWS_EN
                 prompt_id = AUD_ID_BT_WARNING;
 #endif
@@ -8568,25 +8577,24 @@ static uint8_t app_bt_stream_volumedown_generic(bool isToUpdateLocalVolumeLevel)
             else
             {
                 currentBtVol--;
-                //prompt_id = AUD_ID_VOLUME_DOWN;
             }
 
             hfp_local_vol = hfp_convert_bt_vol_to_local_vol(currentBtVol);
         }
 
-        hfp_volume_local_set(curr_device->device_id, hfp_local_vol);
-
+        hfp_volume_local_set(curr_device->device_id,hfp_local_vol);
         current_btdevice_volume.hfp_vol = hfp_local_vol;
-
         app_bt_stream_volumeset(hfp_local_vol);
-
         volume_changed_device_id = curr_device->device_id;
-    #if defined(IBRT)
+
+#if defined(IBRT)
         if (!app_ibrt_if_is_ui_slave())
-    #endif
+#endif
         {
-            if (prompt_id != AUD_ID_INVALID) {
-                AUDIO_BT_TRACE(1, "AUD_ID=%d", prompt_id);
+            if (prompt_id != AUD_ID_INVALID)
+            {
+                AUDIO_BT_TRACE(1,"AUD_ID=%d",prompt_id);
+
 #ifdef MEDIA_PLAYER_SUPPORT
 #ifdef BESUI_STEREO_EN
                 app_ui_mute_vol_warning();
@@ -8597,28 +8605,71 @@ static uint8_t app_bt_stream_volumedown_generic(bool isToUpdateLocalVolumeLevel)
             }
         }
     }
-    else if ((app_bt_stream_isrun(APP_BT_STREAM_A2DP_SBC)) ||
-        (app_bt_stream_isrun(APP_BT_STREAM_INVALID)))
+    else
     {
         AUD_ID_ENUM prompt_id = AUD_ID_INVALID;
         uint8_t a2dp_local_vol = 0;
+        uint8_t music_device_id = bt_media_current_music_get();
 
-        curr_device = app_bt_get_device(bt_media_current_music_get());
+        /*
+         * In idle state there may be no current playing A2DP device.
+         * Try the current music device first, then fall back to a
+         * connected mobile device slot for volume control.
+         */
+        curr_device = app_bt_get_device(music_device_id);
 
         if (!curr_device)
         {
-            AUDIO_BT_TRACE(2, "%s invalid sbc id %x", __func__, bt_media_current_music_get());
+            uint8_t device_id;
+
+            AUDIO_BT_TRACE(2,"[NTT_VOL_DOWN] invalid current music id=%x",music_device_id);
+
+            /*
+            * Idle state has no current playing A2DP device.
+            * Find a mobile device whose A2DP profile is connected.
+            */
+            for (device_id = 0;
+                device_id < BT_DEVICE_NUM;
+                device_id++)
+            {
+                if (app_bt_is_a2dp_connected(device_id))
+                {
+                    curr_device = app_bt_get_device(device_id);
+
+                    if (curr_device)
+                    {
+                        AUDIO_BT_TRACE(2,"[NTT_VOL_DOWN] fallback A2DP connected d%d",device_id);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!curr_device)
+        {
+            AUDIO_BT_TRACE(1,"[NTT_VOL_DOWN] no A2DP connected device");
             return BT_DEVICE_INVALID_ID;
         }
 
-        AUDIO_BT_TRACE(1, "%s set a2dp volume", __func__);
+        AUDIO_BT_TRACE(2,"[NTT_VOL_DOWN] ENTER A2DP FALLBACK d%d",curr_device->device_id);
 
-        a2dp_local_vol = a2dp_volume_local_get(curr_device->device_id);
-
-        if(isToUpdateLocalVolumeLevel)
+        if (!curr_device)
         {
-            // get current local volume
-            if (a2dp_local_vol)
+            AUDIO_BT_TRACE(1,"[NTT_VOL_DOWN] no valid BT device");
+            return BT_DEVICE_INVALID_ID;
+        }
+
+        AUDIO_BT_TRACE(2,"[NTT_VOL_DOWN] ENTER A2DP FALLBACK d%d",curr_device->device_id);
+        AUDIO_BT_TRACE(1,"%s set a2dp volume",__func__);
+        a2dp_local_vol = a2dp_volume_local_get(curr_device->device_id);
+        AUDIO_BT_TRACE(2,"[NTT_VOL_DOWN] before local=%d",a2dp_local_vol);
+
+        if (isToUpdateLocalVolumeLevel)
+        {
+            /*
+             * Decrease local A2DP volume by one step.
+             */
+            if (a2dp_local_vol > TGT_VOLUME_LEVEL_MUTE)
             {
                 a2dp_local_vol--;
             }
@@ -8630,16 +8681,19 @@ static uint8_t app_bt_stream_volumedown_generic(bool isToUpdateLocalVolumeLevel)
 #endif
             }
 
-            a2dp_volume_set_local_vol(curr_device->device_id, a2dp_local_vol);
+            a2dp_volume_set_local_vol(curr_device->device_id,a2dp_local_vol);
         }
         else
         {
-            // get current bt volume
             uint8_t currentBtVol = a2dp_abs_volume_get(curr_device->device_id);
 
-            if (currentBtVol <= 0)
+            /*
+             * Decrease absolute volume by one step.
+             */
+            if (currentBtVol == 0)
             {
                 currentBtVol = 0;
+
 #ifndef BESUI_TWS_EN
                 prompt_id = AUD_ID_BT_WARNING;
 #endif
@@ -8647,45 +8701,48 @@ static uint8_t app_bt_stream_volumedown_generic(bool isToUpdateLocalVolumeLevel)
             else
             {
                 currentBtVol--;
-                //prompt_id = AUD_ID_VOLUME_DOWN;
             }
 
-            a2dp_volume_set(curr_device->device_id, currentBtVol);
-
+            a2dp_volume_set(curr_device->device_id,currentBtVol);
             a2dp_local_vol = a2dp_convert_bt_vol_to_local_vol(currentBtVol);
         }
 
         current_btdevice_volume.a2dp_vol = a2dp_local_vol;
-
         app_bt_stream_volumeset(a2dp_local_vol);
-
         volume_changed_device_id = curr_device->device_id;
-    #if defined(IBRT)
+        AUDIO_BT_TRACE(2,"[NTT_VOL_DOWN] after local=%d device=d%d",a2dp_local_vol,curr_device->device_id);
+
+#if defined(IBRT)
         if (!app_ibrt_if_is_ui_slave())
-    #endif
+#endif
         {
-            if (prompt_id != AUD_ID_INVALID) {
-                AUDIO_BT_TRACE(1, "AUD_ID=%d", prompt_id);
+            if (prompt_id != AUD_ID_INVALID)
+            {
+                AUDIO_BT_TRACE(1,"AUD_ID=%d",prompt_id);
+
 #ifdef MEDIA_PLAYER_SUPPORT
 #ifdef BESUI_STEREO_EN
                 app_ui_mute_vol_warning();
 #else
                 media_PlayAudio(prompt_id, 0);
 #endif
-#endif 
+#endif
             }
         }
     }
 
 #ifdef BESUI_TWS_EN
-    if(isToUpdateLocalVolumeLevel)
+    /*
+     * Synchronize volume only when a valid device was selected.
+     */
+    if (isToUpdateLocalVolumeLevel && curr_device != NULL)
     {
         app_ibrt_keyboard_sync_volume_info_v2(curr_device->device_id);
     }
 #endif
 
-    AUDIO_BT_TRACE(2,"%s a2dp: %d", __func__, current_btdevice_volume.a2dp_vol);
-    AUDIO_BT_TRACE(2,"%s hfp: %d", __func__, current_btdevice_volume.hfp_vol);
+    AUDIO_BT_TRACE(2,"%s a2dp: %d",__func__,current_btdevice_volume.a2dp_vol);
+    AUDIO_BT_TRACE(2,"%s hfp: %d",__func__,current_btdevice_volume.hfp_vol);
 
 #ifndef FPGA
     nv_record_touch_cause_flush();
