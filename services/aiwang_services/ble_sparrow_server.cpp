@@ -2222,21 +2222,56 @@ static void on_accept_call(void)    {
 #endif
 	
 }
-static void on_reject_call(void)    {
-	//printf(">>> Reject/end call\n"); 
-#if 0
-	bes_bt_hfp_call_action(BT_DEVICE_ID_1, BT_HFP_HANGUP_CALL);
-#else
-	CALL_STATE_E call_state = app_bt_get_call_state();
-    if ((call_state == CALL_STATE_OUTGOING) || (call_state == CALL_STATE_ACTIVE) || (call_state == CALL_STATE_TRREE_WAY_HOLD_CALLING))
+static void on_reject_call(void)
+{
+    HFCALL_MACHINE_ENUM call_state =
+        (HFCALL_MACHINE_ENUM)app_bt_get_call_state();
+
+    TRACE(0,
+          "[CALL] reject/end call_state=%d",
+          call_state);
+
+    if (call_state == HFCALL_MACHINE_CURRENT_OUTGOING)
     {
-       bt_key_handle_call(call_state);
+        /*
+         * Cancel outgoing dialing / alerting call.
+         */
+        TRACE(0,
+              "[CALL] cancel outgoing call state=%d",
+              call_state);
+
+        app_audio_control_call_terminate();
     }
-	else if((call_state == CALL_STATE_INCOMING) || (call_state == CALL_STATE_THREE_WAY_INCOMING))
-	{
-		app_audio_control_call_terminate();
-	}
-#endif	
+    else if ((call_state == HFCALL_MACHINE_CURRENT_CALLING) ||
+             (call_state == HFCALL_MACHINE_CURRENT_3WAY_HOLD_CALLING))
+    {
+        /*
+         * Terminate active call.
+         */
+        TRACE(0,
+              "[CALL] terminate active call state=%d",
+              call_state);
+
+        app_audio_control_call_terminate();
+    }
+    else if ((call_state == HFCALL_MACHINE_CURRENT_INCOMMING) ||
+             (call_state == HFCALL_MACHINE_CURRENT_3WAY_INCOMMING))
+    {
+        /*
+         * Reject incoming call.
+         */
+        TRACE(0,
+              "[CALL] reject incoming call state=%d",
+              call_state);
+
+        app_audio_control_call_terminate();
+    }
+    else
+    {
+        TRACE(0,
+              "[CALL] reject ignored, state=%d",
+              call_state);
+    }
 }
 static void on_play_pause(void)     {
 	//printf(">>> Play/Pause\n"); 
