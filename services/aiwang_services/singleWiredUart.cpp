@@ -207,6 +207,10 @@ static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
 
+#define NTT_TWS_PAIRING_RETRY_INTERVAL_MS    5000
+
+static uint32_t ntt_last_tws_pairing_tick = 0;
+
 /**
  * @brief 初始化 Pogo Pin 检测引脚
  * @return true - 初始化成功，false - 初始化失败
@@ -1777,87 +1781,198 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
         break;
     }
-    case CMD_SEND_BOX_BATTERY_LEVEL:
-    {
-        uint32_t now = hal_sys_timer_get();
-
-        //DBGPRINT(
-        //    "[BOX_BAT][RX][%s] len=%u target=0x%02X",
-        //    isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
-        //    uart_dat_len,
-        //    uart_cmd_dat[3]);
-
-        //DUMP8("[BOX_BAT][RX_RAW] ",
-        //    uart_cmd_dat,
-        //    uart_dat_len);
-
-        if (ntt_last_box_battery_case_tick != 0)
+        case CMD_SEND_BOX_BATTERY_LEVEL:
         {
-            uint32_t diff_ms =
-                TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
+            uint32_t now = hal_sys_timer_get();
 
-            if (diff_ms < NTT_BOX_BATTERY_CASE_INTERVAL_MS)
+            if (ntt_last_box_battery_case_tick != 0)
             {
-                DBGPRINT(
-                    "[BOX_BAT][SKIP][%s] interval=%u ms",
-                    isRightEarbuds == RIGHT_BUDS ?
-                        "RIGHT" : "LEFT",
-                    diff_ms);
+                uint32_t diff_ms =
+                    TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
+
+                if (diff_ms < NTT_BOX_BATTERY_CASE_INTERVAL_MS)
+                {
+                    DBGPRINT(
+                        "[BOX_BAT][SKIP][%s] interval=%u ms",
+                        isRightEarbuds == RIGHT_BUDS ?
+                            "RIGHT" : "LEFT",
+                        diff_ms);
+                }
             }
-        }
 
-        ntt_case_state_sync_local_update(true);
+            ntt_case_state_sync_local_update(true);
 
-        ntt_last_box_battery_case_tick = now;
+            ntt_last_box_battery_case_tick = now;
 
-        DBGPRINT(
-            "[BOX_BAT][PROCESS][%s] crc=0x%04X",
-            isRightEarbuds == RIGHT_BUDS ?
-                "RIGHT" : "LEFT",
-            crc_dat);
-
-        wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
-
-        DBGPRINT(
-            "[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",
-            isRightEarbuds == RIGHT_BUDS ?
-                "RIGHT" : "LEFT",
-            boxChargerStatus.boxChargerBattery,
-            boxChargerStatus.leftEarBudsBattery,
-            boxChargerStatus.rightEarBudsBattery);
-
-        if (isRightEarbuds == RIGHT_BUDS)
-        {
             DBGPRINT(
-                "[NTT_TWS] connected=%d",
-                bts_tws_if_is_tws_link_connected());
+                "[BOX_BAT][PROCESS][%s] crc=0x%04X",
+                isRightEarbuds == RIGHT_BUDS ?
+                    "RIGHT" : "LEFT",
+                crc_dat);
 
-            if (!bts_tws_if_is_tws_link_connected())
+            wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
+
+            DBGPRINT(
+                "[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",
+                isRightEarbuds == RIGHT_BUDS ?
+                    "RIGHT" : "LEFT",
+                boxChargerStatus.boxChargerBattery,
+                boxChargerStatus.leftEarBudsBattery,
+                boxChargerStatus.rightEarBudsBattery);
+
+            if (isRightEarbuds == RIGHT_BUDS)
             {
-                DBGPRINT(
-                    "[NTT_TWS] not connected, start TWS pairing");
+                uint8_t *peer_addr =
+                    app_ibrt_if_get_bt_peer_address();
 
-                app_ibrt_start_power_on_tws_pairing();
+                bool tws_connected =
+                    bts_tws_if_is_tws_link_connected();
+
+                DBGPRINT(
+                    "[NTT_TWS] connected=%d",
+                    tws_connected);
+
+                if (peer_addr != NULL)
+                {
+                    DBGPRINT(
+                        "[NTT_TWS] peer addr="
+                        "%02X:%02X:%02X:%02X:%02X:%02X",
+                        peer_addr[0],
+                        peer_addr[1],
+                        peer_addr[2],
+                        peer_addr[3],
+                        peer_addr[4],
+                        peer_addr[5]);
+                }
+                else
+                {
+                    DBGPRINT(
+                        "[NTT_TWS] peer addr=NULL");
+                }
+
+                if (!tws_connected)
+                {
+                    if (ntt_last_tws_pairing_tick == 0)
+                    {
+                        /*
+                        * First request.
+                        * BES starts an internal delayed pairing timer here.
+                        * Do not restart it continuously from BOX_BAT events.
+                        */
+                        ntt_last_tws_pairing_tick = now;
+
+                        if (peer_addr != NULL)
+                        {
+                            DBGPRINT(
+                                "[NTT_TWS] not connected, target peer="
+                                "%02X:%02X:%02X:%02X:%02X:%02X",
+                                peer_addr[0],
+                                peer_addr[1],
+                                peer_addr[2],
+                                peer_addr[3],
+                                peer_addr[4],
+                                peer_addr[5]);
+                        }
+                        else
+                        {
+                            DBGPRINT(
+                                "[NTT_TWS] not connected, "
+                                "peer address=NULL");
+                        }
+
+                        DBGPRINT(
+                            "[NTT_TWS] start TWS pairing");
+
+                        app_ibrt_start_power_on_tws_pairing();
+                    }
+                    else
+                    {
+                        uint32_t pairing_diff_ms =
+                            TICKS_TO_MS(
+                                now - ntt_last_tws_pairing_tick);
+
+                        if (pairing_diff_ms >=
+                            NTT_TWS_PAIRING_RETRY_INTERVAL_MS)
+                        {
+                            /*
+                            * Previous request did not establish TWS.
+                            * Retry after enough time for the BES internal
+                            * delayed pairing timer to complete.
+                            */
+                            ntt_last_tws_pairing_tick = now;
+
+                            if (peer_addr != NULL)
+                            {
+                                DBGPRINT(
+                                    "[NTT_TWS] pairing retry, target peer="
+                                    "%02X:%02X:%02X:%02X:%02X:%02X",
+                                    peer_addr[0],
+                                    peer_addr[1],
+                                    peer_addr[2],
+                                    peer_addr[3],
+                                    peer_addr[4],
+                                    peer_addr[5]);
+                            }
+                            else
+                            {
+                                DBGPRINT(
+                                    "[NTT_TWS] pairing retry, "
+                                    "peer address=NULL");
+                            }
+
+                            DBGPRINT(
+                                "[NTT_TWS] pairing retry after %u ms",
+                                pairing_diff_ms);
+
+                            app_ibrt_start_power_on_tws_pairing();
+                        }
+                        else
+                        {
+                            /*
+                            * Keep the BES internal pairing timer running.
+                            * Do not call app_ibrt_start_power_on_tws_pairing()
+                            * again here.
+                            */
+                            DBGPRINT(
+                                "[NTT_TWS] pairing pending, skip %u ms",
+                                pairing_diff_ms);
+                        }
+                    }
+                }
+                else
+                {
+                    /*
+                    * TWS is connected.
+                    * Clear retry state for the next disconnect.
+                    */
+                    ntt_last_tws_pairing_tick = 0;
+
+                    DBGPRINT(
+                        "[NTT_TWS] RIGHT received box battery, "
+                        "resend case state");
+
+                    ntt_case_state_sync_resend();
+                }
             }
             else
             {
-                DBGPRINT(
-                    "[NTT_TWS] RIGHT received box battery, resend case state");
+                if (bts_tws_if_is_tws_link_connected())
+                {
+                    /*
+                    * Clear retry state after TWS connection is established.
+                    */
+                    ntt_last_tws_pairing_tick = 0;
 
-                ntt_case_state_sync_resend();
-            }
-        }
-        else
-        {
-            if (bts_tws_if_is_tws_link_connected())
-            {
-                DBGPRINT("[NTT_TWS] LEFT received box battery, resend case state");
-                ntt_case_state_sync_resend();
-            }
-        }
+                    DBGPRINT(
+                        "[NTT_TWS] LEFT received box battery, "
+                        "resend case state");
 
-        break;
-    }
+                    ntt_case_state_sync_resend();
+                }
+            }
+
+            break;
+        }
     case CMD_SEND_DUT_MODE:
         {
             if (operateLeftOrRight == isRightEarbuds)
