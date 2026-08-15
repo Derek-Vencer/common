@@ -264,8 +264,17 @@ extern bool  aiWangIsNeedOpenEarBuds(void);
 extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void);
 #endif
 void earBudsCloseOff_PogonIn_StartTimer(void);
+void earBudsCloseOff_PogonIn_StopTimer(void);
 extern bool ntt_charging_pwron_pending_shutdown;
 extern "C" void wired_uart_mobile_connected_get_box_battery(void);
+
+#define POGONIN_CLOSE_CHECK_INTERVAL_MS          (3000)
+#define POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT       (10)
+
+#ifdef IBRT
+static bool g_pogonin_role_switch_requested = false;
+static uint8_t g_pogonin_role_switch_wait_count = 0;
+#endif
 
 #define LOW_BAT_ROLE_SWITCH_PENDING_TIMEOUT_COUNT    (3)
 
@@ -442,40 +451,64 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
 
     BATTERY_TRACE(2,"[POWER_OFF] PogonIn handler charging=%d pending=%d",charging,ntt_charging_pwron_pending_shutdown);
 
-    if (charging)
+    /*
+     * The charger event can toggle quickly during case open/close.
+     * Always validate the latest latched request before continuing.
+     */
+    if (!ntt_charging_pwron_pending_shutdown)
     {
-        BATTERY_TRACE(0,"[POWER_OFF] charging=1 -> check role switch");
+        BATTERY_TRACE(0,"[POWER_OFF] pending=0 -> ignore stale timer callback");
+        return;
+    }
+
+    if (!charging ||
+        (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE))
+    {
+        BATTERY_TRACE(2,
+                      "[POWER_OFF] condition changed charging=%d case=%d -> cancel",
+                      charging,
+                      ntt_case_state_get_local());
+
+        ntt_charging_pwron_pending_shutdown = false;
 
 #ifdef IBRT
-        static bool s_role_switch_requested = false;
-        static uint8_t s_role_switch_wait_cnt = 0;
+        g_pogonin_role_switch_requested = false;
+        g_pogonin_role_switch_wait_count = 0;
+        ntt_case_close_role_switch_reset();
+#endif
+        return;
+    }
 
-        if (s_role_switch_requested)
+    BATTERY_TRACE(0,"[POWER_OFF] condition valid -> check role switch");
+
+#ifdef IBRT
+        if (g_pogonin_role_switch_requested)
         {
             if (ntt_case_close_role_switch_can_shutdown())
             {
                 set_pair_status(1);
                 wired_uart_get_battery_level();
                 BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
-                s_role_switch_requested = false;
-                s_role_switch_wait_cnt = 0;
+                g_pogonin_role_switch_requested = false;
+                g_pogonin_role_switch_wait_count = 0;
                 ntt_charging_pwron_pending_shutdown = false;
 
                 app_shutdown();
                 return;
             }
 
-            s_role_switch_wait_cnt++;
-            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",s_role_switch_wait_cnt);
-            if (s_role_switch_wait_cnt < 10)
+            g_pogonin_role_switch_wait_count++;
+            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",g_pogonin_role_switch_wait_count);
+            if (g_pogonin_role_switch_wait_count <
+                POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
             {
                 earBudsCloseOff_PogonIn_StartTimer();
                 return;
             }
 
             BATTERY_TRACE(0,"[POWER_OFF] role switch timeout, shutdown");
-            s_role_switch_requested = false;
-            s_role_switch_wait_cnt = 0;
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
             ntt_charging_pwron_pending_shutdown = false;
 
             app_shutdown();
@@ -485,28 +518,18 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         if (ntt_case_close_try_role_switch_before_shutdown())
         {
             BATTERY_TRACE(0,"[POWER_OFF] role switch requested");
-            s_role_switch_requested = true;
-            s_role_switch_wait_cnt = 0;
+            g_pogonin_role_switch_requested = true;
+            g_pogonin_role_switch_wait_count = 0;
 
             earBudsCloseOff_PogonIn_StartTimer();
             return;
         }
 #endif
 
-        BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
-        ntt_charging_pwron_pending_shutdown = false;
-
-        app_shutdown();
-        return;
-    }
-
-#ifdef IBRT
-    ntt_case_close_role_switch_reset();
-#endif
-
+    BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
     ntt_charging_pwron_pending_shutdown = false;
 
-    BATTERY_TRACE(0,"[POWER_OFF] charging=0 -> cancel shutdown, keep power on");
+    app_shutdown();
 }
 
 void earBudsCloseOff_PogonIn_StartTimer(void)
@@ -516,8 +539,14 @@ void earBudsCloseOff_PogonIn_StartTimer(void)
         pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER), osTimerOnce, NULL);
     }
 
+    if (NULL == pogonPinCloseTimer)
+    {
+        BATTERY_TRACE(0,"[POWER_OFF] create close-case timer failed");
+        return;
+    }
+
     osTimerStop(pogonPinCloseTimer);
-    osTimerStart(pogonPinCloseTimer, 3000);
+    osTimerStart(pogonPinCloseTimer, POGONIN_CLOSE_CHECK_INTERVAL_MS);
 }
 
 void earBudsCloseOff_PogonIn_StopTimer(void)
@@ -1304,6 +1333,33 @@ app_status_battery_report(level);
                         app_battery_measure.currlevel);
 
             BATTERY_TRACE(1,"CHARGING-->APP_BATTERY_CHARGER :%d", prams.charger);
+            if ((ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+                (prams.charger == 1))
+            {
+                BATTERY_TRACE(0,
+                            "[POWER_OFF] IN_CASE + charger=1 -> start timer");
+
+                ntt_charging_pwron_pending_shutdown = true;
+                earBudsCloseOff_PogonIn_StartTimer();
+            }
+            else if (prams.charger == 0)
+            {
+                BATTERY_TRACE(0,
+                            "[POWER_OFF] charger=0 -> cancel shutdown timer");
+
+                /*
+                 * Clear pending first so a callback already queued by the
+                 * timer cannot continue the old shutdown request.
+                 */
+                ntt_charging_pwron_pending_shutdown = false;
+                earBudsCloseOff_PogonIn_StopTimer();
+
+        #ifdef IBRT
+                g_pogonin_role_switch_requested = false;
+                g_pogonin_role_switch_wait_count = 0;
+                ntt_case_close_role_switch_reset();
+        #endif
+            }
             if (prams.charger == APP_BATTERY_CHARGER_PLUGIN)
             {
 #ifdef BT_USB_AUDIO_DUAL_MODE

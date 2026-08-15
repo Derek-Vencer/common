@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 
-#define DuAL_EARBUDS_VERSION   "0.9.15" 
+#define DuAL_EARBUDS_VERSION   "0.9.16" 
 
 #define NTT_FW_VER_MAJOR  (DuAL_EARBUDS_VERSION[0] - '0')
 #define NTT_FW_VER_MINOR  (DuAL_EARBUDS_VERSION[2] - '0')

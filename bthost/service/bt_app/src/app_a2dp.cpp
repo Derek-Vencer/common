@@ -381,6 +381,14 @@ void a2dp_init(void)
             btif_a2dp_stream_init(curr_device->btif_a2dp_stream);
 
             a2dp_codec_sbc_init(i);
+            /* Print the registered SBC Sink codec capability for BQB verification. */
+            DEBUG_INFO(0,
+                "[BQB_SBC_CAP] index=%d cap=%02X %02X %02X %02X",
+                i,
+                a2dp_codec_elements[0],
+                a2dp_codec_elements[1],
+                a2dp_codec_elements[2],
+                a2dp_codec_elements[3]);
 
 #if defined(A2DP_AAC_ON)
             a2dp_codec_aac_init(i);

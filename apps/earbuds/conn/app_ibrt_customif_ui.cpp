@@ -3107,7 +3107,7 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     /*
      * 離盒後取消入盒關機 timer。
      */
-    earBudsCloseOff_PogonIn_StopTimer();
+    //earBudsCloseOff_PogonIn_StopTimer();
 
     /*
      * 已有手機連線，不需要回連。

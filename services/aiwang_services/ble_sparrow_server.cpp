@@ -3322,6 +3322,7 @@ void sparraw_event_handle(ble_aiwang_param_u *param)
 			break;
 		}
 		case BLE_AIWANG_SRV_RX:{
+            sparrow_api_set_transport(SPARROW_API_TRANSPORT_BLE);
 			REL_TRACE_NOCRLF(0, "%s", "BLE_AIWANG_SRV_RX:");
 			DUMP8("%02X ", param->data, param->len);
 			sparraw_mailbox_put(param->conidx, BLE_AIWANG_SRV_RX, param->data, param->len);

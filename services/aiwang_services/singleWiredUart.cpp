@@ -97,7 +97,7 @@ extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
 extern "C" void ntt_case_state_sync_local_update(bool in_case);
 static bool aiWang_disconnect_second_phone_for_pairing(void);
-
+extern bool ntt_charging_pwron_pending_shutdown;
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
 static uint32_t ntt_last_box_battery_case_tick = 0;
@@ -1533,7 +1533,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             boxChargerStatus.needOpenEarbuds = true;
             ntt_case_open_pending = true;
 
-            earBudsCloseOff_PogonIn_StopTimer();
+            //earBudsCloseOff_PogonIn_StopTimer();
 
 
         }
@@ -1606,7 +1606,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             }
 
             DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
-
+            ntt_charging_pwron_pending_shutdown = true;
             earBudsCloseOff_PogonIn_StartTimer();
         }
     break;
@@ -1886,7 +1886,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         * 放入充電盒後保持耳機開機，
         * 不啟動原本的 Pogo-in 關機計時器。
         */
-        earBudsCloseOff_PogonIn_StopTimer();
+        //earBudsCloseOff_PogonIn_StopTimer();
 
         DBGPRINT("[CASE] EAR_PUTIN -> keep power on");
 
