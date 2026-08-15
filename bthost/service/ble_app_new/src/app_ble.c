@@ -2919,6 +2919,18 @@ bool app_ble_stub_adv_activity_prepare(ble_adv_activity_t *adv)
     app_ble_dt_add_adv_data(adv, &legacy_param, NULL);
 
     //app_ble_dt_set_local_name(adv_param, NULL);
+    /*
+    * Put the complete local name in scan response.
+    */
+    const char *local_name;
+    uint8_t local_name_len = 0;
+
+    local_name = gap_local_le_name(&local_name_len);
+
+    if ((local_name != NULL) && (local_name_len > 0))
+    {
+        gap_dt_add_data_type(&adv_param->scan_rsp_data,GAP_DT_COMPLETE_LOCAL_NAME,(const uint8_t *)local_name,local_name_len);
+    }
 
         DEBUG_INFO(0, "[STUB_FINAL_ADV_LEN]=%d",
         gap_dt_buf_len(&adv_param->adv_data));

@@ -25,6 +25,7 @@
 #include "bt_common_define.h"
 #include "audio_cfg.h"
 #include "btapp.h"
+#include "factory_section.h"
 
 #ifdef IBRT
 #include "app_ibrt_internal.h"
@@ -101,6 +102,9 @@ extern bool ntt_charging_pwron_pending_shutdown;
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
 static uint32_t ntt_last_box_battery_case_tick = 0;
+
+#define NTT_DEFAULT_BT_NAME     "nwm CLIPS"
+#define NTT_DEFAULT_BLE_NAME    "LE nwm CLIPS"
 
 #ifdef DISABLE_GOC_UART_LOG
 
@@ -1621,52 +1625,81 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         }
         else {
 
-            printf("CMD_EAR_RESET factory reset!!!");
+                uint32_t factory_version;
+                int bt_name_ret;
+                int ble_name_ret = -1;
 
-            LinkDisconnectDirectly(true);
+                printf("CMD_EAR_RESET factory reset!!!");
 
-            /*
-            * Delete phone paired records only.
-            * Do not delete TWS pairing records.
-            */
-            wired_uart_remove_all_phone_paired_list();
+                LinkDisconnectDirectly(true);
 
-            /*
-            * Clear SDK NV records.
-            * Note: Do not call besui_app_clear_all_nvrecord() here,
-            * because it cannot be linked from this module.
-            */
-            //nv_record_rebuild(NV_REBUILD_SDK_ONLY);
+                /*
+                * Delete phone paired records only.
+                * Do not delete TWS pairing records.
+                */
+                wired_uart_remove_all_phone_paired_list();
 
-            /*
-            * Restore EQ preset 0.
-            */
-            handleSetEqIndex(0);
-            app_ibrt_customif_cmd_sync_music_eq(0);
+                /*
+                * Clear SDK NV records.
+                * Do not call besui_app_clear_all_nvrecord() here
+                * because it cannot be linked from this module.
+                */
+                // nv_record_rebuild(NV_REBUILD_SDK_ONLY);
 
-            /*
-            * Restore default key mapping.
-            */
-            wired_uart_factory_reset_app_nv();
-            /*
-            * Restore default device name.
-            */
-            factory_section_set_bt_name("nwm CLIPS", strlen("nwm CLIPS") + 1);
+                /*
+                * Restore EQ preset 0.
+                */
+                handleSetEqIndex(0);
+                app_ibrt_customif_cmd_sync_music_eq(0);
 
-            /*
-            * Reset saved box battery to invalid value.
-            */
-            //box_battery_nv_reset();
+                /*
+                * Restore default key mapping.
+                */
+                wired_uart_factory_reset_app_nv();
 
-            /*
-            * Clear BLE state.
-            */
-            bes_ble_gap_disconnect_all();
-            bes_ble_gap_clear_white_list_for_mobile();
+                /*
+                * Read the factory section version before updating names.
+                */
+                factory_version = factory_section_get_version();
 
-            osDelay(500);
+                /*
+                * Restore the default Classic Bluetooth device name.
+                */
+                bt_name_ret = factory_section_set_bt_name(NTT_DEFAULT_BT_NAME,sizeof(NTT_DEFAULT_BT_NAME));
 
-            app_reset();
+                /*
+                * Factory section revision 2 provides a separate BLE name field.
+                */
+                if (factory_version >= 2)
+                {
+                    ble_name_ret = factory_section_set_ble_name(NTT_DEFAULT_BLE_NAME,sizeof(NTT_DEFAULT_BLE_NAME));
+                }
+
+                /*
+                * Set the runtime BLE local name.
+                */
+                bt_set_ble_local_name(NTT_DEFAULT_BLE_NAME);
+
+                printf(
+                    "[FACTORY_RESET] factory_ver=%lu bt_name_ret=%d ble_name_ret=%d",
+                    (unsigned long)factory_version,
+                    bt_name_ret,
+                    ble_name_ret);
+
+                /*
+                * Reset saved box battery to an invalid value.
+                */
+                // box_battery_nv_reset();
+
+                /*
+                * Clear BLE connection and access-list state.
+                */
+                bes_ble_gap_disconnect_all();
+                bes_ble_gap_clear_white_list_for_mobile();
+
+                osDelay(1000);
+
+                app_reset();
         }
     }
     break;

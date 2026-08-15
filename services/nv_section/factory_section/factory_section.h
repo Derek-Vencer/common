@@ -80,9 +80,7 @@ int factory_section_set_bt_address(uint8_t* btAddr);
 int factory_section_set_ble_address(uint8_t * bleAddr);
 uint8_t* factory_section_get_bt_name(void);
 uint8_t* factory_section_get_ble_name(void);
-#ifdef USER_OTA_FIX_DEVNAME_EN
 int factory_section_set_ble_name(const char *name,int len);
-#endif
 uint32_t factory_section_get_version(void);
 uint8_t* factory_section_get_default_peer_bt_address(void);
 uint8_t factory_section_get_default_bt_nv_role(void);

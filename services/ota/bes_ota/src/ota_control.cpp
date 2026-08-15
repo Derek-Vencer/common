@@ -67,9 +67,9 @@ extern uint8_t tota_ble_get_conidx(void);
 extern "C" uint8_t ota_ble_get_conidx(void);
 #endif
 
-#ifdef USER_OTA_FIX_DEVNAME_EN
+
 #include "bt_if.h"
-#endif
+
 #ifdef UUID_TOTA_USE_OTA_EN
 #ifdef TOTA_v2
 #include "app_tota.h"
@@ -208,7 +208,7 @@ POSSIBLY_UNUSED static char *_user2str(uint8_t user)
 
     return (char *)str;
 }
-#ifdef USER_OTA_FIX_DEVNAME_EN
+
 static void ota_update_nv_data(OTA_FLOW_CONFIGURATION_T* ptConfig)
 {
     if (ptConfig->isToRenameBT ||
@@ -243,7 +243,7 @@ static void ota_update_nv_data(OTA_FLOW_CONFIGURATION_T* ptConfig)
         }
     }
 }
-#endif
+
 
 static void ota_env_var_init(void)
 {
@@ -2754,10 +2754,9 @@ static void _handle_received_data(uint8_t *otaBuf, bool isViaBle,uint16_t dataLe
                 OTA_TRACE(0,"crcOfConfiguration:0x%x", ptConfig->crcOfConfiguration);
                 OTA_TRACE(0,"local calculated crc:0x%x", localCrc);
 
-#ifdef USER_OTA_FIX_DEVNAME_EN
                 ota_update_nv_data(ptConfig);            
                 bt_set_local_dev_name((const unsigned char*)ptConfig->newBTName, BES_OTA_NAME_LENGTH);
-#endif
+
                 if(ota_control_env.configuration.startLocationToWriteImage != ota_control_env.offsetInFlashToProgram)
                 {
                     OTA_TRACE(0,"APP Start Location is unused");

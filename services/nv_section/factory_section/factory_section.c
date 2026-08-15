@@ -375,7 +375,6 @@ int factory_section_set_bt_name(const char *name,int len)
     }
 }
 
-#ifdef USER_OTA_FIX_DEVNAME_EN
 int factory_section_set_ble_name(const char *name,int len)
 {
     uint8_t *mempool = NULL;
@@ -389,12 +388,12 @@ int factory_section_set_ble_name(const char *name,int len)
         {
             // TRACE(2,"%s [OLD] %s -> [NEW1] %s", __func__, factory_section_p->data.ble_name,name);
             // memcpy(((factory_section_t *)mempool)->data.ble_name, name, len);
-            BESUI_TRACE(2,"%s [OLD] %s -> [NEW1] %s", __func__, BLE_DEFAULT_NAME,name);
+            NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW1] %s", __func__, BLE_DEFAULT_NAME,name);
             ((factory_section_t *)mempool)->head.crc = crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->head.reserved0)),sizeof(factory_section_t)-2-2-4);
         }
         else
         {
-            BESUI_TRACE(2,"%s [OLD] %s -> [NEW2] %s", __func__, (char *)factory_section_p->data.rev2_ble_name,name);
+            NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW2] %s", __func__, (char *)factory_section_p->data.rev2_ble_name,name);
             memcpy(((factory_section_t *)mempool)->data.rev2_ble_name, name, len);
             ((factory_section_t *)mempool)->data.rev2_crc =
                 crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->data.rev2_reserved0)),
@@ -419,7 +418,7 @@ int factory_section_set_ble_name(const char *name,int len)
         return -1;
     }
 }
-#endif
+
 
 uint8_t* factory_section_get_ble_name(void)
 {
