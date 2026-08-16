@@ -1046,6 +1046,8 @@ bool app_battery_is_measurement_valid(void)
     return g_battery_measure_valid;
 }
 
+static bool g_battery_full_charged = false;
+
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     BATTERY_TRACE(0,"app_battery_handle_process_normal status = %d",status);
@@ -1231,20 +1233,11 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
         #else
 
         #ifdef BESUI_TWS_EN
-
-            level =
-                app_battery_level_tran_process(
-                    app_battery_measure.currvolt);
-
+            level = app_battery_level_tran_process(app_battery_measure.currvolt);
             app_battery_measure.currlevel = level;
-
-            app_battery_low_voice_enable_set(
-                app_battery_measure.currlevel);
-
+            app_battery_low_voice_enable_set(app_battery_measure.currlevel);
             level = app_battery_level_compare();
-
             app_battery_low_voice_play_process();
-
         #ifdef BATTERY_SWITCH_ROLE_EN
             BATTERY_TRACE(0, "[BAT_ROLE] call besui_battery_role_switch");
             besui_battery_role_switch();
@@ -1253,12 +1246,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
         #else
 
         #if defined(BESUI_STEREO_EN)
-
-            level =
-                stereo_battery_level_process(
-                    app_battery_measure.status,
-                    app_battery_measure.currvolt);
-
+            level = stereo_battery_level_process(app_battery_measure.status,app_battery_measure.currvolt);
         #endif
 
             app_battery_measure.currlevel = level;
@@ -1278,33 +1266,15 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             if (last_sync_percent != app_percent)
             {
                 last_sync_percent = app_percent;
-
-                app_ibrt_customif_cmd_sync_battery_level(
-                    app_percent);
-
-                BATTERY_TRACE(1,
-                            "[BAT_SYNC] percent=%d",
-                            app_percent);
+                app_ibrt_customif_cmd_sync_battery_level(app_percent);
+                BATTERY_TRACE(1,"[BAT_SYNC] percent=%d",app_percent);
             }
         }
 #endif
-
-/*
- * 手機 HFP 繼續使用原本的 0～9 level。
- */
-level =
-    aiWangReportNormalLevelHandler(
-        app_battery_measure.currvolt);
-
-app_status_battery_report(level);
-
             /*
             * 手機 HFP 使用 0～9 level。
             */
-            level =
-                aiWangReportNormalLevelHandler(
-                    app_battery_measure.currvolt);
-
+            level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
             app_status_battery_report(level);
 
             break;
@@ -1333,32 +1303,42 @@ app_status_battery_report(level);
                         app_battery_measure.currlevel);
 
             BATTERY_TRACE(1,"CHARGING-->APP_BATTERY_CHARGER :%d", prams.charger);
-            if ((ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
-                (prams.charger == 1))
-            {
-                BATTERY_TRACE(0,
-                            "[POWER_OFF] IN_CASE + charger=1 -> start timer");
+            BATTERY_TRACE(1,
+                        "CHARGING-->APP_BATTERY_CHARGER :%d full=%d",
+                        prams.charger,
+                        g_battery_full_charged);
 
-                ntt_charging_pwron_pending_shutdown = true;
-                earBudsCloseOff_PogonIn_StartTimer();
+            if ((ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+                ((prams.charger == 1) || g_battery_full_charged))
+            {
+                BATTERY_TRACE(2,
+                            "[POWER_OFF] IN_CASE charger=%d full=%d -> start timer",
+                            prams.charger,
+                            g_battery_full_charged);
+
+                if (!ntt_charging_pwron_pending_shutdown)
+                {
+                    ntt_charging_pwron_pending_shutdown = true;
+                    earBudsCloseOff_PogonIn_StartTimer();
+                }
             }
-            else if (prams.charger == 0)
+            else if ((prams.charger == 0) && !g_battery_full_charged)
             {
                 BATTERY_TRACE(0,
-                            "[POWER_OFF] charger=0 -> cancel shutdown timer");
+                            "[POWER_OFF] charger=0 and not full -> cancel shutdown timer");
 
                 /*
-                 * Clear pending first so a callback already queued by the
-                 * timer cannot continue the old shutdown request.
-                 */
+                * Clear pending first so a callback already queued by the
+                * timer cannot continue the old shutdown request.
+                */
                 ntt_charging_pwron_pending_shutdown = false;
                 earBudsCloseOff_PogonIn_StopTimer();
 
-        #ifdef IBRT
+            #ifdef IBRT
                 g_pogonin_role_switch_requested = false;
                 g_pogonin_role_switch_wait_count = 0;
                 ntt_case_close_role_switch_reset();
-        #endif
+            #endif
             }
             if (prams.charger == APP_BATTERY_CHARGER_PLUGIN)
             {
@@ -1831,6 +1811,7 @@ static int app_battery_charger_handle_process(void)
         app_battery_measure.charger_status.slope_1000_index++;
     }
 exit:
+    g_battery_full_charged = (nRet == -1);
     return nRet;
 }
 
