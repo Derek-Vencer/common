@@ -363,6 +363,7 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     uint8_t box_battery   = 0xFF;
 
     bool tws_connected = false;
+    bool local_valid   = false;
     bool peer_valid    = false;
 
     if (battery_array == NULL)
@@ -370,34 +371,44 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
         return false;
     }
 
-    /*
-     * 與 0x31 使用完全相同的電量來源
-     */
     local_battery = app_battery_get_percent();
     peer_battery  = app_ibrt_customif_get_tws_peer_battery_level();
-    box_battery   = getBoxChargerBattery();
+    box_battery = getBoxChargerBattery();
+    tws_connected = bts_tws_if_is_tws_link_connected();
+    local_valid = app_battery_is_measurement_valid() && (local_battery != 0xFF) && (local_battery <= 100);
 
-    /*
-     * Debug APP battery read path.
-     */
-    COMMUNICATION_TRACE(
-        4,
-        "[APP_BAT_READ] local=%d peer=%d box=%d valid=%d",
+    peer_valid = tws_connected && (peer_battery != 0xFF) && (peer_battery <= 100);
+    TRACE(
+        6,
+        "[APP_BAT_READ] local=%u peer=%u box=%u "
+        "local_valid=%d peer_valid=%d tws=%d",
         local_battery,
         peer_battery,
         box_battery,
-        app_battery_is_measurement_valid());
+        local_valid,
+        peer_valid,
+        tws_connected);
 
-    tws_connected = bts_tws_if_is_tws_link_connected();
-
-    peer_valid =
-        tws_connected &&
-        (peer_battery != 0xFF) &&
-        (peer_battery <= 100);
-
-    if (!peer_valid)
+    /*
+     * Do not send a successful battery response while the local
+     * battery measurement is not ready.
+     */
+    if (!local_valid)
     {
-        peer_battery = 0xFF;
+        TRACE(0,"[BAT_COMMON] local battery not ready");
+        return false;
+    }
+
+    /*
+     * When TWS is connected, the peer battery must also be valid.
+     * Returning false prevents a 0x31 response containing 0xFF.
+     */
+    if (tws_connected && !peer_valid)
+    {
+        TRACE(0,"[BAT_COMMON] peer battery not ready, request sync");
+        app_ibrt_customif_cmd_sync_battery_level(local_battery);
+
+        return false;
     }
 
     battery_array[0] = 0xFF;
@@ -416,8 +427,10 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     }
 
     TRACE(0,
-          "[BAT_COMMON] side=%s local=%u peer=%u valid=%d tws=%d box=%u",
-          app_ibrt_if_is_right_side() ? "RIGHT" : "LEFT",
+          "[BAT_COMMON] side=%s local=%u peer=%u "
+          "peer_valid=%d tws=%d box=%u",
+          app_ibrt_if_is_right_side() ?
+              "RIGHT" : "LEFT",
           local_battery,
           peer_battery,
           peer_valid,
@@ -2819,44 +2832,86 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 //#if need_send_data_by_notify
 extern bool app_spp_tota_send_data(uint8_t *ptrData, uint16_t length);
 
-static void sparraw_tx_msg(uint8_t rsp_type,const uint8_t *data,uint16_t len)
+static void sparraw_tx_msg(uint8_t rsp_type,
+                           const uint8_t *data,
+                           uint16_t len)
 {
-    uint8_t rsp_buffer[256] = {0};
-    const uint16_t rsp_len = (uint16_t)(len + 3U);
+    static uint8_t rsp_buffer[256];
+    const uint16_t rsp_len =
+        (uint16_t)(len + 3U);
 
     if ((size_t)rsp_len > sizeof(rsp_buffer))
     {
-        TRACE(0, "[SPARROW_TX] overflow len=%u", (unsigned)rsp_len);
+        TRACE(0,
+              "[SPARROW_TX] overflow len=%u",
+              (unsigned)rsp_len);
+
         return;
     }
 
+    memset(rsp_buffer, 0, sizeof(rsp_buffer));
+
     rsp_buffer[0] = rsp_type;
-    rsp_buffer[1] = (uint8_t)((len >> 8) & 0xFF);
-    rsp_buffer[2] = (uint8_t)(len & 0xFF);
+    rsp_buffer[1] =
+        (uint8_t)((len >> 8) & 0xFF);
+    rsp_buffer[2] =
+        (uint8_t)(len & 0xFF);
 
     if ((data != NULL) && (len > 0))
     {
-        memcpy(&rsp_buffer[3], data, len);
+        memcpy(&rsp_buffer[3],
+               data,
+               len);
     }
 
-    if (g_sparrow_api_transport == SPARROW_API_TRANSPORT_SPP)
+    if (g_sparrow_api_transport ==
+        SPARROW_API_TRANSPORT_SPP)
     {
         bool ret = false;
-        TRACE(0, "[SPARROW_TX][SPP] rsp=0x%02X payload_len=%u total=%u",rsp_type,(unsigned)len,(unsigned)rsp_len);
-        DUMP8("%02X ", rsp_buffer, rsp_len);
-        ret = app_spp_tota_send_data(rsp_buffer, rsp_len);
-        TRACE(0, "[SPARROW_TX][SPP] send ret=%d", ret ? 1 : 0);
+
+        TRACE(0,
+              "[SPARROW_TX][SPP] rsp=0x%02X "
+              "payload_len=%u total=%u",
+              rsp_type,
+              (unsigned)len,
+              (unsigned)rsp_len);
+
+        DUMP8("%02X ",
+              rsp_buffer,
+              rsp_len);
+
+        ret =
+            app_spp_tota_send_data(
+                rsp_buffer,
+                rsp_len);
+
+        TRACE(0,
+              "[SPARROW_TX][SPP] send ret=%d",
+              ret ? 1 : 0);
+
         return;
     }
 
     if (app_sparraw_env.notifyEnable)
     {
-        TRACE(0, "[SPARROW_TX][BLE] rsp=0x%02X payload_len=%u total=%u",rsp_type,(unsigned)len,(unsigned)rsp_len);
-        ble_aiwang_srv_send_data_via_notification(rsp_buffer, rsp_len);
+        TRACE(0,
+              "[SPARROW_TX][BLE] rsp=0x%02X "
+              "payload_len=%u total=%u",
+              rsp_type,
+              (unsigned)len,
+              (unsigned)rsp_len);
+
+        ble_aiwang_srv_send_data_via_notification(
+            rsp_buffer,
+            rsp_len);
     }
     else
     {
-        TRACE(0, "[SPARROW_TX][BLE] notify disabled rsp=0x%02X len=%u",rsp_type,(unsigned)rsp_len);
+        TRACE(0,
+              "[SPARROW_TX][BLE] notify disabled "
+              "rsp=0x%02X len=%u",
+              rsp_type,
+              (unsigned)rsp_len);
     }
 }
 //#endif
