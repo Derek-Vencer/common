@@ -231,6 +231,10 @@ static bool g_battery_measure_valid = false;
  * Used to prevent boot default 4200mV from being reported as 100%.
  */
 static uint8_t g_battery_last_valid_percent = 0xFF;
+/*
+ * True means OPEN_CASE has canceled the current case-close transaction.
+ */
+static bool g_ntt_case_open_cancel = false;
 
 extern void wired_uart_get_battery_level(void);
 
@@ -445,6 +449,43 @@ static void ntt_low_battery_role_switch_check(void)
     app_ui_user_role_switch(false);
 }
 
+void ntt_case_poweroff_cancel(void)
+{
+    /*
+     * Mark the current case-close transaction as canceled.
+     */
+    g_ntt_case_open_cancel = true;
+
+    /*
+     * Invalidate pending shutdown request first.
+     */
+    ntt_charging_pwron_pending_shutdown = false;
+
+    /*
+     * Stop pending Pogo-In shutdown timer.
+     */
+    earBudsCloseOff_PogonIn_StopTimer();
+
+#ifdef IBRT
+    /*
+     * Cancel pending role-switch state.
+     */
+    g_pogonin_role_switch_requested = false;
+    g_pogonin_role_switch_wait_count = 0;
+    ntt_case_close_role_switch_reset();
+#endif
+
+    BATTERY_TRACE(0,"[POWER_OFF] canceled by OPEN_CASE");
+}
+
+void ntt_case_poweroff_enable(void)
+{
+    g_ntt_case_open_cancel = false;
+    ntt_charging_pwron_pending_shutdown = true;
+    BATTERY_TRACE(0,"[POWER_OFF] enabled by POWER_OFF");
+    BATTERY_TRACE(2,"[POWER_OFF] enabled cancel=%d pending=%d",g_ntt_case_open_cancel,ntt_charging_pwron_pending_shutdown);
+}
+
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     int8_t charging = app_battery_is_charging();
@@ -528,6 +569,13 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
 
     BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
     ntt_charging_pwron_pending_shutdown = false;
+
+    if (g_ntt_case_open_cancel)
+    {
+        BATTERY_TRACE(0,
+                    "[POWER_OFF] final shutdown canceled by OPEN_CASE");
+        return;
+    }
 
     app_shutdown();
 }

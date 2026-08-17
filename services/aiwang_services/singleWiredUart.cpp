@@ -1522,23 +1522,56 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             DBGPRINT("[POWER_OFF] received, wait 1.6s and check charger state");
 
             /*
-            * Do not directly set needOpenEarbuds = false.
             * Do not shutdown immediately.
-            * Final decision is based on charger contact status after 1.6s.
+            * Mark close state and start delayed check.
+            * If CMD_OPEN_CASE comes before timer expires,
+            * CMD_OPEN_CASE will stop the timer.
             */
-            earBudsCloseOff_PowerOff_StartTimer();
+            g_case_state = 0;
+            boxChargerStatus.boxIsOpen = false;
+            boxChargerStatus.needOpenEarbuds = false;
+            app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
+            app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
+            /*
+            * Start a new valid case-close transaction.
+            */
+            ntt_case_poweroff_enable();
 
-            break;
+            wired_uart_get_battery_level();
+
+            enum APP_BATTERY_CHARGER_T charger_status = (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+            DBGPRINT("[CASE_CLOSE] charger=%s",
+                    (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
+                    "PLUGIN" : "PLUGOUT");
+
+            /*
+            * Only allow shutdown when charger is really detected.
+            */
+            if (charger_status != APP_BATTERY_CHARGER_PLUGIN)
+            {
+                DBGPRINT("[CASE_CLOSE] skip shutdown, charger plugout");
+                break;
+            }
+
+            DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
+            ntt_charging_pwron_pending_shutdown = true;
+            earBudsCloseOff_PogonIn_StartTimer();            
         }
+        break;
     case CMD_OPEN_CASE:
         {
+            DBGPRINT("[CASE] OPEN received");
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
             ntt_case_open_pending = true;
+            app_ui_set_local_box_state(IBRT_IN_BOX_OPEN);
+            app_ui_sync_box_state(IBRT_IN_BOX_OPEN);
+            ntt_case_poweroff_cancel();
 
-            //earBudsCloseOff_PogonIn_StopTimer();
 
+            earBudsCloseOff_PogonIn_StopTimer();
 
         }
         break;

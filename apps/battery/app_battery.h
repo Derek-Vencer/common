@@ -112,6 +112,8 @@ int8_t app_battery_is_charging(void);
 int ntc_capture_open(void);
 
 int ntc_capture_start(void);
+void ntt_case_poweroff_cancel(void);
+void ntt_case_poweroff_enable(void);
 
 void app_battery_opened_callback(void);
 uint8_t app_battery_get_display_percent(void);
