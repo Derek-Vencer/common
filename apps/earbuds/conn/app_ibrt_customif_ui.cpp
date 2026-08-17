@@ -49,7 +49,7 @@
 #include "bes_gap_api.h"
 #include "hfp_api.h"
 #include "app_ibrt_customif_cmd.h"
-
+#include "audio_cfg.h"
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -3071,18 +3071,22 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         */
         if (app_ui_in_pairing_mode() || get_er_discover_connectable_status())
         {
-            EARBUDS_TRACE(
-                0,
-                "[NTT_PAIR] OUT_CASE -> force SDK pairing exit");
+            if (!ntt_dut_speech_tx_1mic_ns_bypass_get())
+            {
+                EARBUDS_TRACE(0,"[NTT_PAIR] OUT_CASE -> force SDK pairing exit");
+                app_ui_exit_pairing_mode(true);
 
-            app_ui_exit_pairing_mode(true);
-
-            /*
-            * Do not start mobile opening reconnect in the same
-            * OUT_CASE event. Factory reset may have no mobile record,
-            * and opening reconnect would enter pairing mode again.
-            */
-            pairing_exited_on_out = true;
+                /*
+                * Do not start mobile opening reconnect in the same
+                * OUT_CASE event. Factory reset may have no mobile record,
+                * and opening reconnect would enter pairing mode again.
+                */
+                pairing_exited_on_out = true;
+            }
+            else 
+            {
+                EARBUDS_TRACE(0,"[NTT_PAIR] OUT_CASE -> DTM keep pairing mode");
+            }
 
         }
     /*

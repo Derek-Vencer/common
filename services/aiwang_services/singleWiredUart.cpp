@@ -599,40 +599,99 @@ void wired_uart_get_battery_level(void)
         enter_pair_status,
         tws_connected);
 }
+extern "C" void dtm_enter_pairing_mode(void)
+{
+    bool tws_connected;
+    uint8_t ui_role;
+    uint8_t freeman_mode;
+
+    tws_connected = bts_tws_if_is_tws_link_connected();
+
+    ui_role = app_ibrt_if_get_ui_role();
+
+    freeman_mode = app_ibrt_if_is_in_freeman_mode();
+
+    DBGPRINT(
+        "[NTT_DTM_PAIR] enter request ear=%d tws=%d role=%d freeman=%d ui_pairing=%d",
+        isRightEarbuds,
+        tws_connected,
+        ui_role,
+        freeman_mode,
+        app_ui_in_pairing_mode());
+
+    enable_pair_status(1);
+
+    ntt_first_no_mobile_pair_mode = false;
+    ntt_manual_pairing_mode = true;
+
+    /*
+     * Delete phone pairing records only.
+     * Do not rebuild all NV records here.
+     */
+    wired_uart_remove_all_phone_paired_list();
+
+    /*
+     * Enter the official BES single-ear pairing mode.
+     * The Freeman state machine handles the TWS transition.
+     */
+    app_ibrt_if_enter_freeman_pairing();
+
+    set_pair_status(0);
+    set_er_discover_connectable_status(1);
+
+    app_bt_reset_delay_power_off();
+    wired_uart_get_battery_level();
+
+    DBGPRINT(
+        "[NTT_DTM_PAIR] freeman requested ear=%d tws=%d role=%d freeman=%d ui_pairing=%d discover=%d",
+        isRightEarbuds,
+        bts_tws_if_is_tws_link_connected(),
+        app_ibrt_if_get_ui_role(),
+        app_ibrt_if_is_in_freeman_mode(),
+        app_ui_in_pairing_mode(),
+        get_er_discover_connectable_status());
+}
 
 extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
 {
-    DBGPRINT(
-        "[NTT_PAIR] exit pair mode success=%d before discover=%d access=%d",
-        pairing_success,
-        get_er_discover_connectable_status(),
-        app_bt_get_curr_access_mode());
+    if (!ntt_dut_speech_tx_1mic_ns_bypass_get())
+    {
+        DBGPRINT(
+            "[NTT_PAIR] exit pair mode success=%d before discover=%d access=%d",
+            pairing_success,
+            get_er_discover_connectable_status(),
+            app_bt_get_curr_access_mode());
 
-    enable_pair_status(0);
-    enter_pair_count = 0;
-    set_pair_status(1);//disable cc pair led.
+        enable_pair_status(0);
+        enter_pair_count = 0;
+        set_pair_status(1);//disable cc pair led.
 
-    ntt_first_no_mobile_pair_mode = false;
-    ntt_manual_pairing_mode = false;
+        ntt_first_no_mobile_pair_mode = false;
+        ntt_manual_pairing_mode = false;
 
-    /*
-     * Disable permission to enter discoverable mode first.
-     */
-    set_er_discover_connectable_status(0);
+        /*
+        * Disable permission to enter discoverable mode first.
+        */
+        set_er_discover_connectable_status(0);
 
-    /*
-     * Then disable Inquiry Scan while retaining Page Scan.
-     */
-    app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+        /*
+        * Then disable Inquiry Scan while retaining Page Scan.
+        */
+        app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
 
-    set_pair_status(pairing_success ? 1 : 0);
+        set_pair_status(pairing_success ? 1 : 0);
 
-    DBGPRINT(
-        "[NTT_PAIR] exit done discover=%d access=%d",
-        get_er_discover_connectable_status(),
-        app_bt_get_curr_access_mode());
-        
-    wired_uart_get_battery_level();
+        DBGPRINT(
+            "[NTT_PAIR] exit done discover=%d access=%d",
+            get_er_discover_connectable_status(),
+            app_bt_get_curr_access_mode());
+            
+        wired_uart_get_battery_level();
+    }
+    else 
+    {
+        DBGPRINT("[NTT_PAIR] Enter DTM Mode Keep Pairing...");
+    }
 }
 
 extern "C" void wired_uart_mobile_connected_get_box_battery(void)
@@ -1982,6 +2041,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         /* Disable 1-Mic Noise Suppression */
         ntt_dut_speech_tx_1mic_ns_bypass_set(1);
         DBGPRINT("[DUT] TX 1Mic NS -> BYPASS");
+        osDelay(50);
+        dtm_enter_pairing_mode();
     }
     break;
     default:

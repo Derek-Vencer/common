@@ -73,6 +73,8 @@ extern "C" void ntt_color_code_nv_set(uint8_t color);
 extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
 extern bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+extern "C" void dtm_enter_pairing_mode(void);
+
 #define MAX_PACKET_SIZE             (512)
 #define SPARRAW_EVENT_MAX_MAILBOX   (10)
 #define SPARRAW_EVENT_BUF_SIZE      (MAX_PACKET_SIZE*SPARRAW_EVENT_MAX_MAILBOX)
@@ -1487,6 +1489,8 @@ void handleSetDtmEnable(const uint8_t *data, uint16_t len)
          * Disable 1-Mic Noise Suppression.
          */
         ntt_dut_speech_tx_1mic_ns_bypass_set(1);
+        osDelay(50);
+        dtm_enter_pairing_mode();
 
         TRACE(0, "[DUT] TX 1Mic NS -> BYPASS");
     }
@@ -2224,17 +2228,16 @@ static void on_accept_call(void)    {
 }
 static void on_reject_call(void)
 {
-    HFCALL_MACHINE_ENUM call_state =
-        (HFCALL_MACHINE_ENUM)app_bt_get_call_state();
+    CALL_STATE_E call_state = app_bt_get_call_state();
 
     TRACE(0,
           "[CALL] reject/end call_state=%d",
           call_state);
 
-    if (call_state == HFCALL_MACHINE_CURRENT_OUTGOING)
+    if (call_state == CALL_STATE_OUTGOING)
     {
         /*
-         * Cancel outgoing dialing / alerting call.
+         * Cancel outgoing dialing or alerting call.
          */
         TRACE(0,
               "[CALL] cancel outgoing call state=%d",
@@ -2242,8 +2245,8 @@ static void on_reject_call(void)
 
         app_audio_control_call_terminate();
     }
-    else if ((call_state == HFCALL_MACHINE_CURRENT_CALLING) ||
-             (call_state == HFCALL_MACHINE_CURRENT_3WAY_HOLD_CALLING))
+    else if ((call_state == CALL_STATE_ACTIVE) ||
+             (call_state == CALL_STATE_TRREE_WAY_HOLD_CALLING))
     {
         /*
          * Terminate active call.
@@ -2254,8 +2257,8 @@ static void on_reject_call(void)
 
         app_audio_control_call_terminate();
     }
-    else if ((call_state == HFCALL_MACHINE_CURRENT_INCOMMING) ||
-             (call_state == HFCALL_MACHINE_CURRENT_3WAY_INCOMMING))
+    else if ((call_state == CALL_STATE_INCOMING) ||
+             (call_state == CALL_STATE_THREE_WAY_INCOMING))
     {
         /*
          * Reject incoming call.
