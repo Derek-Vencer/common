@@ -1363,7 +1363,7 @@ const SpeechConfig WEAK speech_cfg_default = {
     .tx_post_gain = {
         .bypass     = 0,
         //.gain_dB    = 6.0f, dvt2
-        .gain_dB    = 10.0f,
+        .gain_dB    = 4.0f,
     },
 #endif
 

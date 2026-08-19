@@ -453,9 +453,6 @@ uint8_t get_tws_peer_battery_percent(void)
     return g_tws_peer_battery_percent;
 }
 
-static uint8_t pair_success_count = 0;
-uint8_t enter_pair_count = 0;
-
 #define PAIR_NOTIFY_REPEAT_COUNT    3
 
 void wired_uart_get_battery_level(void)
@@ -468,11 +465,23 @@ void wired_uart_get_battery_level(void)
     uint8_t pair_success_status = 0;
     uint8_t enter_pair_status = 0;
     uint8_t pair_status = 0;
+
     bool tws_connected = false;
+    bool general_accessible = false;
+    bool limit_pair_notify = false;
+    bool allow_send = true;
+
+    btif_accessible_mode_t access_mode = BTIF_BAM_NOT_ACCESSIBLE;
+
+    /*
+     * Pair status transmission control.
+     */
+    static uint8_t s_last_pair_status = 0xFF;
+    static uint8_t s_pair_status_send_count = 0;
+    static bool s_last_pair_notify_limit = false;
 
     raw_level = app_battery_current_level();
 
-#if defined(IBRT)
     static int8_t s_last_tws_connected = -1;
 
     tws_connected = bts_tws_if_is_tws_link_connected();
@@ -483,8 +492,11 @@ void wired_uart_get_battery_level(void)
     }
 
     app_ibrt_customif_cmd_sync_battery_level(raw_level);
-#endif
 
+
+    /*
+     * Convert the battery level to the charging case format.
+     */
     if (raw_level < 0)
     {
         report_level = 0;
@@ -502,13 +514,28 @@ void wired_uart_get_battery_level(void)
      * Get current pairing states.
      */
     pair_success_status = get_pair_status();
+
     enter_pair_status = get_er_discover_connectable_status();
 
-#if defined(IBRT)
+    access_mode = app_bt_get_curr_access_mode();
+
+    general_accessible = (access_mode == BTIF_BAM_GENERAL_ACCESSIBLE);
+
+    /*
+     * Restore the manual pairing flag while the device
+     * remains generally accessible.
+     */
+    if (access_mode == BTIF_BAM_GENERAL_ACCESSIBLE)
+    {
+        DBGPRINT("[NTT_PAIR] Restore manual pairing flag, access=%u",(uint8_t)access_mode);
+        ntt_manual_pairing_mode = true;
+    }
+    else
+    {
+        ntt_manual_pairing_mode = false;
+    }
+
     tws_connected = bts_tws_if_is_tws_link_connected();
-#else
-    tws_connected = false;
-#endif
 
     /*
      * Pair status reported to charging case:
@@ -523,7 +550,7 @@ void wired_uart_get_battery_level(void)
     {
         pair_status = 1;
     }
-    else if (tws_connected && (enter_pair_status || ntt_manual_pairing_mode))
+    else if (tws_connected && (enter_pair_status || ntt_manual_pairing_mode || general_accessible))
     {
         pair_status = 2;
     }
@@ -532,73 +559,132 @@ void wired_uart_get_battery_level(void)
         pair_status = 0;
     }
 
+    /*
+     * Limit repeated reports while entering pairing,
+     * manually pairing, generally accessible, or
+     * reporting pairing success.
+     */
+    limit_pair_notify = (enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || (pair_success_status != 0);
+
     DBGPRINT(
-        "[BOX_BAT] Send level=%u pair=%u success=%u enter=%u tws=%u manual_pairing=%u",
-        report_level,
-        pair_status,
+        "[NTT_PAIR] success=%u enter=%u manual=%u "
+        "access=%u general=%u limit=%u",
         pair_success_status,
         enter_pair_status,
-        tws_connected,
-        ntt_manual_pairing_mode);
+        ntt_manual_pairing_mode,
+        (uint8_t)access_mode,
+        general_accessible,
+        limit_pair_notify);
 
     /*
-     * ---------------------------------------------------------
-     * Old protocol
-     * 55 AA BAT PAIR CRC
-     * ---------------------------------------------------------
+     * Reset the counter when entering a limited
+     * notification state.
      */
-    buff5[0] = 0x55;
-    buff5[1] = 0xAA;
-    buff5[2] = report_level;
-    buff5[3] = pair_status;
-    buff5[4] = crc8(buff5, 4);
-
-    communication_send_buf(buff5, sizeof(buff5));
-
-    /*
-     * Pair success notify repeat counter.
-     */
-    if (pair_success_status)
+    if (limit_pair_notify && !s_last_pair_notify_limit)
     {
-        pair_success_count++;
+        s_pair_status_send_count = 0;
 
-        if (pair_success_count >= PAIR_NOTIFY_REPEAT_COUNT)
-        {
-            set_pair_status(0);
-            pair_success_count = 0;
-        }
+        DBGPRINT( "[BOX_BAT] Pair notify limit entered, reset send count");
+    }
+
+    /*
+     * Reset the counter whenever pair status changes.
+     */
+    if (pair_status != s_last_pair_status)
+    {
+        DBGPRINT(
+            "[BOX_BAT] Pair status changed %u -> %u, "
+            "reset send count",
+            s_last_pair_status,
+            pair_status);
+
+        s_last_pair_status = pair_status;
+        s_pair_status_send_count = 0;
+    }
+
+    s_last_pair_notify_limit = limit_pair_notify;
+
+    /*
+     * Limit identical pairing reports to three times.
+     */
+    if (limit_pair_notify)
+    {
+        allow_send = (s_pair_status_send_count < PAIR_NOTIFY_REPEAT_COUNT);
     }
     else
     {
-        pair_success_count = 0;
+        /*
+         * Normal mode continuously reports battery
+         * and pair status.
+         */
+        allow_send = true;
+        s_pair_status_send_count = 0;
     }
 
-    /*
-     * Enter pairing notify repeat counter.
-     */
-    if (enter_pair_status)
+    if (allow_send)
     {
-        enter_pair_count++;
+        /*
+         * Old protocol:
+         * 55 AA BAT PAIR CRC
+         */
+        buff5[0] = 0x55;
+        buff5[1] = 0xAA;
+        buff5[2] = report_level;
+        buff5[3] = pair_status;
+        buff5[4] = crc8(buff5, 4);
 
-        if (enter_pair_count >= PAIR_NOTIFY_REPEAT_COUNT)
+        communication_send_buf(buff5,sizeof(buff5));
+
+        /*
+         * Count reports only while pairing notification
+         * limiting is active.
+         */
+        if (limit_pair_notify)
         {
-            enable_pair_status(0);
-            enter_pair_count = 0;
+            s_pair_status_send_count++;
+
+            /*
+             * Clear the one-shot pairing success state
+             * after three reports.
+             */
+            if ((pair_success_status != 0) && (s_pair_status_send_count >= PAIR_NOTIFY_REPEAT_COUNT))
+            {
+                set_pair_status(0);
+
+                DBGPRINT(
+                    "[BOX_BAT] Pair success reported "
+                    "%u times, clear success status",
+                    s_pair_status_send_count);
+            }
         }
+
+        DBGPRINT(
+            "[BOX_BAT] Send level=%u pair=%u "
+            "count=%u/%u success=%u enter=%u "
+            "tws=%u manual=%u access=%u",
+            report_level,
+            pair_status,
+            s_pair_status_send_count,
+            PAIR_NOTIFY_REPEAT_COUNT,
+            pair_success_status,
+            enter_pair_status,
+            tws_connected,
+            ntt_manual_pairing_mode,
+            (uint8_t)access_mode);
     }
     else
     {
-        enter_pair_count = 0;
+        DBGPRINT(
+            "[BOX_BAT] Skip pair=%u, "
+            "already sent %u times, "
+            "manual=%u access=%u",
+            pair_status,
+            s_pair_status_send_count,
+            ntt_manual_pairing_mode,
+            (uint8_t)access_mode);
     }
-
-    DBGPRINT(
-        "[BOX_BAT] level=%u pair=%u success=%u enter=%u tws=%u",
-        report_level,
-        pair_status,
-        pair_success_status,
-        enter_pair_status,
-        tws_connected);
 }
+
 extern "C" void dtm_enter_pairing_mode(void)
 {
     bool tws_connected;
@@ -663,7 +749,6 @@ extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
             app_bt_get_curr_access_mode());
 
         enable_pair_status(0);
-        enter_pair_count = 0;
         set_pair_status(1);//disable cc pair led.
 
         ntt_first_no_mobile_pair_mode = false;
@@ -679,7 +764,7 @@ extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
         */
         app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
 
-        set_pair_status(pairing_success ? 1 : 0);
+        //set_pair_status(pairing_success ? 1 : 0);
 
         DBGPRINT(
             "[NTT_PAIR] exit done discover=%d access=%d",
@@ -1846,7 +1931,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             aiWang_disconnect_second_phone_for_pairing();
 
             enable_pair_status(1);
-            enter_pair_count = 0;
 
             ntt_first_no_mobile_pair_mode = false;
             ntt_manual_pairing_mode = true;

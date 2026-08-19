@@ -1292,6 +1292,7 @@ void gfps_enter_pairing_mode(void)
 {
     if (gfpsEnv.enterPairingMode)
     {
+        GFPS_TRACE(0,"gfps_enter_pairing_mode");
         gfpsEnv.enterPairingMode();
     }
 }

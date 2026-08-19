@@ -167,7 +167,7 @@ extern const struct CODEC_DAC_VOL_T codec_dac_hfp_vol[TGT_VOLUME_LEVEL_QTY];
 #define CFG_AUD_EQ_IIR_NUM_BANDS (4)
 
 //battery info
-#define APP_BATTERY_MIN_MV (3400)
+#define APP_BATTERY_MIN_MV (3656)
 #define APP_BATTERY_PD_MV   (3100)
 
 #define APP_BATTERY_MAX_MV (4200)

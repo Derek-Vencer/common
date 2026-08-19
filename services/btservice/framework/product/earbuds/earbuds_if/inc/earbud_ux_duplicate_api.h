@@ -28,6 +28,8 @@
 extern "C" {
 #endif
 
+//#define IS_REGISTER_TWP_TEST_FUNCTION
+
 void app_ibrt_if_set_access_mode(ibrt_if_access_mode_enum mode);
 
 void app_ibrt_if_init_open_box_state_for_evb(void);

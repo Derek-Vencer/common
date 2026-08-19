@@ -1920,8 +1920,6 @@ extern "C" bool ntt_is_local_or_peer_bt_addr(const bt_bdaddr_t *addr)
     return false;
 }
 
-extern uint8_t enter_pair_count;
-
 void app_ibrt_init(void)
 {
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
@@ -2131,7 +2129,6 @@ void app_ibrt_init(void)
                 /*
                 * 建議同時重設 buff[4] 的重送計數。
                 */
-                enter_pair_count = 0;
                 set_er_discover_connectable_status(1);
 
                 app_bt_set_access_mode(
@@ -2203,7 +2200,6 @@ void app_ibrt_init(void)
 
                 set_pair_status(0);
                 enable_pair_status(1);
-                enter_pair_count = 0;
                 set_er_discover_connectable_status(1);
 
                 app_bt_set_access_mode(

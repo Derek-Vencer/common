@@ -72,6 +72,7 @@ static void pair_handler_func(enum pair_event event, void *data)
 
     switch(event) {
     case PAIRING_OK:
+        DEBUG_INFO(0,"PAIRING_OK\n");
         app_pair_evt = PAIR_EVENT_COMPLETE;
         err_code = 0;
 
@@ -85,11 +86,13 @@ static void pair_handler_func(enum pair_event event, void *data)
         ntt_mobile_pairing_mode_exit(true);
         break;
     case PAIRING_TIMEOUT:
+        DEBUG_INFO(0,"PAIRING_TIMEOUT\n");
 		pair_status = 1;
 		set_er_discover_connectable_status(0);
         ntt_mobile_pairing_mode_exit(true);
         break;
     case PAIRING_FAILED:
+        DEBUG_INFO(0,"PAIRING_FAILED\n");
         err_code = 1;
         app_pair_evt = PAIR_EVENT_COMPLETE;
 		pair_status = 1;
@@ -109,26 +112,31 @@ static void pair_handler_func(enum pair_event event, void *data)
 
 uint8_t get_pair_status(void)
 {
+    DEBUG_INFO(1,"get_pair_status status:%d\n", pair_status);
 	return pair_status;
 }
 
 void set_pair_status(uint8_t status)
 {
+    DEBUG_INFO(1,"set_pair_status status:%d\n", pair_status);
 	pair_status = status;
 }
 
 uint8_t get_enable_pair_status(void)
 {
+    DEBUG_INFO(1,"get_enable_pair_status status:%d\n", enter_pair_status);
 	return enter_pair_status;
 }
 
 void enable_pair_status(uint8_t status)
 {
+    DEBUG_INFO(1,"enable_pair_status status:%d\n", enter_pair_status);
 	enter_pair_status = status;
 }
 
 uint8_t get_er_discover_connectable_status(void)
 {
+    DEBUG_INFO(1,"get_er_discover_connectable_status status:%d\n", er_into_discover_connectable);
 	return er_into_discover_connectable;
 }
 

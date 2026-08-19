@@ -88,7 +88,7 @@ extern "C" bool app_usbaudio_mode_on(void);
 #endif
 
 #ifndef APP_BATTERY_MIN_MV
-#define APP_BATTERY_MIN_MV (3385)//3350
+#define APP_BATTERY_MIN_MV (3656)//3350
 #endif
 
 #ifndef APP_BATTERY_MAX_MV
@@ -683,16 +683,16 @@ uint8_t app_battery_get_precise_percent(void)
      */
     static const uint16_t voltage_table[] =
     {
-        3300,
-        3580,
-        3660,
-        3720,
-        3750,
-        3790,
-        3830,
-        3880,
-        3940,
-        4040
+        3656,   //10%
+        3705,   //20%
+        3742,   //30%
+        3768,   //40%
+        3800,   //50%
+        3847,   //60%
+        3918,   //70%
+        3987,   //80%
+        4077,   //90%
+        4140    //100%
     };
 
     static const uint8_t percent_table[] =
@@ -784,34 +784,100 @@ uint8_t app_battery_get_precise_percent(void)
 
 uint8_t app_battery_get_percent(void)
 {
+    static const uint16_t battery_voltage_table[] =
+    {
+        3200, /*   0% */
+        3656, /*  10% */
+        3705, /*  20% */
+        3742, /*  30% */
+        3768, /*  40% */
+        3800, /*  50% */
+        3847, /*  60% */
+        3918, /*  70% */
+        3987, /*  80% */
+        4077, /*  90% */
+        4140, /* 100% */
+    };
+
+    static const uint8_t battery_percent_table[] =
+    {
+          0,
+         10,
+         20,
+         30,
+         40,
+         50,
+         60,
+         70,
+         80,
+         90,
+        100,
+    };
+
+    const uint8_t table_count = sizeof(battery_voltage_table) / sizeof(battery_voltage_table[0]);
     uint16_t volt = app_battery_measure.currvolt;
-    uint8_t percent;
+    uint8_t percent = 0;
+    uint8_t index;
 
     /*
-     * 電池有效範圍：
-     * 3300mV = 0%
-     * 4130mV = 100%
+     * Battery discharge curve:
+     *
+     * 4195mV = 100%
+     * 4077mV =  90%
+     * 3987mV =  80%
+     * 3918mV =  70%
+     * 3847mV =  60%
+     * 3800mV =  50%
+     * 3768mV =  40%
+     * 3742mV =  30%
+     * 3705mV =  20%
+     * 3656mV =  10%
+     * 3200mV =   0%
      */
-    if (volt <= 3300)
+
+    if (volt <= battery_voltage_table[0])
     {
         percent = 0;
     }
-    else if (volt >= 4130)
+    else if (volt >= battery_voltage_table[table_count - 1])
     {
         percent = 100;
     }
     else
     {
-        percent =
-            (uint8_t)(((uint32_t)(volt - 3300) * 100) /
-                      (4130 - 3300));
+        for (index = 1; index < table_count; index++)
+        {
+            if (volt <= battery_voltage_table[index])
+            {
+                uint16_t volt_low;
+                uint16_t volt_high;
+                uint16_t volt_range;
+                uint16_t volt_offset;
+
+                uint8_t percent_low;
+                uint8_t percent_high;
+                uint8_t percent_range;
+
+                volt_low = battery_voltage_table[index - 1];
+                volt_high = battery_voltage_table[index];
+                percent_low = battery_percent_table[index - 1];
+                percent_high = battery_percent_table[index];
+                volt_range = volt_high - volt_low;
+                volt_offset = volt - volt_low;
+                percent_range = percent_high - percent_low;
+
+                /*
+                 * Perform piecewise linear interpolation.
+                 * Add half of the divisor for nearest rounding.
+                 */
+                percent = percent_low + (uint8_t)(((uint32_t)volt_offset * percent_range + (volt_range / 2)) / volt_range);
+
+                break;
+            }
+        }
     }
 
-    BATTERY_TRACE(2,
-                  "[BAT_PERCENT] volt=%d percent=%d",
-                  volt,
-                  percent);
-
+    BATTERY_TRACE(2,"[BAT_PERCENT] volt=%d percent=%d",volt,percent);
     return percent;
 }
 
