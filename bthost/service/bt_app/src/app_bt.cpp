@@ -213,14 +213,19 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
-#define NTT_BT_CONNECTED_PROMPT_DELAY_MS      2500
-#define NTT_BT_CONNECTED_PROMPT_RETRY_MS       200
-#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY       15
+#define NTT_BT_CONNECTED_PROMPT_DELAY_MS          3000
+#define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
+#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           30
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        10
+#define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
 static bool ntt_bt_connected_prompt_pending = false;
 static uint8_t ntt_bt_connected_prompt_device_id = 0;
 static uint8_t ntt_bt_connected_prompt_retry_count = 0;
+static uint8_t ntt_bt_connected_prompt_stable_count = 0;
+static uint8_t ntt_bt_connected_prompt_last_role =
+    NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
 static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
@@ -235,12 +240,17 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t ui_role = app_ibrt_if_get_ui_role();
 
-    DEBUG_INFO(4,
-               "[NTT_CONN_PROMPT] check dev=%u tws=%u role=%u retry=%u",
+    bool role_valid =
+        ((ui_role == TWS_UI_MASTER) ||
+         (ui_role == TWS_UI_SLAVE));
+
+    DEBUG_INFO(5,
+               "[NTT_CONN_PROMPT] check dev=%u tws=%u role=%u retry=%u stable=%u",
                device_id,
                tws_connected,
                ui_role,
-               ntt_bt_connected_prompt_retry_count);
+               ntt_bt_connected_prompt_retry_count,
+               ntt_bt_connected_prompt_stable_count);
 
     /*
      * The phone profile callback can occur on either IBRT side after a role
@@ -248,21 +258,58 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
      * media_PlayAudio/audio_player_play_prompt will negotiate the common
      * trigger with the peer according to the current TWS role.
      */
-    if (tws_connected &&
-        ((ui_role == TWS_UI_MASTER) ||
-         (ui_role == TWS_UI_SLAVE)))
+    if (tws_connected && role_valid)
     {
+        /*
+         * TWS ACL connected does not guarantee that the IBRT/BESAUD prompt
+         * command channel is ready.  Require a stable link and role for
+         * several consecutive checks before sending the synchronized prompt.
+         */
+        if (ntt_bt_connected_prompt_last_role != ui_role)
+        {
+            DEBUG_INFO(2,
+                       "[NTT_CONN_PROMPT] role changed old=%u new=%u",
+                       ntt_bt_connected_prompt_last_role,
+                       ui_role);
+
+            ntt_bt_connected_prompt_last_role = ui_role;
+            ntt_bt_connected_prompt_stable_count = 0;
+        }
+
+        if (ntt_bt_connected_prompt_stable_count <
+            NTT_BT_CONNECTED_PROMPT_STABLE_COUNT)
+        {
+            ntt_bt_connected_prompt_stable_count++;
+            osTimerStart(ntt_bt_connected_prompt_timer_id,
+                         NTT_BT_CONNECTED_PROMPT_RETRY_MS);
+
+            DEBUG_INFO(3,
+                       "[NTT_CONN_PROMPT] wait IBRT ready role=%u stable=%u/%u",
+                       ui_role,
+                       ntt_bt_connected_prompt_stable_count,
+                       NTT_BT_CONNECTED_PROMPT_STABLE_COUNT);
+            return;
+        }
+
         ntt_bt_connected_prompt_pending = false;
         ntt_bt_connected_prompt_retry_count = 0;
+        ntt_bt_connected_prompt_stable_count = 0;
+        ntt_bt_connected_prompt_last_role =
+            NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
         DEBUG_INFO(2,
-                   "[NTT_CONN_PROMPT] IBRT play dev=%u role=%u",
+                   "[NTT_CONN_PROMPT] IBRT ready, play dev=%u role=%u",
                    device_id,
                    ui_role);
 
         audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
         return;
     }
+
+    /* A link loss or role transition invalidates the accumulated stability. */
+    ntt_bt_connected_prompt_stable_count = 0;
+    ntt_bt_connected_prompt_last_role =
+        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
     if (ntt_bt_connected_prompt_retry_count <
         NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
@@ -281,23 +328,27 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 
     ntt_bt_connected_prompt_pending = false;
     ntt_bt_connected_prompt_retry_count = 0;
+    ntt_bt_connected_prompt_stable_count = 0;
+    ntt_bt_connected_prompt_last_role =
+        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
     if (!tws_connected)
     {
         DEBUG_INFO(1,
-                   "[NTT_CONN_PROMPT] no tws, local play dev=%u",
+                   "[NTT_CONN_PROMPT] no tws timeout, local play dev=%u",
                    device_id);
         audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
     }
     else
     {
         DEBUG_INFO(1,
-                   "[NTT_CONN_PROMPT] role unknown timeout role=%u",
+                   "[NTT_CONN_PROMPT] invalid role timeout role=%u",
                    ui_role);
     }
 #else
     ntt_bt_connected_prompt_pending = false;
     ntt_bt_connected_prompt_retry_count = 0;
+    ntt_bt_connected_prompt_stable_count = 0;
     audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
 #endif
 }
@@ -329,6 +380,9 @@ static void ntt_bt_connected_prompt_request(uint8_t device_id)
 
     ntt_bt_connected_prompt_pending = true;
     ntt_bt_connected_prompt_retry_count = 0;
+    ntt_bt_connected_prompt_stable_count = 0;
+    ntt_bt_connected_prompt_last_role =
+        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
     osTimerStop(ntt_bt_connected_prompt_timer_id);
     osTimerStart(ntt_bt_connected_prompt_timer_id,
                  NTT_BT_CONNECTED_PROMPT_DELAY_MS);
@@ -348,6 +402,9 @@ static void ntt_bt_connected_prompt_cancel(void)
 
     ntt_bt_connected_prompt_pending = false;
     ntt_bt_connected_prompt_retry_count = 0;
+    ntt_bt_connected_prompt_stable_count = 0;
+    ntt_bt_connected_prompt_last_role =
+        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
     if (ntt_bt_connected_prompt_timer_id != NULL)
     {

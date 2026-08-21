@@ -55,9 +55,9 @@ bool app_bt_system_phone_cancel_enter_pairmode_flag = false;
  * makes VOICE_REPORT_START/LET_PEER_PLAY_PROMPT fail with "tws link missing".
  * Delay the request for 2.5 seconds, then retry while TWS/role setup settles.
  */
-#define NTT_BT_CONNECTED_PROMPT_DELAY_MS  2500
+#define NTT_BT_CONNECTED_PROMPT_DELAY_MS  3000
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS  200
-#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY 15
+#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY 30
 
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
 static bool ntt_bt_connected_prompt_pending = false;
