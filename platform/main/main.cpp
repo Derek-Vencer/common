@@ -582,6 +582,22 @@ int main(void)
     app_deinit(ret);
 #endif
     system_power_off_callback(sys_case);
+
+    /*
+    * OTA reboot uses HAL_SW_BOOTMODE_ENTER_HIDE_BOOT.
+    * The POWER_OFF prompt starts during app_deinit(), but the original
+    * reset path reaches pmu_reboot before the prompt is completed.
+    */
+    if ((sys_case == 2) &&
+        (hal_sw_bootmode_get() &
+        HAL_SW_BOOTMODE_ENTER_HIDE_BOOT))
+    {
+        TR_INFO(TR_MOD(MAIN),
+                "[NTT_OTA] wait power-off prompt before reboot");
+
+        osDelay(500);
+    }
+
     TR_INFO(TR_MOD(MAIN), "byebye~~~ %d\n", sys_case);
     if ((sys_case == 1)||(sys_case == 0)){
         TR_INFO(TR_MOD(MAIN), "shutdown\n");

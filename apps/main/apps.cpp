@@ -1654,7 +1654,7 @@ int app_deinit(int deinit_case)
         MAIN_TRACE(1,"[UIAPP]%s, uictl.poweroff_start_flag3 = %d",__func__, uictl.poweroff_start_flag);
 #endif
 #ifndef BESUI_STEREO_EN
-        osDelay(1000);
+        osDelay(3000);
 #endif
 #endif
         af_close();
