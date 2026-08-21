@@ -70,6 +70,7 @@
 extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
+extern "C" uint8_t app_battery_get_percent(void);
 
 
 static uint8_t g_tws_peer_battery_level = 0xFF;
@@ -575,6 +576,7 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
     static uint8_t s_last_box_level = 0xFF;
 
     bool tws_connected = bts_tws_if_is_tws_link_connected();
+
     uint8_t role = app_ibrt_if_get_ui_role();
 
     if (!tws_connected)
@@ -587,12 +589,25 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
         return;
     }
 
+    uint8_t calculated_percent = app_battery_get_percent();
+
     uint8_t box_level = getBoxChargerBattery();
+
     uint32_t now_ms = GET_CURRENT_MS();
 
-    if ((s_last_level == current_level) &&
-        (s_last_box_level == box_level) &&
-        ((now_ms - s_last_sync_ms) < 3000))
+    EARBUDS_TRACE(4,
+                  "[BAT_SYNC][PREPARE] input=%u calculated=%u box=%u role=%u",
+                  current_level,
+                  calculated_percent,
+                  box_level,
+                  role);
+
+    /*
+     * Always synchronize the current calculated percentage.
+     */
+    current_level = calculated_percent;
+
+    if ((s_last_level == current_level) && (s_last_box_level == box_level) && ((uint32_t)(now_ms - s_last_sync_ms) < 3000))
     {
         return;
     }
@@ -602,80 +617,35 @@ void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
     s_last_sync_ms = now_ms;
 
     uint8_t cmd_sync_battery_level[2];
+
     cmd_sync_battery_level[0] = current_level;
     cmd_sync_battery_level[1] = box_level;
 
-    tws_ctrl_send_cmd(APP_TWS_CMD_BATTERY_LEVEL_SYNC,
-                      cmd_sync_battery_level,
-                      sizeof(cmd_sync_battery_level));
+    tws_ctrl_send_cmd(
+        APP_TWS_CMD_BATTERY_LEVEL_SYNC,
+        cmd_sync_battery_level,
+        sizeof(cmd_sync_battery_level));
 }
 
 static void app_ibrt_customif_sync_battery_level_send(uint8_t *p_buff,uint16_t length)
 {
-    if ((p_buff == NULL) || (length == 0))
+    if ((p_buff == NULL) || (length < 2))
     {
-        EARBUDS_TRACE(1,
-                      "[BAT_SYNC][SEND] invalid data, length=%u",
-                      length);
+        EARBUDS_TRACE(1,"[BAT_SYNC][SEND] invalid data, length=%u",length);
         return;
     }
 
-    DUMP8("[BAT_SYNC][SEND] raw data: ", p_buff, length);
+    DUMP8("[BAT_SYNC][SEND] raw data: ",p_buff,length);
 
-    /*
-     * 目前擴充格式預期：
-     *
-     * p_buff[0]：耳機電量資料
-     * p_buff[1]：耳機狀態／其他原有電池欄位
-     * p_buff[2]：充電盒電量
-     *
-     * 若你的實際 battery sync payload 超過 3 bytes，
-     * 充電盒電量應以接收端 peer_box_raw 使用的索引為準。
-     */
-    if (length >= 3)
-    {
-        const uint8_t ear_battery_raw = p_buff[0];
-        const uint8_t ear_status_raw  = p_buff[1];
-        const uint8_t box_battery     = p_buff[2];
+    uint8_t ear_battery = p_buff[0];
 
-        if (box_battery <= 100)
-        {
-            EARBUDS_TRACE(3,
-                          "[BAT_SYNC][SEND] ear_raw=%u status=0x%02X box=%u%%",
-                          ear_battery_raw,
-                          ear_status_raw,
-                          box_battery);
-        }
-        else
-        {
-            EARBUDS_TRACE(3,
-                          "[BAT_SYNC][SEND] ear_raw=%u status=0x%02X box=INVALID(0x%02X)",
-                          ear_battery_raw,
-                          ear_status_raw,
-                          box_battery);
-        }
-    }
-    else if (length == 2)
-    {
-        EARBUDS_TRACE(2,
-                      "[BAT_SYNC][SEND] ear_raw=%u status=0x%02X, no box battery",
-                      p_buff[0],
-                      p_buff[1]);
-    }
-    else
-    {
-        EARBUDS_TRACE(1,
-                      "[BAT_SYNC][SEND] ear_raw=%u, payload too short",
-                      p_buff[0]);
-    }
+    uint8_t box_battery = p_buff[1];
 
-    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_BATTERY_LEVEL_SYNC,
-                                  p_buff,
-                                  length);
+    EARBUDS_TRACE(3,"[BAT_SYNC][SEND] ear=%u%% box=%u%% length=%u",ear_battery,box_battery,length);
 
-    EARBUDS_TRACE(1,
-                  "[BAT_SYNC][SEND] APP_TWS_CMD_BATTERY_LEVEL_SYNC sent, length=%u",
-                  length);
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_BATTERY_LEVEL_SYNC,p_buff,length);
+
+    EARBUDS_TRACE(1,"[BAT_SYNC][SEND] APP_TWS_CMD_BATTERY_LEVEL_SYNC sent, length=%u",length);
 }
 
 uint8_t earbuds_get_profile_conn_num(void)

@@ -624,7 +624,7 @@ void earBudsCloseOff_PowerOff_StartTimer(void)
 extern "C" void aw_ntc_detect_process(uint16_t ad_volt);
 static int app_battery_charger_handle_process(void);
 static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
-	static const int battery_table_level[11] = {4040,3940,3880,3830,3790,3750,3720,3660,3580,3300}; //unit:mv
+	static const int battery_table_level[11] = {4140,4077,3987,3918,3847,3800,3768,3742,3705,3656}; //unit:mv
 	uint8_t level = 0;
 	uint8_t index = 0;
 	//uint16_t last_mv = battery_table_level[0];
