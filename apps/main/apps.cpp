@@ -1005,7 +1005,7 @@ int app_reset(void)
 static void app_postponed_reset_timer_handler(void const *param);
 osTimerDef(APP_POSTPONED_RESET_TIMER, app_postponed_reset_timer_handler);
 static osTimerId app_postponed_reset_timer = NULL;
-#define APP_RESET_PONTPONED_TIME_IN_MS  2000
+#define APP_RESET_PONTPONED_TIME_IN_MS  4000
 static void app_postponed_reset_timer_handler(void const *param)
 {
     app_reset();

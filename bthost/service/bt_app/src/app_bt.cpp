@@ -150,6 +150,10 @@ extern "C"
 }
 #include "bluetooth_nv_mgr.h"
 
+#if BES_OTA
+bool ntt_ota_disconnect_prompt_started = false;
+#endif
+
 #if BLE_AUDIO_ENABLED
 #include "bluetooth_ble_api.h"
 
@@ -238,14 +242,23 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
                ui_role,
                ntt_bt_connected_prompt_retry_count);
 
-    if (tws_connected && (ui_role == TWS_UI_MASTER))
+    /*
+     * The phone profile callback can occur on either IBRT side after a role
+     * switch.  Let whichever side receives it start the IBRT prompt flow.
+     * media_PlayAudio/audio_player_play_prompt will negotiate the common
+     * trigger with the peer according to the current TWS role.
+     */
+    if (tws_connected &&
+        ((ui_role == TWS_UI_MASTER) ||
+         (ui_role == TWS_UI_SLAVE)))
     {
         ntt_bt_connected_prompt_pending = false;
         ntt_bt_connected_prompt_retry_count = 0;
 
-        DEBUG_INFO(1,
-                   "[NTT_CONN_PROMPT] master play dev=%u",
-                   device_id);
+        DEBUG_INFO(2,
+                   "[NTT_CONN_PROMPT] IBRT play dev=%u role=%u",
+                   device_id,
+                   ui_role);
 
         audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
         return;
@@ -278,8 +291,9 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     }
     else
     {
-        DEBUG_INFO(0,
-                   "[NTT_CONN_PROMPT] slave timeout, wait peer prompt");
+        DEBUG_INFO(1,
+                   "[NTT_CONN_PROMPT] role unknown timeout role=%u",
+                   ui_role);
     }
 #else
     ntt_bt_connected_prompt_pending = false;
@@ -6221,7 +6235,17 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
 #endif
 
 #if defined(MEDIA_PLAYER_SUPPORT) //&& !defined(IBRT)
-        audio_player_play_prompt(AUD_ID_BT_DIS_CONNECT, id);
+#if BES_OTA
+        if (ntt_ota_disconnect_prompt_started)
+        {
+            DEBUG_INFO(0,
+                       "[NTT_OTA_PROMPT] skip duplicate HFP disconnect prompt");
+        }
+        else
+#endif
+        {
+            audio_player_play_prompt(AUD_ID_BT_DIS_CONNECT, id);
+        }
 #endif
 #ifdef __INTERCONNECTION__
         app_interconnection_disconnected_callback();
@@ -6520,7 +6544,17 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
 #endif
 
 #if defined(MEDIA_PLAYER_SUPPORT) //&& !defined(IBRT)
-        audio_player_play_prompt(AUD_ID_BT_DIS_CONNECT, id);
+#if BES_OTA
+        if (ntt_ota_disconnect_prompt_started)
+        {
+            DEBUG_INFO(0,
+                       "[NTT_OTA_PROMPT] skip duplicate A2DP disconnect prompt");
+        }
+        else
+#endif
+        {
+            audio_player_play_prompt(AUD_ID_BT_DIS_CONNECT, id);
+        }
 #endif
 #ifdef __INTERCONNECTION__
         app_interconnection_disconnected_callback();

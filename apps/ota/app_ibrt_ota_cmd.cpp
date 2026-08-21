@@ -41,6 +41,7 @@
 
 #ifdef BES_OTA
 extern OTA_IBRT_TWS_CMD_EXECUTED_RESULT_FROM_SLAVE_T receivedResultAlreadyProcessedBySlave;
+extern bool ntt_ota_disconnect_prompt_started;
 uint32_t ibrt_ota_cmd_type = 0;
 uint32_t twsBreakPoint = 0;
 uint8_t errOtaCode = 0;
@@ -512,6 +513,10 @@ void app_ibrt_ota_image_overwrite_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_
     {
         if(*p_buff == 1 && errOtaCode == 1)
         {
+            /* Master already started the synchronized prompt before sending
+             * IMAGE_APPLY.  Mark the peer as well so its later profile
+             * disconnect callback does not enqueue a duplicate prompt. */
+            ntt_ota_disconnect_prompt_started = true;
             int ret = tws_ctrl_send_rsp(APP_TWS_CMD_OTA_IMAGE_OVERWRITE_CMD, rsp_seq, p_buff, length);
             if(0 == ret)
             {

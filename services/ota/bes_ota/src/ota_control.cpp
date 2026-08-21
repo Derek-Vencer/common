@@ -23,6 +23,7 @@
 #include "apps.h"
 #include "app_utils.h"
 #include "app_bt.h"
+#include "app_media_player.h"
 #include "hal_aud.h"
 #include "btapp.h"
 #include "watchdog.h"
@@ -141,6 +142,7 @@ static uint8_t isInBesOtaState = false;
 extern "C" void system_get_info(uint8_t *fw_rev_0, uint8_t *fw_rev_1,  uint8_t *fw_rev_2, uint8_t *fw_rev_3);
 void ota_status_change(bool status);
 OTA_CONTROL_ENV_T ota_control_env __attribute__((aligned(4)));
+extern bool ntt_ota_disconnect_prompt_started;
 static bool ota_control_check_image_crc(void);
 static void app_update_ota_boot_info(void);
 static void app_update_magic_number_of_app_image(uint32_t newMagicNumber);
@@ -2857,6 +2859,24 @@ static void _handle_received_data(uint8_t *otaBuf, bool isViaBle,uint16_t dataLe
                 ota.permissionToApply = 1;
                 bool overWrite = OTA_RESULT_PASSED;
                 errOtaCode = 1;
+
+#if defined(MEDIA_PLAYER_SUPPORT)
+                /*
+                 * Start the disconnect prompt while the TWS link is still
+                 * available.  Once IMAGE_APPLY is acknowledged, the phone
+                 * closes the OTA/mobile link and IBRT can disappear before
+                 * the normal profile-disconnect callback gets a chance to
+                 * synchronize this prompt.
+                 */
+                if (!ntt_ota_disconnect_prompt_started && _tws_is_master())
+                {
+                    ntt_ota_disconnect_prompt_started = true;
+                    OTA_TRACE(0,
+                              "[NTT_OTA_PROMPT] master pre-play disconnect prompt");
+                    media_PlayAudio(AUD_ID_BT_DIS_CONNECT, 0);
+                }
+#endif
+
                 ota_send_rsp_handle(OTA_RSP_IMAGE_APPLY, (uint8_t *)&overWrite, 1, APP_TWS_CMD_OTA_IMAGE_OVERWRITE_CMD);
             }
             else
