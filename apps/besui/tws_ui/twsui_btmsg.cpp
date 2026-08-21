@@ -49,6 +49,156 @@ ibrt_mobile_reconnect_info mobile_reconnect_info[2];
 ibrt_mobile_connect_info mobile_connect_info[2];
 bool app_bt_system_phone_cancel_enter_pairmode_flag = false;
 
+/*
+ * The mobile profile can be restored before the TWS BESAUD command channel
+ * becomes usable.  Playing AUD_ID_BT_CONNECTED immediately in that window
+ * makes VOICE_REPORT_START/LET_PEER_PLAY_PROMPT fail with "tws link missing".
+ * Delay the request for 2.5 seconds, then retry while TWS/role setup settles.
+ */
+#define NTT_BT_CONNECTED_PROMPT_DELAY_MS  2500
+#define NTT_BT_CONNECTED_PROMPT_RETRY_MS  200
+#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY 15
+
+static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
+static bool ntt_bt_connected_prompt_pending = false;
+static uint8_t ntt_bt_connected_prompt_device_id = 0;
+static uint8_t ntt_bt_connected_prompt_retry_count = 0;
+
+static void ntt_bt_connected_prompt_timehandler(void const *param)
+{
+    uint8_t device_id = ntt_bt_connected_prompt_device_id;
+    bool tws_connected = bts_tws_if_is_tws_link_connected();
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
+
+    if (!ntt_bt_connected_prompt_pending)
+    {
+        return;
+    }
+
+    BESUI_TRACE(4,
+                "[NTT_CONN_PROMPT] check dev=%u tws=%u role=%u retry=%u",
+                device_id,
+                tws_connected,
+                ui_role,
+                ntt_bt_connected_prompt_retry_count);
+
+    if (tws_connected)
+    {
+        /* Only Master starts the synchronized prompt transaction. */
+        if (ui_role == TWS_UI_MASTER)
+        {
+            ntt_bt_connected_prompt_pending = false;
+            ntt_bt_connected_prompt_retry_count = 0;
+
+            BESUI_TRACE(1,
+                        "[NTT_CONN_PROMPT] master play dev=%u",
+                        device_id);
+
+            media_PlayAudio(AUD_ID_BT_CONNECTED, device_id);
+            return;
+        }
+
+        /*
+         * During fast power-on reconnect the role can still be UNKNOWN or
+         * temporarily SLAVE.  Keep the request instead of dropping it.
+         */
+        if (ntt_bt_connected_prompt_retry_count <
+            NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
+        {
+            ntt_bt_connected_prompt_retry_count++;
+            osTimerStart(ntt_bt_connected_prompt_timer_id,
+                         NTT_BT_CONNECTED_PROMPT_RETRY_MS);
+
+            BESUI_TRACE(2,
+                        "[NTT_CONN_PROMPT] wait master role=%u retry=%u",
+                        ui_role,
+                        ntt_bt_connected_prompt_retry_count);
+            return;
+        }
+
+        /* This ear stayed Slave; the peer Master owns prompt playback. */
+        ntt_bt_connected_prompt_pending = false;
+        ntt_bt_connected_prompt_retry_count = 0;
+        BESUI_TRACE(0,
+                    "[NTT_CONN_PROMPT] slave timeout, wait peer prompt");
+    }
+    else
+    {
+        /* Give a slow TWS reconnect/role setup an additional three seconds. */
+        if (ntt_bt_connected_prompt_retry_count <
+            NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
+        {
+            ntt_bt_connected_prompt_retry_count++;
+            osTimerStart(ntt_bt_connected_prompt_timer_id,
+                         NTT_BT_CONNECTED_PROMPT_RETRY_MS);
+
+            BESUI_TRACE(1,
+                        "[NTT_CONN_PROMPT] wait tws retry=%u",
+                        ntt_bt_connected_prompt_retry_count);
+            return;
+        }
+
+        /* No peer after timeout: treat this as a true single-bud session. */
+        ntt_bt_connected_prompt_pending = false;
+        ntt_bt_connected_prompt_retry_count = 0;
+        BESUI_TRACE(1,
+                    "[NTT_CONN_PROMPT] no tws, local play dev=%u",
+                    device_id);
+        media_PlayAudio_locally(AUD_ID_BT_CONNECTED, device_id);
+    }
+}
+
+osTimerDef(NTT_BT_CONNECTED_PROMPT_TIMER,
+           (void (*)(void const *))ntt_bt_connected_prompt_timehandler);
+
+void ntt_bt_connected_prompt_request(uint8_t device_id)
+{
+    ntt_bt_connected_prompt_device_id = device_id;
+
+    if (ntt_bt_connected_prompt_timer_id == NULL)
+    {
+        ntt_bt_connected_prompt_timer_id =
+            osTimerCreate(osTimer(NTT_BT_CONNECTED_PROMPT_TIMER),
+                          osTimerOnce,
+                          NULL);
+        ASSERT(ntt_bt_connected_prompt_timer_id,
+               "[NTT_CONN_PROMPT] timer create failed");
+    }
+
+    /* HFP/A2DP and UI callbacks can report the same connection. */
+    if (ntt_bt_connected_prompt_pending)
+    {
+        BESUI_TRACE(1,
+                    "[NTT_CONN_PROMPT] duplicate ignored dev=%u",
+                    device_id);
+        return;
+    }
+
+    ntt_bt_connected_prompt_pending = true;
+    ntt_bt_connected_prompt_retry_count = 0;
+    osTimerStop(ntt_bt_connected_prompt_timer_id);
+    osTimerStart(ntt_bt_connected_prompt_timer_id,
+                 NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+
+    BESUI_TRACE(2,
+                "[NTT_CONN_PROMPT] defer dev=%u delay=%u ms",
+                device_id,
+                NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+}
+
+void ntt_bt_connected_prompt_cancel(void)
+{
+    ntt_bt_connected_prompt_pending = false;
+    ntt_bt_connected_prompt_retry_count = 0;
+
+    if (ntt_bt_connected_prompt_timer_id != NULL)
+    {
+        osTimerStop(ntt_bt_connected_prompt_timer_id);
+    }
+
+    BESUI_TRACE(0, "[NTT_CONN_PROMPT] cancel");
+}
+
 void app_bt_mobile_connect_info_init(void)
 {
     mobile_connect_info[0].mobile_connected = false;
@@ -764,14 +914,14 @@ void app_bt_phone_connected_event_process(void)
             app_status_indication_set(APP_STATUS_INDICATION_CONNECTED);
             app_tws_ledsta_to_slave_process(conn_devices, APP_STATUS_INDICATION_CONNECTED);
 
-            media_PlayAudio(AUD_ID_BT_CONNECTED, 0);
+            ntt_bt_connected_prompt_request(0);
 #ifdef BESUI_BOX_PUTINOUT_EN
             app_putinout_box_event_process(uicom.box_put_sta, true);
 #endif
         }
         else if(conn_devices == 2)
         {
-            media_PlayAudio(AUD_ID_BT_CONNECTED, 0);
+            ntt_bt_connected_prompt_request(0);
 #ifdef BESUI_BOX_PUTINOUT_EN
             app_putinout_box_event_process(uicom.box_put_sta, true);
 #endif
@@ -791,7 +941,7 @@ void app_bt_phone_connected_event_process(void)
                 app_status_indication_set(APP_STATUS_INDICATION_CONNECTED);
                 app_tws_ledsta_to_slave_process(conn_devices, APP_STATUS_INDICATION_CONNECTED);
 
-                media_PlayAudio(AUD_ID_BT_CONNECTED, 0);
+                ntt_bt_connected_prompt_request(0);
 #ifdef BESUI_BOX_PUTINOUT_EN
                 app_putinout_box_event_process(uicom.box_put_sta, true);
 #endif
@@ -806,7 +956,7 @@ void app_bt_phone_connected_event_process(void)
         {
             if(TWS_UI_MASTER == app_ibrt_if_get_ui_role())
             {
-                media_PlayAudio(AUD_ID_BT_CONNECTED, 0);
+                ntt_bt_connected_prompt_request(0);
                 #ifdef BESUI_BOX_PUTINOUT_EN
                 app_putinout_box_event_process(uicom.box_put_sta, true);
                 #endif
@@ -936,6 +1086,18 @@ void app_bt_phone_disconnected_event_process(uint8_t discon_type)
 {
     uint8_t conn_devices = besui_get_profile_conn_num();
     POSSIBLY_UNUSED uint8_t slave_need_enter_pairmode = 0;
+
+    /* Ignore transient single-profile disconnects during HFP/A2DP restore. */
+    if (conn_devices == 0)
+    {
+        ntt_bt_connected_prompt_cancel();
+    }
+    else
+    {
+        BESUI_TRACE(1,
+                    "[NTT_CONN_PROMPT] disconnect event ignored conn=%u",
+                    conn_devices);
+    }
 
     BESUI_TRACE(1,"[UIBT]%s discon_type 0x%02X conn %d ui role %d mode %d", __func__, discon_type, conn_devices, app_ibrt_if_get_ui_role(), app_bt_get_curr_access_mode());
     app_bt_system_phone_cancel_enter_pairmode_flag = false;

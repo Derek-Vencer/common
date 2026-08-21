@@ -1,9 +1,15 @@
 #ifndef __TWSUI_BTMSG_H__
 #define __TWSUI_BTMSG_H__
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Used by app_bt.cpp regardless of its local BESUI macro visibility. */
+void ntt_bt_connected_prompt_request(uint8_t device_id);
+void ntt_bt_connected_prompt_cancel(void);
 
 #ifdef BESUI_TWS_EN
 #ifdef BESUI_BTMSG_EN

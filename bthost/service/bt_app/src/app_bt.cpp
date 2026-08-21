@@ -209,6 +209,140 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
+#define NTT_BT_CONNECTED_PROMPT_DELAY_MS      2500
+#define NTT_BT_CONNECTED_PROMPT_RETRY_MS       200
+#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY       15
+
+static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
+static bool ntt_bt_connected_prompt_pending = false;
+static uint8_t ntt_bt_connected_prompt_device_id = 0;
+static uint8_t ntt_bt_connected_prompt_retry_count = 0;
+
+static void ntt_bt_connected_prompt_timehandler(void const *param)
+{
+    uint8_t device_id = ntt_bt_connected_prompt_device_id;
+
+    if (!ntt_bt_connected_prompt_pending)
+    {
+        return;
+    }
+
+#ifdef IBRT
+    bool tws_connected = bts_tws_if_is_tws_link_connected();
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
+
+    DEBUG_INFO(4,
+               "[NTT_CONN_PROMPT] check dev=%u tws=%u role=%u retry=%u",
+               device_id,
+               tws_connected,
+               ui_role,
+               ntt_bt_connected_prompt_retry_count);
+
+    if (tws_connected && (ui_role == TWS_UI_MASTER))
+    {
+        ntt_bt_connected_prompt_pending = false;
+        ntt_bt_connected_prompt_retry_count = 0;
+
+        DEBUG_INFO(1,
+                   "[NTT_CONN_PROMPT] master play dev=%u",
+                   device_id);
+
+        audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
+        return;
+    }
+
+    if (ntt_bt_connected_prompt_retry_count <
+        NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
+    {
+        ntt_bt_connected_prompt_retry_count++;
+        osTimerStart(ntt_bt_connected_prompt_timer_id,
+                     NTT_BT_CONNECTED_PROMPT_RETRY_MS);
+
+        DEBUG_INFO(3,
+                   "[NTT_CONN_PROMPT] wait tws/role role=%u retry=%u tws=%u",
+                   ui_role,
+                   ntt_bt_connected_prompt_retry_count,
+                   tws_connected);
+        return;
+    }
+
+    ntt_bt_connected_prompt_pending = false;
+    ntt_bt_connected_prompt_retry_count = 0;
+
+    if (!tws_connected)
+    {
+        DEBUG_INFO(1,
+                   "[NTT_CONN_PROMPT] no tws, local play dev=%u",
+                   device_id);
+        audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
+    }
+    else
+    {
+        DEBUG_INFO(0,
+                   "[NTT_CONN_PROMPT] slave timeout, wait peer prompt");
+    }
+#else
+    ntt_bt_connected_prompt_pending = false;
+    ntt_bt_connected_prompt_retry_count = 0;
+    audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
+#endif
+}
+
+osTimerDef(NTT_BT_CONNECTED_PROMPT_TIMER,
+           (void (*)(void const *))ntt_bt_connected_prompt_timehandler);
+
+static void ntt_bt_connected_prompt_request(uint8_t device_id)
+{
+    ntt_bt_connected_prompt_device_id = device_id;
+
+    if (ntt_bt_connected_prompt_timer_id == NULL)
+    {
+        ntt_bt_connected_prompt_timer_id =
+            osTimerCreate(osTimer(NTT_BT_CONNECTED_PROMPT_TIMER),
+                          osTimerOnce,
+                          NULL);
+        ASSERT(ntt_bt_connected_prompt_timer_id,
+               "[NTT_CONN_PROMPT] timer create failed");
+    }
+
+    if (ntt_bt_connected_prompt_pending)
+    {
+        DEBUG_INFO(1,
+                   "[NTT_CONN_PROMPT] duplicate ignored dev=%u",
+                   device_id);
+        return;
+    }
+
+    ntt_bt_connected_prompt_pending = true;
+    ntt_bt_connected_prompt_retry_count = 0;
+    osTimerStop(ntt_bt_connected_prompt_timer_id);
+    osTimerStart(ntt_bt_connected_prompt_timer_id,
+                 NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+
+    DEBUG_INFO(2,
+               "[NTT_CONN_PROMPT] defer dev=%u delay=%u ms",
+               device_id,
+               NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+}
+
+static void ntt_bt_connected_prompt_cancel(void)
+{
+    if (!ntt_bt_connected_prompt_pending)
+    {
+        return;
+    }
+
+    ntt_bt_connected_prompt_pending = false;
+    ntt_bt_connected_prompt_retry_count = 0;
+
+    if (ntt_bt_connected_prompt_timer_id != NULL)
+    {
+        osTimerStop(ntt_bt_connected_prompt_timer_id);
+    }
+
+    DEBUG_INFO(0, "[NTT_CONN_PROMPT] cancel");
+}
+
 static void app_bt_profile_reconnect_timehandler(void const *param);
 static void app_bt_accessmode_timehandler(void const *param);
 
@@ -6066,7 +6200,7 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
         app_bt_get_remote_device_name(&curr_device->remote);
 #endif
 #if defined(MEDIA_PLAYER_SUPPORT) //&& !defined(IBRT)
-        audio_player_play_prompt(AUD_ID_BT_CONNECTED, id);
+        ntt_bt_connected_prompt_request(id);
 #endif
     }
 
@@ -6077,6 +6211,7 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
 
         profile_mgr->profile_connected = false;
         DEBUG_INFO(0,"BT hfp disconnected!!!");
+        ntt_bt_connected_prompt_cancel();
 
 #ifdef GFPS_ENABLED
         if (gfps_is_last_response_pending())
@@ -6364,7 +6499,7 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
         app_bt_get_remote_device_name(&curr_device->remote);
 #endif
 #if defined(MEDIA_PLAYER_SUPPORT) //&& !defined(IBRT)
-        audio_player_play_prompt(AUD_ID_BT_CONNECTED, id);
+        ntt_bt_connected_prompt_request(id);
 #endif
     }
 
@@ -6375,6 +6510,7 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
 
         profile_mgr->profile_connected = false;
         DEBUG_INFO(0,"BT a2dp disconnected!!!");
+        ntt_bt_connected_prompt_cancel();
 
 #ifdef GFPS_ENABLED
         if (gfps_is_last_response_pending())
