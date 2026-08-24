@@ -2874,7 +2874,7 @@ static void ntt_case_out_slave_push_battery(void)
  *
  * 0: 雙耳都放入充電盒後，才暫停音樂。
  */
-#define NTT_PAUSE_ON_ANY_EAR_IN_CASE 1
+#define NTT_PAUSE_ON_ANY_EAR_IN_CASE 0
 
 
 /*

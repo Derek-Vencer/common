@@ -3433,13 +3433,52 @@ bool app_bt_checker_print_link_state(const char* tag, btif_remote_device_t *btm_
         if(ret)
         {
             app_bt_get_tx_power_idx(conhdl, &tx_power_id);
-            DEBUG_INFO(3, "%s RSSI=%d,RX gain =%d,TXpwr id=%d,Piconet CLK=0x%x", tag ? tag : "",link_agc_info.rssi,
-                link_agc_info.rxgain, tx_power_id,bt_syn_get_curr_ticks(conhdl));
 
-#if defined(__CONNECTIVITY_LOG_REPORT__)
-            app_ibrt_if_update_rssi_info(tag, link_agc_info, btif_me_get_device_id_from_rdev(btm_conn));
-            app_ibrt_if_save_bt_clkoffset(bt_syn_get_clkoffset(conhdl), btif_me_get_device_id_from_rdev(btm_conn));
-#endif
+            /*
+            * NTT TWS RF TEST
+            * Only limit PEER TWS TX power:
+            *
+            * TX_PWR_IDX_2 = 8 dBm
+            * TX_PWR_IDX_3 = 12 dBm
+            *
+            * Prevent TWS link from dropping below 8 dBm.
+            * Mobile / BLE links are not affected.
+            */
+            if (tag && (strcmp(tag, "PEER TWS") == 0))
+            {
+                if (tx_power_id < 2)
+                {
+                    DEBUG_INFO(3,
+                            "[NTT_TWS_RF] RSSI=%d txpwr %d -> 2",
+                            link_agc_info.rssi,
+                            tx_power_id);
+
+                    btdrv_regop_host_set_txpwr(
+                        conhdl,
+                        2);
+
+                    tx_power_id = 2;
+                }
+            }
+
+            DEBUG_INFO(3,
+                "%s RSSI=%d,RX gain =%d,TXpwr id=%d,Piconet CLK=0x%x",
+                tag ? tag : "",
+                link_agc_info.rssi,
+                link_agc_info.rxgain,
+                tx_power_id,
+                bt_syn_get_curr_ticks(conhdl));
+
+        #if defined(__CONNECTIVITY_LOG_REPORT__)
+            app_ibrt_if_update_rssi_info(
+                tag,
+                link_agc_info,
+                btif_me_get_device_id_from_rdev(btm_conn));
+
+            app_ibrt_if_save_bt_clkoffset(
+                bt_syn_get_clkoffset(conhdl),
+                btif_me_get_device_id_from_rdev(btm_conn));
+        #endif
         }
 
         if (0 == bt_drv_reg_op_acl_chnmap(conhdl, chlMap, sizeof(chlMap)))
