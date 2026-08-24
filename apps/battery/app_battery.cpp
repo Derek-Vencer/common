@@ -502,22 +502,46 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         return;
     }
 
-    if (!charging ||
-        (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE))
+    /*
+    * Do not use BES UI case state as the shutdown-cancel condition.
+    *
+    * During the 3-second Power-On prompt delay, BES UI may generate a
+    * delayed CASE_OPEN event even though the earbud is still charging
+    * inside the case.
+    *
+    * Cancel shutdown only when:
+    * 1. Charger is actually removed, or
+    * 2. A confirmed OPEN_CASE command has called
+    *    ntt_case_poweroff_cancel().
+    */
+    if (!charging || g_ntt_case_open_cancel)
     {
-        BATTERY_TRACE(2,
-                      "[POWER_OFF] condition changed charging=%d case=%d -> cancel",
-                      charging,
-                      ntt_case_state_get_local());
+        BATTERY_TRACE(3,
+                    "[POWER_OFF] cancel charging=%d open_cancel=%d case=%d",
+                    charging,
+                    g_ntt_case_open_cancel,
+                    ntt_case_state_get_local());
 
         ntt_charging_pwron_pending_shutdown = false;
 
-#ifdef IBRT
+    #ifdef IBRT
         g_pogonin_role_switch_requested = false;
         g_pogonin_role_switch_wait_count = 0;
         ntt_case_close_role_switch_reset();
-#endif
+    #endif
         return;
+    }
+
+    /*
+    * Log the inconsistent UI state, but do not cancel because the
+    * charger confirms that the earbud is still physically in the case.
+    */
+    if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE)
+    {
+        BATTERY_TRACE(2,
+                    "[POWER_OFF] ignore stale case=%d while charging=%d",
+                    ntt_case_state_get_local(),
+                    charging);
     }
 
     BATTERY_TRACE(0,"[POWER_OFF] condition valid -> check role switch");
