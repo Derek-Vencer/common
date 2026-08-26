@@ -706,54 +706,78 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     uint8_t peer_box_raw = 0xFF;
     uint8_t role = app_ibrt_if_get_ui_role();
 
+    (void)rsp_seq;
 
     if ((p_buff == NULL) || (length < 1))
     {
+        EARBUDS_TRACE(1,
+                      "[BAT_SYNC][RECV] invalid payload length=%u",
+                      length);
         return;
     }
 
     peer_raw = p_buff[0];
-    peer_box_raw = (length > 1) ? p_buff[1] : 0xFF;
 
-    if (peer_raw <= 9)
+    if (length > 1)
     {
-        peer_percent = (peer_raw >= 9) ? 100 : ((peer_raw + 1) * 10);
+        peer_box_raw = p_buff[1];
     }
-    else if (peer_raw <= 100)
+
+    /*
+     * TWS battery payload uses a direct percentage.
+     * Values from 0 to 100 represent 0% to 100%.
+     */
+    if (peer_raw <= 100)
     {
         peer_percent = peer_raw;
     }
     else
     {
-
+        EARBUDS_TRACE(2,
+                      "[BAT_SYNC][RECV] invalid peer battery raw=0x%02X length=%u",
+                      peer_raw,
+                      length);
         return;
     }
 
+    EARBUDS_TRACE(4,
+                  "[BAT_SYNC][RECV] role=%u raw=%u percent=%u box=%u",
+                  role,
+                  peer_raw,
+                  peer_percent,
+                  peer_box_raw);
 
-    if (role == TWS_UI_MASTER)
+    if (role != TWS_UI_MASTER)
     {
-        g_tws_peer_battery_level = peer_percent;
-        g_tws_peer_battery_valid = true;
-
-        if (peer_box_raw <= 100)
-        {
-            g_tws_peer_box_battery_level = peer_box_raw;
-            g_tws_peer_box_battery_valid = true;
-        }
-
-        EARBUDS_TRACE(4,
-                    "[BAT_SYNC][MASTER_SAVE_PEER] ear=%d valid=%d box=%d box_valid=%d",
-                    g_tws_peer_battery_level,
-                    g_tws_peer_battery_valid,
-                    g_tws_peer_box_battery_level,
-                    g_tws_peer_box_battery_valid);
-
-    #ifdef BESUI_TWS_EN
-        set_tws_peer_battery_percent(peer_percent);
-        app_battery_set_other_battery_level(peer_percent);
-        app_tws_battery_update(true);
-    #endif
+        return;
     }
+
+    g_tws_peer_battery_level = peer_percent;
+    g_tws_peer_battery_valid = true;
+
+    if (peer_box_raw <= 100)
+    {
+        g_tws_peer_box_battery_level = peer_box_raw;
+        g_tws_peer_box_battery_valid = true;
+    }
+    else
+    {
+        g_tws_peer_box_battery_level = 0xFF;
+        g_tws_peer_box_battery_valid = false;
+    }
+
+    EARBUDS_TRACE(4,
+                  "[BAT_SYNC][MASTER_SAVE_PEER] ear=%u valid=%u box=%u box_valid=%u",
+                  g_tws_peer_battery_level,
+                  g_tws_peer_battery_valid,
+                  g_tws_peer_box_battery_level,
+                  g_tws_peer_box_battery_valid);
+
+#ifdef BESUI_TWS_EN
+    set_tws_peer_battery_percent(peer_percent);
+    app_battery_set_other_battery_level(peer_percent);
+    app_tws_battery_update(true);
+#endif
 }
 
 #ifdef BESUI_GAME_EN
