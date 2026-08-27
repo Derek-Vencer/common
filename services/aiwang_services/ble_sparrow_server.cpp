@@ -45,6 +45,7 @@
 #include "bts_tws_if.h"
 #include "app_ibrt_customif_cmd.h"
 #include "audio_cfg.h"
+#include "audio_process.h"
 
 #define GOC_APP_DEBUG_ENABLE 1
 
@@ -74,6 +75,7 @@ extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
 extern bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 extern "C" void dtm_enter_pairing_mode(void);
+extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 
 #define MAX_PACKET_SIZE             (512)
 #define SPARRAW_EVENT_MAX_MAILBOX   (10)
@@ -236,8 +238,20 @@ typedef enum {
     FUNC_PREV_SONG      = 0x05,
     FUNC_VOLUME_UP      = 0x06,
     FUNC_VOLUME_DOWN    = 0x07,
-    FUNC_VOICE_ASSIST   = 0x08
+    FUNC_VOICE_ASSIST   = 0x08,
+    FUNC_EQ_NEXT        = 0x09,
+    FUNC_EQ_CLEAR_VOICE = 0x0A
 } function_t;
+
+#define NTT_EQ_PRESET_COUNT              5
+#define NTT_EQ_CLEAR_VOICE_PRESET        3
+#define NTT_EQ_PRESET_INVALID             0xFF
+
+/*
+ * This is intentionally RAM-only.  Function 0x0A is a temporary toggle:
+ * enter Clear Voice and restore the EQ that was active immediately before it.
+ */
+static uint8_t ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
 
 // 单个映射条目
 typedef struct {
@@ -1437,6 +1451,36 @@ void handleGetEqIndex(uint8_t *index)
 	*index = nvrecord_env->eq_index_data;
 }
 
+static bool ntt_eq_preset_is_valid(uint8_t preset)
+{
+    return (preset < NTT_EQ_PRESET_COUNT);
+}
+
+static void ntt_keymap_apply_eq_preset(uint8_t preset)
+{
+    if (!ntt_eq_preset_is_valid(preset))
+    {
+        TRACE(0, "[KEYMAP][EQ] invalid preset=%u", (unsigned)preset);
+        return;
+    }
+
+    audio_eq_set_cfg(NULL,
+                     audio_eq_cfg_vol_list[preset],
+                     AUDIO_EQ_TYPE_HW_DAC_IIR);
+    ntt_audio_drc_apply_by_eq_index(preset);
+    handleSetEqIndex(preset);
+    app_ibrt_customif_cmd_sync_music_eq(preset);
+
+#ifdef __AUDIO_DYNAMIC_BOOST__
+#ifdef DYNAMIC_BOOST_USE_HW_EQ
+    audio_dynamic_boost_set_new_customer_iir_eq(&audio_process.hw_dac_iir_cfg,
+                                                AUDIO_EQ_TYPE_HW_DAC_IIR);
+#endif
+#endif
+
+    TRACE(0, "[KEYMAP][EQ] applied preset=%u", (unsigned)preset);
+}
+
 void handleGetEqPresent(const uint8_t *data, uint16_t len)
 {
     TRACE(0,
@@ -1494,9 +1538,7 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
 }
 
 #include "hw_codec_iir_process.h"
-#include "audio_process.h"
 //extern int audio_eq_hw_dac_iir_callback(uint8_t *buf, uint32_t  len);
-extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 //#include "hw_codec_iir_process.h"
 //IIR_CFG_T hw_dac_iir_cfg;
 #if 0
@@ -1536,7 +1578,7 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 
     presetId = data[3];
 
-    if (presetId >= 6)
+    if (!ntt_eq_preset_is_valid(presetId))
     {
         TRACE(0, "%s invalid presetId=%d", __func__, presetId);
         ntt_api_send_error_notify(0x4B, API_ERR_INVALID_PARAM);
@@ -1545,21 +1587,9 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
 
     TRACE(0, "%s[%d].", __func__, presetId);
 
-    audio_eq_set_cfg(NULL,
-                     audio_eq_cfg_vol_list[presetId],
-                     AUDIO_EQ_TYPE_HW_DAC_IIR);
-    ntt_audio_drc_apply_by_eq_index(presetId);
-
-    app_ibrt_customif_cmd_sync_music_eq(presetId);
-
-#ifdef __AUDIO_DYNAMIC_BOOST__
-#ifdef DYNAMIC_BOOST_USE_HW_EQ
-    audio_dynamic_boost_set_new_customer_iir_eq(&audio_process.hw_dac_iir_cfg,
-                                                AUDIO_EQ_TYPE_HW_DAC_IIR);
-#endif
-#endif
-
-    handleSetEqIndex(presetId);
+    /* An App EQ change starts a new EQ selection, not a Clear Voice toggle. */
+    ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
+    ntt_keymap_apply_eq_preset(presetId);
 
 #if need_send_data_by_notify
     sparraw_tx_msg(RSP_SET_EQ_PRESET, (const uint8_t *)"", 0);
@@ -2467,6 +2497,81 @@ static void on_voice_assist(void)   {
 	app_audio_control_open_voice_assistant();
 }
 
+/* Function 0x09: select the next EQ preset and wrap after preset 5. */
+static void on_eq_next(void)
+{
+    uint8_t current_preset = 0;
+
+    handleGetEqIndex(&current_preset);
+
+    if (!ntt_eq_preset_is_valid(current_preset))
+    {
+        TRACE(0, "[KEYMAP][EQ] invalid current=%u, use 0", (unsigned)current_preset);
+        current_preset = 0;
+    }
+
+    ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
+    ntt_keymap_apply_eq_preset((uint8_t)((current_preset + 1) % NTT_EQ_PRESET_COUNT));
+}
+
+/*
+ * Function 0x0A: enter Clear Voice (preset 3), then restore the EQ that was
+ * active immediately before it when the same function is used again.
+ */
+static void on_eq_clear_voice_toggle(void)
+{
+    uint8_t current_preset = 0;
+    uint8_t target_preset = 0;
+
+    handleGetEqIndex(&current_preset);
+
+    if (!ntt_eq_preset_is_valid(current_preset))
+    {
+        TRACE(0, "[KEYMAP][EQ] invalid current=%u, use Clear Voice",
+              (unsigned)current_preset);
+        current_preset = NTT_EQ_CLEAR_VOICE_PRESET;
+    }
+
+    /*
+     * No saved EQ:
+     * Save current EQ (including preset 3), then enter/stay Clear Voice.
+     */
+    if (!ntt_eq_preset_is_valid(ntt_eq_preset_before_clear_voice))
+    {
+        ntt_eq_preset_before_clear_voice = current_preset;
+        target_preset = NTT_EQ_CLEAR_VOICE_PRESET;
+
+        TRACE(0, "[KEYMAP][EQ] Clear Voice ON, save=%u",
+              (unsigned)current_preset);
+    }
+    /*
+     * A previous EQ was saved and current EQ is still Clear Voice:
+     * Restore it, then clear the temporary saved value.
+     */
+    else if (current_preset == NTT_EQ_CLEAR_VOICE_PRESET)
+    {
+        target_preset = ntt_eq_preset_before_clear_voice;
+        ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
+
+        TRACE(0, "[KEYMAP][EQ] Clear Voice OFF, restore=%u",
+              (unsigned)target_preset);
+    }
+    /*
+     * EQ was changed externally after Clear Voice was entered.
+     * Start a new Clear Voice sequence using this new EQ as the restore target.
+     */
+    else
+    {
+        ntt_eq_preset_before_clear_voice = current_preset;
+        target_preset = NTT_EQ_CLEAR_VOICE_PRESET;
+
+        TRACE(0, "[KEYMAP][EQ] Clear Voice ON again, save=%u",
+              (unsigned)current_preset);
+    }
+
+    ntt_keymap_apply_eq_preset(target_preset);
+}
+
 void key_function_execute(function_t func)
 {
     switch (func)
@@ -2509,6 +2614,16 @@ void key_function_execute(function_t func)
         case FUNC_VOICE_ASSIST:
             TRACE(0, "[ACTION] VOICE_ASSIST");
             on_voice_assist();
+            break;
+
+        case FUNC_EQ_NEXT:
+            TRACE(0, "[ACTION] EQ_NEXT");
+            on_eq_next();
+            break;
+
+        case FUNC_EQ_CLEAR_VOICE:
+            TRACE(0, "[ACTION] EQ_CLEAR_VOICE");
+            on_eq_clear_voice_toggle();
             break;
 
         default:
