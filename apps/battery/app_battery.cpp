@@ -160,6 +160,12 @@ static bool g_low_bat_voice_first = true;
 #define APP_BATTERY_GET_PRAMS(appevt, prams) ((prams) = appevt&0xffff)
 #if defined(IBRT)
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+
+/*
+ * Implemented by the Sparrow BLE service. It sends the three-byte battery
+ * payload through the proactive 0x31 Notify packet.
+ */
+extern void sparrow_push_battery_level_notify(bool slave_disconnected);
 #endif
 enum APP_BATTERY_MEASURE_PERIODIC_T
 {
@@ -927,6 +933,36 @@ uint8_t app_battery_get_display_percent(void)
     return (uint8_t)((level + 1) * 10);
 }
 
+void app_battery_notify_peer_percent_changed(void)
+{
+#if defined(IBRT)
+    if (app_ibrt_if_get_ui_role() != TWS_UI_MASTER)
+    {
+        BATTERY_TRACE(1,
+                      "[BAT31] peer update ignored: local is not MASTER");
+        return;
+    }
+
+    BATTERY_TRACE(1, "[BAT31] peer battery changed -> push");
+    sparrow_push_battery_level_notify(false);
+#endif
+}
+
+void app_battery_notify_tws_slave_disconnected(void)
+{
+#if defined(IBRT)
+    if (app_ibrt_if_get_ui_role() != TWS_UI_MASTER)
+    {
+        BATTERY_TRACE(1,
+                      "[BAT31] slave disconnect ignored: local is not MASTER");
+        return;
+    }
+
+    BATTERY_TRACE(0, "[BAT31] slave disconnected -> push peer=FF");
+    sparrow_push_battery_level_notify(true);
+#endif
+}
+
 #ifdef BESUI_STEREO_EN
 int app_ui_battery_charger_handle_process(void)
 {
@@ -1318,6 +1354,23 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                 BATTERY_TRACE(1,
                             "[BAT_SYNC] percent=%d",
                             app_percent);
+
+                /*
+                 * The phone's BLE session belongs to the TWS Master.
+                 * On a local percentage change, the Master can immediately
+                 * update App battery data through proactive 0x31 Notify.
+                 * A Slave only synchronizes its value above; the Master's
+                 * TWS receive handler calls
+                 * app_battery_notify_peer_percent_changed().
+                 */
+                if (app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+                {
+                    BATTERY_TRACE(1,
+                                  "[BAT31] local battery changed=%d -> push",
+                                  app_percent);
+
+                    sparrow_push_battery_level_notify(false);
+                }
             }
             else if (app_percent == 0xFF)
             {
@@ -1392,23 +1445,6 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
         #endif
         #endif
 
-        /*
-        * App 與 TWS Peer 使用精細的 0～100%。
-        */
-        //uint8_t app_percent = app_battery_get_precise_percent();
-
-#if defined(IBRT)
-        {
-            static int16_t last_sync_percent = -1;
-
-            if (last_sync_percent != app_percent)
-            {
-                last_sync_percent = app_percent;
-                app_ibrt_customif_cmd_sync_battery_level(app_percent);
-                BATTERY_TRACE(1,"[BAT_SYNC] percent=%d",app_percent);
-            }
-        }
-#endif
             /*
             * 手機 HFP 使用 0～9 level。
             */

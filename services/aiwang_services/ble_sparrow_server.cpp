@@ -516,12 +516,99 @@ void handleGetBatteryLevel(const uint8_t *data,
      * Read reply    : 0x32
      */
     sparraw_tx_msg(
-        0x31,
+        0x32,
         batteryArray,
         sizeof(batteryArray));
 #endif
 }
 
+extern bool isRightOfTheEarBuds(void);
+static uint8_t g_bat31_last_value[3] = { 0xFF, 0xFF, 0xFF };
+static bool g_bat31_last_value_valid = false;
+static bool g_bat31_peer_disconnected = false;
+
+void sparrow_push_battery_level_notify(bool slave_disconnected)
+{
+    uint8_t batteryArray[3] = { 0xFF, 0xFF, 0xFF };
+
+    if (!sparrow_get_battery_report_values(batteryArray))
+    {
+        TRACE(0, "[BAT31][PUSH] battery not ready");
+        return;
+    }
+
+    /*
+     * batteryArray format:
+     * [0] = Left ear
+     * [1] = Right ear
+     * [2] = Charging case
+     *
+     * 本專案 IBRT_RIGHT_MASTER=1：
+     * Right = Master, Left = Slave
+     */
+    if (slave_disconnected)
+    {
+        /*
+        * 發送 0x31 的本耳仍與手機連線，
+        * 已斷線的 Peer 必定是另一個實體耳。
+        */
+        if (isRightOfTheEarBuds())
+        {
+            batteryArray[0] = 0xFF;     // 本耳 Right，Peer Left
+        }
+        else
+        {
+            batteryArray[1] = 0xFF;     // 本耳 Left，Peer Right
+        }
+    }
+
+    bool peer_state_changed =
+        (g_bat31_peer_disconnected != slave_disconnected);
+
+    /*
+    * 電量資料相同時不重複推送；
+    * 但 Peer 連線狀態變更一定要推送。
+    *
+    * false -> true：Peer 斷線，送 0xFF
+    * true  -> false：Peer 回連，送正常電量
+    */
+    if (!peer_state_changed &&
+        g_bat31_last_value_valid &&
+        (memcmp(g_bat31_last_value,
+                batteryArray,
+                sizeof(batteryArray)) == 0))
+    {
+        TRACE(0,
+            "[BAT31][PUSH] unchanged L=%u R=%u CASE=%u peer_disc=%u",
+            batteryArray[0],
+            batteryArray[1],
+            batteryArray[2],
+            slave_disconnected);
+        return;
+    }
+
+    g_bat31_peer_disconnected = slave_disconnected;
+
+    memcpy(g_bat31_last_value,
+           batteryArray,
+           sizeof(g_bat31_last_value));
+
+    g_bat31_last_value_valid = true;
+
+    TRACE(0,
+          "[BAT31][PUSH] L=%u R=%u CASE=%u slave_disc=%u",
+          batteryArray[0],
+          batteryArray[1],
+          batteryArray[2],
+          slave_disconnected);
+
+#if need_send_data_by_notify
+    sparraw_tx_msg(
+        0x31,                       // Proactive battery Notify
+        batteryArray,
+        sizeof(batteryArray));
+#endif
+}
 
 #define NTT_BT_NAME_MAX_LEN             45
 #define NTT_BT_NAME_DELAY_WRITE_MS          10000

@@ -97,6 +97,9 @@
 
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 
+/* Implemented by the Sparrow BLE service: proactive battery 0x31 Notify. */
+extern void sparrow_push_battery_level_notify(bool slave_disconnected);
+
 extern ibrt_link_status_changed_cb_t* ibrt_link_status_changed_client_cb;
 extern ibrt_mgr_status_changed_cb_t *ibrt_mgr_status_changed_client_cb;
 extern ibrt_ext_conn_policy_cb_t *ibrt_ext_conn_policy_client_cb;
@@ -903,6 +906,22 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
             EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
+
+            /*
+             * Peer reconnect is complete only after TWS profiles are ready.
+             * Send from the ear that still owns the phone/BLE connection.
+             */
+            if (app_bt_ibrt_has_mobile_link_connected())
+            {
+                EARBUDS_TRACE(0,
+                              "[BAT31] TWS peer reconnected -> push peer battery");
+                sparrow_push_battery_level_notify(false);
+            }
+            else
+            {
+                EARBUDS_TRACE(1,
+                              "[BAT31] TWS peer reconnected, no local mobile link");
+            }
 #ifdef IBRT
         if (!app_ibrt_middleware_is_ui_slave())
         {
@@ -917,6 +936,23 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
             break;
         case IBRT_CONN_ACL_DISCONNECTED:
             EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_DISCONNECTED ");
+
+            /*
+             * The UI role may already have changed to UNKNOWN at this point.
+             * Do not use UI-role checking here; the local mobile-link owner
+             * is the only ear that can notify the App.
+             */
+            if (app_bt_ibrt_has_mobile_link_connected())
+            {
+                EARBUDS_TRACE(0,
+                              "[BAT31] TWS peer disconnected -> push peer=FF");
+                sparrow_push_battery_level_notify(true);
+            }
+            else
+            {
+                EARBUDS_TRACE(1,
+                              "[BAT31] TWS peer disconnected, no local mobile link");
+            }
             break;
         case IBRT_CONN_ACL_CONNECTING_CANCELED:
             break;
@@ -2131,12 +2167,35 @@ int app_ibrt_customif_ui_start(void)
 
 void app_ibrt_customif_tws_ui_role_updated(uint8_t newRole)
 {
+    static uint8_t last_tws_ui_role = TWS_UI_UNKNOWN;
+
     app_ibrt_middleware_ui_role_updated_handler(newRole);
 
     EARBUDS_TRACE(0,
         "%s newRole=%d",
         __func__,
         newRole);
+
+    /*
+     * On TWS link loss, both ears change their UI role to UNKNOWN. The
+     * previous ACL-state callback can run only on the ear that initiated
+     * the disconnect (R2 in the latest test), which has no phone link.
+     *
+     * This callback is also received by the remaining phone/BLE owner (L2),
+     * so it is the reliable place to invalidate the Peer battery in App.
+     */
+    if ((newRole == TWS_UI_UNKNOWN) &&
+        (last_tws_ui_role != TWS_UI_UNKNOWN) &&
+        app_bt_ibrt_has_mobile_link_connected())
+    {
+        EARBUDS_TRACE(0,
+            "[BAT31] TWS peer lost, role %d -> UNKNOWN, push peer=FF",
+            last_tws_ui_role);
+
+        sparrow_push_battery_level_notify(true);
+    }
+
+    last_tws_ui_role = newRole;
 
     extern int bt_sco_chain_set_master_role(bool is_master);
     extern void bt_media_set_current_media(uint16_t stream_type);

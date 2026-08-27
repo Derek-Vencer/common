@@ -120,6 +120,18 @@ uint8_t app_battery_get_display_percent(void);
 uint8_t app_battery_get_percent(void);
 uint8_t app_battery_get_precise_percent(void);
 bool app_battery_is_measurement_valid(void);
+
+/*
+ * Battery 0x31 proactive-notify bridges.
+ *
+ * Call app_battery_notify_peer_percent_changed() after the Master has saved
+ * a new TWS peer battery percentage. Call
+ * app_battery_notify_tws_slave_disconnected() from the TWS Slave disconnect
+ * callback. Both functions only send the BLE notification from the current
+ * TWS Master.
+ */
+void app_battery_notify_peer_percent_changed(void);
+void app_battery_notify_tws_slave_disconnected(void);
 #if defined(BESUI_TWS_EN)
 void app_battery_clear_index(void);
 #endif
