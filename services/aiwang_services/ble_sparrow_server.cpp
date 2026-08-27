@@ -526,6 +526,48 @@ extern bool isRightOfTheEarBuds(void);
 static uint8_t g_bat31_last_value[3] = { 0xFF, 0xFF, 0xFF };
 static bool g_bat31_last_value_valid = false;
 static bool g_bat31_peer_disconnected = false;
+/*
+ * Battery may be ready before the BLE client enables the 0x31 CCCD.
+ * Keep the boot notification pending until a usable app transport exists.
+ */
+static bool g_bat31_initial_notify_pending = true;
+static bool g_bat31_force_next_notify = false;
+
+void sparrow_push_battery_level_notify(bool slave_disconnected);
+
+static void sparrow_try_push_initial_battery_notify(void)
+{
+    uint8_t battery_array[3] = { 0xFF, 0xFF, 0xFF };
+
+    if (!g_bat31_initial_notify_pending)
+    {
+        return;
+    }
+
+    /* BLE notification cannot be sent until the client enables CCCD. */
+    if ((g_sparrow_api_transport == SPARROW_API_TRANSPORT_BLE) &&
+        !app_sparraw_env.notifyEnable)
+    {
+        TRACE(0, "[BAT31][BOOT] wait BLE notify enable");
+        return;
+    }
+
+    /* Do not consume the boot notification before ADC battery is ready. */
+    if (!sparrow_get_battery_report_values(battery_array))
+    {
+        TRACE(0, "[BAT31][BOOT] battery not ready, keep pending");
+        return;
+    }
+
+    g_bat31_initial_notify_pending = false;
+    g_bat31_force_next_notify = true;
+
+    TRACE(0, "[BAT31][BOOT] transport=%s, push initial battery",
+          (g_sparrow_api_transport == SPARROW_API_TRANSPORT_SPP) ?
+              "SPP" : "BLE");
+
+    sparrow_push_battery_level_notify(false);
+}
 
 void sparrow_push_battery_level_notify(bool slave_disconnected)
 {
@@ -572,7 +614,8 @@ void sparrow_push_battery_level_notify(bool slave_disconnected)
     * false -> true：Peer 斷線，送 0xFF
     * true  -> false：Peer 回連，送正常電量
     */
-    if (!peer_state_changed &&
+    if (!g_bat31_force_next_notify &&
+        !peer_state_changed &&
         g_bat31_last_value_valid &&
         (memcmp(g_bat31_last_value,
                 batteryArray,
@@ -588,6 +631,7 @@ void sparrow_push_battery_level_notify(bool slave_disconnected)
     }
 
     g_bat31_peer_disconnected = slave_disconnected;
+    g_bat31_force_next_notify = false;
 
     memcpy(g_bat31_last_value,
            batteryArray,
@@ -3376,6 +3420,9 @@ extern "C" void sparrow_spp_api_rx_handler(const uint8_t *data, uint16_t len)
 
     TRACE(0, "[SPARROW_RX][SPP] len=%d cmd=0x%02X", len, data[0]);
     sparrow_api_set_transport(SPARROW_API_TRANSPORT_SPP);
+    /* SPP has no connect callback in this module; the first valid API packet
+     * is the first point where the SPP application transport is usable. */
+    sparrow_try_push_initial_battery_notify();
     sparraw_rx_cmd_parse_v2(data, len);
 }
 
@@ -3421,6 +3468,14 @@ void sparraw_connected(uint8_t conidx, bool enableNotify)
     TRACE(0,"%s.", __func__);
     app_sparraw_env.conidx = conidx;
     app_sparraw_env.notifyEnable = enableNotify;
+
+    if (enableNotify)
+    {
+        /* This callback is reached after the BLE client enables Notify. */
+        sparrow_api_set_transport(SPARROW_API_TRANSPORT_BLE);
+        sparrow_try_push_initial_battery_notify();
+    }
+
 	aw_ntc_detect_volt_timer_onoff(false);
 }
 
