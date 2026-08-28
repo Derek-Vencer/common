@@ -906,7 +906,19 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
             EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
+        /*
+        * 此事件代表 TWS profiles 與 custom command channel 已建立。
+        *
+        * 若耳機離盒時 TWS 尚未連上，OUT_CASE 當時無法送出；
+        * 現在補送本機目前的真實狀態，覆蓋 Peer 保存的舊狀態。
+        *
+        * 兩耳都執行是必要的：各自同步自己的 local case state。
+        */
+        EARBUDS_TRACE(
+            0,
+            "[NTT_CASE_SYNC] TWS profiles ready -> resend local case state");
 
+        ntt_case_state_sync_resend();
             /*
              * Peer reconnect is complete only after TWS profiles are ready.
              * Send from the ear that still owns the phone/BLE connection.
