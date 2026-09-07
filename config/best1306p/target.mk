@@ -117,7 +117,7 @@ OSC_26M_X4_AUD2BB ?= 1
 export SYS_USE_BBPLL ?= 1
 
 #goodocom adjust 16 --> 13
-AUDIO_OUTPUT_VOLUME_DEFAULT ?= 13
+AUDIO_OUTPUT_VOLUME_DEFAULT ?= 8
 
 # range:1~16
 

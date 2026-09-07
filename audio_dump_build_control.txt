@@ -1,0 +1,195 @@
+services/audio_dump/include/audio_dump.h:16:#ifndef __AUDIO_DUMP_H__
+services/audio_dump/include/audio_dump.h:17:#define __AUDIO_DUMP_H__
+services/audio_dump/include/audio_dump.h:25:void audio_dump_init(int frame_len, int sample_bytes, int channel_num);
+services/audio_dump/include/audio_dump.h:26:void audio_dump_deinit(void);
+services/audio_dump/include/audio_dump.h:27:void audio_dump_clear_up(void);
+services/audio_dump/include/audio_dump.h:28:void audio_dump_add_channel_data_from_multi_channels(int channel_id, void *pcm_buf, int pcm_len, int channel_num, int channel_index);
+services/audio_dump/include/audio_dump.h:29:void audio_dump_add_channel_data_from_multi_channels_32bit_to_16bit(int channel_id, void *pcm_buf, int pcm_len, int channel_num, int channel_index, int right_shift);
+services/audio_dump/include/audio_dump.h:30:void audio_dump_add_channel_data(int channel_id, void *pcm_buf, int pcm_len);
+services/audio_dump/include/audio_dump.h:31:void audio_dump_run(void);
+services/audio_dump/include/audio_dump.h:32:void audio_dump_get_buff_info(uint8_t **buf, uint32_t *len);
+services/audio_dump/include/audio_dump.h:34:int audio_dump_buffer_mutex_init(void);
+services/audio_dump/include/audio_dump.h:35:int audio_dump_buffer_mutex_lock(void);
+services/audio_dump/include/audio_dump.h:36:int audio_dump_buffer_mutex_unlock(void);
+services/audio_dump/src/audio_dump.c:17:#include "audio_dump.h"
+services/audio_dump/src/audio_dump.c:21:#ifdef AUDIO_DEBUG
+services/audio_dump/src/audio_dump.c:28:#include "app_tota_audio_dump.h"
+services/audio_dump/src/audio_dump.c:36:#define AUDIO_DUMP_HEAD_STR             ("[trace][audio dump]")
+services/audio_dump/src/audio_dump.c:38:#define AUDIO_DUMP_HEAD_STR             ("[audio dump]")
+services/audio_dump/src/audio_dump.c:40:#define AUDIO_DUMP_HEAD_LEN             (sizeof(AUDIO_DUMP_HEAD_STR)-1)
+services/audio_dump/src/audio_dump.c:41:#define AUDIO_DUMP_INDEX_LEN            (4)
+services/audio_dump/src/audio_dump.c:42:#define AUDIO_DUMP_CRC_LEN              (4)
+services/audio_dump/src/audio_dump.c:43:#define AUDIO_DUMP_DATA_LEN             (4)
+services/audio_dump/src/audio_dump.c:44:#define AUDIO_DUMP_MAX_SAMPLE_BYTES     (sizeof(int))
+services/audio_dump/src/audio_dump.c:45:#define AUDIO_DUMP_MAX_FRAME_LEN        (512)
+services/audio_dump/src/audio_dump.c:46:#define AUDIO_DUMP_MAX_CHANNEL_NUM      (8)
+services/audio_dump/src/audio_dump.c:47:#define AUDIO_DUMP_MAX_DATA_SIZE        (AUDIO_DUMP_MAX_FRAME_LEN * AUDIO_DUMP_MAX_CHANNEL_NUM * AUDIO_DUMP_MAX_SAMPLE_BYTES / sizeof(char))
+services/audio_dump/src/audio_dump.c:48:#define AUDIO_DUMP_BUFFER_SIZE          (AUDIO_DUMP_HEAD_LEN + AUDIO_DUMP_INDEX_LEN + AUDIO_DUMP_CRC_LEN + AUDIO_DUMP_DATA_LEN + AUDIO_DUMP_MAX_DATA_SIZE)
+services/audio_dump/src/audio_dump.c:50:static int audio_dump_index = 0;
+services/audio_dump/src/audio_dump.c:51:static int audio_dump_crc = 0;
+services/audio_dump/src/audio_dump.c:52:static int audio_dump_frame_len = 256;
+services/audio_dump/src/audio_dump.c:53:static int audio_dump_sample_bytes = sizeof(short) / sizeof(char);
+services/audio_dump/src/audio_dump.c:54:static int audio_dump_channel_num = 2;
+services/audio_dump/src/audio_dump.c:55:static int audio_dump_data_size = 0;
+services/audio_dump/src/audio_dump.c:56:static int audio_dump_buf_size = 0;
+services/audio_dump/src/audio_dump.c:57:static char *audio_dump_data_ptr = NULL;
+services/audio_dump/src/audio_dump.c:58:static char audio_dump_buf[AUDIO_DUMP_BUFFER_SIZE];
+services/audio_dump/src/audio_dump.c:60:osMutexDef(audio_dump_buf_mutex);
+services/audio_dump/src/audio_dump.c:61:static void *audio_dump_buf_mutex = NULL;
+services/audio_dump/src/audio_dump.c:63:int audio_dump_buffer_mutex_init(void)
+services/audio_dump/src/audio_dump.c:65:    if (audio_dump_buf_mutex == NULL){
+services/audio_dump/src/audio_dump.c:66:        audio_dump_buf_mutex = osMutexCreate((osMutex(audio_dump_buf_mutex)));
+services/audio_dump/src/audio_dump.c:71:int audio_dump_buffer_mutex_lock(void)
+services/audio_dump/src/audio_dump.c:73:    osMutexWait((osMutexId)audio_dump_buf_mutex, osWaitForever);
+services/audio_dump/src/audio_dump.c:77:int audio_dump_buffer_mutex_unlock(void)
+services/audio_dump/src/audio_dump.c:79:    osMutexRelease((osMutexId)audio_dump_buf_mutex);
+services/audio_dump/src/audio_dump.c:84:void audio_dump_clear_up(void)
+services/audio_dump/src/audio_dump.c:86:    memset(audio_dump_data_ptr, 0, audio_dump_data_size);
+services/audio_dump/src/audio_dump.c:89:void audio_dump_init(int frame_len, int sample_bytes, int channel_num)
+services/audio_dump/src/audio_dump.c:91:    AUDIO_DUMP_TRACE(2, "%s frame_len:%d, sample_bytes:%d, channel_num:%d", __func__, frame_len, sample_bytes, channel_num);
+services/audio_dump/src/audio_dump.c:93:     ASSERT(frame_len*channel_num*sample_bytes <= AUDIO_DUMP_MAX_DATA_SIZE,
+services/audio_dump/src/audio_dump.c:96:    char *buf_ptr = audio_dump_buf;
+services/audio_dump/src/audio_dump.c:97:    audio_dump_index = 0;
+services/audio_dump/src/audio_dump.c:98:    audio_dump_crc = 0;
+services/audio_dump/src/audio_dump.c:99:    audio_dump_frame_len = frame_len;
+services/audio_dump/src/audio_dump.c:100:    audio_dump_sample_bytes = sample_bytes / sizeof(char);
+services/audio_dump/src/audio_dump.c:101:    audio_dump_channel_num = channel_num;
+services/audio_dump/src/audio_dump.c:105:     * [trace][audio_dump] + data_len(int32_t) + data
+services/audio_dump/src/audio_dump.c:107:     * In usb mode, "[trace]" is added in audio_dump module.
+services/audio_dump/src/audio_dump.c:109:    memcpy(buf_ptr, AUDIO_DUMP_HEAD_STR, AUDIO_DUMP_HEAD_LEN);
+services/audio_dump/src/audio_dump.c:112:    buf_ptr += AUDIO_DUMP_HEAD_LEN + AUDIO_DUMP_INDEX_LEN + AUDIO_DUMP_CRC_LEN;
+services/audio_dump/src/audio_dump.c:114:    buf_ptr += AUDIO_DUMP_HEAD_LEN;
+services/audio_dump/src/audio_dump.c:118:    *data_len = frame_len * channel_num * audio_dump_sample_bytes;
+services/audio_dump/src/audio_dump.c:119:    audio_dump_data_size = *data_len;
+services/audio_dump/src/audio_dump.c:121:    audio_dump_buf_size = AUDIO_DUMP_HEAD_LEN + AUDIO_DUMP_INDEX_LEN + AUDIO_DUMP_CRC_LEN + AUDIO_DUMP_DATA_LEN + audio_dump_data_size;
+services/audio_dump/src/audio_dump.c:123:    audio_dump_buf_size = AUDIO_DUMP_HEAD_LEN + AUDIO_DUMP_DATA_LEN + audio_dump_data_size;
+services/audio_dump/src/audio_dump.c:126:    buf_ptr += AUDIO_DUMP_DATA_LEN;
+services/audio_dump/src/audio_dump.c:128:    audio_dump_data_ptr = buf_ptr;
+services/audio_dump/src/audio_dump.c:130:    audio_dump_clear_up();
+services/audio_dump/src/audio_dump.c:132:    audio_dump_buffer_mutex_init();
+services/audio_dump/src/audio_dump.c:144:void audio_dump_deinit(void)
+services/audio_dump/src/audio_dump.c:156:void audio_dump_add_channel_data_from_multi_channels(int channel_id, void *pcm_buf, int pcm_len, int channel_num, int channel_index)
+services/audio_dump/src/audio_dump.c:158:    ASSERT(audio_dump_frame_len >= pcm_len, "[%s] frame_len(%d) < pcm_len(%d)", __func__, audio_dump_frame_len, pcm_len);
+services/audio_dump/src/audio_dump.c:160:    if (channel_id >= audio_dump_channel_num)
+services/audio_dump/src/audio_dump.c:165:    audio_dump_buffer_mutex_lock();
+services/audio_dump/src/audio_dump.c:166:    if (audio_dump_sample_bytes == sizeof(short))
+services/audio_dump/src/audio_dump.c:169:        short *_dump_buf = (short *)audio_dump_data_ptr;
+services/audio_dump/src/audio_dump.c:173:            _dump_buf[audio_dump_channel_num * i + channel_id] = _pcm_buf[i * channel_num + channel_index];
+services/audio_dump/src/audio_dump.c:176:    else if (audio_dump_sample_bytes == sizeof(int))
+services/audio_dump/src/audio_dump.c:179:        int *_dump_buf = (int *)audio_dump_data_ptr;
+services/audio_dump/src/audio_dump.c:183:            _dump_buf[audio_dump_channel_num * i + channel_id] = _pcm_buf[i * channel_num + channel_index];
+services/audio_dump/src/audio_dump.c:188:        ASSERT(0, "[%s] audio_dump_sample_bytes(%d) is invalid", __func__, audio_dump_sample_bytes);
+services/audio_dump/src/audio_dump.c:190:    audio_dump_buffer_mutex_unlock();
+services/audio_dump/src/audio_dump.c:193:void audio_dump_add_channel_data_from_multi_channels_32bit_to_16bit(int channel_id, void *pcm_buf, int pcm_len, int channel_num, int channel_index, int right_shift)
+services/audio_dump/src/audio_dump.c:195:    ASSERT(audio_dump_frame_len >= pcm_len, "[%s] frame_len(%d) < pcm_len(%d)", __func__, audio_dump_frame_len, pcm_len);
+services/audio_dump/src/audio_dump.c:197:    if (channel_id >= audio_dump_channel_num)
+services/audio_dump/src/audio_dump.c:204:    audio_dump_buffer_mutex_lock();
+services/audio_dump/src/audio_dump.c:205:    if (audio_dump_sample_bytes == sizeof(short))
+services/audio_dump/src/audio_dump.c:208:        short POSSIBLY_UNUSED *_dump_buf = (short *)audio_dump_data_ptr;
+services/audio_dump/src/audio_dump.c:212:            _dump_buf[audio_dump_channel_num * i + channel_id] = _pcm_buf[i * channel_num + channel_index] >> right_shift;
+services/audio_dump/src/audio_dump.c:217:        ASSERT(0, "[%s] audio_dump_sample_bytes(%d) is invalid", __func__, audio_dump_sample_bytes);
+services/audio_dump/src/audio_dump.c:219:    audio_dump_buffer_mutex_unlock();
+services/audio_dump/src/audio_dump.c:222:void audio_dump_add_channel_data(int channel_id, void *pcm_buf, int pcm_len)
+services/audio_dump/src/audio_dump.c:224:    audio_dump_add_channel_data_from_multi_channels(channel_id, pcm_buf, pcm_len, 1, 0);
+services/audio_dump/src/audio_dump.c:228:static void audio_debug_add_index(void)
+services/audio_dump/src/audio_dump.c:230:    int *index_ptr = (int *)(audio_dump_buf + AUDIO_DUMP_HEAD_LEN);
+services/audio_dump/src/audio_dump.c:232:    *index_ptr = audio_dump_index;
+services/audio_dump/src/audio_dump.c:250:static void audio_debug_add_crc(void)
+services/audio_dump/src/audio_dump.c:252:    int *crc_ptr = (int *)(audio_dump_buf + AUDIO_DUMP_HEAD_LEN + AUDIO_DUMP_CRC_LEN);
+services/audio_dump/src/audio_dump.c:258:void audio_dump_run(void)
+services/audio_dump/src/audio_dump.c:261:    int offset = AUDIO_DUMP_HEAD_LEN + AUDIO_DUMP_DATA_LEN;
+services/audio_dump/src/audio_dump.c:264:    offset += AUDIO_DUMP_INDEX_LEN + AUDIO_DUMP_CRC_LEN;
+services/audio_dump/src/audio_dump.c:267:    app_tota_audio_dump_send((uint8_t *)&audio_dump_buf[offset], audio_dump_buf_size - offset);
+services/audio_dump/src/audio_dump.c:268:    // data_dump_tota_run((uint8_t *)&audio_dump_buf[offset], audio_dump_buf_size - offset);
+services/audio_dump/src/audio_dump.c:273:    audio_debug_add_index();
+services/audio_dump/src/audio_dump.c:274:    audio_debug_add_crc();
+services/audio_dump/src/audio_dump.c:275:    audio_dump_index++;
+services/audio_dump/src/audio_dump.c:277:    // if (audio_dump_index % 20 == 0)
+services/audio_dump/src/audio_dump.c:279:    //     audio_dump_index++;
+services/audio_dump/src/audio_dump.c:282:    AUDIO_DEBUG_DUMP((const unsigned char *)audio_dump_buf, audio_dump_buf_size);
+services/audio_dump/src/audio_dump.c:286:void audio_dump_get_buff_info(uint8_t **buf, uint32_t *len)
+services/audio_dump/src/audio_dump.c:289:        *buf = (uint8_t *)audio_dump_buf;
+services/audio_dump/src/audio_dump.c:292:        *len = audio_dump_buf_size;
+services/audio_dump/src/audio_dump.c:356:    // AUDIO_DUMP_TRACE(5,"[%s] %d, %d, %d, %d", __func__, strlen(str), sizeof(uint32_t), data_len, len);
+services/audio_dump/src/audio_dump.c:357:    AUDIO_DEBUG_DUMP(buf_ptr, len);
+services/audio_dump/src/audio_dump.c:359:#else // AUDIO_DEBUG
+services/audio_dump/src/audio_dump.c:360:void audio_dump_clear_up(void) {;}
+services/audio_dump/src/audio_dump.c:361:void audio_dump_init(int frame_len, int sample_bytes, int channel_num) {;}
+services/audio_dump/src/audio_dump.c:362:void audio_dump_deinit(void) {;}
+services/audio_dump/src/audio_dump.c:363:void audio_dump_add_channel_data_from_multi_channels(int channel_id, void *pcm_buf, int pcm_len, int channel_num, int channel_index) {;}
+services/audio_dump/src/audio_dump.c:364:void audio_dump_add_channel_data_from_multi_channels_32bit_to_16bit(int channel_id, void *pcm_buf, int pcm_len, int channel_num, int channel_index, int right_shift) {;}
+services/audio_dump/src/audio_dump.c:365:void audio_dump_add_channel_data(int channel_id, void *pcm_buf, int pcm_len) {;}
+services/audio_dump/src/audio_dump.c:366:void audio_dump_run(void) {;}
+services/audio_dump/src/data_dump_tota.c:27:APP_TOTA_START_DATA_XFER_T tota_audio_dump_start_req = {
+services/audio_dump/src/data_dump_tota.c:31:APP_TOTA_STOP_DATA_XFER_T tota_audio_dump_stop_req = {
+services/audio_dump/src/data_dump_tota.c:47:	app_tota_start_data_xfer(APP_TOTA_VIA_SPP, &tota_audio_dump_start_req);
+services/audio_dump/src/data_dump_tota.c:52:	app_tota_stop_data_xfer(APP_TOTA_VIA_SPP, &tota_audio_dump_stop_req);	
+services/audio_dump/src/data_dump_tota.c:84:    // AUDIO_DUMP_TRACE(4, "[%s] g_write_pos: %d; len: %d; DUMP_BUF_SIZE: %d", __func__, g_write_pos, len, DUMP_BUF_SIZE);
+services/audio_dump/src/data_dump_tota.c:98:    // AUDIO_DUMP_TRACE(3, "[%s] g_write_pos: %d; len: %d", __func__, g_write_pos, len);
+services/audio_dump/src/data_dump_tota.c:109:        // AUDIO_DUMP_TRACE(1, "[%s] SKIP...", __func__);
+services/audio_dump/src/data_dump_tota.c:122:            AUDIO_DUMP_TRACE(1, "[%s] tota tx buffer is not available!!!", __func__);
+services/audio_dump/src/data_dump_tota.c:128:                // AUDIO_DUMP_TRACE(3, "[%s] %d, %d", __func__, g_tota_tx_buf[0], g_tota_tx_buf[1]);
+services/audio_dump/src/data_dump_tota.c:131:            // AUDIO_DUMP_TRACE(1, "[%s] No data to send...", __func__);
+services/audio_dump/src/data_dump_tota.c:139:        AUDIO_DUMP_TRACE(3, "[%s] %d, %d", __func__, g_tota_tx_buf[0], g_tota_tx_buf[1]);
+services/audio_dump/src/data_dump_tota.c:151:#define TOTA_AUDIO_DUMP_STACK_SIZE          (1024 * 2)
+services/audio_dump/src/data_dump_tota.c:153:osThreadDef(_dump_thread, osPriorityNormal, 1, TOTA_AUDIO_DUMP_STACK_SIZE, "DATA_DUMP_TOTA");
+services/audio_dump/src/data_dump_tota.c:161:#define TOTA_AUDIO_DUMP_SIGNAL_READY   1
+services/audio_dump/src/data_dump_tota.c:165:    osSignalSet(_dump_thread_tid, 0x01 << TOTA_AUDIO_DUMP_SIGNAL_READY);
+services/audio_dump/src/data_dump_tota.c:177:        //AUDIO_DUMP_TRACE(3, "[%s] status = %x, signals = %d", __func__, evt.status, evt.value.signals);
+services/audio_dump/src/data_dump_tota.c:180:            // AUDIO_DUMP_TRACE(1, "signal = %d", signals);
+services/audio_dump/src/data_dump_tota.c:181:            if (signals & (1 << TOTA_AUDIO_DUMP_SIGNAL_READY)) {
+services/audio_dump/src/data_dump_tota.c:193:    AUDIO_DUMP_TRACE(1, "[%s] ......", __func__);
+services/audio_dump/src/data_dump_tota.c:207:    AUDIO_DUMP_TRACE(1, "[%s] ......", __func__);
+services/audio_dump/src/data_dump_tota.c:242:        AUDIO_DUMP_TRACE(1, "[%s] TOTA is disconnected!!!", __func__);
+services/audio_dump/src/data_dump_usb.c:9:#include "audio_dump.h"
+services/audio_dump/src/data_dump_usb.c:30:    AUDIO_DUMP_TRACE(1, "usb dev state change: %d", event);
+services/audio_dump/src/data_dump_usb.c:35:    AUDIO_DUMP_TRACE(0, "Detect break!");
+services/audio_dump/src/data_dump_usb.c:42:    //AUDIO_DUMP_TRACE(0,"usb_serial_recv_timeout");
+services/audio_dump/src/data_dump_usb.c:54:    AUDIO_DUMP_TRACE(0, "usb_serial_thread_init");
+services/audio_dump/src/data_dump_usb.c:59:    AUDIO_DUMP_TRACE(1, "[0x%X] Open USB serial", hal_sys_timer_get());
+services/audio_dump/src/data_dump_usb.c:87:#define USB_AUDIO_DUMP_SIGNAL_READY   1
+services/audio_dump/src/data_dump_usb.c:91:    osSignalSet(usb_serial_tid, 0x01 << USB_AUDIO_DUMP_SIGNAL_READY);
+services/audio_dump/src/data_dump_usb.c:106:    AUDIO_DUMP_TRACE(0, "usb_serial_thread");
+services/audio_dump/src/data_dump_usb.c:110:    AUDIO_DUMP_TRACE(0, "usb serial ready");
+services/audio_dump/src/data_dump_usb.c:114:    AUDIO_DUMP_TRACE(0, "usb serial connected");
+services/audio_dump/src/data_dump_usb.c:128:                //AUDIO_DUMP_TRACE(0,"usb_serial_recv result: %d", result);
+services/audio_dump/src/data_dump_usb.c:138:            AUDIO_DUMP_DUMP16("%04x ", usb_serial_data, i / 2);
+services/audio_dump/src/data_dump_usb.c:140:                AUDIO_DUMP_TRACE(1, "Failed to send to usb serial: ret=%d", result);
+services/audio_dump/src/data_dump_usb.c:147:        // AUDIO_DUMP_TRACE(2, "[%s] signals = 0x%x", __FUNCTION__, signals);
+services/audio_dump/src/data_dump_usb.c:150:            if (signals & (1 << USB_AUDIO_DUMP_SIGNAL_READY)) {
+services/audio_dump/src/data_dump_usb.c:170:                audio_dump_get_buff_info(&buf, &len);
+services/audio_dump/src/data_dump_usb.c:173:                audio_dump_buffer_mutex_lock();
+services/audio_dump/src/data_dump_usb.c:175:                audio_dump_buffer_mutex_unlock();
+services/audio_dump/src/data_dump_usb.c:177:                    AUDIO_DUMP_TRACE(1, "Failed to send to usb serial: ret=%d", result);
+config/common.mk:165:export BTDUMP_ENABLE := 1
+config/common.mk:3617:# AUDIO_DEBUG
+config/common.mk:3618:ifeq ($(AUDIO_DEBUG_CMD),1)
+config/common.mk:3619:export AUDIO_DEBUG_CMD
+config/common.mk:3622:ifeq ($(AUDIO_DEBUG),1)
+config/common.mk:3623:export AUDIO_DEBUG
+config/common.mk:3624:export AUDIO_DEBUG_CMD ?= 1
+config/common.mk:3625:KBUILD_CPPFLAGS += -DAUDIO_DEBUG
+config/common.mk:3627:# AUDIO_DEBUG END
+config/common.mk:3639:ifneq ($(filter 1, $(AUDIO_DEBUG_CMD) $(AUTO_TEST) $(BES_AUTOMATE_TEST)),)
+config/common.mk:5839:export DUMP_LOG_ENABLE ?= 0
+config/common.mk:5840:ifeq ($(DUMP_LOG_ENABLE),1)
+config/common.mk:5865:KBUILD_CPPFLAGS += -DDUMP_LOG_ENABLE
+config/best1306p/bt_config.mk:38:export CONTROLLER_DUMP_ENABLE ?= 1
+config/best1306p/target.mk:35:#export AUDIO_DEBUG ?= 1
+config/best1306p/target.mk:56:export BTDUMP_ENABLE ?= 0
+config/best1306p/target.mk:281:export DUMP_LOG_ENABLE ?= 0
+tools/com_sdk/cust/build_pro_1306p_0002.sh:8:BUILD_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=1 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1306p_0004.sh:8:BUILD_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1306p_0005.sh:27:                    APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 TRACE_BUF_SIZE=40*1024 \
+tools/com_sdk/cust/build_pro_1306p_0006.sh:10:                APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1306p_0008.sh:19:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1306p_0013.sh:8:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1502p_0001.sh:11:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1502p_0003.sh:8:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1502p_0004.sh:8:FIR_ANC_CFG="ANC_ENABLE=1 APP_MCPP_CLI=BTH APP_MCPP_BTH_SENS=1 APP_MCPP_CLI=BTH APP_MCPP_BTH_SENS=1 POWER_ON_ENTER_FREEMAN_PAIRING_ENABLED=1 AUDIO_DEBUG_CMD=1 SENSOR_HUB=1 APP_RPC_ENABLE=1 SENS_TRC_TO_MCU=1 \
+tools/com_sdk/cust/build_pro_1502p_0004.sh:10:SENSORHUB_START_WHEN_MAIN_MCU_ON=0 AUDIO_DEBUG=0 "
+tools/com_sdk/cust/build_pro_1502p_0007.sh:8:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1502p_0008.sh:8:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1502p_0011.sh:8:    APP_RX_API_ENABLE=1 APP_MCPP_CLI=BTH APP_MCPP_BTH_SENS=0 AUDIO_DEBUG_CMD=1 APP_RPC_ENABLE=1 VOICE_ASSIST_FF_FIR_LMS=0 VOICE_ASSIST_FF_FIR_LMS_BTH_SENS=0 GATT_OVER_BR_EDR=1 \
+tools/com_sdk/cust/build_pro_1503_0001.sh:10:                APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \
+tools/com_sdk/cust/build_pro_1503_0002.sh:8:APP_CUSTOMER_CFG="IGNORE_POWER_ON_KEY_DURING_BOOT_UP=1 IS_AUTOPOWEROFF_ENABLED=0 APP_TRACE_RX_ENABLE=1 APP_RX_API_ENABLE=1 AUDIO_DEBUG_CMD=0 \

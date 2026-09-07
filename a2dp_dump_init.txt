@@ -1,0 +1,91 @@
+            app_anc_assist_set_mode(ANC_ASSIST_MODE_MUSIC_AAC);
+        } else if (codec_type == BT_A2DP_CODEC_TYPE_SBC) {
+            app_anc_assist_set_mode(ANC_ASSIST_MODE_MUSIC_SBC);
+        } else if (codec_type == BT_A2DP_CODEC_TYPE_NON_A2DP) {
+            // TODO: Be careful audioflinger callback frame length.
+            app_anc_assist_set_mode(ANC_ASSIST_MODE_MUSIC_AAC);
+        } else {
+            ASSERT(0, "[%s] codec_type(%d) is invalid!!!", __func__, codec_type);
+        }
+#endif
+#if defined(AUDIO_ADAPTIVE_EQ)
+        app_voice_assist_adaptive_eq_open();
+#endif
+#endif
+
+        AUDIO_BT_TRACE(4, "A2DP Playback: sample rate: %d, bits = %d, channel number = %d, data size:%d",
+                                            stream_cfg.sample_rate,
+                                            stream_cfg.bits,
+                                            stream_cfg.channel_num,
+                                            stream_cfg.data_size);
+
+#ifdef AUDIO_OUTPUT_ROUTE_SELECT
+        if (stream_route_info.output_route_info)
+        {
+            stream_route_info.codec_type = codec_type;
+            app_bt_output_route_init(stream_cfg.sample_rate, stream_cfg.bits,
+                                     stream_cfg.channel_num, stream_cfg.data_size/2, stream_cfg.vol);
+            if (!stream_route_info.output_route_info->data_transfer_mode)
+            {
+                 app_audio_mempool_get_buff(&stream_route_info.send_buf, stream_route_info.buffer_samples);
+            }
+        }
+        else
+#endif
+        {
+            // stream_cfg.sample_rate = AUD_SAMPRATE_96000;
+            af_stream_open(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK, &stream_cfg);
+        }
+        // stream_cfg.sample_rate = AUD_SAMPRATE_96000;
+
+#if BLE_AUDIO_ENABLED
+        af_codec_set_device_bt_sync_source(stream_cfg.device, AUD_STREAM_PLAYBACK, A2DP_SCO_TRIGGER_CHANNEL);
+#endif
+
+#if defined(A2DP_STREAM_AUDIO_DUMP)
+        if (stream_cfg.bits == 16) {
+        } else {
+            g_a2dp_pcm_dump_sample_bytes = sizeof(int32_t);
+        }
+        g_a2dp_pcm_dump_channel_num = stream_cfg.channel_num;
+        g_a2dp_pcm_dump_frame_len = stream_cfg.data_size / 2 / g_a2dp_pcm_dump_sample_bytes / g_a2dp_pcm_dump_channel_num;
+#if A2DP_STREAM_AUDIO_DUMP == 16
+        ASSERT(g_a2dp_pcm_dump_frame_len < A2DP_PCM_DUMP_BUFFER_MAX_SIZE,
+                "DUMP ERROR: frame_len(%d) > MAX LEN(%d) ", g_a2dp_pcm_dump_frame_len, A2DP_PCM_DUMP_BUFFER_MAX_SIZE);
+        audio_dump_init(g_a2dp_pcm_dump_frame_len, sizeof(int16_t), 1);
+#else
+        audio_dump_init(g_a2dp_pcm_dump_frame_len, g_a2dp_pcm_dump_sample_bytes, 1);
+#endif
+#endif
+
+#ifdef A2DP_DUMP_REF_FB
+		struct AF_STREAM_CONFIG_T stream_a2dp_dump;
+		audio_dump_init(A2DP_DUMP_FRAME_LEN, sizeof(short), 2);
+		app_sysfreq_req(APP_SYSFREQ_USER_VOICE_ASSIST, APP_SYSFREQ_104M);
+        AUDIO_BT_TRACE(0, "[A2DP_DUMP] sysfreq %d", freq);
+        // AUDIO_BT_TRACE(0, "[A2DP_DUMP] sysfreq calc : %d\n", hal_sys_timer_calc_cpu_freq(5, 0));
+		memset(&stream_a2dp_dump, 0, sizeof(stream_a2dp_dump));
+        stream_a2dp_dump.channel_num = (enum AUD_CHANNEL_NUM_T)A2DP_DUMP_CHANNEL_NUM;
+        stream_a2dp_dump.channel_map = (enum AUD_CHANNEL_MAP_T)(ANC_FB_MIC_CH_L | AUD_CHANNEL_MAP_ECMIC_CH0);
+        stream_a2dp_dump.data_size = A2DP_DUMP_BUF_SIZE;
+        stream_a2dp_dump.sample_rate = AUD_SAMPRATE_16000;
+        stream_a2dp_dump.bits = AUD_BITS_16;
+        stream_a2dp_dump.vol = 12;
+        stream_a2dp_dump.chan_sep_buf = true;
+        stream_a2dp_dump.device = AUD_STREAM_USE_INT_CODEC;
+        stream_a2dp_dump.io_path = AUD_INPUT_PATH_ANC_ASSIST;
+        stream_a2dp_dump.handler = a2dp_dump_ref_fb_handler;
+        stream_a2dp_dump.data_ptr = A2DP_DUMP_buf;
+
+        af_stream_open(A2DP_DUMP_STREAM_ID, AUD_STREAM_CAPTURE, &stream_a2dp_dump);
+#if BLE_AUDIO_ENABLED
+        af_codec_set_device_bt_sync_source(stream_a2dp_dump.device, AUD_STREAM_CAPTURE, A2DP_SCO_TRIGGER_CHANNEL);
+#endif
+#endif
+
+#if defined(AUDIO_ANC_FB_MC) && defined(ANC_APP) && !defined(__AUDIO_RESAMPLE__)
+        stream_cfg.bits = sample_size_play_bt;
+        stream_cfg.channel_num = playback_ch_num_bt;
+        stream_cfg.sample_rate = sample_rate_play_bt;
+        stream_cfg.device = AUD_STREAM_USE_MC;
+        stream_cfg.vol = 0;

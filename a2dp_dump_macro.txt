@@ -1,0 +1,70 @@
+services/audio_bt/app_bt_stream.cpp:263:// #define A2DP_STREAM_AUDIO_DUMP      (16)
+services/audio_bt/app_bt_stream.cpp:265:#if defined(A2DP_STREAM_AUDIO_DUMP)
+services/audio_bt/app_bt_stream.cpp:266:static uint32_t g_a2dp_pcm_dump_frame_len = 0;
+services/audio_bt/app_bt_stream.cpp:267:static uint32_t g_a2dp_pcm_dump_channel_num = 0;
+services/audio_bt/app_bt_stream.cpp:268:static uint32_t g_a2dp_pcm_dump_sample_bytes = 0;
+services/audio_bt/app_bt_stream.cpp:269:#if A2DP_STREAM_AUDIO_DUMP == 16
+services/audio_bt/app_bt_stream.cpp:270:#define A2DP_PCM_DUMP_BUFFER_MAX_SIZE      2048
+services/audio_bt/app_bt_stream.cpp:271:static int16_t g_a2dp_pcm_dump_buf[A2DP_PCM_DUMP_BUFFER_MAX_SIZE];
+services/audio_bt/app_bt_stream.cpp:451://#define A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:1407:#if defined(A2DP_STREAM_AUDIO_DUMP)
+services/audio_bt/app_bt_stream.cpp:1409:#if A2DP_STREAM_AUDIO_DUMP == 16
+services/audio_bt/app_bt_stream.cpp:1410:    if (g_a2dp_pcm_dump_sample_bytes == sizeof(int32_t)) {
+services/audio_bt/app_bt_stream.cpp:1412:        for (uint16_t i=0; i<g_a2dp_pcm_dump_frame_len; i++) {
+services/audio_bt/app_bt_stream.cpp:1413:            g_a2dp_pcm_dump_buf[i] = buf_int[g_a2dp_pcm_dump_channel_num * i] >> 8;
+services/audio_bt/app_bt_stream.cpp:1415:        audio_dump_add_channel_data(0, g_a2dp_pcm_dump_buf, g_a2dp_pcm_dump_frame_len);
+services/audio_bt/app_bt_stream.cpp:1417:        audio_dump_add_channel_data_from_multi_channels(0, buf, g_a2dp_pcm_dump_frame_len, g_a2dp_pcm_dump_channel_num, 0);
+services/audio_bt/app_bt_stream.cpp:1420:    audio_dump_add_channel_data_from_multi_channels(0, buf, g_a2dp_pcm_dump_frame_len, g_a2dp_pcm_dump_channel_num, 0);
+services/audio_bt/app_bt_stream.cpp:1591:#ifdef A2DP_EQ_24BIT
+services/audio_bt/app_bt_stream.cpp:1679:#ifdef A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:1680:#define A2DP_DUMP_STREAM_ID       AUD_STREAM_ID_1
+services/audio_bt/app_bt_stream.cpp:1682:#define A2DP_DUMP_SAMPLE_BITS         (16)
+services/audio_bt/app_bt_stream.cpp:1683:#define A2DP_DUMP_SAMPLE_BYTES      (A2DP_DUMP_SAMPLE_BITS / 8)
+services/audio_bt/app_bt_stream.cpp:1684:#define A2DP_DUMP_CHANNEL_NUM       (2)
+services/audio_bt/app_bt_stream.cpp:1685:#define A2DP_DUMP_FRAME_LEN            (256)
+services/audio_bt/app_bt_stream.cpp:1686:#define A2DP_DUMP_BUF_SIZE   (A2DP_DUMP_FRAME_LEN * A2DP_DUMP_CHANNEL_NUM * A2DP_DUMP_SAMPLE_BYTES * 2)//pingpong
+services/audio_bt/app_bt_stream.cpp:1687:static uint8_t A2DP_DUMP_buf[A2DP_DUMP_BUF_SIZE];
+services/audio_bt/app_bt_stream.cpp:1690:static uint32_t a2dp_dump_ref_fb_handler(uint8_t *buf, uint32_t len)
+services/audio_bt/app_bt_stream.cpp:3079:#ifdef A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:3080:        af_stream_stop(A2DP_DUMP_STREAM_ID, AUD_STREAM_CAPTURE);
+services/audio_bt/app_bt_stream.cpp:3134:#ifdef A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:3135:        af_stream_close(A2DP_DUMP_STREAM_ID, AUD_STREAM_CAPTURE);
+services/audio_bt/app_bt_stream.cpp:3197:#ifdef A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:3567:#ifdef A2DP_EQ_24BIT
+services/audio_bt/app_bt_stream.cpp:3724:#if defined(A2DP_STREAM_AUDIO_DUMP)
+services/audio_bt/app_bt_stream.cpp:3727:            g_a2dp_pcm_dump_sample_bytes = sizeof(int32_t);
+services/audio_bt/app_bt_stream.cpp:3729:        g_a2dp_pcm_dump_channel_num = stream_cfg.channel_num;
+services/audio_bt/app_bt_stream.cpp:3730:        g_a2dp_pcm_dump_frame_len = stream_cfg.data_size / 2 / g_a2dp_pcm_dump_sample_bytes / g_a2dp_pcm_dump_channel_num;
+services/audio_bt/app_bt_stream.cpp:3731:#if A2DP_STREAM_AUDIO_DUMP == 16
+services/audio_bt/app_bt_stream.cpp:3732:        ASSERT(g_a2dp_pcm_dump_frame_len < A2DP_PCM_DUMP_BUFFER_MAX_SIZE,
+services/audio_bt/app_bt_stream.cpp:3733:                "DUMP ERROR: frame_len(%d) > MAX LEN(%d) ", g_a2dp_pcm_dump_frame_len, A2DP_PCM_DUMP_BUFFER_MAX_SIZE);
+services/audio_bt/app_bt_stream.cpp:3734:        audio_dump_init(g_a2dp_pcm_dump_frame_len, sizeof(int16_t), 1);
+services/audio_bt/app_bt_stream.cpp:3736:        audio_dump_init(g_a2dp_pcm_dump_frame_len, g_a2dp_pcm_dump_sample_bytes, 1);
+services/audio_bt/app_bt_stream.cpp:3740:#ifdef A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:3741:		struct AF_STREAM_CONFIG_T stream_a2dp_dump;
+services/audio_bt/app_bt_stream.cpp:3742:		audio_dump_init(A2DP_DUMP_FRAME_LEN, sizeof(short), 2);
+services/audio_bt/app_bt_stream.cpp:3744:        AUDIO_BT_TRACE(0, "[A2DP_DUMP] sysfreq %d", freq);
+services/audio_bt/app_bt_stream.cpp:3745:        // AUDIO_BT_TRACE(0, "[A2DP_DUMP] sysfreq calc : %d\n", hal_sys_timer_calc_cpu_freq(5, 0));
+services/audio_bt/app_bt_stream.cpp:3746:		memset(&stream_a2dp_dump, 0, sizeof(stream_a2dp_dump));
+services/audio_bt/app_bt_stream.cpp:3747:        stream_a2dp_dump.channel_num = (enum AUD_CHANNEL_NUM_T)A2DP_DUMP_CHANNEL_NUM;
+services/audio_bt/app_bt_stream.cpp:3748:        stream_a2dp_dump.channel_map = (enum AUD_CHANNEL_MAP_T)(ANC_FB_MIC_CH_L | AUD_CHANNEL_MAP_ECMIC_CH0);
+services/audio_bt/app_bt_stream.cpp:3749:        stream_a2dp_dump.data_size = A2DP_DUMP_BUF_SIZE;
+services/audio_bt/app_bt_stream.cpp:3750:        stream_a2dp_dump.sample_rate = AUD_SAMPRATE_16000;
+services/audio_bt/app_bt_stream.cpp:3751:        stream_a2dp_dump.bits = AUD_BITS_16;
+services/audio_bt/app_bt_stream.cpp:3752:        stream_a2dp_dump.vol = 12;
+services/audio_bt/app_bt_stream.cpp:3753:        stream_a2dp_dump.chan_sep_buf = true;
+services/audio_bt/app_bt_stream.cpp:3754:        stream_a2dp_dump.device = AUD_STREAM_USE_INT_CODEC;
+services/audio_bt/app_bt_stream.cpp:3755:        stream_a2dp_dump.io_path = AUD_INPUT_PATH_ANC_ASSIST;
+services/audio_bt/app_bt_stream.cpp:3756:        stream_a2dp_dump.handler = a2dp_dump_ref_fb_handler;
+services/audio_bt/app_bt_stream.cpp:3757:        stream_a2dp_dump.data_ptr = A2DP_DUMP_buf;
+services/audio_bt/app_bt_stream.cpp:3759:        af_stream_open(A2DP_DUMP_STREAM_ID, AUD_STREAM_CAPTURE, &stream_a2dp_dump);
+services/audio_bt/app_bt_stream.cpp:3761:        af_codec_set_device_bt_sync_source(stream_a2dp_dump.device, AUD_STREAM_CAPTURE, A2DP_SCO_TRIGGER_CHANNEL);
+services/audio_bt/app_bt_stream.cpp:4428:#ifdef A2DP_DUMP_REF_FB
+services/audio_bt/app_bt_stream.cpp:4429:    	af_stream_start(A2DP_DUMP_STREAM_ID, AUD_STREAM_CAPTURE);
+config/best1306p/target.mk:203:A2DP_EQ_24BIT ?= 1
+config/best1502p/target.mk:182:A2DP_EQ_24BIT ?= 1
+config/best1503/target.mk:181:A2DP_EQ_24BIT ?= 1
+config/best1503_rom/target.mk:182:A2DP_EQ_24BIT ?= 1
+config/common.mk:1491:export A2DP_EQ_24BIT ?= 1
+config/common.mk:1514:export A2DP_EQ_24BIT ?= 1
+config/common.mk:1584:export A2DP_EQ_24BIT := 1

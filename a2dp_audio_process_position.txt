@@ -1,0 +1,363 @@
+1548-        }
+1549-
+1550-        adj_eq_audio_mix(tmp_buf, current_ch-2, audio_tmp_buffer, len/4);
+1551-    }else{
+1552-        int32_t *tmp_buf = (int32_t *)buf;
+1553-        for(uint32_t i=0; i<len/8; i++){
+1554-            tmp_buf[2*i+current_ch-2] /= 4;
+1555-        }
+1556-    }
+1557-#endif
+1558-
+1559-#if defined(PLAYBACK_FORCE_48K)
+1560-    if (force48k_pcm_bytes == sizeof(int32_t)) {
+1561-        a2dp_audio_convert_16bit_to_24bit((int32_t *)buf, (int16_t *)buf, len / sizeof(int16_t));
+1562-    }
+1563-    len = len * (force48k_pcm_bytes / sizeof(int16_t));
+1564-#endif
+1565-
+1566-#ifdef __AUDIO_SPECTRUM__
+1567-    audio_spectrum_run(buf, len);
+1568-#endif
+1569-
+1570-
+1571-#ifdef __KWS_AUDIO_PROCESS__
+1572-    short* pdata = (short*)buf;
+1573-    short pdata_mono = 0;
+1574-    for(unsigned int i = 0;i<len/4;i++)
+1575-    {
+1576-        pdata_mono = pdata[2*i]/2+pdata[2*i+1]/2;
+1577-        pdata[2*i] = pdata_mono;
+1578-        pdata[2*i+1] = pdata_mono;
+1579-    }
+1580-#endif
+1581-
+1582-#ifdef __AUDIO_OUTPUT_MONO_MODE__
+1583-#ifdef AUDIO_OUTPUT_ROUTE_SELECT
+1584-if (stream_route_info.output_route_info)
+1585-    {
+1586-        merge_stereo_to_mono_16bits((int16_t *)buf, (int16_t *)buf, len/sizeof(int16_t));
+1587-    }
+1588-    else
+1589-#endif
+1590-    {
+1591-#ifdef A2DP_EQ_24BIT
+1592-        merge_stereo_to_mono_24bits((int32_t *)buf, (int32_t *)buf, len/sizeof(int32_t));
+1593-#else
+1594-        merge_stereo_to_mono_16bits((int16_t *)buf, (int16_t *)buf, len/sizeof(int16_t));
+1595-#endif
+1596-    }
+1597-#endif
+1598-
+1599-#ifdef __HEAR_THRU_PEAK_DET__
+1600-#ifdef ANC_APP
+1601-    if(app_anc_work_status())
+1602-#endif
+1603-    {
+1604-        int vol_level = 0;
+1605-        vol_level = app_bt_stream_local_volume_get();
+1606-        peak_detector_run(buf, len, pkd_vol_multiple[vol_level]);
+1607-    }
+1608-#endif
+1609-
+1610-#ifndef AUDIO_EQ_TUNING
+1611-#ifdef ANC_APP
+1612-    bt_audio_updata_eq_for_anc(app_anc_work_status());
+1613-#endif
+1614-#endif
+1615-
+1616-#ifdef BESUI_TWS_EN
+1617-    if(app_get_speaker_mute_a2dp_status())
+1618-    {
+1619-        BESUI_TRACE(0,"[UIA2DP]a2dp mute speaker");
+1620-        memset(buf,0,len);
+1621-    }
+1622-#endif
+1623-
+1624-#ifdef AUDIO_OUTPUT_ROUTE_SELECT
+1625-    if (!stream_route_info.output_route_info)
+1626-#endif
+1627-    {
+1628:        audio_process_run(buf, len);
+1629-
+1630-#if !defined(DOLBY_AUDIO_ENABLE)
+1631-#if defined(SPA_AUDIO_ENABLE)
+1632-        spatial_audio_app_run_if(buf,len,bts_core_get_ui_role());
+1633-#ifdef SPA_AUDIO_SEC
+1634-        tz_audio_process_stream_proc_handler(buf,len);
+1635-        ree_audio_test_demo(buf,len);
+1636-#endif
+1637-#endif
+1638-#endif
+1639-
+1640-#if defined(IBRT) && !defined(FPGA)
+1641-        app_tws_ibrt_audio_analysis_audiohandler_tick(device_id);
+1642-#endif
+1643-
+1644-#ifndef BT_BUILD_WITH_CUSTOMER_HOST
+1645-        osapi_notify_evm();
+1646-#endif
+1647-    }
+1648-    return len;
+1649-}
+1650-
+1651-FRAM_TEXT_LOC void bt_a2dp_player_playback_post_handler(uint8_t *buf, uint32_t len, void *cfg)
+1652-{
+1653-    POSSIBLY_UNUSED struct AF_STREAM_CONFIG_T *config = (struct AF_STREAM_CONFIG_T *)cfg;
+1654-
+1655-#ifdef MIX_AUDIO_PROMPT_WITH_A2DP_MEDIA_ENABLED
+1656-    uint8_t device_id = bes_aud_bt->aud_get_curr_a2dp_device();
+1657-#ifdef TWS_PROMPT_SYNC
+1658-    tws_playback_ticks_check_for_mix_prompt(device_id);
+1659-#endif
+1660-    if (audio_prompt_is_playing_ongoing())
+1661-    {
+1662-        audio_prompt_processing_handler(device_id, len, buf);
+1663-    }
+1664-#else
+1665-    app_ring_merge_more_data(buf, len);
+1666-#endif
+1667-
+1668-#ifdef ANC_ASSIST_USE_INT_CODEC
+1669-    codec_play_merge_pilot_data(buf, len, cfg);
+1670-#endif
+1671-}
+1672-
+1673-#ifdef __THIRDPARTY
+1674-bool start_by_music = false;
+1675-#endif
+1676-
+1677-
+1678-
+1679-#ifdef A2DP_DUMP_REF_FB
+1680-#define A2DP_DUMP_STREAM_ID       AUD_STREAM_ID_1
+1681-
+1682-#define A2DP_DUMP_SAMPLE_BITS         (16)
+1683-#define A2DP_DUMP_SAMPLE_BYTES      (A2DP_DUMP_SAMPLE_BITS / 8)
+1684-#define A2DP_DUMP_CHANNEL_NUM       (2)
+1685-#define A2DP_DUMP_FRAME_LEN            (256)
+1686-#define A2DP_DUMP_BUF_SIZE   (A2DP_DUMP_FRAME_LEN * A2DP_DUMP_CHANNEL_NUM * A2DP_DUMP_SAMPLE_BYTES * 2)//pingpong
+1687-static uint8_t A2DP_DUMP_buf[A2DP_DUMP_BUF_SIZE];
+1688-//static uint32_t a2dp_capture_sample_rate = 16000;
+1689-
+1690-static uint32_t a2dp_dump_ref_fb_handler(uint8_t *buf, uint32_t len)
+1691-{
+1692-	int16_t *fb_ptr = (int16_t *)buf;
+1693-	int16_t *ref_ptr = (int16_t *)(buf+len);
+1694-
+1695-    audio_dump_clear_up();
+1696-
+1697-    audio_dump_add_channel_data(0, fb_ptr, 256);
+1698-    audio_dump_add_channel_data(1, ref_ptr, 256);
+1699-	audio_dump_run();
+1700-	return 0;
+1701-}
+1702-#endif
+1703-
+1704-#if defined(AUDIO_ADJ_EQ)
+1705-#define ADJ_EQ_STREAM_ID       AUD_STREAM_ID_1
+1706-
+1707-#define ADJ_EQ_SAMPLE_BITS         (24)
+1708-#define ADJ_EQ_SAMPLE_BYTES      (4)
+1709-#define ADJ_EQ_CHANNEL_NUM       (2)
+1710-#define ADJ_EQ_FRAME_LEN            (256)
+1711-#define ADJ_EQ_BUF_SIZE   (ADJ_EQ_FRAME_LEN * ADJ_EQ_CHANNEL_NUM * ADJ_EQ_SAMPLE_BYTES * 2)//pingpong
+1712-static uint8_t POSSIBLY_UNUSED adj_eq_buf[ADJ_EQ_BUF_SIZE];
+1713-
+1714-#endif
+1715-
+1716-#if defined(AUDIO_ANC_FB_MC) && defined(ANC_APP) && !defined(__AUDIO_RESAMPLE__)
+1717-static int32_t mid_p_8_old_l=0;
+1718-static int32_t mid_p_8_old_r=0;
+1719-#ifdef AUDIO_ANC_FB_ADJ_MC
+1720-#define ADJ_MC_STREAM_ID       AUD_STREAM_ID_1
+1721-
+1722-#define ADJ_MC_SAMPLE_BITS         (16)
+1723-#define ADJ_MC_SAMPLE_BYTES      (ADJ_MC_SAMPLE_BITS / 8)
+1724-#define ADJ_MC_CHANNEL_NUM       (2)
+1725-#define ADJ_MC_FRAME_LEN            (256)
+1726-#define ADJ_MC_BUF_SIZE   (ADJ_MC_FRAME_LEN * ADJ_MC_CHANNEL_NUM * ADJ_MC_SAMPLE_BYTES * 2)//pingpong
+1727-static uint8_t POSSIBLY_UNUSED adj_mc_buf[ADJ_MC_BUF_SIZE];
+1728-
+--
+7527-        app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_KWS,THIRDPARTY_CALL_STOP, AI_SPEC_AMA);
+7528-#else
+7529-        app_thirdparty_specific_lib_event_handle(THIRDPARTY_FUNC_KWS,THIRDPARTY_CALL_STOP, 0);
+7530-#endif
+7531-#ifdef __BIXBY
+7532-        app_bixby_on_resume_handle();
+7533-#endif
+7534-#endif
+7535-
+7536-#ifdef AUDIO_RMS_MONITOR_ENABLE
+7537-        rms_debug_cnt = 0xFFFF;
+7538-#endif
+7539-        af_set_irq_notification(NULL);
+7540-        bt_set_playback_triggered(false);
+7541-    }
+7542-
+7543-#if defined(HIGH_EFFICIENCY_TX_PWR_CTRL)
+7544-    bt_sco_reset_tx_gain_mode(on);
+7545-#endif
+7546-
+7547-    isRun=on;
+7548-    return 0;
+7549-}
+7550-
+7551-#ifdef AUDIO_LINEIN
+7552-#include "app_status_ind.h"
+7553-//player channel should <= capture channel number
+7554-//player must be 2 channel
+7555-#define LINEIN_PLAYER_CHANNEL (2)
+7556-#ifdef __AUDIO_OUTPUT_MONO_MODE__
+7557-#define LINEIN_CAPTURE_CHANNEL (1)
+7558-#else
+7559-#define LINEIN_CAPTURE_CHANNEL (2)
+7560-#endif
+7561-
+7562-#if (LINEIN_CAPTURE_CHANNEL == 1)
+7563-#define LINEIN_PLAYER_BUFFER_SIZE (1024*LINEIN_PLAYER_CHANNEL)
+7564-#define LINEIN_CAPTURE_BUFFER_SIZE (LINEIN_PLAYER_BUFFER_SIZE/2)
+7565-#elif (LINEIN_CAPTURE_CHANNEL == 2)
+7566-#define LINEIN_PLAYER_BUFFER_SIZE (1024*LINEIN_PLAYER_CHANNEL)
+7567-#define LINEIN_CAPTURE_BUFFER_SIZE (LINEIN_PLAYER_BUFFER_SIZE)
+7568-#endif
+7569-
+7570-int8_t app_linein_buffer_is_empty(void)
+7571-{
+7572-    if (app_audio_pcmbuff_length()){
+7573-        return 0;
+7574-    }else{
+7575-        return 1;
+7576-    }
+7577-}
+7578-
+7579-uint32_t app_linein_pcm_come(uint8_t * pcm_buf, uint32_t len)
+7580-{
+7581-    app_audio_pcmbuff_put(pcm_buf, len);
+7582-
+7583-    return len;
+7584-}
+7585-
+7586-uint32_t app_linein_need_pcm_data(uint8_t* pcm_buf, uint32_t len)
+7587-{
+7588-#if (LINEIN_CAPTURE_CHANNEL == 1)
+7589-    app_audio_pcmbuff_get((uint8_t *)app_linein_play_cache, len/2);
+7590-    app_play_audio_lineinmode_more_data((uint8_t *)app_linein_play_cache,len/2);
+7591-    app_bt_stream_copy_track_one_to_two_16bits((int16_t *)pcm_buf, app_linein_play_cache, len/2/2);
+7592-#elif (LINEIN_CAPTURE_CHANNEL == 2)
+7593-    app_audio_pcmbuff_get((uint8_t *)pcm_buf, len);
+7594-    app_play_audio_lineinmode_more_data((uint8_t *)pcm_buf, len);
+7595-#endif
+7596-
+7597-#if defined(__AUDIO_OUTPUT_MONO_MODE__)
+7598-    merge_stereo_to_mono_16bits((int16_t *)buf, (int16_t *)pcm_buf, len/2);
+7599-#endif
+7600-
+7601-#ifdef ANC_APP
+7602-    bt_audio_updata_eq_for_anc(app_anc_work_status());
+7603-#else
+7604-    bt_audio_updata_eq(app_audio_get_eq());
+7605-#endif
+7606-
+7607:    audio_process_run(pcm_buf, len);
+7608-
+7609-    return len;
+7610-}
+7611-
+7612-int app_play_linein_onoff(bool onoff)
+7613-{
+7614-    static bool isRun =  false;
+7615-    uint8_t *linein_audio_cap_buff = 0;
+7616-    uint8_t *linein_audio_play_buff = 0;
+7617-    uint8_t *linein_audio_loop_buf = NULL;
+7618-    struct AF_STREAM_CONFIG_T stream_cfg;
+7619-
+7620-    uint8_t POSSIBLY_UNUSED *bt_eq_buff = NULL;
+7621-    uint32_t POSSIBLY_UNUSED eq_buff_size;
+7622-    uint8_t POSSIBLY_UNUSED play_samp_size;
+7623-
+7624-    AUDIO_BT_TRACE(0,"[LINEIN_PLAYER] work:%d op:%d", isRun, onoff);
+7625-
+7626-    if (isRun == onoff)
+7627-        return 0;
+7628-
+7629-    if (onoff) {
+7630-        app_sysfreq_req(APP_SYSFREQ_USER_APP_0, APP_SYSFREQ_104M);
+7631-        app_overlay_select(APP_OVERLAY_A2DP);
+7632-        app_audio_mempool_init_with_specific_size(app_audio_mempool_size());
+7633-        app_audio_mempool_get_buff(&linein_audio_cap_buff, LINEIN_CAPTURE_BUFFER_SIZE);
+7634-        app_audio_mempool_get_buff(&linein_audio_play_buff, LINEIN_PLAYER_BUFFER_SIZE);
+7635-        app_audio_mempool_get_buff(&linein_audio_loop_buf, LINEIN_PLAYER_BUFFER_SIZE<<2);
+7636-        app_audio_pcmbuff_init(linein_audio_loop_buf, LINEIN_PLAYER_BUFFER_SIZE<<2);
+7637-
+7638-#if (LINEIN_CAPTURE_CHANNEL == 1)
+7639-        app_audio_mempool_get_buff((uint8_t **)&app_linein_play_cache, LINEIN_PLAYER_BUFFER_SIZE/2/2);
+7640-        app_play_audio_lineinmode_init(LINEIN_CAPTURE_CHANNEL, LINEIN_PLAYER_BUFFER_SIZE/2/2);
+7641-#elif (LINEIN_CAPTURE_CHANNEL == 2)
+7642-        app_play_audio_lineinmode_init(LINEIN_CAPTURE_CHANNEL, LINEIN_PLAYER_BUFFER_SIZE/2);
+7643-#endif
+7644-
+7645-        memset(&stream_cfg, 0, sizeof(stream_cfg));
+7646-
+7647-        stream_cfg.bits = AUD_BITS_16;
+7648-        stream_cfg.channel_num = (enum AUD_CHANNEL_NUM_T)LINEIN_PLAYER_CHANNEL;
+7649-#if defined(__AUDIO_RESAMPLE__)
+7650-        stream_cfg.sample_rate = AUD_SAMPRATE_50781;
+7651-#else
+7652-        stream_cfg.sample_rate = AUD_SAMPRATE_44100;
+7653-#endif
+7654-#if FPGA==0
+7655-        stream_cfg.device = AUD_STREAM_USE_INT_CODEC;
+7656-#else
+7657-        stream_cfg.device = AUD_STREAM_USE_EXT_CODEC;
+7658-#endif
+7659-        stream_cfg.vol = stream_linein_volume;
+7660-        AUDIO_BT_TRACE(0,"[LINEIN_PLAYER] vol = %d",stream_linein_volume);
+7661-        stream_cfg.io_path = AUD_OUTPUT_PATH_SPEAKER;
+7662-        stream_cfg.handler = app_linein_need_pcm_data;
+7663-        stream_cfg.data_ptr = BT_AUDIO_CACHE_2_UNCACHE(linein_audio_play_buff);
+7664-        stream_cfg.data_size = LINEIN_PLAYER_BUFFER_SIZE;
+7665-
+7666-#if defined(AUDIO_ANC_FB_MC) && defined(ANC_APP) && !defined(__AUDIO_RESAMPLE__)
+7667-        sample_size_play_bt=stream_cfg.bits;
+7668-        sample_rate_play_bt=stream_cfg.sample_rate;
+7669-        data_size_play_bt=stream_cfg.data_size;
+7670-        playback_buf_bt=stream_cfg.data_ptr;
+7671-        playback_size_bt=stream_cfg.data_size;
+7672-        if(sample_rate_play_bt==AUD_SAMPRATE_96000)
+7673-        {
+7674-            playback_samplerate_ratio_bt=4;
+7675-        }
+7676-        else
+7677-        {
+7678-            playback_samplerate_ratio_bt=8;
+7679-        }
+7680-        playback_ch_num_bt=stream_cfg.channel_num;
+7681-        mid_p_8_old_l=0;
+7682-        mid_p_8_old_r=0;
+7683-#endif
+7684-
+7685-        af_stream_open(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK, &stream_cfg);
+7686-
+7687-#if defined(__HW_FIR_EQ_PROCESS__) && defined(__HW_IIR_EQ_PROCESS__)
+7688-        eq_buff_size = stream_cfg.data_size*2;
+7689-#elif defined(__HW_FIR_EQ_PROCESS__) && !defined(__HW_IIR_EQ_PROCESS__)
+7690-
+7691-        play_samp_size = (stream_cfg.bits <= AUD_BITS_16) ? 2 : 4;
+7692-#if defined(CHIP_BEST2000)
+7693-        eq_buff_size = stream_cfg.data_size * sizeof(int32_t) / play_samp_size;
+7694-#elif  defined(CHIP_BEST1000)
+7695-        eq_buff_size = stream_cfg.data_size * sizeof(int16_t) / play_samp_size;
+7696-#elif defined(CHIP_BEST2300) || defined(CHIP_BEST2300P) || defined(CHIP_BEST2300A)
+7697-        eq_buff_size = stream_cfg.data_size;
+7698-#endif
+7699-
+7700-#elif !defined(__HW_FIR_EQ_PROCESS__) && defined(__HW_IIR_EQ_PROCESS__)
+7701-        eq_buff_size = stream_cfg.data_size;
+7702-#else
+7703-        eq_buff_size = 0;
+7704-        bt_eq_buff = NULL;
+7705-#endif
+7706-
+7707-        if(eq_buff_size>0)

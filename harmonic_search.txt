@@ -1,0 +1,1863 @@
+config/anc_usb/target.mk:151:export SPEECH_TX_POST_GAIN ?= 0
+config/anc_usb/tgt_hardware.c:202:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:204:            .total_gain = 350,
+config/anc_usb/tgt_hardware.c:234:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:240:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:242:            .total_gain = 350,
+config/anc_usb/tgt_hardware.c:272:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:296:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:298:            .total_gain = 350,
+config/anc_usb/tgt_hardware.c:333:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:340:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:342:            .total_gain = 350,
+config/anc_usb/tgt_hardware.c:373:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:380:        .total_gain = 0,
+config/anc_usb/tgt_hardware.c:415:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:445:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:447:            .total_gain = 312,
+config/anc_usb/tgt_hardware.c:477:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:484:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:486:            .total_gain = 288,
+config/anc_usb/tgt_hardware.c:515:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:539:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:541:            .total_gain = 511,
+config/anc_usb/tgt_hardware.c:571:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:577:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:579:            .total_gain = 511,
+config/anc_usb/tgt_hardware.c:609:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:670:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:672:            .total_gain = 1228,
+config/anc_usb/tgt_hardware.c:696:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:704:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:706:            .total_gain = 1331,
+config/anc_usb/tgt_hardware.c:731:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:764:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:766:            .total_gain = 312,
+config/anc_usb/tgt_hardware.c:797:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:804:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:806:            .total_gain = 288,
+config/anc_usb/tgt_hardware.c:837:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:861:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:863:            .total_gain = 511,
+config/anc_usb/tgt_hardware.c:894:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:901:            .total_gain = 0,
+config/anc_usb/tgt_hardware.c:903:            .total_gain = 511,
+config/anc_usb/tgt_hardware.c:934:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:961:        .total_gain = 0,
+config/anc_usb/tgt_hardware.c:963:        .total_gain = 1228,
+config/anc_usb/tgt_hardware.c:987:		.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:995:        .total_gain = 0,
+config/anc_usb/tgt_hardware.c:997:        .total_gain = 1331,
+config/anc_usb/tgt_hardware.c:1022:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1045:        .total_gain = 512,
+config/anc_usb/tgt_hardware.c:1050:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1056:        .total_gain = 512,
+config/anc_usb/tgt_hardware.c:1061:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1067:        .total_gain = 512,
+config/anc_usb/tgt_hardware.c:1072:        .dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1093:        .psap_total_gain = 0,
+config/anc_usb/tgt_hardware.c:1095:        .psap_total_gain = 512,
+config/anc_usb/tgt_hardware.c:1106:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/anc_usb/tgt_hardware.c:1111:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1114:        .psap_dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1121:        .psap_total_gain = 0,
+config/anc_usb/tgt_hardware.c:1123:        .psap_total_gain = 512,
+config/anc_usb/tgt_hardware.c:1134:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/anc_usb/tgt_hardware.c:1139:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1142:        .psap_dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1149:        .psap_total_gain = 0,
+config/anc_usb/tgt_hardware.c:1151:        .psap_total_gain = 512,
+config/anc_usb/tgt_hardware.c:1162:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/anc_usb/tgt_hardware.c:1167:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/anc_usb/tgt_hardware.c:1170:        .psap_dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:23:        .total_gain = 512*2,
+config/anc_usb_ff/anc_cfg.c:47:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:51:        .total_gain = 512*2,
+config/anc_usb_ff/anc_cfg.c:73:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:77:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:101:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:105:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:127:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:131:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:155:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:159:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:181:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:185:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:209:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:213:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:235:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:242:        .total_gain = 512*2,
+config/anc_usb_ff/anc_cfg.c:272:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:276:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:306:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:310:        .total_gain = 512*2,
+config/anc_usb_ff/anc_cfg.c:332:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:339:        .total_gain =512*2,
+config/anc_usb_ff/anc_cfg.c:370:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:374:        .total_gain = 512/2,
+config/anc_usb_ff/anc_cfg.c:404:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:408:        .total_gain = 512,
+config/anc_usb_ff/anc_cfg.c:430:        .dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:449:        .psap_total_gain = 811,
+config/anc_usb_ff/anc_cfg.c:459:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/anc_usb_ff/anc_cfg.c:464:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:467:        .psap_dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:473:        .psap_total_gain = 811,
+config/anc_usb_ff/anc_cfg.c:483:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/anc_usb_ff/anc_cfg.c:488:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:491:        .psap_dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:497:        .psap_total_gain = 811,
+config/anc_usb_ff/anc_cfg.c:507:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/anc_usb_ff/anc_cfg.c:512:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:515:        .psap_dac_gain_offset=0,
+config/anc_usb_ff/anc_cfg.c:534:        .psap_total_gain = 723,
+config/anc_usb_ff/anc_cfg.c:578:        .psap_dac_gain_offset=0,
+config/anc_usb_ff/audio_cfg.c:187:const DrcConfig audio_drc_cfg = {
+config/anc_usb_ff/audio_cfg.c:198:const LimiterConfig audio_limiter_cfg = {
+config/best1306p/anc_cfg.c:28:        .total_gain = 512 * 2,
+config/best1306p/anc_cfg.c:53:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:60:        .total_gain = 512 * 2,
+config/best1306p/anc_cfg.c:83:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:90:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:115:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:122:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:145:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:152:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:177:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:184:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:207:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:214:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:239:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:246:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:269:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:276:        .total_gain = 512,
+config/best1306p/anc_cfg.c:301:		.dac_gain_offset=0,
+config/best1306p/anc_cfg.c:305:        .total_gain = 512,
+config/best1306p/anc_cfg.c:320:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:325:		.total_gain = 0,
+config/best1306p/anc_cfg.c:352:		.dac_gain_offset=0,
+config/best1306p/anc_cfg.c:356:        .total_gain = 512,
+config/best1306p/anc_cfg.c:375:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:384:        .total_gain = 512,
+config/best1306p/anc_cfg.c:409:		.dac_gain_offset=0,
+config/best1306p/anc_cfg.c:414:        .total_gain = 512,
+config/best1306p/anc_cfg.c:429:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:434:		.total_gain = 0,
+config/best1306p/anc_cfg.c:461:		.dac_gain_offset=0,
+config/best1306p/anc_cfg.c:465:        .total_gain = 512,
+config/best1306p/anc_cfg.c:484:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:493:        .total_gain = 512 * 2,
+config/best1306p/anc_cfg.c:518:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:525:        .total_gain = 512 * 2,
+config/best1306p/anc_cfg.c:548:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:555:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:580:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:587:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:610:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:617:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:642:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:649:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:672:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:680:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:705:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:712:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:735:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:746:        .total_gain = 512 * 2,
+config/best1306p/anc_cfg.c:771:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:778:        .total_gain = 512 * 2,
+config/best1306p/anc_cfg.c:801:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:808:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:833:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:840:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:863:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:870:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:895:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:902:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:925:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:933:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:958:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:965:        .total_gain = 512 / 2,
+config/best1306p/anc_cfg.c:988:        .dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1023:        .psap_total_gain = 811,
+config/best1306p/anc_cfg.c:1033:        .psap_dehowling_cfg.dehowling_l.total_gain = 0,
+config/best1306p/anc_cfg.c:1038:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1041:        .psap_dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1046:        .psap_total_gain = 811,
+config/best1306p/anc_cfg.c:1056:        .psap_dehowling_cfg.dehowling_l.total_gain = 0,
+config/best1306p/anc_cfg.c:1061:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1064:        .psap_dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1069:        .psap_total_gain = 811,
+config/best1306p/anc_cfg.c:1079:        .psap_dehowling_cfg.dehowling_l.total_gain = 0,
+config/best1306p/anc_cfg.c:1084:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1087:        .psap_dac_gain_offset = 0,
+config/best1306p/anc_cfg.c:1105:        .psap_total_gain = 723,
+config/best1306p/anc_cfg.c:1149:        .psap_dac_gain_offset = 0,
+config/best1306p/audio_cfg.c:215:/*const DrcConfig audio_drc_cfg = {
+config/best1306p/audio_cfg.c:226:const DrcConfig audio_drc_cfg = {
+config/best1306p/audio_cfg.c:238:const DrcConfig audio_drc_cfg_0 = {
+config/best1306p/audio_cfg.c:250:const DrcConfig audio_drc_cfg_1 = {
+config/best1306p/audio_cfg.c:262:const DrcConfig audio_drc_cfg_2 = {
+config/best1306p/audio_cfg.c:274:const DrcConfig audio_drc_cfg_3 = {
+config/best1306p/audio_cfg.c:286:const DrcConfig audio_drc_cfg_4 = {
+config/best1306p/audio_cfg.c:297:#define AUDIO_DRC_CFG_NUM    5
+config/best1306p/audio_cfg.c:299:const DrcConfig * const POSSIBLY_UNUSED audio_drc_cfg_list[AUDIO_DRC_CFG_NUM] = {
+config/best1306p/audio_cfg.c:300:    &audio_drc_cfg_0,
+config/best1306p/audio_cfg.c:301:    &audio_drc_cfg_1,
+config/best1306p/audio_cfg.c:302:    &audio_drc_cfg_2,
+config/best1306p/audio_cfg.c:303:    &audio_drc_cfg_3,
+config/best1306p/audio_cfg.c:304:    &audio_drc_cfg_4,
+config/best1306p/audio_cfg.c:307:const LimiterConfig audio_limiter_cfg = {
+config/best1306p/besui_param/param_notws.h:32:        .total_gain = 512,
+config/best1306p/besui_param/param_notws.h:66:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:70:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:104:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:108:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:142:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:146:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:180:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:184:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:218:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:222:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:256:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:263:        .total_gain = 512,
+config/best1306p/besui_param/param_notws.h:297:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:301:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:335:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:339:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:373:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:377:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:411:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:415:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:449:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:453:        .total_gain = 0,
+config/best1306p/besui_param/param_notws.h:487:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_notws.h:494:        .total_gain = 512*2,
+config/best1306p/besui_param/param_notws.h:524:        .dac_gain_offset=0,
+config/best1306p/besui_param/param_notws.h:531:        .total_gain = 512*2,
+config/best1306p/besui_param/param_notws.h:561:        .dac_gain_offset=0,
+config/best1306p/besui_param/param_notws.h:568:        .total_gain =512*2,
+config/best1306p/besui_param/param_notws.h:598:        .dac_gain_offset=0,
+config/best1306p/besui_param/param_notws.h:604:        .total_gain =512*2,
+config/best1306p/besui_param/param_notws.h:634:        .dac_gain_offset=0,
+config/best1306p/besui_param/param_twspro.h:36:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:55:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:59:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:78:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:82:        .total_gain = 0,
+config/best1306p/besui_param/param_twspro.h:101:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:105:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:124:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:131:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:150:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:154:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:173:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:177:        .total_gain = 0,
+config/best1306p/besui_param/param_twspro.h:196:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:200:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:219:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:226:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:245:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:249:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:268:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:272:        .total_gain = 0,
+config/best1306p/besui_param/param_twspro.h:291:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:295:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:314:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:321:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:340:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:344:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:363:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:367:        .total_gain = 0,
+config/best1306p/besui_param/param_twspro.h:386:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:390:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:409:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:416:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:435:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:439:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:458:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:462:        .total_gain = 0,
+config/best1306p/besui_param/param_twspro.h:481:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:485:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:504:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:511:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:530:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:534:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:553:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:557:        .total_gain = 0,
+config/best1306p/besui_param/param_twspro.h:576:        .dac_gain_offset = 0,
+config/best1306p/besui_param/param_twspro.h:580:        .total_gain = 512,
+config/best1306p/besui_param/param_twspro.h:599:        .dac_gain_offset = 0,
+config/best1306p/speech_config.mk:36:SPEECH_TX_POST_GAIN ?= 0
+config/best1306p/speech_config.mk:42:SPEECH_RX_EQ ?= 1
+config/best1306p/speech_config.mk:44:SPEECH_RX_POST_GAIN ?= 0
+config/best1306p/target.mk:97:AUDIO_DRC ?= 1
+config/best1306p/target.mk:99:AUDIO_LIMITER ?= 1
+config/best1502p/anc_cfg.c:24:        .total_gain = 512*2,
+config/best1502p/anc_cfg.c:49:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:53:        .total_gain = 512*2,
+config/best1502p/anc_cfg.c:76:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:80:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:105:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:109:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:132:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:136:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:161:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:165:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:188:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:192:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:217:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:221:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:244:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:251:        .total_gain = 512*2,
+config/best1502p/anc_cfg.c:281:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:285:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:315:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:319:        .total_gain = 512*2,
+config/best1502p/anc_cfg.c:342:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:349:        .total_gain =512*2,
+config/best1502p/anc_cfg.c:379:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:383:        .total_gain = 512/2,
+config/best1502p/anc_cfg.c:413:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:417:        .total_gain = 512,
+config/best1502p/anc_cfg.c:440:        .dac_gain_offset=0,
+config/best1502p/anc_cfg.c:479:        .psap_total_gain = 811,
+config/best1502p/anc_cfg.c:489:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/best1502p/anc_cfg.c:494:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/best1502p/anc_cfg.c:497:        .psap_dac_gain_offset=0,
+config/best1502p/anc_cfg.c:504:        .psap_total_gain = 811,
+config/best1502p/anc_cfg.c:514:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/best1502p/anc_cfg.c:519:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/best1502p/anc_cfg.c:522:        .psap_dac_gain_offset=0,
+config/best1502p/anc_cfg.c:529:        .psap_total_gain = 811,
+config/best1502p/anc_cfg.c:539:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/best1502p/anc_cfg.c:544:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/best1502p/anc_cfg.c:547:        .psap_dac_gain_offset=0,
+config/best1502p/anc_cfg.c:566:        .psap_total_gain = 723,
+config/best1502p/anc_cfg.c:610:        .psap_dac_gain_offset=0,
+config/best1502p/audio_cfg.c:207:const DrcConfig audio_drc_cfg = {
+config/best1502p/audio_cfg.c:218:const LimiterConfig audio_limiter_cfg = {
+config/best1502p/besui_param/param_notws.h:32:        .total_gain = 512,
+config/best1502p/besui_param/param_notws.h:66:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:70:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:104:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:108:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:142:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:146:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:180:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:184:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:218:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:222:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:256:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:263:        .total_gain = 512,
+config/best1502p/besui_param/param_notws.h:297:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:301:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:335:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:339:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:373:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:377:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:411:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:415:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:449:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:453:        .total_gain = 0,
+config/best1502p/besui_param/param_notws.h:487:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_notws.h:494:        .total_gain = 512*2,
+config/best1502p/besui_param/param_notws.h:524:        .dac_gain_offset=0,
+config/best1502p/besui_param/param_notws.h:531:        .total_gain = 512*2,
+config/best1502p/besui_param/param_notws.h:561:        .dac_gain_offset=0,
+config/best1502p/besui_param/param_notws.h:568:        .total_gain =512*2,
+config/best1502p/besui_param/param_notws.h:598:        .dac_gain_offset=0,
+config/best1502p/besui_param/param_notws.h:604:        .total_gain =512*2,
+config/best1502p/besui_param/param_notws.h:634:        .dac_gain_offset=0,
+config/best1502p/besui_param/param_twspro.h:36:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:55:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:59:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:78:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:82:        .total_gain = 0,
+config/best1502p/besui_param/param_twspro.h:101:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:105:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:124:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:131:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:150:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:154:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:173:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:177:        .total_gain = 0,
+config/best1502p/besui_param/param_twspro.h:196:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:200:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:219:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:226:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:245:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:249:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:268:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:272:        .total_gain = 0,
+config/best1502p/besui_param/param_twspro.h:291:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:295:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:314:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:321:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:340:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:344:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:363:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:367:        .total_gain = 0,
+config/best1502p/besui_param/param_twspro.h:386:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:390:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:409:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:416:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:435:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:439:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:458:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:462:        .total_gain = 0,
+config/best1502p/besui_param/param_twspro.h:481:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:485:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:504:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:511:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:530:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:534:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:553:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:557:        .total_gain = 0,
+config/best1502p/besui_param/param_twspro.h:576:        .dac_gain_offset = 0,
+config/best1502p/besui_param/param_twspro.h:580:        .total_gain = 512,
+config/best1502p/besui_param/param_twspro.h:599:        .dac_gain_offset = 0,
+config/best1502p/speech_config.mk:34:SPEECH_TX_POST_GAIN ?= 0
+config/best1502p/speech_config.mk:40:SPEECH_RX_EQ ?= 1
+config/best1502p/speech_config.mk:42:SPEECH_RX_POST_GAIN ?= 0
+config/best1502p/target.mk:79:AUDIO_DRC ?= 0
+config/best1502p/target.mk:81:AUDIO_LIMITER ?= 0
+config/best1503/anc_cfg.c:24:        .total_gain = 512*2,
+config/best1503/anc_cfg.c:48:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:52:        .total_gain = 512/2,
+config/best1503/anc_cfg.c:76:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:80:        .total_gain = 512/2,
+config/best1503/anc_cfg.c:104:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:108:        .total_gain = 512/2,
+config/best1503/anc_cfg.c:132:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:139:        .total_gain = 512*2,
+config/best1503/anc_cfg.c:169:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:173:        .total_gain = 512/2,
+config/best1503/anc_cfg.c:203:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:207:        .total_gain = 512*2,
+config/best1503/anc_cfg.c:229:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:236:        .total_gain =512*2,
+config/best1503/anc_cfg.c:267:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:271:        .total_gain = 512/2,
+config/best1503/anc_cfg.c:301:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:305:        .total_gain = 512,
+config/best1503/anc_cfg.c:327:        .dac_gain_offset=0,
+config/best1503/anc_cfg.c:356:        .psap_total_gain = 811,
+config/best1503/anc_cfg.c:366:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/best1503/anc_cfg.c:371:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/best1503/anc_cfg.c:374:        .psap_dac_gain_offset=0,
+config/best1503/anc_cfg.c:380:        .psap_total_gain = 811,
+config/best1503/anc_cfg.c:390:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/best1503/anc_cfg.c:395:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/best1503/anc_cfg.c:398:        .psap_dac_gain_offset=0,
+config/best1503/anc_cfg.c:404:        .psap_total_gain = 811,
+config/best1503/anc_cfg.c:414:        .psap_dehowling_cfg.dehowling_l.total_gain=0,
+config/best1503/anc_cfg.c:419:        .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+config/best1503/anc_cfg.c:422:        .psap_dac_gain_offset=0,
+config/best1503/anc_cfg.c:441:        .psap_total_gain = 723,
+config/best1503/anc_cfg.c:485:        .psap_dac_gain_offset=0,
+config/best1503/audio_cfg.c:178:const DrcConfig audio_drc_cfg = {
+config/best1503/audio_cfg.c:189:const LimiterConfig audio_limiter_cfg = {
+config/best1503/besui_param/param_notws.h:32:        .total_gain = 512,
+config/best1503/besui_param/param_notws.h:66:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:70:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:104:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:108:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:142:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:146:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:180:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:184:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:218:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:222:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:256:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:263:        .total_gain = 512,
+config/best1503/besui_param/param_notws.h:297:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:301:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:335:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:339:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:373:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:377:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:411:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:415:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:449:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:453:        .total_gain = 0,
+config/best1503/besui_param/param_notws.h:487:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_notws.h:494:        .total_gain = 512*2,
+config/best1503/besui_param/param_notws.h:524:        .dac_gain_offset=0,
+config/best1503/besui_param/param_notws.h:531:        .total_gain = 512*2,
+config/best1503/besui_param/param_notws.h:561:        .dac_gain_offset=0,
+config/best1503/besui_param/param_notws.h:568:        .total_gain =512*2,
+config/best1503/besui_param/param_notws.h:598:        .dac_gain_offset=0,
+config/best1503/besui_param/param_notws.h:604:        .total_gain =512*2,
+config/best1503/besui_param/param_notws.h:634:        .dac_gain_offset=0,
+config/best1503/besui_param/param_twspro.h:36:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:55:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:59:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:78:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:82:        .total_gain = 0,
+config/best1503/besui_param/param_twspro.h:101:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:105:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:124:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:131:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:150:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:154:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:173:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:177:        .total_gain = 0,
+config/best1503/besui_param/param_twspro.h:196:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:200:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:219:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:226:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:245:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:249:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:268:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:272:        .total_gain = 0,
+config/best1503/besui_param/param_twspro.h:291:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:295:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:314:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:321:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:340:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:344:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:363:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:367:        .total_gain = 0,
+config/best1503/besui_param/param_twspro.h:386:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:390:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:409:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:416:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:435:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:439:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:458:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:462:        .total_gain = 0,
+config/best1503/besui_param/param_twspro.h:481:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:485:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:504:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:511:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:530:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:534:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:553:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:557:        .total_gain = 0,
+config/best1503/besui_param/param_twspro.h:576:        .dac_gain_offset = 0,
+config/best1503/besui_param/param_twspro.h:580:        .total_gain = 512,
+config/best1503/besui_param/param_twspro.h:599:        .dac_gain_offset = 0,
+config/best1503/speech_config.mk:34:SPEECH_TX_POST_GAIN ?= 0
+config/best1503/speech_config.mk:40:SPEECH_RX_EQ ?= 1
+config/best1503/speech_config.mk:42:SPEECH_RX_POST_GAIN ?= 0
+config/best1503/target.mk:78:AUDIO_DRC ?= 0
+config/best1503/target.mk:80:AUDIO_LIMITER ?= 0
+config/best1503_rom/speech_config.mk:34:SPEECH_TX_POST_GAIN ?= 0
+config/best1503_rom/speech_config.mk:40:SPEECH_RX_EQ ?= 1
+config/best1503_rom/speech_config.mk:42:SPEECH_RX_POST_GAIN ?= 0
+config/best1503_rom/target.mk:79:AUDIO_DRC ?= 0
+config/best1503_rom/target.mk:81:AUDIO_LIMITER ?= 0
+config/besui.mk:113:SPEECH_RX_EQ        					:= 0
+config/besui.mk:133:SPEECH_RX_EQ        					:= 0
+config/common.mk:1537:export SPEECH_RX_24BIT := 1
+config/common.mk:1542:export SPEECH_RX_24BIT := 1
+config/common.mk:1581:# export AUDIO_LIMITER := 1
+config/common.mk:2300:export SPEECH_RX_24BIT := 1
+config/common.mk:2529:export MEDIA_PLAY_24BIT ?= 1
+config/common.mk:3266:export SPEECH_RX_24BIT := 1
+config/common.mk:4723:ifeq ($(SPEECH_TX_POST_GAIN),1)
+config/common.mk:4724:export SPEECH_TX_POST_GAIN
+config/common.mk:4725:KBUILD_CPPFLAGS += -DSPEECH_TX_POST_GAIN
+config/common.mk:4796:ifeq ($(SPEECH_RX_EQ),1)
+config/common.mk:4797:export SPEECH_RX_EQ
+config/common.mk:4798:KBUILD_CPPFLAGS += -DSPEECH_RX_EQ
+config/common.mk:4814:export SPEECH_RX_POST_GAIN :=1
+config/common.mk:4817:ifeq ($(SPEECH_RX_POST_GAIN),1)
+config/common.mk:4818:export SPEECH_RX_POST_GAIN
+config/common.mk:4819:KBUILD_CPPFLAGS += -DSPEECH_RX_POST_GAIN
+config/common.mk:4822:ifeq ($(SPEECH_RX_EQ),1)
+config/common.mk:4824:export SPEECH_RX_24BIT := 1
+config/common.mk:5091:export AUDIO_LIMITER := 1
+config/common.mk:5339:ifeq ($(AUDIO_DRC),1)
+config/common.mk:5340:export AUDIO_DRC
+config/common.mk:5345:ifeq ($(AUDIO_LIMITER),1)
+config/common.mk:5346:export AUDIO_LIMITER
+config/common.mk:5349:KBUILD_CPPFLAGS += -DAUDIO_LIMITER
+apps/anc/src/app_anc.c:101:        .howling_set_gain_level = 0,    //0:-3dB  1:-6dB  2:-9dB  3:mute
+apps/anc/src/app_anc_utils.c:98:int32_t app_anc_get_total_gain_f32(enum ANC_TYPE_T type, float *gain_l, float *gain_r)
+apps/anc/src/app_anc_utils.c:122:    app_anc_get_total_gain_f32(type, &gain_l, &gain_r);
+apps/anc/src/app_anc_utils.c:127:        psap_set_total_gain_f32(gain_l, gain_r);
+apps/anc/src/assist/anc_assist_anc.c:61:// The anc total gain is same for FF and TT
+apps/audioplayers/bt_sco_chain.c:349:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:350:SpeechGainState *speech_tx_post_gain_st = NULL;
+apps/audioplayers/bt_sco_chain.c:381:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:382:EqState *speech_rx_eq_st = NULL;
+apps/audioplayers/bt_sco_chain.c:394:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:395:SpeechGainState *speech_rx_post_gain_st = NULL;
+apps/audioplayers/bt_sco_chain.c:725:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:726:    speech_tx_post_gain_st = speech_gain_create(sample_rate, frame_len, &speech_cfg->tx_post_gain);
+apps/audioplayers/bt_sco_chain.c:784:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:785:    speech_rx_eq_st = eq_init_with_custom_allocator(sample_rate, frame_len, &speech_cfg->rx_eq, default_allocator());
+apps/audioplayers/bt_sco_chain.c:790:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/bt_sco_chain.c:810:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:811:    speech_rx_post_gain_st = speech_gain_create(sample_rate, frame_len, &speech_cfg->rx_post_gain);
+apps/audioplayers/bt_sco_chain.c:876:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/bt_sco_chain.c:1016:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:1017:    speech_gain_destroy(speech_tx_post_gain_st);
+apps/audioplayers/bt_sco_chain.c:1198:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:1199:    speech_gain_destroy(speech_rx_post_gain_st);
+apps/audioplayers/bt_sco_chain.c:1202:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:1203:    eq_destroy(speech_rx_eq_st);
+apps/audioplayers/bt_sco_chain.c:1413:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:1414:    mips += speech_gain_get_required_mips(speech_tx_post_gain_st);
+apps/audioplayers/bt_sco_chain.c:1448:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:1449:    mips += eq_get_required_mips(speech_rx_eq_st);
+apps/audioplayers/bt_sco_chain.c:1460:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:1461:    mips += speech_gain_get_required_mips(speech_rx_post_gain_st);
+apps/audioplayers/bt_sco_chain.c:1579:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:1580:    speech_gain_set_config(speech_tx_post_gain_st, &cfg->tx_post_gain);
+apps/audioplayers/bt_sco_chain.c:1606:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:1607:    eq_set_config(speech_rx_eq_st, &cfg->rx_eq);
+apps/audioplayers/bt_sco_chain.c:1615:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:1616:    speech_gain_set_config(speech_rx_post_gain_st, &cfg->rx_post_gain);
+apps/audioplayers/bt_sco_chain.c:2040:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:2041:    speech_gain_process(speech_tx_post_gain_st, pcm_buf, pcm_len);
+apps/audioplayers/bt_sco_chain.c:2183:    if(speech_rx_post_gain_st == NULL){
+apps/audioplayers/bt_sco_chain.c:2184:        ASSERT(0, "%s warning, speech_rx_post_gain_st is not created",__func__);
+apps/audioplayers/bt_sco_chain.c:2201:        SpeechGainConfig rx_post_gain;
+apps/audioplayers/bt_sco_chain.c:2202:        rx_post_gain.bypass = 0;
+apps/audioplayers/bt_sco_chain.c:2203:        rx_post_gain.gain_dB = speech_adaptive_volume_st->adaptive_volume_gain;
+apps/audioplayers/bt_sco_chain.c:2205:        speech_gain_set_config(speech_rx_post_gain_st, &rx_post_gain);
+apps/audioplayers/bt_sco_chain.c:2210:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/bt_sco_chain.c:2245:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:2246:    eq_process_int24(speech_rx_eq_st, pcm_buf, pcm_len);
+apps/audioplayers/bt_sco_chain.c:2253:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:2254:    speech_gain_process_int24(speech_rx_post_gain_st, pcm_buf, pcm_len);
+apps/audioplayers/bt_sco_chain.c:2305:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain.c:2306:    eq_process(speech_rx_eq_st, pcm_buf, pcm_len);
+apps/audioplayers/bt_sco_chain.c:2313:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain.c:2314:    speech_gain_process(speech_rx_post_gain_st, pcm_buf, pcm_len);
+apps/audioplayers/bt_sco_chain_cfg.h:115:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain_cfg.h:116:    SpeechGainConfig        tx_post_gain;
+apps/audioplayers/bt_sco_chain_cfg.h:142:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_cfg.h:151:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain_cfg.h:152:    SpeechGainConfig        rx_post_gain;
+apps/audioplayers/bt_sco_chain_cfg_default.c:60:|       | SPEECH_RX_EQ        | Default EQ                        | 0.5     \ | 1.1           | each section           |
+apps/audioplayers/bt_sco_chain_cfg_default.c:649:        .pre_gain           = 10,
+apps/audioplayers/bt_sco_chain_cfg_default.c:650:        .post_gain          = 5,
+apps/audioplayers/bt_sco_chain_cfg_default.c:700: *     pre_gain(float): normalized gain(before processing).
+apps/audioplayers/bt_sco_chain_cfg_default.c:701: *     post_gain(float): normalized gain(after processing).
+apps/audioplayers/bt_sco_chain_cfg_default.c:741:        .talk_pre_gain      = -2,    //Calibrate 2-mic frequency response(reduce the talk mic), usually gain <=0
+apps/audioplayers/bt_sco_chain_cfg_default.c:742:        .pre_gain           = 0,     //Amplify all microphones with pre gain
+apps/audioplayers/bt_sco_chain_cfg_default.c:743:        .post_gain          = 14,
+apps/audioplayers/bt_sco_chain_cfg_default.c:781: *     pre_gain(float): normalized gain(before processing).
+apps/audioplayers/bt_sco_chain_cfg_default.c:782: *     post_gain(float): normalized gain(after processing).
+apps/audioplayers/bt_sco_chain_cfg_default.c:822:        .talk_pre_gain      = 0,    //Calibrate 2-mic frequency response(reduce the talk mic), usually gain <=0
+apps/audioplayers/bt_sco_chain_cfg_default.c:823:        .pre_gain           = 0,     //Amplify all microphones with pre gain
+apps/audioplayers/bt_sco_chain_cfg_default.c:824:        .post_gain          = 14,
+apps/audioplayers/bt_sco_chain_cfg_default.c:865:        .talk_pre_gain =   -2,
+apps/audioplayers/bt_sco_chain_cfg_default.c:911:        .pre_gain =         10,
+apps/audioplayers/bt_sco_chain_cfg_default.c:912:        .post_gain =        8,
+apps/audioplayers/bt_sco_chain_cfg_default.c:921:            .talk_pre_gain =   -2,
+apps/audioplayers/bt_sco_chain_cfg_default.c:967:            .pre_gain =         10,
+apps/audioplayers/bt_sco_chain_cfg_default.c:968:            .post_gain =        8,
+apps/audioplayers/bt_sco_chain_cfg_default.c:977:                .talk_pre_gain =   -2,
+apps/audioplayers/bt_sco_chain_cfg_default.c:1023:                .pre_gain =         10,
+apps/audioplayers/bt_sco_chain_cfg_default.c:1024:                .post_gain =        8,
+apps/audioplayers/bt_sco_chain_cfg_default.c:1250: *     data_shift(1~3): 1: -6dB; 2: -12dB; 3: -18dB
+apps/audioplayers/bt_sco_chain_cfg_default.c:1350:#if defined(SPEECH_TX_POST_GAIN)
+apps/audioplayers/bt_sco_chain_cfg_default.c:1363:    .tx_post_gain = {
+apps/audioplayers/bt_sco_chain_cfg_default.c:1533:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_cfg_default.c:1592:#if defined(SPEECH_RX_POST_GAIN)
+apps/audioplayers/bt_sco_chain_cfg_default.c:1597: *     Refer to SPEECH_TX_POST_GAIN
+apps/audioplayers/bt_sco_chain_cfg_default.c:1601:    .rx_post_gain = {
+apps/audioplayers/bt_sco_chain_thirdparty.c:53:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty.c:54:EqState *speech_rx_eq_st = NULL;
+apps/audioplayers/bt_sco_chain_thirdparty.c:116:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty.c:117:    eq_set_config(speech_rx_eq_st, &cfg->rx_eq);
+apps/audioplayers/bt_sco_chain_thirdparty.c:154:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/bt_sco_chain_thirdparty.c:244:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty.c:245:    speech_rx_eq_st = eq_init(rx_sample_rate, frame_len, &speech_cfg->rx_eq);
+apps/audioplayers/bt_sco_chain_thirdparty.c:283:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty.c:284:    eq_destroy(speech_rx_eq_st);
+apps/audioplayers/bt_sco_chain_thirdparty.c:497:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/bt_sco_chain_thirdparty.c:502:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty.c:503:    eq_process_int24(speech_rx_eq_st, pcm_buf, *pcm_len);
+apps/audioplayers/bt_sco_chain_thirdparty.c:511:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty.c:512:    eq_process(speech_rx_eq_st, pcm_buf, *pcm_len);
+apps/audioplayers/bt_sco_chain_thirdparty_xiaomi.c:239:#if defined(SPEECH_RX_EQ)
+apps/audioplayers/bt_sco_chain_thirdparty_xiaomi.c:240:    // eq_set_config(speech_rx_eq_st, &cfg->rx_eq);
+apps/audioplayers/bt_sco_chain_tuning.c:119://#if defined(SPEECH_RX_EQ)
+apps/audioplayers/voicebtpcmplay.cpp:1149:#if defined(SPEECH_TX_24BIT) && defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay.cpp:1151:#elif defined(SPEECH_TX_24BIT) && !defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay.cpp:1156:#elif !defined(SPEECH_TX_24BIT) && defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay.cpp:1222:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay.cpp:1234:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay_sco_dma_snapshot.cpp:53:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay_sco_dma_snapshot.cpp:200:#if defined(SPEECH_RX_24BIT) && !defined(SPEECH_TX_24BIT)
+apps/audioplayers/voicebtpcmplay_sco_dma_snapshot.cpp:202:#elif !defined(SPEECH_RX_24BIT) && defined(SPEECH_TX_24BIT)
+apps/audioplayers/voicebtpcmplay_sco_dma_snapshot.cpp:210:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay_sco_dma_snapshot.cpp:255:#if defined(SPEECH_RX_24BIT)
+apps/audioplayers/voicebtpcmplay_sco_dma_snapshot.cpp:267:#if defined(SPEECH_RX_24BIT)
+apps/earbuds/conn/app_ibrt_customif_cmd.cpp:92:extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+apps/earbuds/conn/app_ibrt_customif_cmd.cpp:1383:            ntt_audio_drc_apply_by_eq_index(eq_index);
+apps/voice_assist/src/app_voice_assist_noise_adapt_anc.c:67:    // app_anc_set_gain_f32 0.5 == total gain -6dB, app_anc_set_gain_f32 0.25 == total gain -12dB
+apps/voice_detector/voice_detector.c:149:        c->pre_gain    = VAD_DEFAULT_PRE_GAIN;
+apps/voice_detector/voice_detector.h:82:#define VAD_DEFAULT_PRE_GAIN    0x4
+services/aiwang_services/ble_sparrow_server.cpp:76:extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+services/aiwang_services/ble_sparrow_server.cpp:1494:    ntt_audio_drc_apply_by_eq_index(preset);
+services/audioflinger/audioflinger.c:1443:    hal_codec_dac_gain_m60db_check(HAL_CODEC_PERF_TEST_M60DB);
+services/audioflinger/audioflinger.c:4170:    hal_codec_dac_gain_m60db_check((enum HAL_CODEC_PERF_TEST_POWER_T)type);
+services/audioflinger/audioflinger.c:4263:            hal_codec_sync_dac_gain_enable((enum HAL_CODEC_SYNC_TYPE_T)type);
+services/audioflinger/audioflinger.c:4265:            hal_codec_sync_dac_gain_disable();
+services/audioflinger/audioflinger.c:4451:    c.pre_gain    = VAD_DEF_PRE_GAIN;
+services/audioflinger/audioflinger.c:4708:#define DAC_GAIN_CALIB_AUTO_CNT         4
+services/audioflinger/audioflinger.c:4840:static volatile uint8_t cal_dac_gain_offset = 2;
+services/audioflinger/audioflinger.c:4869:        cal_dac_gain_offset  = (uint8_t)p2;
+services/audioflinger/audioflinger.c:5244:    hal_codec_set_dac_ana_gain(cal_dac_ini_ana_gain, cal_dac_gain_offset);
+services/audioflinger/audioflinger.c:5311:        AUDIOFLINGER_TRACE(1, "\nCALIB DAC GAIN\n");
+services/audioflinger/audioflinger.c:5314:        hal_codec_set_dig_dac_gain_dr(DAC_DC_CALIB_SPK_CHAN_MAP, 0);
+services/audioflinger/audioflinger.c:5318:        for (i = 0; i < DAC_GAIN_CALIB_AUTO_CNT;i++) {
+services/audioflinger/audioflinger.c:5324:        dc_out_l /= DAC_GAIN_CALIB_AUTO_CNT;
+services/audioflinger/audioflinger.c:5325:        dc_out_r /= DAC_GAIN_CALIB_AUTO_CNT;
+services/audio_bt/app_bt_media_manager.cpp:79:extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+services/audio_bt/app_bt_media_manager.cpp:808:            ntt_audio_drc_apply_by_eq_index(eq_index);
+services/audio_bt/app_bt_media_manager.cpp:817:            ntt_audio_drc_apply_by_eq_index(eq_index);
+services/audio_bt/app_bt_stream.cpp:238:extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+services/audio_bt/app_bt_stream.cpp:1742:   hal_codec_get_dac_gain(&left_gain,&right_gain);
+services/audio_bt/app_bt_stream.cpp:1952:   hal_codec_get_dac_gain(&left_gain,&right_gain);
+services/audio_bt/app_bt_stream.cpp:2805:#if defined(__AUDIO_DRC__) || defined(__AUDIO_LIMITER__)
+services/audio_bt/app_bt_stream.cpp:4467:                ntt_audio_drc_apply_by_eq_index(eq_index);
+services/audio_bt/app_bt_stream.cpp:4476:                ntt_audio_drc_apply_by_eq_index(eq_index);
+services/audio_bt/app_bt_stream.cpp:6088:#if defined(SPEECH_RX_24BIT)
+services/audio_bt/app_bt_stream.cpp:6107:#if defined(SPEECH_RX_24BIT)
+services/audio_bt/app_bt_stream.cpp:6153:#if defined(SPEECH_RX_24BIT)
+services/audio_bt/app_bt_stream.cpp:6159:#if defined(SPEECH_RX_24BIT)
+services/audio_bt/app_bt_stream.cpp:6217:   hal_codec_get_dac_gain(&left_gain,&right_gain);
+services/audio_bt/app_bt_stream.cpp:7003:#if defined(SPEECH_RX_24BIT)
+services/audio_bt/app_media_player.cpp:2197:#if defined(MEDIA_PLAY_24BIT)
+services/audio_bt/app_media_player.cpp:2272:#if defined(MEDIA_PLAY_24BIT)
+services/audio_bt/app_media_player.cpp:2282:#if defined(MEDIA_PLAY_24BIT)
+services/audio_bt/app_media_player.cpp:2298:#if defined(MEDIA_PLAY_24BIT)
+services/audio_bt/app_media_player.cpp:2416:   hal_codec_get_dac_gain(&left_gain,&right_gain);
+services/audio_bt/app_media_player.cpp:2823:#if defined(MEDIA_PLAY_24BIT)
+services/audio_bt/app_media_player.cpp:2867:#if defined(MEDIA_PLAY_24BIT)
+services/audio_process/audio_cfg.c:87:#if defined(SPEECH_RX_EQ)
+services/audio_process/audio_cfg.c:265:#ifdef __AUDIO_DRC__
+services/audio_process/audio_cfg.c:266:    memcpy((uint8_t*)&audio_section_audio_cfg.cfg.drc, (uint8_t*)&audio_drc_cfg, sizeof(DrcConfig));
+services/audio_process/audio_cfg.c:268:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_cfg.c:269:    memcpy((uint8_t*)&audio_section_audio_cfg.cfg.limiter, (uint8_t*)&audio_limiter_cfg, sizeof(LimiterConfig));
+services/audio_process/audio_cfg.c:278:#if defined(SPEECH_RX_EQ)
+services/audio_process/audio_process.c:174:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:175:#define AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:178:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:179:#define AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:245:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:246:extern const DrcConfig audio_drc_cfg;
+services/audio_process/audio_process.c:249:#define AUDIO_DRC_CFG_LIST_NUM    5
+services/audio_process/audio_process.c:250:extern const DrcConfig * const audio_drc_cfg_list[AUDIO_DRC_CFG_LIST_NUM];
+services/audio_process/audio_process.c:263:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:264:extern const LimiterConfig audio_limiter_cfg;
+services/audio_process/audio_process.c:287:#if defined(AUDIO_EQ_SW_IIR_UPDATE_CFG) || defined(AUDIO_EQ_HW_FIR_UPDATE_CFG)|| defined(AUDIO_EQ_HW_DAC_IIR_UPDATE_CFG)|| defined(AUDIO_EQ_HW_IIR_UPDATE_CFG) || defined(AUDIO_DRC_UPDATE_CFG) || defined(AUDIO_LIMITER_UPDATE_CFG) || defined(AUDIO_DYNAMIC_BOOST_UPDATE_CFG) || defined(AUDIO_HW_LIMITER_UPDATE_CFG) || defined(AUDIO_BASS_ENHANCER_UPDATE_CFG) || defined(VIRTUAL_SURROUND_UPDATE_CFG) || defined(AUDIO_DYNAMIC_EQ_UPDATE_CFG)
+services/audio_process/audio_process.c:291:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:292://#error __AUDIO_DRC__
+services/audio_process/audio_process.c:294:#define AUDIO_DRC_NEEDED_SIZE (1024*15) // TWS
+services/audio_process/audio_process.c:296:#define AUDIO_DRC_NEEDED_SIZE (1024*18) // stereo
+services/audio_process/audio_process.c:299:#define AUDIO_DRC_NEEDED_SIZE (0)
+services/audio_process/audio_process.c:320:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:321:#define AUDIO_LIMITER_NEEDED_SIZE (1024*9)
+services/audio_process/audio_process.c:323:#define AUDIO_LIMITER_NEEDED_SIZE (0)
+services/audio_process/audio_process.c:364:#define AUDIO_MEMORY_SIZE ( AUDIO_DRC_NEEDED_SIZE + AUDIO_LIMITER_NEEDED_SIZE + AUDIO_REVERB_NEEDED_SIZE + AUDIO_STEREO_SORROUNDING_NEEDED_SIZE + AUDIO_BASS_ENHANCER_NEEDED_SIZE + + AUDIO_DYNAMIC_BOOST_NEEDED_SIZE + AUDIO_DYNAMIC_EQ_NEEDED_SIZE + AUDIO_ADJ_EQ_REV_NEEDED_SIZE + AUDIO_NOISE_ADJ_VOLUME_NEEDED_SIZE)
+services/audio_process/audio_process.c:368:#define AUDIO_MEMORY_SIZE (AUDIO_DRC_NEEDED_SIZE + AUDIO_LIMITER_NEEDED_SIZE + AUDIO_REVERB_NEEDED_SIZE + AUDIO_STEREO_SORROUNDING_NEEDED_SIZE + AUDIO_BASS_ENHANCER_NEEDED_SIZE + DIRAC_SIZE + + AUDIO_DYNAMIC_BOOST_NEEDED_SIZE + AUDIO_DYNAMIC_EQ_NEEDED_SIZE + AUDIO_NOISE_ADJ_VOLUME_NEEDED_SIZE)
+services/audio_process/audio_process.c:380:#define AUDIO_MEMORY_SIZE (AUDIO_DRC_NEEDED_SIZE + AUDIO_LIMITER_NEEDED_SIZE \
+services/audio_process/audio_process.c:453:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:457:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:530:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:545:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:627:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:756:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:773:            .psap_total_gain = 512,
+services/audio_process/audio_process.c:783:            .psap_dehowling_cfg.dehowling_l.total_gain=0,
+services/audio_process/audio_process.c:788:            .psap_dehowling_cfg.dehowling_l.dac_gain_offset=0,
+services/audio_process/audio_process.c:791:            .psap_dac_gain_offset=0,
+services/audio_process/audio_process.c:1399:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:1400:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:1403:        drc_set_config(audio_process.drc_st, &audio_process.drc_cfg);
+services/audio_process/audio_process.c:1408:	drc_process(audio_process.drc_st, buf, pcm_len);
+services/audio_process/audio_process.c:1433:        limiter_set_pre_gain(audio_process.limiter_st, audio_process.adaptive_volume->adaptive_volume_gain);
+services/audio_process/audio_process.c:1434:        AUDIO_PROCESS_TRACE(0,"[%s] limiter_set_pre_gain %d done ", __func__,(int32_t)audio_process.adaptive_volume->adaptive_volume_gain);
+services/audio_process/audio_process.c:1439:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:1440:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:1443:        limiter_set_config(audio_process.limiter_st, &audio_process.limiter_cfg);
+services/audio_process/audio_process.c:1448:    limiter_process(audio_process.limiter_st, buf, pcm_len);
+services/audio_process/audio_process.c:1750:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:1751:    audio_process.drc_st = drc_create(sample_rate, sample_bits, sw_ch_num, 10,
+services/audio_process/audio_process.c:1752:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:1755:        &audio_drc_cfg
+services/audio_process/audio_process.c:1758:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:1853:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:1854:    audio_process.limiter_st = limiter_create(sample_rate, sample_bits, sw_ch_num,
+services/audio_process/audio_process.c:1855:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:1858:        &audio_limiter_cfg
+services/audio_process/audio_process.c:1861:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:1995:#ifdef __AUDIO_DRC__
+services/audio_process/audio_process.c:1996:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:2025:#ifdef __AUDIO_LIMITER__
+services/audio_process/audio_process.c:2026:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:2308:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:2309:int audio_drc_callback(uint8_t *buf, uint32_t  len)
+services/audio_process/audio_process.c:2403:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:2404:int audio_limiter_callback(uint8_t *buf, uint32_t  len)
+services/audio_process/audio_process.c:3198:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:3199:    hal_cmd_register("drc", audio_drc_callback);
+services/audio_process/audio_process.c:3210:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:3211:    hal_cmd_register("limiter", audio_limiter_callback);
+services/audio_process/audio_process.c:3284:#ifdef AUDIO_DRC_UPDATE_CFG
+services/audio_process/audio_process.c:3285:    memcpy(&audio_process.drc_cfg, &audio_drc_cfg, sizeof(DrcConfig));
+services/audio_process/audio_process.c:3296:#ifdef AUDIO_LIMITER_UPDATE_CFG
+services/audio_process/audio_process.c:3297:    memcpy(&audio_process.limiter_cfg, &audio_limiter_cfg, sizeof(LimiterConfig));
+services/audio_process/audio_process.c:3392:void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
+services/audio_process/audio_process.c:3396:    if (drc_index >= AUDIO_DRC_CFG_LIST_NUM)
+services/audio_process/audio_process.c:3403:    memcpy(&audio_process.drc_cfg,audio_drc_cfg_list[drc_index],sizeof(DrcConfig));
+services/nv_section/aud_section/aud_section.h:57:    int32_t     total_gain;
+services/nv_section/aud_section/aud_section.h:85:    int8_t      dac_gain_offset; // in qdb (quater of dB)
+services/nv_section/aud_section/aud_section.h:171:    int32_t     psap_total_gain;
+services/nv_section/aud_section/aud_section.h:180:    int8_t     psap_dac_gain_offset; // in qdb (quater of dB)
+services/tota/app_tota_cmd_code.h:88:    OP_TOTA_ANC_TOTAL_GAIN_WRITE_CMD=0x9020,
+services/voice_dev/voice_algo.c:66:        case VOICE_DEV_ALGO_INDEX_PRE_GAIN:
+services/voice_dev/voice_algo.c:78:        case VOICE_DEV_ALGO_INDEX_POST_GAIN:
+services/voice_dev/voice_algo.c:96:        case VOICE_DEV_ALGO_INDEX_PRE_GAIN:
+services/voice_dev/voice_algo.c:108:        case VOICE_DEV_ALGO_INDEX_POST_GAIN:
+services/voice_dev/voice_algo.c:130:        case VOICE_DEV_ALGO_INDEX_PRE_GAIN:
+services/voice_dev/voice_algo.c:145:        case VOICE_DEV_ALGO_INDEX_POST_GAIN:
+services/voice_dev/voice_dev.h:67:    VOICE_DEV_ALGO_INDEX_PRE_GAIN,
+services/voice_dev/voice_dev.h:70:    VOICE_DEV_ALGO_INDEX_POST_GAIN,
+services/voice_dev/voice_dev.h:77:    VOICE_DEV_ALGO_PRE_GAIN = 0x01 << VOICE_DEV_ALGO_INDEX_PRE_GAIN,
+services/voice_dev/voice_dev.h:80:    VOICE_DEV_ALGO_POST_GAIN = 0x01 << VOICE_DEV_ALGO_INDEX_POST_GAIN,
+platform/cmsis/weak_sym_armclang/weak_sym_armclang.c:30:WEAK void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type) {}
+platform/cmsis/weak_sym_armclang/weak_sym_armclang.c:45:WEAK void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type) {}
+platform/cmsis/weak_sym_armclang/weak_sym_armclang.c:46:WEAK void hal_codec_sync_dac_gain_disable(void) {}
+platform/cmsis/weak_sym_armclang/weak_sym_armclang.c:91:WEAK void analog_aud_set_dac_gain(int32_t v) {}
+platform/drivers/ana/analog.h:76:void analog_aud_set_dac_gain(int32_t v);
+platform/drivers/ana/analog.h:78:uint32_t analog_codec_get_dac_gain(void);
+platform/drivers/ana/analog.h:80:uint32_t analog_codec_dac_gain_to_db(int32_t gain);
+platform/drivers/ana/best1306/analog_best1306.c:1045:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1306/analog_best1306.c:1049:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1306/analog_best1306.c:1054:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1306/analog_best1306.c:2031:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/ana/best1306/reg_analog_best1306.h:781:#define REG_RX_PGAA_DACGAIN_SHIFT           8
+platform/drivers/ana/best1306/reg_analog_best1306.h:782:#define REG_RX_PGAA_DACGAIN_MASK            (0x3 << REG_RX_PGAA_DACGAIN_SHIFT)
+platform/drivers/ana/best1306/reg_analog_best1306.h:783:#define REG_RX_PGAA_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAA_DACGAIN, n)
+platform/drivers/ana/best1306/reg_analog_best1306.h:833:#define REG_RX_PGAB_DACGAIN_SHIFT           8
+platform/drivers/ana/best1306/reg_analog_best1306.h:834:#define REG_RX_PGAB_DACGAIN_MASK            (0x3 << REG_RX_PGAB_DACGAIN_SHIFT)
+platform/drivers/ana/best1306/reg_analog_best1306.h:835:#define REG_RX_PGAB_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAB_DACGAIN, n)
+platform/drivers/ana/best1306/reg_analog_best1306.h:880:#define REG_RX_PGAC_DACGAIN_SHIFT           8
+platform/drivers/ana/best1306/reg_analog_best1306.h:881:#define REG_RX_PGAC_DACGAIN_MASK            (0x3 << REG_RX_PGAC_DACGAIN_SHIFT)
+platform/drivers/ana/best1306/reg_analog_best1306.h:882:#define REG_RX_PGAC_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAC_DACGAIN, n)
+platform/drivers/ana/best1306/reg_analog_best1306.h:927:#define REG_RX_PGAD_DACGAIN_SHIFT           8
+platform/drivers/ana/best1306/reg_analog_best1306.h:928:#define REG_RX_PGAD_DACGAIN_MASK            (0x3 << REG_RX_PGAD_DACGAIN_SHIFT)
+platform/drivers/ana/best1306/reg_analog_best1306.h:929:#define REG_RX_PGAD_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAD_DACGAIN, n)
+platform/drivers/ana/best1306/reg_analog_best1306.h:974:#define REG_RX_PGAE_DACGAIN_SHIFT           8
+platform/drivers/ana/best1306/reg_analog_best1306.h:975:#define REG_RX_PGAE_DACGAIN_MASK            (0x3 << REG_RX_PGAE_DACGAIN_SHIFT)
+platform/drivers/ana/best1306/reg_analog_best1306.h:976:#define REG_RX_PGAE_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAE_DACGAIN, n)
+platform/drivers/ana/best1306p/analog_best1306p.c:1038:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1306p/analog_best1306p.c:1042:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1306p/analog_best1306p.c:1047:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1306p/analog_best1306p.c:1998:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/ana/best1501/analog_best1501.c:1378:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1501/analog_best1501.c:1382:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1501/analog_best1501.c:1387:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1501/analog_best1501.c:2600:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/ana/best1501/reg_analog_best1501.h:419:#define REG_RX_PGAA_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501/reg_analog_best1501.h:420:#define REG_RX_PGAA_DACGAIN_MASK            (0x3 << REG_RX_PGAA_DACGAIN_SHIFT)
+platform/drivers/ana/best1501/reg_analog_best1501.h:421:#define REG_RX_PGAA_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAA_DACGAIN, n)
+platform/drivers/ana/best1501/reg_analog_best1501.h:598:#define REG_RX_PGAB_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501/reg_analog_best1501.h:599:#define REG_RX_PGAB_DACGAIN_MASK            (0x3 << REG_RX_PGAB_DACGAIN_SHIFT)
+platform/drivers/ana/best1501/reg_analog_best1501.h:600:#define REG_RX_PGAB_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAB_DACGAIN, n)
+platform/drivers/ana/best1501/reg_analog_best1501.h:769:#define REG_RX_PGAC_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501/reg_analog_best1501.h:770:#define REG_RX_PGAC_DACGAIN_MASK            (0x3 << REG_RX_PGAC_DACGAIN_SHIFT)
+platform/drivers/ana/best1501/reg_analog_best1501.h:771:#define REG_RX_PGAC_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAC_DACGAIN, n)
+platform/drivers/ana/best1501/reg_analog_best1501.h:941:#define REG_RX_PGAD_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501/reg_analog_best1501.h:942:#define REG_RX_PGAD_DACGAIN_MASK            (0x3 << REG_RX_PGAD_DACGAIN_SHIFT)
+platform/drivers/ana/best1501/reg_analog_best1501.h:943:#define REG_RX_PGAD_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAD_DACGAIN, n)
+platform/drivers/ana/best1501/reg_analog_best1501.h:1112:#define REG_RX_PGAE_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501/reg_analog_best1501.h:1113:#define REG_RX_PGAE_DACGAIN_MASK            (0x3 << REG_RX_PGAE_DACGAIN_SHIFT)
+platform/drivers/ana/best1501/reg_analog_best1501.h:1114:#define REG_RX_PGAE_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAE_DACGAIN, n)
+platform/drivers/ana/best1501p/analog_best1501p.c:1453:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1501p/analog_best1501p.c:1457:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1501p/analog_best1501p.c:1462:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1501p/analog_best1501p.c:2586:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:419:#define REG_RX_PGAA_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:420:#define REG_RX_PGAA_DACGAIN_MASK            (0x3 << REG_RX_PGAA_DACGAIN_SHIFT)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:421:#define REG_RX_PGAA_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAA_DACGAIN, n)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:593:#define REG_RX_PGAB_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:594:#define REG_RX_PGAB_DACGAIN_MASK            (0x3 << REG_RX_PGAB_DACGAIN_SHIFT)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:595:#define REG_RX_PGAB_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAB_DACGAIN, n)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:762:#define REG_RX_PGAC_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:763:#define REG_RX_PGAC_DACGAIN_MASK            (0x3 << REG_RX_PGAC_DACGAIN_SHIFT)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:764:#define REG_RX_PGAC_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAC_DACGAIN, n)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:996:#define REG_RX_PGAE_DACGAIN_SHIFT           8
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:997:#define REG_RX_PGAE_DACGAIN_MASK            (0x3 << REG_RX_PGAE_DACGAIN_SHIFT)
+platform/drivers/ana/best1501p/reg_analog_best1501p.h:998:#define REG_RX_PGAE_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAE_DACGAIN, n)
+platform/drivers/ana/best1502p/analog_best1502p.c:982:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1502p/analog_best1502p.c:986:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1502p/analog_best1502p.c:991:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1502p/analog_best1502p.c:1991:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/ana/best1502x/analog_best1502x.c:1477:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1502x/analog_best1502x.c:1481:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1502x/analog_best1502x.c:1486:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1502x/analog_best1502x.c:2549:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:440:#define REG_RX_PGAA_DACGAIN_SHIFT           8
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:441:#define REG_RX_PGAA_DACGAIN_MASK            (0x3 << REG_RX_PGAA_DACGAIN_SHIFT)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:442:#define REG_RX_PGAA_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAA_DACGAIN, n)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:619:#define REG_RX_PGAB_DACGAIN_SHIFT           8
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:620:#define REG_RX_PGAB_DACGAIN_MASK            (0x3 << REG_RX_PGAB_DACGAIN_SHIFT)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:621:#define REG_RX_PGAB_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAB_DACGAIN, n)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:790:#define REG_RX_PGAC_DACGAIN_SHIFT           8
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:791:#define REG_RX_PGAC_DACGAIN_MASK            (0x3 << REG_RX_PGAC_DACGAIN_SHIFT)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:792:#define REG_RX_PGAC_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAC_DACGAIN, n)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:962:#define REG_RX_PGAD_DACGAIN_SHIFT           8
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:963:#define REG_RX_PGAD_DACGAIN_MASK            (0x3 << REG_RX_PGAD_DACGAIN_SHIFT)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:964:#define REG_RX_PGAD_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAD_DACGAIN, n)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:1133:#define REG_RX_PGAE_DACGAIN_SHIFT           8
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:1134:#define REG_RX_PGAE_DACGAIN_MASK            (0x3 << REG_RX_PGAE_DACGAIN_SHIFT)
+platform/drivers/ana/best1502x/reg_analog_best1502x.h:1135:#define REG_RX_PGAE_DACGAIN(n)              BITFIELD_VAL(REG_RX_PGAE_DACGAIN, n)
+platform/drivers/ana/best1503/analog_best1503.c:1033:void analog_aud_set_dac_gain(int32_t v)
+platform/drivers/ana/best1503/analog_best1503.c:1037:uint32_t analog_codec_get_dac_gain(void)
+platform/drivers/ana/best1503/analog_best1503.c:1042:uint32_t analog_codec_dac_gain_to_db(int32_t gain)
+platform/drivers/ana/best1503/analog_best1503.c:1927:    //analog_aud_set_dac_gain(dac_gain);
+platform/drivers/bt/best1306/bt_drv_1306_internal.h:556:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1306/bt_drv_reg_op.cpp:179:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1306p/bt_drv_1306p_internal.h:558:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1306p/bt_drv_config.c:1238:    // tx digital gain
+platform/drivers/bt/best1306p/bt_drv_reg_op.cpp:270:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1306p/bt_drv_rfconfig.c:77:    {-6,  0x4200, 0x00c2, 0x0006, TX_PWR_1P2_PA},   //-6dbm
+platform/drivers/bt/best1306p/bt_drv_rfconfig.c:124:    {0x008C, 0x0000, 0},    //reg_bt_dac_gain_ctrl
+platform/drivers/bt/best1306p/bt_drv_rfconfig.c:1383:    // High transmission power reduces digital gain
+platform/drivers/bt/best1501/bt_drv_1501_internal.h:690:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1501/bt_drv_reg_op.cpp:245:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1501p/bt_drv_1501p_internal.h:608:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1501p/bt_drv_reg_op.cpp:196:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1502p/bt_drv_1502p_internal.h:603:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1502p/bt_drv_config.c:1931:    // tx digital gain
+platform/drivers/bt/best1502p/bt_drv_reg_op.cpp:147:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1502p/bt_drv_rfconfig.c:78:    {-6,  0x4200, 0x0093, 0x0007, TX_PWR_1P8_PA},   //-6dbm
+platform/drivers/bt/best1502p/bt_drv_rfconfig.c:126:    {0x008C, 0x0000, 0},    //reg_bt_dac_gain_ctrl
+platform/drivers/bt/best1502x/bt_drv_1502x_internal.h:625:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1502x/bt_drv_reg_op.cpp:232:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1503/bt_drv_1503_internal.h:599:    //1: -6dbm, 2:-12dbm
+platform/drivers/bt/best1503/bt_drv_config.c:1871:    // tx digital gain
+platform/drivers/bt/best1503/bt_drv_reg_op.cpp:265:    //1: -6dbm, 2:-12dbm
+platform/hal/best1306/hal_codec_best1306.c:58:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1306/hal_codec_best1306.c:59:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1306/hal_codec_best1306.c:63:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1306/hal_codec_best1306.c:188:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1306/hal_codec_best1306.c:189:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1306/hal_codec_best1306.c:190:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1306/hal_codec_best1306.c:191:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1306/hal_codec_best1306.c:192:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1306/hal_codec_best1306.c:193:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1306/hal_codec_best1306.c:194:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1306/hal_codec_best1306.c:196:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1306/hal_codec_best1306.c:388:static int8_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1306/hal_codec_best1306.c:407:static int8_t digdac_gain_offset_nr;
+platform/hal/best1306/hal_codec_best1306.c:492:static int8_t swdac_gain;
+platform/hal/best1306/hal_codec_best1306.c:584:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1306/hal_codec_best1306.c:586:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1306/hal_codec_best1306.c:588:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1306/hal_codec_best1306.c:1389:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1306/hal_codec_best1306.c:1390:            hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1306/hal_codec_best1306.c:1395:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306/hal_codec_best1306.c:1396:        codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1306/hal_codec_best1306.c:1408:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1306/hal_codec_best1306.c:1417:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306/hal_codec_best1306.c:1938:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1306/hal_codec_best1306.c:1949:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1306/hal_codec_best1306.c:1967:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1306/hal_codec_best1306.c:1981:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1306/hal_codec_best1306.c:1984:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1306/hal_codec_best1306.c:1985:        digdac_gain_offset_nr = 0;
+platform/hal/best1306/hal_codec_best1306.c:1992:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1306/hal_codec_best1306.c:1994:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1306/hal_codec_best1306.c:2059:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1306/hal_codec_best1306.c:2060:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1306/hal_codec_best1306.c:2438:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306/hal_codec_best1306.c:2442:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1306/hal_codec_best1306.c:2708:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1306/hal_codec_best1306.c:2712:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306/hal_codec_best1306.c:2716:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306/hal_codec_best1306.c:2727:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306/hal_codec_best1306.c:2728:            codec->REG_0B8 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1306/hal_codec_best1306.c:2730:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1306/hal_codec_best1306.c:2734:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306/hal_codec_best1306.c:2735:                codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1306/hal_codec_best1306.c:2776:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1306/hal_codec_best1306.c:2901:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1306/hal_codec_best1306.c:2903:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1306/hal_codec_best1306.c:2906:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1306/hal_codec_best1306.c:2909:        codec->REG_0B8 = SET_BITFIELD(codec->REG_0B8, CODEC_CODEC_DAC_GAIN_CH1, val);
+platform/hal/best1306/hal_codec_best1306.c:2911:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1306/hal_codec_best1306.c:2916:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1306/hal_codec_best1306.c:2920:        codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1306/hal_codec_best1306.c:2924:        codec->REG_164 = SET_BITFIELD(codec->REG_164, CODEC_CODEC_DAC_GAIN_SND_CH1, val);
+platform/hal/best1306/hal_codec_best1306.c:2926:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1306/hal_codec_best1306.c:2929:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1306/hal_codec_best1306.c:2931:    struct DAC_GAIN_T {
+platform/hal/best1306/hal_codec_best1306.c:2935:    struct DAC_GAIN_T left;
+platform/hal/best1306/hal_codec_best1306.c:2937:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1306/hal_codec_best1306.c:2953:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1306/hal_codec_best1306.c:2956:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306/hal_codec_best1306.c:2958:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1306/hal_codec_best1306.c:2996:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1306/hal_codec_best1306.c:3001:    gain += digdac_gain_offset_nr;
+platform/hal/best1306/hal_codec_best1306.c:3018:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1306/hal_codec_best1306.c:3028:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1306/hal_codec_best1306.c:3032:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1306/hal_codec_best1306.c:3039:        digdac_gain[0] = gain;
+platform/hal/best1306/hal_codec_best1306.c:3042:        digdac_gain[1] = gain;
+platform/hal/best1306/hal_codec_best1306.c:3060:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306/hal_codec_best1306.c:3067:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1306/hal_codec_best1306.c:3070:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1306/hal_codec_best1306.c:3072:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1306/hal_codec_best1306.c:3073:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1306/hal_codec_best1306.c:3075:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1306/hal_codec_best1306.c:3076:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1306/hal_codec_best1306.c:3112:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306/hal_codec_best1306.c:3128:    swdac_gain = gain;
+platform/hal/best1306/hal_codec_best1306.c:3135:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306/hal_codec_best1306.c:3162:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306/hal_codec_best1306.c:3322:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, vol_tab_ptr->sdac_volume);
+platform/hal/best1306/hal_codec_best1306.c:3325:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, vol_tab_ptr->sdac_volume);
+platform/hal/best1306/hal_codec_best1306.c:3593:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1306/hal_codec_best1306.c:3596:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1306/hal_codec_best1306.c:3619:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1306/hal_codec_best1306.c:3620:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1306/hal_codec_best1306.c:3879:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1306/hal_codec_best1306.c:3897:                analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1306/hal_codec_best1306.c:3898:                hal_codec_set_dig_dac_gain(VALID_DAC_MAP, vol_tab_ptr->sdac_volume);
+platform/hal/best1306/hal_codec_best1306.c:4226:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1306/hal_codec_best1306.c:4227:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1306/hal_codec_best1306.c:4355:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1306/hal_codec_best1306.c:4564:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1306/hal_codec_best1306.c:4566:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1306/hal_codec_best1306.c:4977:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1306/hal_codec_best1306.c:4984:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1306/hal_codec_best1306.c:4987:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1306/hal_codec_best1306.c:4989:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1306/hal_codec_best1306.c:4999:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1306/hal_codec_best1306.c:5004:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1306/hal_codec_best1306.c:5189:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306/hal_codec_best1306.c:5226:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1306/reg_codec_best1306.h:897:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1306/reg_codec_best1306.h:898:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1306/reg_codec_best1306.h:899:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1306/reg_codec_best1306.h:900:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1306/reg_codec_best1306.h:901:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1306/reg_codec_best1306.h:902:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1306/reg_codec_best1306.h:1062:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1306/reg_codec_best1306.h:1063:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1306/reg_codec_best1306.h:1064:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1306/reg_codec_best1306.h:1065:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1306/reg_codec_best1306.h:1066:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1306/reg_codec_best1306.h:1074:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 29)
+platform/hal/best1306/reg_codec_best1306.h:1075:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 29)
+platform/hal/best1306/reg_codec_best1306.h:1076:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (29)
+platform/hal/best1306/reg_codec_best1306.h:1079:#define CODEC_CODEC_DAC_GAIN_CH1(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1306/reg_codec_best1306.h:1080:#define CODEC_CODEC_DAC_GAIN_CH1_MASK                       (0xFFFFF << 0)
+platform/hal/best1306/reg_codec_best1306.h:1081:#define CODEC_CODEC_DAC_GAIN_CH1_SHIFT                      (0)
+platform/hal/best1306/reg_codec_best1306.h:1082:#define CODEC_CODEC_DAC_GAIN_SEL_CH1                        (1 << 20)
+platform/hal/best1306/reg_codec_best1306.h:1425:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1306/reg_codec_best1306.h:1426:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1306/reg_codec_best1306.h:1427:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1306/reg_codec_best1306.h:1428:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1306/reg_codec_best1306.h:1429:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1306/reg_codec_best1306.h:1430:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1306/reg_codec_best1306.h:1431:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1306/reg_codec_best1306.h:1432:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/best1306/reg_codec_best1306.h:1435:#define CODEC_CODEC_DAC_GAIN_SND_CH1(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1306/reg_codec_best1306.h:1436:#define CODEC_CODEC_DAC_GAIN_SND_CH1_MASK                   (0xFFFFF << 0)
+platform/hal/best1306/reg_codec_best1306.h:1437:#define CODEC_CODEC_DAC_GAIN_SND_CH1_SHIFT                  (0)
+platform/hal/best1306/reg_codec_best1306.h:1438:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH1                    (1 << 20)
+platform/hal/best1306p/hal_codec_best1306p.c:59:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1306p/hal_codec_best1306p.c:60:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1306p/hal_codec_best1306p.c:64:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1306p/hal_codec_best1306p.c:194:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1306p/hal_codec_best1306p.c:195:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1306p/hal_codec_best1306p.c:196:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1306p/hal_codec_best1306p.c:197:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1306p/hal_codec_best1306p.c:198:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1306p/hal_codec_best1306p.c:199:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1306p/hal_codec_best1306p.c:200:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1306p/hal_codec_best1306p.c:202:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1306p/hal_codec_best1306p.c:403:static int8_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1306p/hal_codec_best1306p.c:422:static CODEC_DAC_VOL_T digdac_gain_offset_nr;
+platform/hal/best1306p/hal_codec_best1306p.c:510:static int8_t swdac_gain;
+platform/hal/best1306p/hal_codec_best1306p.c:600:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1306p/hal_codec_best1306p.c:602:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1306p/hal_codec_best1306p.c:604:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1306p/hal_codec_best1306p.c:1525:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1306p/hal_codec_best1306p.c:1529:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306p/hal_codec_best1306p.c:1530:        codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1306p/hal_codec_best1306p.c:1547:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306p/hal_codec_best1306p.c:2065:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1306p/hal_codec_best1306p.c:2076:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1306p/hal_codec_best1306p.c:2094:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1306p/hal_codec_best1306p.c:2108:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1306p/hal_codec_best1306p.c:2111:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1306p/hal_codec_best1306p.c:2112:        digdac_gain_offset_nr = 0;
+platform/hal/best1306p/hal_codec_best1306p.c:2119:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1306p/hal_codec_best1306p.c:2121:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1306p/hal_codec_best1306p.c:2219:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1306p/hal_codec_best1306p.c:2220:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1306p/hal_codec_best1306p.c:2619:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306p/hal_codec_best1306p.c:2623:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1306p/hal_codec_best1306p.c:2897:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1306p/hal_codec_best1306p.c:2901:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306p/hal_codec_best1306p.c:2905:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306p/hal_codec_best1306p.c:2918:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306p/hal_codec_best1306p.c:2919:            codec->REG_0B8 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1306p/hal_codec_best1306p.c:2921:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1306p/hal_codec_best1306p.c:2925:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1306p/hal_codec_best1306p.c:2926:                codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1306p/hal_codec_best1306p.c:2963:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1306p/hal_codec_best1306p.c:3092:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1306p/hal_codec_best1306p.c:3094:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1306p/hal_codec_best1306p.c:3097:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1306p/hal_codec_best1306p.c:3101:        codec->REG_0B8 = SET_BITFIELD(codec->REG_0B8, CODEC_CODEC_DAC_GAIN_CH1, val);
+platform/hal/best1306p/hal_codec_best1306p.c:3103:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1306p/hal_codec_best1306p.c:3108:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1306p/hal_codec_best1306p.c:3112:        codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1306p/hal_codec_best1306p.c:3116:        codec->REG_164 = SET_BITFIELD(codec->REG_164, CODEC_CODEC_DAC_GAIN_SND_CH1, val);
+platform/hal/best1306p/hal_codec_best1306p.c:3118:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1306p/hal_codec_best1306p.c:3121:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1306p/hal_codec_best1306p.c:3123:    struct DAC_GAIN_T {
+platform/hal/best1306p/hal_codec_best1306p.c:3127:    struct DAC_GAIN_T left;
+platform/hal/best1306p/hal_codec_best1306p.c:3129:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1306p/hal_codec_best1306p.c:3145:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1306p/hal_codec_best1306p.c:3148:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306p/hal_codec_best1306p.c:3150:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1306p/hal_codec_best1306p.c:3188:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1306p/hal_codec_best1306p.c:3193:    gain += digdac_gain_offset_nr;
+platform/hal/best1306p/hal_codec_best1306p.c:3210:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1306p/hal_codec_best1306p.c:3220:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1306p/hal_codec_best1306p.c:3224:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1306p/hal_codec_best1306p.c:3231:        digdac_gain[0] = gain;
+platform/hal/best1306p/hal_codec_best1306p.c:3234:        digdac_gain[1] = gain;
+platform/hal/best1306p/hal_codec_best1306p.c:3252:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306p/hal_codec_best1306p.c:3259:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1306p/hal_codec_best1306p.c:3262:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1306p/hal_codec_best1306p.c:3264:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1306p/hal_codec_best1306p.c:3265:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1306p/hal_codec_best1306p.c:3267:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1306p/hal_codec_best1306p.c:3268:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1306p/hal_codec_best1306p.c:3304:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306p/hal_codec_best1306p.c:3320:    swdac_gain = gain;
+platform/hal/best1306p/hal_codec_best1306p.c:3327:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306p/hal_codec_best1306p.c:3354:        coef = digdac_gain_to_float(gain);
+platform/hal/best1306p/hal_codec_best1306p.c:3509:        const struct CODEC_DAC_VOL_T * dac_gain_db;
+platform/hal/best1306p/hal_codec_best1306p.c:3511:        dac_gain_db = hal_codec_get_dac_volume(vol);
+platform/hal/best1306p/hal_codec_best1306p.c:3513:            hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:3516:            hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:3548:    const struct CODEC_DAC_VOL_T * dac_gain_db;
+platform/hal/best1306p/hal_codec_best1306p.c:3550:    dac_gain_db = hal_codec_get_dac_volume(vol);
+platform/hal/best1306p/hal_codec_best1306p.c:3552:        hal_codec_set_dig_dac2_gain(AUD_CHANNEL_MAP_CH0, dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:3555:        hal_codec_set_dig_dac2_gain(AUD_CHANNEL_MAP_CH1, dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:3794:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1306p/hal_codec_best1306p.c:3797:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1306p/hal_codec_best1306p.c:3820:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1306p/hal_codec_best1306p.c:3821:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1306p/hal_codec_best1306p.c:4195:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1306p/hal_codec_best1306p.c:4236:            const struct CODEC_DAC_VOL_T * dac_gain_db;
+platform/hal/best1306p/hal_codec_best1306p.c:4238:            dac_gain_db = hal_codec_get_dac_volume(cfg->vol);
+platform/hal/best1306p/hal_codec_best1306p.c:4240:            hal_codec_set_sw_gain(dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:4242:            hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:4596:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1306p/hal_codec_best1306p.c:4597:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1306p/hal_codec_best1306p.c:4718:        const struct CODEC_DAC_VOL_T * dac_gain_db;
+platform/hal/best1306p/hal_codec_best1306p.c:4720:        dac_gain_db = hal_codec_get_dac_volume(cfg->vol);
+platform/hal/best1306p/hal_codec_best1306p.c:4722:        hal_codec_set_dac2_sw_gain(dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:4724:        hal_codec_set_dig_dac2_gain(VALID_DAC_MAP, dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:4725:        HAL_TRACE(1, "update vol: %d, dac_gain_db: %d", cfg->vol, (int)dac_gain_db->sdac_volume);
+platform/hal/best1306p/hal_codec_best1306p.c:5052:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1306p/hal_codec_best1306p.c:5054:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1306p/hal_codec_best1306p.c:5493:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1306p/hal_codec_best1306p.c:5500:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1306p/hal_codec_best1306p.c:5503:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1306p/hal_codec_best1306p.c:5505:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1306p/hal_codec_best1306p.c:5515:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1306p/hal_codec_best1306p.c:5520:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1306p/hal_codec_best1306p.c:5731:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1306p/hal_codec_best1306p.c:5768:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1306p/reg_codec_best1306p.h:856:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1306p/reg_codec_best1306p.h:857:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1306p/reg_codec_best1306p.h:858:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1306p/reg_codec_best1306p.h:859:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1306p/reg_codec_best1306p.h:860:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1306p/reg_codec_best1306p.h:861:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1306p/reg_codec_best1306p.h:1021:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1022:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1023:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1306p/reg_codec_best1306p.h:1024:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1306p/reg_codec_best1306p.h:1025:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1306p/reg_codec_best1306p.h:1031:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 27)
+platform/hal/best1306p/reg_codec_best1306p.h:1032:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 27)
+platform/hal/best1306p/reg_codec_best1306p.h:1033:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (27)
+platform/hal/best1306p/reg_codec_best1306p.h:1036:#define CODEC_CODEC_DAC_GAIN_CH1(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1037:#define CODEC_CODEC_DAC_GAIN_CH1_MASK                       (0xFFFFF << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1038:#define CODEC_CODEC_DAC_GAIN_CH1_SHIFT                      (0)
+platform/hal/best1306p/reg_codec_best1306p.h:1039:#define CODEC_CODEC_DAC_GAIN_SEL_CH1                        (1 << 20)
+platform/hal/best1306p/reg_codec_best1306p.h:1472:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1473:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1474:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1306p/reg_codec_best1306p.h:1475:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1306p/reg_codec_best1306p.h:1476:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1306p/reg_codec_best1306p.h:1477:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1306p/reg_codec_best1306p.h:1478:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1306p/reg_codec_best1306p.h:1479:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/best1306p/reg_codec_best1306p.h:1482:#define CODEC_CODEC_DAC_GAIN_SND_CH1(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1483:#define CODEC_CODEC_DAC_GAIN_SND_CH1_MASK                   (0xFFFFF << 0)
+platform/hal/best1306p/reg_codec_best1306p.h:1484:#define CODEC_CODEC_DAC_GAIN_SND_CH1_SHIFT                  (0)
+platform/hal/best1306p/reg_codec_best1306p.h:1485:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH1                    (1 << 20)
+platform/hal/best1501/hal_codec_best1501.c:60:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1501/hal_codec_best1501.c:61:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1501/hal_codec_best1501.c:65:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1501/hal_codec_best1501.c:196:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1501/hal_codec_best1501.c:197:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1501/hal_codec_best1501.c:198:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1501/hal_codec_best1501.c:199:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1501/hal_codec_best1501.c:200:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1501/hal_codec_best1501.c:201:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1501/hal_codec_best1501.c:202:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1501/hal_codec_best1501.c:204:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1501/hal_codec_best1501.c:405:static int8_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1501/hal_codec_best1501.c:424:static int8_t digdac_gain_offset_nr;
+platform/hal/best1501/hal_codec_best1501.c:510:static int8_t swdac_gain;
+platform/hal/best1501/hal_codec_best1501.c:600:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1501/hal_codec_best1501.c:602:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1501/hal_codec_best1501.c:604:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1501/hal_codec_best1501.c:1494:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501/hal_codec_best1501.c:1495:            hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1501/hal_codec_best1501.c:1500:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501/hal_codec_best1501.c:1511:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501/hal_codec_best1501.c:1520:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501/hal_codec_best1501.c:1904:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1501/hal_codec_best1501.c:1915:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1501/hal_codec_best1501.c:1933:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1501/hal_codec_best1501.c:1947:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1501/hal_codec_best1501.c:1950:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1501/hal_codec_best1501.c:1951:        digdac_gain_offset_nr = 0;
+platform/hal/best1501/hal_codec_best1501.c:1957:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1501/hal_codec_best1501.c:1959:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1501/hal_codec_best1501.c:2028:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1501/hal_codec_best1501.c:2029:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1501/hal_codec_best1501.c:2406:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501/hal_codec_best1501.c:2410:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1501/hal_codec_best1501.c:2663:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1501/hal_codec_best1501.c:2667:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501/hal_codec_best1501.c:2671:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501/hal_codec_best1501.c:2684:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501/hal_codec_best1501.c:2686:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1501/hal_codec_best1501.c:2690:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501/hal_codec_best1501.c:2727:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1501/hal_codec_best1501.c:2845:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1501/hal_codec_best1501.c:2847:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1501/hal_codec_best1501.c:2850:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1501/hal_codec_best1501.c:2852:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1501/hal_codec_best1501.c:2857:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1501/hal_codec_best1501.c:2859:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1501/hal_codec_best1501.c:2860:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1501/hal_codec_best1501.c:2863:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1501/hal_codec_best1501.c:2865:    struct DAC_GAIN_T {
+platform/hal/best1501/hal_codec_best1501.c:2869:    struct DAC_GAIN_T left;
+platform/hal/best1501/hal_codec_best1501.c:2871:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1501/hal_codec_best1501.c:2887:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1501/hal_codec_best1501.c:2890:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501/hal_codec_best1501.c:2892:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1501/hal_codec_best1501.c:2930:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1501/hal_codec_best1501.c:2935:    gain += digdac_gain_offset_nr;
+platform/hal/best1501/hal_codec_best1501.c:2952:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1501/hal_codec_best1501.c:2962:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1501/hal_codec_best1501.c:2966:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1501/hal_codec_best1501.c:2979:        digdac_gain[0] = gain;
+platform/hal/best1501/hal_codec_best1501.c:2982:        digdac_gain[1] = gain;
+platform/hal/best1501/hal_codec_best1501.c:3000:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501/hal_codec_best1501.c:3007:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1501/hal_codec_best1501.c:3010:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1501/hal_codec_best1501.c:3012:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1501/hal_codec_best1501.c:3013:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1501/hal_codec_best1501.c:3015:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1501/hal_codec_best1501.c:3016:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1501/hal_codec_best1501.c:3042:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501/hal_codec_best1501.c:3058:    swdac_gain = gain;
+platform/hal/best1501/hal_codec_best1501.c:3065:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501/hal_codec_best1501.c:3092:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501/hal_codec_best1501.c:3252:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, vol_tab_ptr->sdac_volume);
+platform/hal/best1501/hal_codec_best1501.c:3255:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, vol_tab_ptr->sdac_volume);
+platform/hal/best1501/hal_codec_best1501.c:3522:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1501/hal_codec_best1501.c:3525:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1501/hal_codec_best1501.c:3548:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1501/hal_codec_best1501.c:3549:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1501/hal_codec_best1501.c:3668:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1501/hal_codec_best1501.c:3721:                analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501/hal_codec_best1501.c:3722:                hal_codec_set_dig_dac_gain(VALID_DAC_MAP, vol_tab_ptr->sdac_volume);
+platform/hal/best1501/hal_codec_best1501.c:4191:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1501/hal_codec_best1501.c:4192:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1501/hal_codec_best1501.c:4308:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501/hal_codec_best1501.c:4550:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1501/hal_codec_best1501.c:4552:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1501/hal_codec_best1501.c:4961:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1501/hal_codec_best1501.c:4968:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1501/hal_codec_best1501.c:4971:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1501/hal_codec_best1501.c:4973:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1501/hal_codec_best1501.c:4983:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1501/hal_codec_best1501.c:4988:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1501/hal_codec_best1501.c:5173:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501/hal_codec_best1501.c:5210:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1501/hal_vad_best1501.c:779:static inline void hal_codec_vad_set_pre_gain(int v)
+platform/hal/best1501/hal_vad_best1501.c:781:    vad->REG_104 = SET_BITFIELD(vad->REG_104, VAD_VAD_PRE_GAIN, v);
+platform/hal/best1501/hal_vad_best1501.c:1085:    hal_codec_vad_set_pre_gain(conf->pre_gain);
+platform/hal/best1501/reg_codec_best1501.h:916:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1501/reg_codec_best1501.h:917:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1501/reg_codec_best1501.h:918:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1501/reg_codec_best1501.h:919:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1501/reg_codec_best1501.h:920:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1501/reg_codec_best1501.h:921:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1501/reg_codec_best1501.h:1121:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1501/reg_codec_best1501.h:1122:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1501/reg_codec_best1501.h:1123:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1501/reg_codec_best1501.h:1124:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1501/reg_codec_best1501.h:1125:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1501/reg_codec_best1501.h:1133:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 29)
+platform/hal/best1501/reg_codec_best1501.h:1134:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 29)
+platform/hal/best1501/reg_codec_best1501.h:1135:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (29)
+platform/hal/best1501/reg_codec_best1501.h:1138:#define CODEC_CODEC_DAC_GAIN_CH1(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1501/reg_codec_best1501.h:1139:#define CODEC_CODEC_DAC_GAIN_CH1_MASK                       (0xFFFFF << 0)
+platform/hal/best1501/reg_codec_best1501.h:1140:#define CODEC_CODEC_DAC_GAIN_CH1_SHIFT                      (0)
+platform/hal/best1501/reg_codec_best1501.h:1141:#define CODEC_CODEC_DAC_GAIN_SEL_CH1                        (1 << 20)
+platform/hal/best1501/reg_codec_best1501.h:1693:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1501/reg_codec_best1501.h:1694:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1501/reg_codec_best1501.h:1695:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1501/reg_codec_best1501.h:1696:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1501/reg_codec_best1501.h:1697:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1501/reg_codec_best1501.h:1698:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1501/reg_codec_best1501.h:1699:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1501/reg_codec_best1501.h:1700:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/best1501/reg_codec_best1501.h:1703:#define CODEC_CODEC_DAC_GAIN_SND_CH1(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1501/reg_codec_best1501.h:1704:#define CODEC_CODEC_DAC_GAIN_SND_CH1_MASK                   (0xFFFFF << 0)
+platform/hal/best1501/reg_codec_best1501.h:1705:#define CODEC_CODEC_DAC_GAIN_SND_CH1_SHIFT                  (0)
+platform/hal/best1501/reg_codec_best1501.h:1706:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH1                    (1 << 20)
+platform/hal/best1501/reg_vad_best1501.h:352:#define VAD_VAD_PRE_GAIN(n)                                 (((n) & 0x3F) << 19)
+platform/hal/best1501/reg_vad_best1501.h:353:#define VAD_VAD_PRE_GAIN_MASK                               (0x3F << 19)
+platform/hal/best1501/reg_vad_best1501.h:354:#define VAD_VAD_PRE_GAIN_SHIFT                              (19)
+platform/hal/best1501p/hal_codec_best1501p.c:86:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1501p/hal_codec_best1501p.c:87:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1501p/hal_codec_best1501p.c:91:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1501p/hal_codec_best1501p.c:222:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1501p/hal_codec_best1501p.c:223:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1501p/hal_codec_best1501p.c:224:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1501p/hal_codec_best1501p.c:225:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1501p/hal_codec_best1501p.c:226:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1501p/hal_codec_best1501p.c:227:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1501p/hal_codec_best1501p.c:228:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1501p/hal_codec_best1501p.c:230:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1501p/hal_codec_best1501p.c:431:static int8_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1501p/hal_codec_best1501p.c:450:static int8_t digdac_gain_offset_nr;
+platform/hal/best1501p/hal_codec_best1501p.c:532:static int8_t swdac_gain;
+platform/hal/best1501p/hal_codec_best1501p.c:622:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1501p/hal_codec_best1501p.c:624:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1501p/hal_codec_best1501p.c:626:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1501p/hal_codec_best1501p.c:1541:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:1542:            hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1501p/hal_codec_best1501p.c:1547:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501p/hal_codec_best1501p.c:1558:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:1567:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501p/hal_codec_best1501p.c:2010:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1501p/hal_codec_best1501p.c:2021:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1501p/hal_codec_best1501p.c:2039:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1501p/hal_codec_best1501p.c:2053:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1501p/hal_codec_best1501p.c:2056:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1501p/hal_codec_best1501p.c:2057:        digdac_gain_offset_nr = 0;
+platform/hal/best1501p/hal_codec_best1501p.c:2063:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:2065:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1501p/hal_codec_best1501p.c:2134:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1501p/hal_codec_best1501p.c:2135:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1501p/hal_codec_best1501p.c:2512:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501p/hal_codec_best1501p.c:2516:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1501p/hal_codec_best1501p.c:2769:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1501p/hal_codec_best1501p.c:2773:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501p/hal_codec_best1501p.c:2777:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501p/hal_codec_best1501p.c:2790:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501p/hal_codec_best1501p.c:2792:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1501p/hal_codec_best1501p.c:2796:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1501p/hal_codec_best1501p.c:2833:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1501p/hal_codec_best1501p.c:2951:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1501p/hal_codec_best1501p.c:2953:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1501p/hal_codec_best1501p.c:2956:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1501p/hal_codec_best1501p.c:2958:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1501p/hal_codec_best1501p.c:2963:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1501p/hal_codec_best1501p.c:2965:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1501p/hal_codec_best1501p.c:2966:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1501p/hal_codec_best1501p.c:2969:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1501p/hal_codec_best1501p.c:2971:    struct DAC_GAIN_T {
+platform/hal/best1501p/hal_codec_best1501p.c:2975:    struct DAC_GAIN_T left;
+platform/hal/best1501p/hal_codec_best1501p.c:2977:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1501p/hal_codec_best1501p.c:2993:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:2996:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501p/hal_codec_best1501p.c:2998:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1501p/hal_codec_best1501p.c:3036:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1501p/hal_codec_best1501p.c:3041:    gain += digdac_gain_offset_nr;
+platform/hal/best1501p/hal_codec_best1501p.c:3062:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1501p/hal_codec_best1501p.c:3072:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1501p/hal_codec_best1501p.c:3076:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1501p/hal_codec_best1501p.c:3083:        digdac_gain[0] = gain;
+platform/hal/best1501p/hal_codec_best1501p.c:3086:        digdac_gain[1] = gain;
+platform/hal/best1501p/hal_codec_best1501p.c:3104:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501p/hal_codec_best1501p.c:3111:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1501p/hal_codec_best1501p.c:3114:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1501p/hal_codec_best1501p.c:3116:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1501p/hal_codec_best1501p.c:3117:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1501p/hal_codec_best1501p.c:3119:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1501p/hal_codec_best1501p.c:3120:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1501p/hal_codec_best1501p.c:3146:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501p/hal_codec_best1501p.c:3162:    swdac_gain = gain;
+platform/hal/best1501p/hal_codec_best1501p.c:3169:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501p/hal_codec_best1501p.c:3196:        coef = digdac_gain_to_float(gain);
+platform/hal/best1501p/hal_codec_best1501p.c:3356:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, vol_tab_ptr->sdac_volume);
+platform/hal/best1501p/hal_codec_best1501p.c:3359:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, vol_tab_ptr->sdac_volume);
+platform/hal/best1501p/hal_codec_best1501p.c:3627:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1501p/hal_codec_best1501p.c:3630:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1501p/hal_codec_best1501p.c:3653:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1501p/hal_codec_best1501p.c:3654:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1501p/hal_codec_best1501p.c:3773:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1501p/hal_codec_best1501p.c:3821:                analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:3822:                hal_codec_set_dig_dac_gain(VALID_DAC_MAP, vol_tab_ptr->sdac_volume);
+platform/hal/best1501p/hal_codec_best1501p.c:4303:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1501p/hal_codec_best1501p.c:4304:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1501p/hal_codec_best1501p.c:4420:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:4664:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1501p/hal_codec_best1501p.c:4666:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1501p/hal_codec_best1501p.c:5076:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1501p/hal_codec_best1501p.c:5083:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1501p/hal_codec_best1501p.c:5086:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1501p/hal_codec_best1501p.c:5088:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1501p/hal_codec_best1501p.c:5098:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1501p/hal_codec_best1501p.c:5103:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1501p/hal_codec_best1501p.c:5288:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1501p/hal_codec_best1501p.c:5325:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1501p/hal_vad_best1501p.c:779:static inline void hal_codec_vad_set_pre_gain(int v)
+platform/hal/best1501p/hal_vad_best1501p.c:781:    vad->REG_104 = SET_BITFIELD(vad->REG_104, VAD_VAD_PRE_GAIN, v);
+platform/hal/best1501p/hal_vad_best1501p.c:1085:    hal_codec_vad_set_pre_gain(conf->pre_gain);
+platform/hal/best1501p/reg_codec_best1501p.h:916:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1501p/reg_codec_best1501p.h:917:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1501p/reg_codec_best1501p.h:918:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1501p/reg_codec_best1501p.h:919:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1501p/reg_codec_best1501p.h:920:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1501p/reg_codec_best1501p.h:921:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1501p/reg_codec_best1501p.h:1121:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1122:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1123:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1501p/reg_codec_best1501p.h:1124:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1501p/reg_codec_best1501p.h:1125:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1501p/reg_codec_best1501p.h:1133:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 29)
+platform/hal/best1501p/reg_codec_best1501p.h:1134:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 29)
+platform/hal/best1501p/reg_codec_best1501p.h:1135:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (29)
+platform/hal/best1501p/reg_codec_best1501p.h:1138:#define CODEC_CODEC_DAC_GAIN_CH1(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1139:#define CODEC_CODEC_DAC_GAIN_CH1_MASK                       (0xFFFFF << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1140:#define CODEC_CODEC_DAC_GAIN_CH1_SHIFT                      (0)
+platform/hal/best1501p/reg_codec_best1501p.h:1141:#define CODEC_CODEC_DAC_GAIN_SEL_CH1                        (1 << 20)
+platform/hal/best1501p/reg_codec_best1501p.h:1693:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1694:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1695:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1501p/reg_codec_best1501p.h:1696:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1501p/reg_codec_best1501p.h:1697:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1501p/reg_codec_best1501p.h:1698:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1501p/reg_codec_best1501p.h:1699:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1501p/reg_codec_best1501p.h:1700:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/best1501p/reg_codec_best1501p.h:1703:#define CODEC_CODEC_DAC_GAIN_SND_CH1(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1704:#define CODEC_CODEC_DAC_GAIN_SND_CH1_MASK                   (0xFFFFF << 0)
+platform/hal/best1501p/reg_codec_best1501p.h:1705:#define CODEC_CODEC_DAC_GAIN_SND_CH1_SHIFT                  (0)
+platform/hal/best1501p/reg_codec_best1501p.h:1706:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH1                    (1 << 20)
+platform/hal/best1501p/reg_vad_best1501p.h:352:#define VAD_VAD_PRE_GAIN(n)                                 (((n) & 0x3F) << 19)
+platform/hal/best1501p/reg_vad_best1501p.h:353:#define VAD_VAD_PRE_GAIN_MASK                               (0x3F << 19)
+platform/hal/best1501p/reg_vad_best1501p.h:354:#define VAD_VAD_PRE_GAIN_SHIFT                              (19)
+platform/hal/best1502p/hal_codec_best1502p.c:82:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1502p/hal_codec_best1502p.c:83:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1502p/hal_codec_best1502p.c:87:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1502p/hal_codec_best1502p.c:221:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1502p/hal_codec_best1502p.c:222:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1502p/hal_codec_best1502p.c:223:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1502p/hal_codec_best1502p.c:224:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1502p/hal_codec_best1502p.c:225:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1502p/hal_codec_best1502p.c:226:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1502p/hal_codec_best1502p.c:227:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1502p/hal_codec_best1502p.c:229:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1502p/hal_codec_best1502p.c:430:static int32_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1502p/hal_codec_best1502p.c:449:static uint32_t digdac_gain_offset_nr;
+platform/hal/best1502p/hal_codec_best1502p.c:542:static int8_t swdac_gain;
+platform/hal/best1502p/hal_codec_best1502p.c:632:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1502p/hal_codec_best1502p.c:634:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1502p/hal_codec_best1502p.c:636:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1502p/hal_codec_best1502p.c:1583:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1502p/hal_codec_best1502p.c:1587:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502p/hal_codec_best1502p.c:1588:        codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1502p/hal_codec_best1502p.c:1605:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502p/hal_codec_best1502p.c:2131:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1502p/hal_codec_best1502p.c:2142:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1502p/hal_codec_best1502p.c:2160:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1502p/hal_codec_best1502p.c:2174:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1502p/hal_codec_best1502p.c:2177:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1502p/hal_codec_best1502p.c:2178:        digdac_gain_offset_nr = 0;
+platform/hal/best1502p/hal_codec_best1502p.c:2185:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1502p/hal_codec_best1502p.c:2187:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1502p/hal_codec_best1502p.c:2285:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1502p/hal_codec_best1502p.c:2286:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1502p/hal_codec_best1502p.c:2686:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502p/hal_codec_best1502p.c:2690:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1502p/hal_codec_best1502p.c:2962:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1502p/hal_codec_best1502p.c:2966:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502p/hal_codec_best1502p.c:2970:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502p/hal_codec_best1502p.c:2983:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502p/hal_codec_best1502p.c:2984:            codec->REG_0B8 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1502p/hal_codec_best1502p.c:2986:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1502p/hal_codec_best1502p.c:2990:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502p/hal_codec_best1502p.c:2991:                codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1502p/hal_codec_best1502p.c:3032:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1502p/hal_codec_best1502p.c:3166:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1502p/hal_codec_best1502p.c:3168:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1502p/hal_codec_best1502p.c:3171:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1502p/hal_codec_best1502p.c:3175:        codec->REG_0B8 = SET_BITFIELD(codec->REG_0B8, CODEC_CODEC_DAC_GAIN_CH1, val);
+platform/hal/best1502p/hal_codec_best1502p.c:3177:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1502p/hal_codec_best1502p.c:3182:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1502p/hal_codec_best1502p.c:3186:        codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1502p/hal_codec_best1502p.c:3190:        codec->REG_164 = SET_BITFIELD(codec->REG_164, CODEC_CODEC_DAC_GAIN_SND_CH1, val);
+platform/hal/best1502p/hal_codec_best1502p.c:3192:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1502p/hal_codec_best1502p.c:3195:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1502p/hal_codec_best1502p.c:3197:    struct DAC_GAIN_T {
+platform/hal/best1502p/hal_codec_best1502p.c:3201:    struct DAC_GAIN_T left;
+platform/hal/best1502p/hal_codec_best1502p.c:3203:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1502p/hal_codec_best1502p.c:3219:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1502p/hal_codec_best1502p.c:3222:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502p/hal_codec_best1502p.c:3224:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1502p/hal_codec_best1502p.c:3262:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1502p/hal_codec_best1502p.c:3267:    gain += digdac_gain_offset_nr;
+platform/hal/best1502p/hal_codec_best1502p.c:3284:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1502p/hal_codec_best1502p.c:3294:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1502p/hal_codec_best1502p.c:3298:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1502p/hal_codec_best1502p.c:3305:        digdac_gain[0] = gain;
+platform/hal/best1502p/hal_codec_best1502p.c:3308:        digdac_gain[1] = gain;
+platform/hal/best1502p/hal_codec_best1502p.c:3326:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502p/hal_codec_best1502p.c:3333:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1502p/hal_codec_best1502p.c:3336:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1502p/hal_codec_best1502p.c:3338:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1502p/hal_codec_best1502p.c:3339:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1502p/hal_codec_best1502p.c:3341:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1502p/hal_codec_best1502p.c:3342:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1502p/hal_codec_best1502p.c:3378:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502p/hal_codec_best1502p.c:3394:    swdac_gain = gain;
+platform/hal/best1502p/hal_codec_best1502p.c:3401:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502p/hal_codec_best1502p.c:3428:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502p/hal_codec_best1502p.c:3588:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, vol_tab_ptr->sdac_volume);
+platform/hal/best1502p/hal_codec_best1502p.c:3591:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, vol_tab_ptr->sdac_volume);
+platform/hal/best1502p/hal_codec_best1502p.c:3874:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1502p/hal_codec_best1502p.c:3877:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1502p/hal_codec_best1502p.c:3900:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1502p/hal_codec_best1502p.c:3901:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1502p/hal_codec_best1502p.c:4291:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1502p/hal_codec_best1502p.c:4339:                analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1502p/hal_codec_best1502p.c:4340:                hal_codec_set_dig_dac_gain(VALID_DAC_MAP, vol_tab_ptr->sdac_volume);
+platform/hal/best1502p/hal_codec_best1502p.c:4701:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1502p/hal_codec_best1502p.c:4702:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1502p/hal_codec_best1502p.c:4830:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1502p/hal_codec_best1502p.c:5267:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1502p/hal_codec_best1502p.c:5269:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1502p/hal_codec_best1502p.c:5708:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1502p/hal_codec_best1502p.c:5715:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1502p/hal_codec_best1502p.c:5718:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1502p/hal_codec_best1502p.c:5720:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1502p/hal_codec_best1502p.c:5730:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1502p/hal_codec_best1502p.c:5735:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1502p/hal_codec_best1502p.c:5946:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502p/hal_codec_best1502p.c:5983:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1502p/hal_vad_best1502p.c:776:static inline void hal_codec_vad_set_pre_gain(int v)
+platform/hal/best1502p/hal_vad_best1502p.c:778:    vad->REG_104 = SET_BITFIELD(vad->REG_104, VAD_VAD_PRE_GAIN, v);
+platform/hal/best1502p/hal_vad_best1502p.c:1089:    hal_codec_vad_set_pre_gain(conf->pre_gain);
+platform/hal/best1502p/reg_codec_best1502p.h:919:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1502p/reg_codec_best1502p.h:920:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1502p/reg_codec_best1502p.h:921:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1502p/reg_codec_best1502p.h:922:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1502p/reg_codec_best1502p.h:923:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1502p/reg_codec_best1502p.h:924:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1502p/reg_codec_best1502p.h:1124:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1125:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1126:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1502p/reg_codec_best1502p.h:1127:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1502p/reg_codec_best1502p.h:1128:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1502p/reg_codec_best1502p.h:1136:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 29)
+platform/hal/best1502p/reg_codec_best1502p.h:1137:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 29)
+platform/hal/best1502p/reg_codec_best1502p.h:1138:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (29)
+platform/hal/best1502p/reg_codec_best1502p.h:1141:#define CODEC_CODEC_DAC_GAIN_CH1(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1142:#define CODEC_CODEC_DAC_GAIN_CH1_MASK                       (0xFFFFF << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1143:#define CODEC_CODEC_DAC_GAIN_CH1_SHIFT                      (0)
+platform/hal/best1502p/reg_codec_best1502p.h:1144:#define CODEC_CODEC_DAC_GAIN_SEL_CH1                        (1 << 20)
+platform/hal/best1502p/reg_codec_best1502p.h:1801:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1802:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1803:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1502p/reg_codec_best1502p.h:1804:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1502p/reg_codec_best1502p.h:1805:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1502p/reg_codec_best1502p.h:1806:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1502p/reg_codec_best1502p.h:1807:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1502p/reg_codec_best1502p.h:1808:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/best1502p/reg_codec_best1502p.h:1811:#define CODEC_CODEC_DAC_GAIN_SND_CH1(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1812:#define CODEC_CODEC_DAC_GAIN_SND_CH1_MASK                   (0xFFFFF << 0)
+platform/hal/best1502p/reg_codec_best1502p.h:1813:#define CODEC_CODEC_DAC_GAIN_SND_CH1_SHIFT                  (0)
+platform/hal/best1502p/reg_codec_best1502p.h:1814:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH1                    (1 << 20)
+platform/hal/best1502p/reg_vad_best1502p.h:352:#define VAD_VAD_PRE_GAIN(n)                                 (((n) & 0x3F) << 19)
+platform/hal/best1502p/reg_vad_best1502p.h:353:#define VAD_VAD_PRE_GAIN_MASK                               (0x3F << 19)
+platform/hal/best1502p/reg_vad_best1502p.h:354:#define VAD_VAD_PRE_GAIN_SHIFT                              (19)
+platform/hal/best1502x/hal_codec_best1502x.c:82:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1502x/hal_codec_best1502x.c:83:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1502x/hal_codec_best1502x.c:87:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1502x/hal_codec_best1502x.c:216:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1502x/hal_codec_best1502x.c:217:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1502x/hal_codec_best1502x.c:218:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1502x/hal_codec_best1502x.c:219:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1502x/hal_codec_best1502x.c:220:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1502x/hal_codec_best1502x.c:221:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1502x/hal_codec_best1502x.c:222:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1502x/hal_codec_best1502x.c:224:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1502x/hal_codec_best1502x.c:425:static int8_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1502x/hal_codec_best1502x.c:444:static int8_t digdac_gain_offset_nr;
+platform/hal/best1502x/hal_codec_best1502x.c:532:static int8_t swdac_gain;
+platform/hal/best1502x/hal_codec_best1502x.c:622:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1502x/hal_codec_best1502x.c:624:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1502x/hal_codec_best1502x.c:626:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1502x/hal_codec_best1502x.c:1526:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:1527:            hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1502x/hal_codec_best1502x.c:1532:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502x/hal_codec_best1502x.c:1533:        codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1502x/hal_codec_best1502x.c:1545:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:1554:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502x/hal_codec_best1502x.c:2060:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1502x/hal_codec_best1502x.c:2071:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1502x/hal_codec_best1502x.c:2089:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1502x/hal_codec_best1502x.c:2103:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1502x/hal_codec_best1502x.c:2106:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1502x/hal_codec_best1502x.c:2107:        digdac_gain_offset_nr = 0;
+platform/hal/best1502x/hal_codec_best1502x.c:2114:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:2116:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1502x/hal_codec_best1502x.c:2214:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1502x/hal_codec_best1502x.c:2215:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1502x/hal_codec_best1502x.c:2614:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502x/hal_codec_best1502x.c:2618:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1502x/hal_codec_best1502x.c:2890:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1502x/hal_codec_best1502x.c:2894:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502x/hal_codec_best1502x.c:2898:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502x/hal_codec_best1502x.c:2911:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502x/hal_codec_best1502x.c:2912:            codec->REG_0B8 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1502x/hal_codec_best1502x.c:2914:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1502x/hal_codec_best1502x.c:2918:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1502x/hal_codec_best1502x.c:2919:                codec->REG_0B8 |= CODEC_CODEC_DAC_GAIN_SEL_CH1;
+platform/hal/best1502x/hal_codec_best1502x.c:2960:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1502x/hal_codec_best1502x.c:3090:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1502x/hal_codec_best1502x.c:3092:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1502x/hal_codec_best1502x.c:3095:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1502x/hal_codec_best1502x.c:3099:        codec->REG_0B8 = SET_BITFIELD(codec->REG_0B8, CODEC_CODEC_DAC_GAIN_CH1, val);
+platform/hal/best1502x/hal_codec_best1502x.c:3101:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1502x/hal_codec_best1502x.c:3106:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1502x/hal_codec_best1502x.c:3110:        codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1502x/hal_codec_best1502x.c:3114:        codec->REG_164 = SET_BITFIELD(codec->REG_164, CODEC_CODEC_DAC_GAIN_SND_CH1, val);
+platform/hal/best1502x/hal_codec_best1502x.c:3116:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1502x/hal_codec_best1502x.c:3119:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1502x/hal_codec_best1502x.c:3121:    struct DAC_GAIN_T {
+platform/hal/best1502x/hal_codec_best1502x.c:3125:    struct DAC_GAIN_T left;
+platform/hal/best1502x/hal_codec_best1502x.c:3127:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1502x/hal_codec_best1502x.c:3143:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:3146:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502x/hal_codec_best1502x.c:3148:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1502x/hal_codec_best1502x.c:3186:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1502x/hal_codec_best1502x.c:3191:    gain += digdac_gain_offset_nr;
+platform/hal/best1502x/hal_codec_best1502x.c:3208:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1502x/hal_codec_best1502x.c:3218:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1502x/hal_codec_best1502x.c:3222:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1502x/hal_codec_best1502x.c:3229:        digdac_gain[0] = gain;
+platform/hal/best1502x/hal_codec_best1502x.c:3232:        digdac_gain[1] = gain;
+platform/hal/best1502x/hal_codec_best1502x.c:3250:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502x/hal_codec_best1502x.c:3257:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1502x/hal_codec_best1502x.c:3260:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1502x/hal_codec_best1502x.c:3262:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1502x/hal_codec_best1502x.c:3263:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1502x/hal_codec_best1502x.c:3265:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1502x/hal_codec_best1502x.c:3266:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1502x/hal_codec_best1502x.c:3302:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502x/hal_codec_best1502x.c:3318:    swdac_gain = gain;
+platform/hal/best1502x/hal_codec_best1502x.c:3325:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502x/hal_codec_best1502x.c:3352:        coef = digdac_gain_to_float(gain);
+platform/hal/best1502x/hal_codec_best1502x.c:3512:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, vol_tab_ptr->sdac_volume);
+platform/hal/best1502x/hal_codec_best1502x.c:3515:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, vol_tab_ptr->sdac_volume);
+platform/hal/best1502x/hal_codec_best1502x.c:3798:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1502x/hal_codec_best1502x.c:3801:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1502x/hal_codec_best1502x.c:3824:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1502x/hal_codec_best1502x.c:3825:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1502x/hal_codec_best1502x.c:4197:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1502x/hal_codec_best1502x.c:4250:                analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:4251:                hal_codec_set_dig_dac_gain(VALID_DAC_MAP, vol_tab_ptr->sdac_volume);
+platform/hal/best1502x/hal_codec_best1502x.c:4633:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1502x/hal_codec_best1502x.c:4634:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1502x/hal_codec_best1502x.c:4762:            analog_aud_set_dac_gain(vol_tab_ptr->tx_pa_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:5090:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1502x/hal_codec_best1502x.c:5092:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1502x/hal_codec_best1502x.c:5531:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1502x/hal_codec_best1502x.c:5538:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1502x/hal_codec_best1502x.c:5541:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1502x/hal_codec_best1502x.c:5543:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1502x/hal_codec_best1502x.c:5553:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1502x/hal_codec_best1502x.c:5558:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1502x/hal_codec_best1502x.c:5743:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1502x/hal_codec_best1502x.c:5780:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1502x/hal_vad_best1502x.c:779:static inline void hal_codec_vad_set_pre_gain(int v)
+platform/hal/best1502x/hal_vad_best1502x.c:781:    vad->REG_104 = SET_BITFIELD(vad->REG_104, VAD_VAD_PRE_GAIN, v);
+platform/hal/best1502x/hal_vad_best1502x.c:1085:    hal_codec_vad_set_pre_gain(conf->pre_gain);
+platform/hal/best1502x/reg_codec_best1502x.h:916:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1502x/reg_codec_best1502x.h:917:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1502x/reg_codec_best1502x.h:918:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1502x/reg_codec_best1502x.h:919:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1502x/reg_codec_best1502x.h:920:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1502x/reg_codec_best1502x.h:921:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1502x/reg_codec_best1502x.h:1121:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1122:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1123:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1502x/reg_codec_best1502x.h:1124:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1502x/reg_codec_best1502x.h:1125:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1502x/reg_codec_best1502x.h:1133:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 29)
+platform/hal/best1502x/reg_codec_best1502x.h:1134:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 29)
+platform/hal/best1502x/reg_codec_best1502x.h:1135:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (29)
+platform/hal/best1502x/reg_codec_best1502x.h:1138:#define CODEC_CODEC_DAC_GAIN_CH1(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1139:#define CODEC_CODEC_DAC_GAIN_CH1_MASK                       (0xFFFFF << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1140:#define CODEC_CODEC_DAC_GAIN_CH1_SHIFT                      (0)
+platform/hal/best1502x/reg_codec_best1502x.h:1141:#define CODEC_CODEC_DAC_GAIN_SEL_CH1                        (1 << 20)
+platform/hal/best1502x/reg_codec_best1502x.h:1712:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1713:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1714:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1502x/reg_codec_best1502x.h:1715:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1502x/reg_codec_best1502x.h:1716:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1502x/reg_codec_best1502x.h:1717:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1502x/reg_codec_best1502x.h:1718:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1502x/reg_codec_best1502x.h:1719:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/best1502x/reg_codec_best1502x.h:1722:#define CODEC_CODEC_DAC_GAIN_SND_CH1(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1723:#define CODEC_CODEC_DAC_GAIN_SND_CH1_MASK                   (0xFFFFF << 0)
+platform/hal/best1502x/reg_codec_best1502x.h:1724:#define CODEC_CODEC_DAC_GAIN_SND_CH1_SHIFT                  (0)
+platform/hal/best1502x/reg_codec_best1502x.h:1725:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH1                    (1 << 20)
+platform/hal/best1502x/reg_vad_best1502x.h:352:#define VAD_VAD_PRE_GAIN(n)                                 (((n) & 0x3F) << 19)
+platform/hal/best1502x/reg_vad_best1502x.h:353:#define VAD_VAD_PRE_GAIN_MASK                               (0x3F << 19)
+platform/hal/best1502x/reg_vad_best1502x.h:354:#define VAD_VAD_PRE_GAIN_SHIFT                              (19)
+platform/hal/best1503/hal_codec_best1503.c:59:#ifndef CODEC_DAC_GAIN_RAMP_INTERVAL
+platform/hal/best1503/hal_codec_best1503.c:60:#define CODEC_DAC_GAIN_RAMP_INTERVAL        CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1503/hal_codec_best1503.c:64:#define CODEC_DAC2_GAIN_RAMP_INTERVAL       CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP
+platform/hal/best1503/hal_codec_best1503.c:193:enum CODEC_DAC_GAIN_RAMP_INTVL_T {
+platform/hal/best1503/hal_codec_best1503.c:194:    CODEC_DAC_GAIN_RAMP_INTVL_1_SAMP,
+platform/hal/best1503/hal_codec_best1503.c:195:    CODEC_DAC_GAIN_RAMP_INTVL_2_SAMP,
+platform/hal/best1503/hal_codec_best1503.c:196:    CODEC_DAC_GAIN_RAMP_INTVL_4_SAMP,
+platform/hal/best1503/hal_codec_best1503.c:197:    CODEC_DAC_GAIN_RAMP_INTVL_8_SAMP,
+platform/hal/best1503/hal_codec_best1503.c:198:    CODEC_DAC_GAIN_RAMP_INTVL_16_SAMP,
+platform/hal/best1503/hal_codec_best1503.c:199:    CODEC_DAC_GAIN_RAMP_INTVL_32_SAMP,
+platform/hal/best1503/hal_codec_best1503.c:201:    CODEC_DAC_GAIN_RAMP_INTVL_QTY,
+platform/hal/best1503/hal_codec_best1503.c:402:static int8_t digdac_gain[MAX_DAC_CH_NUM];
+platform/hal/best1503/hal_codec_best1503.c:421:static int8_t digdac_gain_offset_nr;
+platform/hal/best1503/hal_codec_best1503.c:504:static int8_t swdac_gain;
+platform/hal/best1503/hal_codec_best1503.c:594:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+platform/hal/best1503/hal_codec_best1503.c:596:static void hal_codec_restore_dig_dac_gain(void);
+platform/hal/best1503/hal_codec_best1503.c:598:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val);
+platform/hal/best1503/hal_codec_best1503.c:1512:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, ZERODB_DIG_DBVAL);
+platform/hal/best1503/hal_codec_best1503.c:1516:        codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1503/hal_codec_best1503.c:1532:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1503/hal_codec_best1503.c:1987:    hal_codec_set_dig_dac_gain(VALID_DAC_MAP, dac_vol);
+platform/hal/best1503/hal_codec_best1503.c:1998:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type)
+platform/hal/best1503/hal_codec_best1503.c:2016:        // Avoid corrupting digdac_gain_offset_nr or using an invalid one
+platform/hal/best1503/hal_codec_best1503.c:2030:        digdac_gain_offset_nr = ((0xF - ini_ana_gain) * 11 + 0xF / 2) / 0xF;
+platform/hal/best1503/hal_codec_best1503.c:2033:        ini_ana_gain = 0xF - (digdac_gain_offset_nr * 0xF + 11 / 2) / 11;
+platform/hal/best1503/hal_codec_best1503.c:2034:        digdac_gain_offset_nr = 0;
+platform/hal/best1503/hal_codec_best1503.c:2040:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1503/hal_codec_best1503.c:2042:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1503/hal_codec_best1503.c:2111:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1503/hal_codec_best1503.c:2112:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1503/hal_codec_best1503.c:2467:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1503/hal_codec_best1503.c:2471:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1503/hal_codec_best1503.c:2723:        bool zc_en = !!(codec->REG_0B4 & CODEC_CODEC_DAC_GAIN_SEL_CH0);
+platform/hal/best1503/hal_codec_best1503.c:2727:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1503/hal_codec_best1503.c:2731:            hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1503/hal_codec_best1503.c:2744:            codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1503/hal_codec_best1503.c:2746:            hal_codec_restore_dig_dac_gain();
+platform/hal/best1503/hal_codec_best1503.c:2750:                codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_SEL_CH0;
+platform/hal/best1503/hal_codec_best1503.c:2787:        hal_codec_sync_dac_gain_disable();
+platform/hal/best1503/hal_codec_best1503.c:2906:static void hal_codec_set_dac_gain_value(enum AUD_CHANNEL_MAP_T map, uint32_t val)
+platform/hal/best1503/hal_codec_best1503.c:2908:    codec->REG_0B4 &= ~CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1503/hal_codec_best1503.c:2911:        codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0, val);
+platform/hal/best1503/hal_codec_best1503.c:2913:    codec->REG_0B4 |= CODEC_CODEC_DAC_GAIN_UPDATE;
+platform/hal/best1503/hal_codec_best1503.c:2918:    codec->REG_160 &= ~CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1503/hal_codec_best1503.c:2920:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_SND_CH0, val);
+platform/hal/best1503/hal_codec_best1503.c:2921:    codec->REG_160 |= CODEC_CODEC_DAC_GAIN_UPDATE_SND;
+platform/hal/best1503/hal_codec_best1503.c:2924:void hal_codec_get_dac_gain(float *left_gain, float *right_gain)
+platform/hal/best1503/hal_codec_best1503.c:2926:    struct DAC_GAIN_T {
+platform/hal/best1503/hal_codec_best1503.c:2930:    struct DAC_GAIN_T left;
+platform/hal/best1503/hal_codec_best1503.c:2932:    left.v  = GET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_CH0);
+platform/hal/best1503/hal_codec_best1503.c:2948:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1503/hal_codec_best1503.c:2951:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1503/hal_codec_best1503.c:2953:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1503/hal_codec_best1503.c:2991:static float digdac_gain_to_float(int32_t gain)
+platform/hal/best1503/hal_codec_best1503.c:2996:    gain += digdac_gain_offset_nr;
+platform/hal/best1503/hal_codec_best1503.c:3013:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1503/hal_codec_best1503.c:3023:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1503/hal_codec_best1503.c:3027:static void hal_codec_set_dig_dac_gain(enum AUD_CHANNEL_MAP_T map, int32_t gain)
+platform/hal/best1503/hal_codec_best1503.c:3034:        digdac_gain[0] = gain;
+platform/hal/best1503/hal_codec_best1503.c:3037:        digdac_gain[1] = gain;
+platform/hal/best1503/hal_codec_best1503.c:3055:        coef = digdac_gain_to_float(gain);
+platform/hal/best1503/hal_codec_best1503.c:3062:    hal_codec_set_dac_gain_value(map, val);
+platform/hal/best1503/hal_codec_best1503.c:3065:static void POSSIBLY_UNUSED hal_codec_restore_dig_dac_gain(void)
+platform/hal/best1503/hal_codec_best1503.c:3067:    if (digdac_gain[0] == digdac_gain[1]) {
+platform/hal/best1503/hal_codec_best1503.c:3068:        hal_codec_set_dig_dac_gain(VALID_DAC_MAP, digdac_gain[0]);
+platform/hal/best1503/hal_codec_best1503.c:3070:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, digdac_gain[0]);
+platform/hal/best1503/hal_codec_best1503.c:3071:        hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, digdac_gain[1]);
+platform/hal/best1503/hal_codec_best1503.c:3097:        coef = digdac_gain_to_float(gain);
+platform/hal/best1503/hal_codec_best1503.c:3113:    swdac_gain = gain;
+platform/hal/best1503/hal_codec_best1503.c:3120:        coef = digdac_gain_to_float(gain);
+platform/hal/best1503/hal_codec_best1503.c:3147:        coef = digdac_gain_to_float(gain);
+platform/hal/best1503/hal_codec_best1503.c:3307:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH0, vol_tab_ptr->sdac_volume);
+platform/hal/best1503/hal_codec_best1503.c:3310:                hal_codec_set_dig_dac_gain(AUD_CHANNEL_MAP_CH1, vol_tab_ptr->sdac_volume);
+platform/hal/best1503/hal_codec_best1503.c:3579:static void hal_codec_set_dac_gain_ramp_interval(enum AUD_SAMPRATE_T rate)
+platform/hal/best1503/hal_codec_best1503.c:3582:    int ramp_intvl = CODEC_DAC_GAIN_RAMP_INTERVAL;
+platform/hal/best1503/hal_codec_best1503.c:3605:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1503/hal_codec_best1503.c:3606:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1503/hal_codec_best1503.c:3872:            hal_codec_set_dac_gain_ramp_interval(cfg->sample_rate);
+platform/hal/best1503/hal_codec_best1503.c:3920:            hal_codec_set_dig_dac_gain(VALID_DAC_MAP, vol_tab_ptr->sdac_volume);
+platform/hal/best1503/hal_codec_best1503.c:4266:    } else if (ramp_intvl >= CODEC_DAC_GAIN_RAMP_INTVL_QTY) {
+platform/hal/best1503/hal_codec_best1503.c:4267:        ramp_intvl = CODEC_DAC_GAIN_RAMP_INTVL_QTY - 1;
+platform/hal/best1503/hal_codec_best1503.c:4626:    hal_codec_set_sw_gain(swdac_gain);
+platform/hal/best1503/hal_codec_best1503.c:4628:    hal_codec_restore_dig_dac_gain();
+platform/hal/best1503/hal_codec_best1503.c:5037:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type)
+platform/hal/best1503/hal_codec_best1503.c:5044:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, type);
+platform/hal/best1503/hal_codec_best1503.c:5047:void hal_codec_sync_dac_gain_disable(void)
+platform/hal/best1503/hal_codec_best1503.c:5049:    codec->REG_0B4 = SET_BITFIELD(codec->REG_0B4, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1503/hal_codec_best1503.c:5059:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, type);
+platform/hal/best1503/hal_codec_best1503.c:5064:    codec->REG_160 = SET_BITFIELD(codec->REG_160, CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND, HAL_CODEC_SYNC_TYPE_NONE);
+platform/hal/best1503/hal_codec_best1503.c:5275:        hal_codec_set_dac_gain_value(VALID_DAC_MAP, 0);
+platform/hal/best1503/hal_codec_best1503.c:5312:        hal_codec_restore_dig_dac_gain();
+platform/hal/best1503/reg_codec_best1503.h:824:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL(n)          (((n) & 0x3) << 2)
+platform/hal/best1503/reg_codec_best1503.h:825:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_MASK        (0x3 << 2)
+platform/hal/best1503/reg_codec_best1503.h:826:#define CODEC_CODEC_DAC_GAIN_PLAYTIME_STAMP_SEL_SHIFT       (2)
+platform/hal/best1503/reg_codec_best1503.h:827:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL(n)      (((n) & 0x3) << 4)
+platform/hal/best1503/reg_codec_best1503.h:828:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_MASK    (0x3 << 4)
+platform/hal/best1503/reg_codec_best1503.h:829:#define CODEC_CODEC_DAC_GAIN_SND_PLAYTIME_STAMP_SEL_SHIFT   (4)
+platform/hal/best1503/reg_codec_best1503.h:962:#define CODEC_CODEC_DAC_GAIN_CH0(n)                         (((n) & 0xFFFFF) << 0)
+platform/hal/best1503/reg_codec_best1503.h:963:#define CODEC_CODEC_DAC_GAIN_CH0_MASK                       (0xFFFFF << 0)
+platform/hal/best1503/reg_codec_best1503.h:964:#define CODEC_CODEC_DAC_GAIN_CH0_SHIFT                      (0)
+platform/hal/best1503/reg_codec_best1503.h:965:#define CODEC_CODEC_DAC_GAIN_SEL_CH0                        (1 << 20)
+platform/hal/best1503/reg_codec_best1503.h:966:#define CODEC_CODEC_DAC_GAIN_UPDATE                         (1 << 21)
+platform/hal/best1503/reg_codec_best1503.h:971:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL(n)                 (((n) & 0x3) << 26)
+platform/hal/best1503/reg_codec_best1503.h:972:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_MASK               (0x3 << 26)
+platform/hal/best1503/reg_codec_best1503.h:973:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SHIFT              (26)
+platform/hal/best1503/reg_codec_best1503.h:1249:#define CODEC_CODEC_DAC_GAIN_SND_CH0(n)                     (((n) & 0xFFFFF) << 0)
+platform/hal/best1503/reg_codec_best1503.h:1250:#define CODEC_CODEC_DAC_GAIN_SND_CH0_MASK                   (0xFFFFF << 0)
+platform/hal/best1503/reg_codec_best1503.h:1251:#define CODEC_CODEC_DAC_GAIN_SND_CH0_SHIFT                  (0)
+platform/hal/best1503/reg_codec_best1503.h:1252:#define CODEC_CODEC_DAC_GAIN_SEL_SND_CH0                    (1 << 20)
+platform/hal/best1503/reg_codec_best1503.h:1253:#define CODEC_CODEC_DAC_GAIN_UPDATE_SND                     (1 << 21)
+platform/hal/best1503/reg_codec_best1503.h:1254:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND(n)             (((n) & 0x3) << 22)
+platform/hal/best1503/reg_codec_best1503.h:1255:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_MASK           (0x3 << 22)
+platform/hal/best1503/reg_codec_best1503.h:1256:#define CODEC_CODEC_DAC_GAIN_TRIGGER_SEL_SND_SHIFT          (22)
+platform/hal/hal_aud.h:310:#define VAD_DEF_PRE_GAIN    0x4
+platform/hal/hal_aud.h:343:    uint8_t pre_gain;
+platform/hal/hal_codec.h:239:void hal_codec_dac_gain_m60db_check(enum HAL_CODEC_PERF_TEST_POWER_T type);
+platform/hal/hal_codec.h:260:void hal_codec_sync_dac_gain_enable(enum HAL_CODEC_SYNC_TYPE_T type);
+platform/hal/hal_codec.h:261:void hal_codec_sync_dac_gain_disable(void);
+platform/hal/hal_codec.h:271:void hal_codec_get_dac_gain(float *left_gain,float *right_gain);
+platform/hal/hal_codec.h:410:void hal_codec_set_dig_dac_gain_dr(enum AUD_CHANNEL_MAP_T map, int32_t gain);
+utils/codec_calib/codec_calib.c:393:        CODEC_CALIB_TRACE(1, "AUTO CALIB DAC GAIN: ana_gain=%d, L*1000=%d R*1000=%d",

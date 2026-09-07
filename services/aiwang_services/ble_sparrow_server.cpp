@@ -1444,6 +1444,31 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
 
 }
 
+static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
+{
+    static const AUD_ID_ENUM eq_prompt_map[5] =
+    {
+        AUD_ID_NUM_1,  /* EQ mode 0: 1 tone */
+        AUD_ID_NUM_2,  /* EQ mode 1: 2 tones */
+        AUD_ID_NUM_3,  /* EQ mode 2: 3 tones */
+        AUD_ID_NUM_4,  /* EQ mode 3: 4 tones / Clear Voice */
+        AUD_ID_NUM_5,  /* EQ mode 4: 5 tones */
+    };
+
+    if (eq_preset >= ARRAY_SIZE(eq_prompt_map))
+    {
+        TRACE(0, "[KEYMAP][EQ] prompt invalid preset=%u",
+              (unsigned)eq_preset);
+        return;
+    }
+
+    TRACE(0, "[KEYMAP][EQ] play prompt preset=%u, aud_id=%u",
+          (unsigned)eq_preset,
+          (unsigned)eq_prompt_map[eq_preset]);
+
+    media_PlayAudio(eq_prompt_map[eq_preset], 0);
+}
+
 void handleGetEqIndex(uint8_t *index)
 {
     struct nvrecord_env_t *nvrecord_env;
@@ -1460,25 +1485,27 @@ static void ntt_keymap_apply_eq_preset(uint8_t preset)
 {
     if (!ntt_eq_preset_is_valid(preset))
     {
-        TRACE(0, "[KEYMAP][EQ] invalid preset=%u", (unsigned)preset);
+        TRACE(0, "[KEYMAP][EQ] invalid preset=%u",(unsigned)preset);
         return;
     }
 
-    audio_eq_set_cfg(NULL,
-                     audio_eq_cfg_vol_list[preset],
-                     AUDIO_EQ_TYPE_HW_DAC_IIR);
+    audio_eq_set_cfg(NULL,audio_eq_cfg_vol_list[preset],AUDIO_EQ_TYPE_HW_DAC_IIR);
+
     ntt_audio_drc_apply_by_eq_index(preset);
     handleSetEqIndex(preset);
     app_ibrt_customif_cmd_sync_music_eq(preset);
 
-#ifdef __AUDIO_DYNAMIC_BOOST__
+#ifdef AUDIO_DYNAMIC_BOOST
 #ifdef DYNAMIC_BOOST_USE_HW_EQ
-    audio_dynamic_boost_set_new_customer_iir_eq(&audio_process.hw_dac_iir_cfg,
-                                                AUDIO_EQ_TYPE_HW_DAC_IIR);
+    audio_dynamic_boost_set_new_customer_iir_eq(
+        &audio_process.hw_dac_iir_cfg,
+        AUDIO_EQ_TYPE_HW_DAC_IIR);
 #endif
 #endif
 
-    TRACE(0, "[KEYMAP][EQ] applied preset=%u", (unsigned)preset);
+    ntt_keymap_play_eq_mode_prompt(preset);
+
+    TRACE(0, "[KEYMAP][EQ] applied preset=%u",(unsigned)preset);
 }
 
 void handleGetEqPresent(const uint8_t *data, uint16_t len)

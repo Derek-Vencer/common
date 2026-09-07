@@ -1,0 +1,141 @@
+    .num = 8,
+    .param = {
+/*        {IIR_TYPE_PEAK, -10.1,   100.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   400.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   700.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   1000.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   3000.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   5000.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   7000.0,   7},
+        {IIR_TYPE_PEAK, -10.1,   9000.0,   7},*/
+        {IIR_TYPE_PEAK, 0.0,   100.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   400.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   700.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   1000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   3000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   5000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   7000.0,   7},
+        {IIR_TYPE_PEAK, 0.0,   9000.0,   7},
+    }
+};
+const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_hw_iir_cfg_list[EQ_HW_IIR_LIST_NUM] = {
+    &audio_eq_hw_iir_cfg,
+};
+
+/* Keep original SDK symbol for default DRC reference */
+/*const DrcConfig audio_drc_cfg = {
+    .knee = 3,
+    .filter_type = {300, -1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings = {
+        {-24, 0.0, 8, 1, 100, 1},
+        {  0, 0.0, 1, 1,   1, 1},
+    }
+};
+*/
+const DrcConfig audio_drc_cfg = {
+    .knee = 3,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings = {
+        {-24 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+
+/* Balance */
+const DrcConfig audio_drc_cfg_0 = {
+    .knee = 3,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings = {
+        {-24 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+
+/* More bass */
+const DrcConfig audio_drc_cfg_1 = {
+    .knee = 3,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings= {
+        {-27 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+
+/* More treble */
+const DrcConfig audio_drc_cfg_2 = {
+    .knee = 3,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings= {
+        {-22 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+
+/* Clear voice */
+const DrcConfig audio_drc_cfg_3 = {
+    .knee = 3,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings= {
+        {-20 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+
+/* Dynamic */
+const DrcConfig audio_drc_cfg_4 = {
+    .knee = 3,
+    .filter_type = {300,-1},
+    .band_num = 2,
+    .look_ahead_time = 0,
+    .band_settings= {
+        {-26 ,0.0 ,8 ,1 ,100 ,1},
+        {0 ,0.0 ,1 ,1 ,1 ,1},
+    }
+};
+
+#define AUDIO_DRC_CFG_NUM    5
+
+const DrcConfig * const POSSIBLY_UNUSED audio_drc_cfg_list[AUDIO_DRC_CFG_NUM] = {
+    &audio_drc_cfg_0,
+    &audio_drc_cfg_1,
+    &audio_drc_cfg_2,
+    &audio_drc_cfg_3,
+    &audio_drc_cfg_4,
+};
+
+const LimiterConfig audio_limiter_cfg = {
+    .knee = 2,
+    .look_ahead_time = 10,
+    .threshold = -1,
+    .makeup_gain = 0,
+    .ratio = 1000,
+    .attack_time = 3,
+    .release_time = 3000,
+};
+
+const SpectrumFixConfig audio_spectrum_cfg = {
+    .freq_num = 9,
+    .freq_list = {200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800},
+};
+
+const ReverbConfig audio_reverb_cfg = {
+    .bypass = 1,
+    .high_pass_f0 = 100,
+    .gain = 0,
+};
+
+const BassEnhancerConfig audio_bass_cfg =
+{
+    .low_cut_freq = 100,
