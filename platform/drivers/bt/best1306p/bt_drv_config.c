@@ -793,7 +793,7 @@ const uint8_t bt_peer_txpwr_dft_thr[]=
 
 const struct rssi_txpower_link_thd tws_link_txpwr_thd =
 {
-    0x19,   // 25 packets//uint16_t rssi_avg_nb_pkt;
+    0x32,//uint16_t rssi_avg_nb_pkt;
     -40,//rssi_high_thr;
     -50,//rssi_low_thr;
     5,//rssi_below_low_thr;
