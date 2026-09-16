@@ -1704,7 +1704,7 @@ void analog_open(void)
     val = REG_CODEC_TX_DAC_VREF_L(6);
     analog_write(ANA_REG_5F, val);
 
-    val = REG_CODEC_TX_EAR_COMP1_L(0xf1) | REG_CODEC_TX_DRV_05_L;
+    val = REG_CODEC_TX_EAR_COMP1_L(0x73) | REG_CODEC_TX_DRV_05_L;
     analog_write(ANA_REG_60, val);
 
     val = REG_CODEC_TX_EAR_IBSEL_L(1);

@@ -3373,6 +3373,8 @@ POSSIBLY_UNUSED int32_t audio_eq_set_onoff(int32_t onoff, AUDIO_EQ_TYPE_T audio_
     return 0;
 }
 
+#ifdef __AUDIO_DRC__
+
 static const int32_t ntt_drc_band0_value[] = {
     -24,   /* Balance */
     -27,   /* More bass */
@@ -3420,3 +3422,16 @@ void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
         audio_process.drc_update);
 
 }
+
+#else
+
+void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)
+{
+    /*
+     * AUDIO_DRC=0：
+     * 保留函式符號，避免 EQ 切換呼叫端發生 link error。
+     */
+    (void)eq_index;
+}
+
+#endif
