@@ -114,7 +114,8 @@ typedef short   SPEECH_PCM_T;
 
 //#define BT_SCO_CHAIN_PROFILE
 #ifdef USER_SPEECH_DUMP_EN
-#define BT_SCO_CHAIN_AUDIO_DUMP
+//#define BT_SCO_CHAIN_AUDIO_DUMP
+#define BT_SCO_RX_AUDIO_DUMP
 #endif
 // #define TWS_SWITCH_ACCORDING_NOISE
 #define BT_SCO_LOW_RAM
@@ -976,17 +977,9 @@ int speech_init2(int tx_sample_rate, int rx_sample_rate,
 #endif
     //app_sysfreq_req(APP_SYSFREQ_USER_BT_SCO, APP_SYSFREQ_104M);
 
-// DUMP: Multi MICs + Ref + VPU + OUT
-#if defined(BT_SCO_CHAIN_AUDIO_DUMP)
-    uint32_t dump_ch = SPEECH_CODEC_CAPTURE_CHANNEL_NUM + 1;
-    if (aec_enable) {
-        dump_ch += 1;
-    }
-#if defined(SPEECH_BONE_SENSOR)
-    dump_ch += 1;
-#endif
-    //audio_dump_init(speech_tx_frame_len, sizeof(short), dump_ch);
-    audio_dump_init(speech_tx_frame_len, sizeof(short), 5);
+// HFP/SCO speaker RX PCM dump
+#if defined(BT_SCO_RX_AUDIO_DUMP)
+    audio_dump_init(speech_rx_frame_len,playback_sample_size,1);
 #endif
 
     AUDIOPLAYERS_TRACE(1,"[%s] End", __func__);
@@ -1274,7 +1267,7 @@ int speech_deinit(void)
     speech_tuning_close();
 #endif
 
-#if defined(BT_SCO_CHAIN_AUDIO_DUMP)
+#if defined(BT_SCO_RX_AUDIO_DUMP)
     audio_dump_deinit();
 #endif
 
@@ -2315,9 +2308,15 @@ int32_t _speech_rx_process_(void *pcm_buf, int32_t *_pcm_len)
 #endif
 #endif
 
-#if defined(BT_SCO_CHAIN_AUDIO_DUMP)
-    // audio_dump_add_channel_data(1, pcm_buf, pcm_len);
-    // audio_dump_run();
+#if defined(BT_SCO_RX_AUDIO_DUMP)
+    /*
+     * Final HFP downlink PCM:
+     * after RX NS/AGC/Compexp/EQ/HW-EQ/Post-Gain,
+     * immediately before returning to SCO playback.
+     */
+    audio_dump_clear_up();
+    audio_dump_add_channel_data(0,pcm_buf,pcm_len);
+    audio_dump_run();
 #endif
 
     *_pcm_len = pcm_len;

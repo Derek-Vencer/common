@@ -331,92 +331,217 @@ uint8_t* factory_section_get_bt_name(void)
     }
 }
 
-
-int factory_section_set_bt_name(const char *name,int len)
+int factory_section_set_bt_name(const char *name, int len)
 {
     uint8_t *mempool = NULL;
-    if (factory_section_p)
-    {
-        syspool_init();
-        syspool_get_buff((uint8_t **)&mempool, 0x1000);
-        memcpy(mempool, factory_section_p, 0x1000);
 
-        if (1 == nv_record_dev_rev)
-        {
-            NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW1] %s", __func__, factory_section_p->data.device_name,name);
-            memcpy(((factory_section_t *)mempool)->data.device_name, name, len);
-            ((factory_section_t *)mempool)->head.crc = crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->head.reserved0)),sizeof(factory_section_t)-2-2-4);
-        }
-        else
-        {
-            NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW2] %s", __func__, (char *)factory_section_p->data.rev2_bt_name,name);
-            memcpy(((factory_section_t *)mempool)->data.rev2_bt_name, name, len);
-            ((factory_section_t *)mempool)->data.rev2_crc =
-                crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->data.rev2_reserved0)),
-                ((factory_section_t *)mempool)->data.rev2_data_len);
-        }
-#ifdef RAM_NV_RECORD
-        memcpy(factory_section_p, mempool, FACTORY_SECTOR_SIZE);
-#else
-        uint32_t lock;
-        enum NORFLASH_API_RET_T ret;
-        lock = int_lock_global();
-        ret = norflash_api_erase(NORFLASH_API_MODULE_ID_FACTORY,(uint32_t)(__factory_start)&0x00FFFFFF ,FACTORY_SECTOR_SIZE,false);
-        ASSERT(ret == NORFLASH_API_OK,"factory_section_xtal_fcap_set: erase failed! ret = %d.",ret);
-        ret = norflash_api_write(NORFLASH_API_MODULE_ID_FACTORY,(uint32_t)(__factory_start)&0x00FFFFFF ,(uint8_t *)mempool,FACTORY_SECTOR_SIZE,false);
-        ASSERT(ret == NORFLASH_API_OK,"factory_section_xtal_fcap_set: write failed! ret = %d.",ret);
-        int_unlock_global(lock);
-#endif
-        return 0;
-    }
-    else
+    if ((factory_section_p == NULL) || (name == NULL) || (len <= 0))
     {
         return -1;
     }
+
+    syspool_init();
+    syspool_get_buff((uint8_t **)&mempool, 0x1000);
+
+    if (mempool == NULL)
+    {
+        return -1;
+    }
+
+    memcpy(mempool, factory_section_p, 0x1000);
+
+    if (1 == nv_record_dev_rev)
+    {
+        uint32_t max_len =
+            sizeof(((factory_section_t *)mempool)->data.device_name);
+
+        if ((uint32_t)len > max_len)
+        {
+            len = max_len;
+        }
+
+        NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW1] %s",__func__,factory_section_p->data.device_name,name);
+
+        /*
+         * Clear old name first to avoid residual data.
+         */
+        memset(((factory_section_t *)mempool)->data.device_name,0,sizeof(((factory_section_t *)mempool)->data.device_name));
+        memcpy(((factory_section_t *)mempool)->data.device_name,name,len);
+        ((factory_section_t *)mempool)->head.crc =
+            crc32_c(
+                0,
+                (unsigned char *)
+                    (&(((factory_section_t *)mempool)->head.reserved0)),
+                sizeof(factory_section_t) - 2 - 2 - 4);
+    }
+    else
+    {
+        uint32_t max_len = sizeof(((factory_section_t *)mempool)->data.rev2_bt_name);
+        if ((uint32_t)len > max_len)
+        {
+            len = max_len;
+        }
+
+        NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW2] %s",__func__,(char *)factory_section_p->data.rev2_bt_name,name);
+
+        /*
+         * Clear old name first to avoid residual data.
+         */
+        memset(((factory_section_t *)mempool)->data.rev2_bt_name,0,sizeof(((factory_section_t *)mempool)->data.rev2_bt_name));
+        memcpy(((factory_section_t *)mempool)->data.rev2_bt_name,name,len);
+        ((factory_section_t *)mempool)->data.rev2_crc = crc32_c(0,(unsigned char *)
+                    (&(((factory_section_t *)mempool)->data.rev2_reserved0)),
+                ((factory_section_t *)mempool)->data.rev2_data_len);
+    }
+
+#ifdef RAM_NV_RECORD
+
+    memcpy(factory_section_p,mempool,FACTORY_SECTOR_SIZE);
+
+#else
+
+    {
+        uint32_t lock;
+        enum NORFLASH_API_RET_T ret;
+        lock = int_lock_global();
+        ret = norflash_api_erase(NORFLASH_API_MODULE_ID_FACTORY,(uint32_t)(__factory_start) & 0x00FFFFFF,FACTORY_SECTOR_SIZE,false);
+        ASSERT(ret == NORFLASH_API_OK,"%s: erase failed! ret=%d",__func__,ret);
+
+        ret = norflash_api_write(
+            NORFLASH_API_MODULE_ID_FACTORY,
+            (uint32_t)(__factory_start) & 0x00FFFFFF,
+            (uint8_t *)mempool,
+            FACTORY_SECTOR_SIZE,
+            false);
+
+        ASSERT(ret == NORFLASH_API_OK,"%s: write failed! ret=%d",__func__,ret);
+
+        /*
+         * Very important:
+         * Keep RAM shadow synchronized with Flash.
+         *
+         * Otherwise the next factory_section_set_xxx()
+         * copies stale data from factory_section_p and can
+         * overwrite the name we just wrote.
+         */
+        memcpy(factory_section_p,mempool,FACTORY_SECTOR_SIZE);
+        int_unlock_global(lock);
+    }
+
+#endif
+
+    return 0;
 }
 
-int factory_section_set_ble_name(const char *name,int len)
+int factory_section_set_ble_name(const char *name, int len)
 {
     uint8_t *mempool = NULL;
-    if (factory_section_p)
-    {
-        syspool_init();
-        syspool_get_buff((uint8_t **)&mempool, 0x1000);
-        memcpy(mempool, factory_section_p, 0x1000);
 
-        if (1 == nv_record_dev_rev)
-        {
-            // TRACE(2,"%s [OLD] %s -> [NEW1] %s", __func__, factory_section_p->data.ble_name,name);
-            // memcpy(((factory_section_t *)mempool)->data.ble_name, name, len);
-            NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW1] %s", __func__, BLE_DEFAULT_NAME,name);
-            ((factory_section_t *)mempool)->head.crc = crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->head.reserved0)),sizeof(factory_section_t)-2-2-4);
-        }
-        else
-        {
-            NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW2] %s", __func__, (char *)factory_section_p->data.rev2_ble_name,name);
-            memcpy(((factory_section_t *)mempool)->data.rev2_ble_name, name, len);
-            ((factory_section_t *)mempool)->data.rev2_crc =
-                crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->data.rev2_reserved0)),
-                ((factory_section_t *)mempool)->data.rev2_data_len);
-        }
-#ifdef RAM_NV_RECORD
-        memcpy(factory_section_p, mempool, FACTORY_SECTOR_SIZE);
-#else
-        uint32_t lock;
-        enum NORFLASH_API_RET_T ret;
-        lock = int_lock_global();
-        ret = norflash_api_erase(NORFLASH_API_MODULE_ID_FACTORY,(uint32_t)(__factory_start)&0x00FFFFFF ,FACTORY_SECTOR_SIZE,false);
-        ASSERT(ret == NORFLASH_API_OK,"factory_section_xtal_fcap_set: erase failed! ret = %d.",ret);
-        ret = norflash_api_write(NORFLASH_API_MODULE_ID_FACTORY,(uint32_t)(__factory_start)&0x00FFFFFF ,(uint8_t *)mempool,FACTORY_SECTOR_SIZE,false);
-        ASSERT(ret == NORFLASH_API_OK,"factory_section_xtal_fcap_set: write failed! ret = %d.",ret);
-        int_unlock_global(lock);
-#endif
-        return 0;
-    }
-    else
+    if ((factory_section_p == NULL) || (name == NULL) || (len <= 0))
     {
         return -1;
     }
+
+    syspool_init();
+    syspool_get_buff((uint8_t **)&mempool, 0x1000);
+
+    if (mempool == NULL)
+    {
+        return -1;
+    }
+
+    /*
+     * Copy the latest factory section RAM shadow.
+     */
+    memcpy(mempool, factory_section_p, 0x1000);
+
+    if (1 == nv_record_dev_rev)
+    {
+        /*
+         * REV1 does not use a separate writable BLE name field.
+         * Keep the original behavior and only refresh CRC.
+         */
+        NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW1] %s",__func__,BLE_DEFAULT_NAME,name);
+
+        ((factory_section_t *)mempool)->head.crc = crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->head.reserved0)),
+                sizeof(factory_section_t) - 2 - 2 - 4);
+    }
+    else
+    {
+        uint32_t max_len = sizeof(((factory_section_t *)mempool)->data.rev2_ble_name);
+
+        if ((uint32_t)len > max_len)
+        {
+            len = max_len;
+        }
+
+        NV_SECTION_TRACE(2,"%s [OLD] %s -> [NEW2] %s",__func__,(char *)factory_section_p->data.rev2_ble_name,name);
+
+        /*
+         * Clear old BLE name first to avoid residual data
+         * when the new name is shorter than the old name.
+         */
+        memset(((factory_section_t *)mempool)->data.rev2_ble_name,0,sizeof(((factory_section_t *)mempool)->data.rev2_ble_name));
+
+        memcpy(((factory_section_t *)mempool)->data.rev2_ble_name,name,len);
+
+        /*
+         * Recalculate REV2 factory section CRC.
+         */
+        ((factory_section_t *)mempool)->data.rev2_crc = crc32_c(0,(unsigned char *)(&(((factory_section_t *)mempool)->data.rev2_reserved0)),
+                ((factory_section_t *)mempool)->data.rev2_data_len);
+    }
+
+#ifdef RAM_NV_RECORD
+
+    /*
+     * RAM NV mode:
+     * update factory section RAM shadow directly.
+     */
+    memcpy(factory_section_p,mempool,FACTORY_SECTOR_SIZE);
+
+#else
+
+    {
+        uint32_t lock;
+        enum NORFLASH_API_RET_T ret;
+        lock = int_lock_global();
+
+        /*
+         * Erase factory sector.
+         */
+        ret = norflash_api_erase(NORFLASH_API_MODULE_ID_FACTORY,(uint32_t)(__factory_start) & 0x00FFFFFF,FACTORY_SECTOR_SIZE,false);
+        ASSERT(ret == NORFLASH_API_OK,"%s: erase failed! ret=%d",__func__,ret);
+
+        /*
+         * Write updated factory sector.
+         */
+        ret = norflash_api_write(
+            NORFLASH_API_MODULE_ID_FACTORY,
+            (uint32_t)(__factory_start) & 0x00FFFFFF,
+            (uint8_t *)mempool,
+            FACTORY_SECTOR_SIZE,
+            false);
+
+        ASSERT(ret == NORFLASH_API_OK,"%s: write failed! ret=%d",__func__,ret);
+
+        /*
+         * IMPORTANT:
+         *
+         * Keep factory_section_p synchronized with the data
+         * just written to Flash.
+         *
+         * Without this copy, the next factory_section_set_xxx()
+         * may copy stale factory data and overwrite the previous
+         * modification.
+         */
+        memcpy(factory_section_p,mempool,FACTORY_SECTOR_SIZE);
+        int_unlock_global(lock);
+    }
+
+#endif
+
+    return 0;
 }
 
 

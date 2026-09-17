@@ -1,6 +1,6 @@
 CHIP        ?= best1306p
 
-DEBUG       ?= 0
+DEBUG       ?= 1
 
 FPGA        ?= 0
 
@@ -485,5 +485,12 @@ endef
 #
 #$(warning SOFTWARE_VERSION_INFO=$(SOFTWARE_VERSION_INFO))
 #$(warning BESUI_VER_STR=$(BESUI_VER_STR))
+
+export USER_SPEECH_DUMP_EN ?= 0
+
+ifeq ($(USER_SPEECH_DUMP_EN),1)
+KBUILD_CPPFLAGS += -DUSER_SPEECH_DUMP_EN
+endif
+
 
 
