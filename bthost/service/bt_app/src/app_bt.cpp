@@ -5391,20 +5391,41 @@ static void app_bt_start_reconnect_next_device(void)
     app_bt_start_poweron_reconnect();
 }
 
-void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote, bool is_for_source_device)
+void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote,bool is_for_source_device)
 {
     struct BT_DEVICE_RECONNECT_T *reconnect = NULL;
-    reconnect = app_bt_append_to_reconnect_list(bt_profile_reconnect_reconnecting, remote, is_for_source_device);
-    if (!reconnect)
+
+    /*
+     * During manual pairing, do not reconnect a mobile
+     * after link-loss/disconnection.
+     *
+     * BT source device behavior is left untouched.
+     */
+    if (ntt_manual_pairing_mode && !is_for_source_device)
     {
-        DEBUG_INFO(1,"%s cannot add device", __func__);
+        DEBUG_INFO(0,"[NTT_PAIR] BLOCK linkloss mobile reconnect");
         return;
     }
 
-    DEBUG_INFO(8,"%s %02x:%02x:%02x:%02x:%02x:%02x wait %dms", __func__,
-          remote->address[5], remote->address[4], remote->address[3],
-          remote->address[2], remote->address[1], remote->address[0],
-          APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS);
+    reconnect = app_bt_append_to_reconnect_list(bt_profile_reconnect_reconnecting,remote,is_for_source_device);
+
+    if (!reconnect)
+    {
+        DEBUG_INFO(1,"%s cannot add device",__func__);
+        return;
+    }
+
+    DEBUG_INFO(
+        8,
+        "%s %02x:%02x:%02x:%02x:%02x:%02x wait %dms",
+        __func__,
+        remote->address[5],
+        remote->address[4],
+        remote->address[3],
+        remote->address[2],
+        remote->address[1],
+        remote->address[0],
+        APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS);
 
     if (!is_for_source_device)
     {
@@ -5417,12 +5438,17 @@ void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote, bool is_for_source_dev
 #endif
     }
 
-    osTimerStart(reconnect->acl_reconnect_timer, APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS);
+    osTimerStart(reconnect->acl_reconnect_timer,APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS);
 }
 
 void app_bt_start_connfail_reconnect(bt_bdaddr_t *remote, uint8_t errcode, bool is_for_source_device)
 {
     struct BT_DEVICE_RECONNECT_T *reconnect = NULL;
+    if (ntt_manual_pairing_mode && !is_for_source_device)
+    {
+        DEBUG_INFO(0,"[NTT_PAIR] BLOCK connfail mobile reconnect");
+        return;
+    }
     reconnect = app_bt_find_reconnect_device(remote);
     if (!reconnect)
     {
@@ -5549,6 +5575,78 @@ bool app_bt_is_in_reconnecting(void)
     return false;
 }
 
+void ntt_bt_reconnect_context_reset(void);
+
+void ntt_bt_cancel_all_mobile_reconnect(void)
+{
+    uint8_t i;
+    DEBUG_INFO(1,"[NTT_PAIR] cancel mobile reconnect begin pend=%d",btif_me_get_pendCons());
+
+#ifdef BT_SOURCE
+    const uint8_t max_nodes = BT_DEVICE_NUM + BT_SOURCE_DEVICE_NUM;
+#else
+    const uint8_t max_nodes = BT_DEVICE_NUM;
+#endif
+
+    for (i = 0; i < max_nodes; i++)
+    {
+        struct BT_DEVICE_RECONNECT_T *reconnect = &app_bt_manager.reconnect_node[i];
+
+        if (!reconnect->inuse)
+        {
+            continue;
+        }
+
+#ifdef BT_SOURCE
+        if (reconnect->for_source_device)
+        {
+            continue;
+        }
+#endif
+
+        DEBUG_INFO(4,"[NTT_PAIR] cancel node[%d] inuse=%d mode=%d cnt=%d",
+            i,
+            reconnect->inuse,
+            reconnect->reconnect_mode,
+            reconnect->acl_reconnect_cnt);
+
+        if (reconnect->acl_reconnect_timer)
+        {
+            osTimerStop(reconnect->acl_reconnect_timer);
+        }
+
+        if (btif_me_get_pendCons() > 0)
+        {
+            DEBUG_INFO(6,"[NTT_PAIR] HCI cancel %02x:%02x:%02x:%02x:%02x:%02x",
+                reconnect->rmt_addr.address[5],
+                reconnect->rmt_addr.address[4],
+                reconnect->rmt_addr.address[3],
+                reconnect->rmt_addr.address[2],
+                reconnect->rmt_addr.address[1],
+                reconnect->rmt_addr.address[0]);
+
+            bes_bt_me_cancel_create_connection(&reconnect->rmt_addr);
+        }
+    }
+
+    for (i = 0; i < BT_DEVICE_NUM; i++)
+    {
+        struct BT_DEVICE_T *curr_device = app_bt_get_device(i);
+        struct app_bt_profile_manager *profile_mgr = &curr_device->profile_mgr;
+
+        if (profile_mgr->reconnect_timer)
+        {
+            osTimerStop(profile_mgr->reconnect_timer);
+        }
+
+        profile_mgr->connect_timer_cb = NULL;
+        DEBUG_INFO(3,"[NTT_PAIR] profile[%d] mode=%d connected=%d",i,profile_mgr->reconnect_mode,profile_mgr->profile_connected);
+    }
+
+    ntt_bt_reconnect_context_reset();
+    DEBUG_INFO(1,"[NTT_PAIR] cancel mobile reconnect done pend=%d",btif_me_get_pendCons());
+}
+
 void ntt_bt_reconnect_context_reset(void)
 {
     uint8_t i = 0;
@@ -5619,6 +5717,17 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     btdevice_profile *btdevice_plf_p;
     int find_invalid_record_cnt;
     bool reconnect_added = false;
+
+    /*
+     * Manual pairing:
+     * Earbuds must NOT initiate connection to previously
+     * paired mobiles. Only accept incoming Host connection.
+     */
+    if (ntt_manual_pairing_mode)
+    {
+        DEBUG_INFO(0,"[NTT_PAIR] BLOCK opening reconnect: manual pairing");
+        return;
+    }
 
     /*
      * GFPS callback 可能在初始化後覆蓋全域 Classic SSP callback。

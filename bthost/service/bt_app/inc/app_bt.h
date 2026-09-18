@@ -555,7 +555,7 @@ uint8_t get_enable_pair_status(void);
 void enable_pair_status(uint8_t status);
 uint8_t get_er_discover_connectable_status(void);
 void set_er_discover_connectable_status(uint8_t status);
-
+void ntt_bt_cancel_all_mobile_reconnect(void);
 
 #ifdef NV_RECORD_DEV_NAME
 uint8_t *app_get_current_remote_device_name(void);

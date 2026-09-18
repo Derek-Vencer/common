@@ -98,6 +98,7 @@ extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
 extern "C" void ntt_case_state_sync_local_update(bool in_case);
 static bool aiWang_disconnect_second_phone_for_pairing(void);
+
 extern bool ntt_charging_pwron_pending_shutdown;
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
@@ -1795,7 +1796,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1912,29 +1913,41 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         if (operateLeftOrRight == isRightEarbuds)
         {
-            bool tws_connected =
-                bts_tws_if_is_tws_link_connected();
-
-            uint8_t ui_role =
-                app_ibrt_if_get_ui_role();
-
-            DBGPRINT(
-                "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",
-                isRightEarbuds,
-                tws_connected,
-                ui_role,
-                app_ui_in_pairing_mode());
+            bool tws_connected = bts_tws_if_is_tws_link_connected();
+            uint8_t ui_role = app_ibrt_if_get_ui_role();
+            DBGPRINT( "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",isRightEarbuds,tws_connected,ui_role,app_ui_in_pairing_mode());
 
             /*
-            * If two mobile phones are connected, keep device 0
-            * and disconnect device 1 before entering pairing mode.
+            * IMPORTANT:
+            *
+            * Set manual-pairing gate BEFORE doing anything
+            * that can cause a mobile ACL disconnect/reconnect.
+            */
+            ntt_first_no_mobile_pair_mode = false;
+            ntt_manual_pairing_mode = true;
+
+            DBGPRINT("[NTT_PAIR] manual pairing gate ON");
+
+            /*
+            * Stop all outgoing mobile reconnect activity:
+            *
+            * 1. Cancel pending Classic Create Connection
+            * 2. Stop ACL reconnect timers
+            * 3. Stop profile reconnect timers
+            * 4. Clear reconnect queues
+            */
+            ntt_bt_cancel_all_mobile_reconnect();
+
+            /*
+            * If two mobile phones are connected,
+            * keep device 0 and disconnect device 1.
+            *
+            * Since manual-pairing gate is already ON,
+            * the disconnection cannot trigger mobile reconnect.
             */
             aiWang_disconnect_second_phone_for_pairing();
 
             enable_pair_status(1);
-
-            ntt_first_no_mobile_pair_mode = false;
-            ntt_manual_pairing_mode = true;
 
             set_pair_status(0);
             set_er_discover_connectable_status(1);
@@ -1942,47 +1955,37 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             app_ibrt_if_init_open_box_state_for_evb();
 
             /*
-            * Enter the official BES UI pairing state.
+            * Enter official BES pairing UI.
             */
             if (tws_connected)
             {
                 if (TWS_UI_MASTER == ui_role)
                 {
                     app_ibrt_if_enter_pairing_after_tws_connected();
-
-                    DBGPRINT(
-                        "[NTT_PAIR] enter after TWS connected");
+                    DBGPRINT("[NTT_PAIR] enter after TWS connected");
                 }
                 else
                 {
-                    DBGPRINT(
-                        "[NTT_PAIR] skip local enter: not UI master");
+                    DBGPRINT("[NTT_PAIR] skip local enter: not UI master");
                 }
             }
             else
             {
-                app_ui_enter_pairing_mode(
-                    IBRT_UI_DISABLE_BT_SCAN_TIMEOUT,
-                    false);
-
-                DBGPRINT(
-                    "[NTT_PAIR] enter local UI pairing");
+                app_ui_enter_pairing_mode(IBRT_UI_DISABLE_BT_SCAN_TIMEOUT,false);
+                DBGPRINT("[NTT_PAIR] enter local UI pairing");
             }
 
             /*
-            * Keep this as a fallback only.
-            * The UI pairing flow should normally update access mode.
+            * Remain discoverable/connectable so that Host can:
+            *
+            * Scan -> Connect -> Pair
+            *
+            * This does NOT initiate an outgoing connection.
             */
-            app_bt_set_access_mode(
-                BTIF_BAM_GENERAL_ACCESSIBLE);
-
+            app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
             app_bt_reset_delay_power_off();
             wired_uart_get_battery_level();
-
-            DBGPRINT(
-                "[NTT_PAIR] enter requested ui_pairing=%d discover=%d",
-                app_ui_in_pairing_mode(),
-                get_er_discover_connectable_status());
+            DBGPRINT("[NTT_PAIR] enter requested ui_pairing=%d discover=%d manual=%d",app_ui_in_pairing_mode(),get_er_discover_connectable_status(),ntt_manual_pairing_mode);
         }
 
         break;

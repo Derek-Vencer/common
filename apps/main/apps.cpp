@@ -2159,9 +2159,7 @@ void app_ibrt_init(void)
          */
         if (has_tws_peer)
         {
-            MAIN_TRACE(1,
-                "[NTT_TWS] valid peer, start TWS reconnect: "
-                "%02X:%02X:%02X:%02X:%02X:%02X",
+            MAIN_TRACE(1,"[NTT_TWS] valid peer, reconnect existing TWS: %02X:%02X:%02X:%02X:%02X:%02X",
                 config.peer_addr.address[0],
                 config.peer_addr.address[1],
                 config.peer_addr.address[2],
@@ -2169,13 +2167,34 @@ void app_ibrt_init(void)
                 config.peer_addr.address[4],
                 config.peer_addr.address[5]);
 
-            app_ibrt_start_power_on_tws_pairing();
+            /*
+            * Existing TWS peer:
+            *
+            * Reconnect using the existing peer record.
+            * Do NOT enter TWS pairing mode here.
+            *
+            * APP_UI_EV_TWS_RECONNECT:
+            *   existing peer reconnect
+            *
+            * app_ibrt_start_power_on_tws_pairing():
+            *   pairing flow -- must not be used for normal boot reconnect.
+            */
+            if (!bts_tws_if_is_tws_link_connected() && !bts_tws_if_is_tws_link_connecting())
+            {
+                MAIN_TRACE(0,"[NTT_TWS] send APP_UI_EV_TWS_RECONNECT");
+
+                app_ibrt_if_event_entry(APP_UI_EV_TWS_RECONNECT);
+            }
+            else
+            {
+                MAIN_TRACE(2,"[NTT_TWS] skip reconnect connected=%d connecting=%d",
+                    bts_tws_if_is_tws_link_connected(),
+                    bts_tws_if_is_tws_link_connecting());
+            }
         }
         else
         {
-            MAIN_TRACE(1,
-                "[NTT_TWS] invalid peer, skip TWS reconnect: "
-                "%02X:%02X:%02X:%02X:%02X:%02X",
+            MAIN_TRACE(1,"[NTT_TWS] invalid peer, skip TWS reconnect: %02X:%02X:%02X:%02X:%02X:%02X",
                 config.peer_addr.address[0],
                 config.peer_addr.address[1],
                 config.peer_addr.address[2],
