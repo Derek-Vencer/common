@@ -1469,30 +1469,50 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
     media_PlayAudio(eq_prompt_map[eq_preset], 0);
 }
 
+
 void handleGetEqIndex(uint8_t *index)
 {
     struct nvrecord_env_t *nvrecord_env;
+
     nv_record_env_get(&nvrecord_env);
-	*index = nvrecord_env->eq_index_data;
+
+    *index = nvrecord_env->eq_index_data;
 }
+
 
 static bool ntt_eq_preset_is_valid(uint8_t preset)
 {
     return (preset < NTT_EQ_PRESET_COUNT);
 }
 
+
+/*
+ * Apply EQ only.
+ *
+ * IMPORTANT:
+ * This function does NOT play EQ prompt.
+ *
+ * APP / BLE / SPP can call this function directly,
+ * so APP EQ operation will remain silent.
+ */
 static void ntt_keymap_apply_eq_preset(uint8_t preset)
 {
     if (!ntt_eq_preset_is_valid(preset))
     {
-        TRACE(0, "[KEYMAP][EQ] invalid preset=%u",(unsigned)preset);
+        TRACE(0, "[KEYMAP][EQ] invalid preset=%u",
+              (unsigned)preset);
         return;
     }
 
-    audio_eq_set_cfg(NULL,audio_eq_cfg_vol_list[preset],AUDIO_EQ_TYPE_HW_DAC_IIR);
+    audio_eq_set_cfg(
+        NULL,
+        audio_eq_cfg_vol_list[preset],
+        AUDIO_EQ_TYPE_HW_DAC_IIR);
 
     ntt_audio_drc_apply_by_eq_index(preset);
+
     handleSetEqIndex(preset);
+
     app_ibrt_customif_cmd_sync_music_eq(preset);
 
 #ifdef AUDIO_DYNAMIC_BOOST
@@ -1503,9 +1523,47 @@ static void ntt_keymap_apply_eq_preset(uint8_t preset)
 #endif
 #endif
 
-    ntt_keymap_play_eq_mode_prompt(preset);
+    /*
+     * Do NOT play prompt here.
+     *
+     * APP / BLE / SPP EQ operations also pass through
+     * this function, therefore prompt playback must
+     * be handled by key event only.
+     */
 
-    TRACE(0, "[KEYMAP][EQ] applied preset=%u",(unsigned)preset);
+    TRACE(0, "[KEYMAP][EQ] applied preset=%u",
+          (unsigned)preset);
+}
+
+
+/*
+ * Key operation only.
+ *
+ * Use this function when EQ preset is changed by
+ * physical earbud key / key mapping.
+ */
+static void ntt_keymap_apply_eq_preset_by_key(uint8_t preset)
+{
+    if (!ntt_eq_preset_is_valid(preset))
+    {
+        TRACE(0, "[KEYMAP][EQ][KEY] invalid preset=%u",
+              (unsigned)preset);
+        return;
+    }
+
+    TRACE(0, "[KEYMAP][EQ][KEY] apply preset=%u",
+          (unsigned)preset);
+
+    /*
+     * Apply EQ setting first.
+     */
+    ntt_keymap_apply_eq_preset(preset);
+
+    /*
+     * Physical key operation only:
+     * play EQ mode prompt.
+     */
+    ntt_keymap_play_eq_mode_prompt(preset);
 }
 
 void handleGetEqPresent(const uint8_t *data, uint16_t len)
@@ -2538,7 +2596,7 @@ static void on_eq_next(void)
     }
 
     ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
-    ntt_keymap_apply_eq_preset((uint8_t)((current_preset + 1) % NTT_EQ_PRESET_COUNT));
+    ntt_keymap_apply_eq_preset_by_key((uint8_t)((current_preset + 1) % NTT_EQ_PRESET_COUNT));
 }
 
 /*
@@ -2596,7 +2654,7 @@ static void on_eq_clear_voice_toggle(void)
               (unsigned)current_preset);
     }
 
-    ntt_keymap_apply_eq_preset(target_preset);
+    ntt_keymap_apply_eq_preset_by_key(target_preset);
 }
 
 void key_function_execute(function_t func)

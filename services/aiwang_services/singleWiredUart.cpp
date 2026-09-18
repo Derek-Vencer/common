@@ -1853,8 +1853,9 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                 }
 
                 /*
-                * Set the runtime BLE local name.
+                * Set the runtime Classic BT and BLE local names.
                 */
+                bt_set_local_name(NTT_DEFAULT_BT_NAME);
                 bt_set_ble_local_name(NTT_DEFAULT_BLE_NAME);
 
                 printf(
