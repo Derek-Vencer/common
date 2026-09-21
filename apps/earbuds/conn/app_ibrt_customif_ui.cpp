@@ -1144,8 +1144,40 @@ void app_ibrt_customif_on_mobile_acl_state_changed(const bt_bdaddr_t *addr, ibrt
         }
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
-            break;
+        {
+            EARBUDS_TRACE(0,"[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED dev=%d",state->device_id);
+
+        #ifdef IBRT
+            if (!app_ibrt_middleware_is_ui_slave() && bts_tws_if_is_tws_link_connected())
+            {
+                bool ibrt_ok = bts_ibrt_if_is_ibrt_link_connected(addr);
+                bool profile_ok = bts_ibrt_if_is_profile_exchanged(addr);
+                EARBUDS_TRACE(3,"[NTT_PHONE_RECOVERY] dev=%d ibrt=%d profile=%d",state->device_id,ibrt_ok,profile_ok);
+
+                /*
+                * Step 1:
+                * Phone ACL/Profile 已連上，
+                * 但此 phone 尚未建立 IBRT/Snoop link。
+                */
+                if (!ibrt_ok)
+                {
+                    bool started = app_bt_ntt_request_ibrt_link(state->device_id);
+                    EARBUDS_TRACE(2,"[NTT_PHONE_RECOVERY] request IBRT dev=%d result=%d",state->device_id,started);
+                }
+                /*
+                * Step 2:
+                * IBRT link 已存在，但 profile/mobile info
+                * 尚未同步到 peer。
+                */
+                else if (!profile_ok)
+                {
+                    bool started = app_bt_ntt_restart_profile_exchange(state->device_id);
+                    EARBUDS_TRACE(2,"[NTT_PHONE_RECOVERY] restart profile exchange dev=%d result=%d",state->device_id,started);
+                }
+            }
+        #endif
+        }
+        break;
         case IBRT_CONN_ACL_AUTH_COMPLETE:
             EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_on_mobile_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
 #ifdef IBRT
