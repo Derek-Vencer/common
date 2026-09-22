@@ -207,7 +207,7 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
 
 //reconnect = (INTERVAL+PAGETO)*CNT = (3000ms+5000ms)*15 = 120s
-#define APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS (5000)
+#define APP_BT_PROFILE_RECONNECT_RETRY_INTERVAL_MS (3000)
 #define APP_BT_PROFILE_OPENNING_RECONNECT_RETRY_LIMIT_CNT   (3)//2
 #define APP_BT_PROFILE_RECONNECT_RETRY_LIMIT_CNT (15)
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
@@ -5613,6 +5613,22 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
 
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
+
+    /*
+     * Mobile opening reconnect must only be driven
+     * by the current UI Master.
+     *
+     * Slave must never independently reconnect a phone,
+     * otherwise multipoint links can be split between
+     * the two earbuds.
+     */
+    if (ui_role == TWS_UI_SLAVE)
+    {
+        DEBUG_INFO(1,"[NTT_RECONNECT] BLOCK opening reconnect on UI SLAVE role=%d",ui_role);
+        return;
+    }
+
     int ret;
     btif_device_record_t record1;
     btif_device_record_t record2;
@@ -5760,35 +5776,67 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #else
         if (btif_me_get_pendCons() == 0)
         {
-            if (ret >= 1 && !ntt_bt_addr_is_invalid(&record1.bdAddr))
+            if (ret >= 1 &&
+                !ntt_bt_addr_is_invalid(&record1.bdAddr))
             {
-                DEBUG_INFO(0, "[NTT_RECONNECT] append phone1");
+                bool record1_connected =
+                    bts_bt_if_is_dev_link_connected(
+                        &record1.bdAddr);
 
-                app_bt_append_to_reconnect_list(
-                    bt_profile_reconnect_openreconnecting,
-                    &record1.bdAddr,
-                    false);
+                if (!record1_connected)
+                {
+                    DEBUG_INFO(
+                        0,
+                        "[NTT_RECONNECT] append phone1");
 
-                reconnect_added = true;
+                    app_bt_append_to_reconnect_list(
+                        bt_profile_reconnect_openreconnecting,
+                        &record1.bdAddr,
+                        false);
+
+                    reconnect_added = true;
+                }
+                else
+                {
+                    DEBUG_INFO(
+                        0,
+                        "[NTT_RECONNECT] phone1 already connected, skip");
+                }
             }
 
             if (ret >= 2 &&
                 BT_DEVICE_NUM > 1 &&
                 !ntt_bt_addr_is_invalid(&record2.bdAddr))
             {
-                DEBUG_INFO(0, "[NTT_RECONNECT] append phone2");
+                bool record2_connected =
+                    bts_bt_if_is_dev_link_connected(
+                        &record2.bdAddr);
 
-                app_bt_append_to_reconnect_list(
-                    bt_profile_reconnect_openreconnecting,
-                    &record2.bdAddr,
-                    false);
+                if (!record2_connected)
+                {
+                    DEBUG_INFO(
+                        0,
+                        "[NTT_RECONNECT] append phone2");
 
-                reconnect_added = true;
+                    app_bt_append_to_reconnect_list(
+                        bt_profile_reconnect_openreconnecting,
+                        &record2.bdAddr,
+                        false);
+
+                    reconnect_added = true;
+                }
+                else
+                {
+                    DEBUG_INFO(
+                        0,
+                        "[NTT_RECONNECT] phone2 already connected, skip");
+                }
             }
         }
         else
         {
-            DEBUG_INFO(0,
+            DEBUG_INFO(
+                0,
                 "[NTT_RECONNECT] pending connection exists, skip reconnect");
         }
 

@@ -101,6 +101,9 @@ static bool aiWang_disconnect_second_phone_for_pairing(void);
 extern bool ntt_charging_pwron_pending_shutdown;
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
+#define NTT_BOX_TWS_RECONNECT_INTERVAL_MS    3000
+static uint32_t ntt_last_box_tws_reconnect_tick = 0;
+
 static uint32_t ntt_last_box_battery_case_tick = 0;
 
 #define NTT_DEFAULT_BT_NAME     "nwm CLIPS"
@@ -1795,7 +1798,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1991,77 +1994,91 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     {
         uint32_t now = hal_sys_timer_get();
 
-        //DBGPRINT(
-        //    "[BOX_BAT][RX][%s] len=%u target=0x%02X",
-        //    isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
-        //    uart_dat_len,
-        //    uart_cmd_dat[3]);
-
-        //DUMP8("[BOX_BAT][RX_RAW] ",
-        //    uart_cmd_dat,
-        //    uart_dat_len);
-
         if (ntt_last_box_battery_case_tick != 0)
         {
-            uint32_t diff_ms =
-                TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
+            uint32_t diff_ms = TICKS_TO_MS(now - ntt_last_box_battery_case_tick);
 
             if (diff_ms < NTT_BOX_BATTERY_CASE_INTERVAL_MS)
             {
-                DBGPRINT(
-                    "[BOX_BAT][SKIP][%s] interval=%u ms",
-                    isRightEarbuds == RIGHT_BUDS ?
-                        "RIGHT" : "LEFT",
-                    diff_ms);
+                DBGPRINT("[BOX_BAT][SKIP][%s] interval=%u ms",isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",diff_ms);
             }
         }
 
         ntt_case_state_sync_local_update(true);
-
         ntt_last_box_battery_case_tick = now;
+        DBGPRINT("[BOX_BAT][PROCESS][%s] crc=0x%04X",isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",crc_dat);
+        wired_uart_get_box_battery(&uart_cmd_dat[4],6);
 
-        DBGPRINT(
-            "[BOX_BAT][PROCESS][%s] crc=0x%04X",
-            isRightEarbuds == RIGHT_BUDS ?
-                "RIGHT" : "LEFT",
-            crc_dat);
-
-        wired_uart_get_box_battery(&uart_cmd_dat[4], 6);
-
-        DBGPRINT(
-            "[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",
-            isRightEarbuds == RIGHT_BUDS ?
-                "RIGHT" : "LEFT",
+        DBGPRINT("[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
             boxChargerStatus.boxChargerBattery,
             boxChargerStatus.leftEarBudsBattery,
             boxChargerStatus.rightEarBudsBattery);
 
+        /*
+        * RIGHT ear controls TWS reconnect while in case.
+        *
+        * Do not trigger TWS pairing for every BOX battery packet.
+        * Retry at most once every 3 seconds.
+        */
         if (isRightEarbuds == RIGHT_BUDS)
         {
-            DBGPRINT(
-                "[NTT_TWS] connected=%d",
-                bts_tws_if_is_tws_link_connected());
-
-            if (!bts_tws_if_is_tws_link_connected())
+            bool tws_connected = bts_tws_if_is_tws_link_connected();
+            bool tws_connecting = bts_tws_if_is_tws_link_connecting();
+            bool mobile_connected = app_bt_ibrt_has_mobile_link_connected();
+            DBGPRINT("[NTT_TWS][BOX] connected=%d connecting=%d mobile=%d",tws_connected,tws_connecting,mobile_connected);
+            if (tws_connected)
             {
-                DBGPRINT(
-                    "[NTT_TWS] not connected, start TWS pairing");
-
-                app_ibrt_start_power_on_tws_pairing();
+                /*
+                * TWS already connected.
+                * Clear retry timing so a future disconnect
+                * can start a fresh 3-second retry cycle.
+                */
+                ntt_last_box_tws_reconnect_tick = 0;
+                DBGPRINT("[NTT_TWS][BOX] RIGHT TWS connected, resend case state");
+                ntt_case_state_sync_resend();
             }
             else
             {
-                DBGPRINT(
-                    "[NTT_TWS] RIGHT received box battery, resend case state");
+                uint32_t tws_retry_diff_ms = (ntt_last_box_tws_reconnect_tick == 0) ?
+                        NTT_BOX_TWS_RECONNECT_INTERVAL_MS :
+                        TICKS_TO_MS(now - ntt_last_box_tws_reconnect_tick);
 
-                ntt_case_state_sync_resend();
+                DBGPRINT("[NTT_TWS][BOX] disconnected retry_diff=%u ms",tws_retry_diff_ms);
+
+                /*
+                * Important:
+                *
+                * 1. Do not re-enter pairing while a TWS
+                *    connection is already in progress.
+                *
+                * 2. Do not enter TWS pairing while a phone
+                *    connection exists, otherwise TWS_PAIRING
+                *    may interfere with the mobile connection.
+                *
+                * 3. Retry at most once every 3 seconds.
+                */
+                if (!tws_connecting && !mobile_connected && (tws_retry_diff_ms >= NTT_BOX_TWS_RECONNECT_INTERVAL_MS))
+                {
+                    ntt_last_box_tws_reconnect_tick = now;
+                    DBGPRINT("[NTT_TWS][BOX] TWS disconnected -> start power-on TWS pairing");
+                    app_ibrt_start_power_on_tws_pairing();
+                }
+                else
+                {
+                    DBGPRINT("[NTT_TWS][BOX] skip retry connecting=%d mobile=%d diff=%u",tws_connecting,mobile_connected,tws_retry_diff_ms);
+                }
             }
         }
         else
         {
+            /*
+            * LEFT does not initiate TWS pairing.
+            * It only resends its case state after TWS
+            * has been established.
+            */
             if (bts_tws_if_is_tws_link_connected())
             {
-                DBGPRINT("[NTT_TWS] LEFT received box battery, resend case state");
+                DBGPRINT("[NTT_TWS][BOX] LEFT TWS connected, resend case state");
                 ntt_case_state_sync_resend();
             }
         }

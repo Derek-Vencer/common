@@ -905,43 +905,55 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
         case IBRT_CONN_ACL_CONNECTED:
             break;
         case IBRT_CONN_ACL_PROFILES_CONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_PROFILES_CONNECTED ");
-        /*
-        * 此事件代表 TWS profiles 與 custom command channel 已建立。
-        *
-        * 若耳機離盒時 TWS 尚未連上，OUT_CASE 當時無法送出；
-        * 現在補送本機目前的真實狀態，覆蓋 Peer 保存的舊狀態。
-        *
-        * 兩耳都執行是必要的：各自同步自己的 local case state。
-        */
-        EARBUDS_TRACE(
-            0,
-            "[NTT_CASE_SYNC] TWS profiles ready -> resend local case state");
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_USER_SYNC] "
+                "app_ibrt_customif_tws_on_acl_state_changed "
+                "IBRT_CONN_ACL_PROFILES_CONNECTED");
 
-        ntt_case_state_sync_resend();
-            /*
-             * Peer reconnect is complete only after TWS profiles are ready.
-             * Send from the ear that still owns the phone/BLE connection.
-             */
+            ntt_case_state_sync_resend();
+
             if (app_bt_ibrt_has_mobile_link_connected())
             {
-                EARBUDS_TRACE(0,
-                              "[BAT31] TWS peer reconnected -> push peer battery");
                 sparrow_push_battery_level_notify(false);
             }
-            else
+
+        #ifdef IBRT
             {
-                EARBUDS_TRACE(1,
-                              "[BAT31] TWS peer reconnected, no local mobile link");
+                uint8_t ui_role =
+                    app_ibrt_if_get_ui_role();
+
+                EARBUDS_TRACE(
+                    1,
+                    "[NTT_RECONNECT] "
+                    "TWS profiles connected role=%d",
+                    ui_role);
+
+                if (ui_role == TWS_UI_MASTER)
+                {
+                    ntt_user_setting_sync_delay_start();
+
+                    EARBUDS_TRACE(
+                        0,
+                        "[NTT_RECONNECT] "
+                        "TWS profiles ready -> "
+                        "MASTER start opening reconnect");
+
+                    app_bt_profile_connect_manager_opening_reconnect();
+                }
+                else
+                {
+                    EARBUDS_TRACE(
+                        1,
+                        "[NTT_RECONNECT] "
+                        "TWS profiles ready -> "
+                        "SLAVE skip opening reconnect role=%d",
+                        ui_role);
+                }
             }
-#ifdef IBRT
-        if (!app_ibrt_middleware_is_ui_slave())
-        {
-            EARBUDS_TRACE(0,
-                "[NTT_PROFILE_SYNC] TWS profiles connected, skip early profile sync test");
-            ntt_user_setting_sync_delay_start();
+        #endif
         }
-#endif
         break;
         case IBRT_CONN_ACL_AUTH_COMPLETE:
                 EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
@@ -2018,7 +2030,7 @@ int app_ibrt_customif_ui_start(void)
     config.exit_pairing_on_streaming                = true;
 
     //disconnect remote devices when entering pairing mode actively
-    config.paring_with_disc_mob_num                 = IBRT_PAIRING_DISC_ONE_MOB;
+    config.paring_with_disc_mob_num                 = IBRT_PAIRING_DISC_NONE;
 
     //disconnect remote le devices when entering pairing mode actively
     config.paring_with_disc_le_mob_num              = IBRT_PAIRING_DISC_NONE;

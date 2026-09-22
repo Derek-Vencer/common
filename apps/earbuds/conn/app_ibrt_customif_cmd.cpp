@@ -1012,23 +1012,26 @@ static void app_ibrt_customif_sync_set_reconnect_status_send_handler(uint16_t rs
 #endif
 
 #ifdef IBRT
-    if (recon_status == 1)
-    {
-        if (app_ibrt_middleware_is_ui_slave())
-        {
-            EARBUDS_TRACE(2,
-                "[NTT_RECONNECT_SYNC] slave start opening reconnect dev=%d status=%d",
-                device_id,
-                recon_status);
+if (recon_status == 1)
+{
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
 
-            app_bt_profile_connect_manager_opening_reconnect();
-        }
-        else
-        {
-            EARBUDS_TRACE(0,
-                "[NTT_RECONNECT_SYNC] master recv sync, skip");
-        }
+    /*
+     * Sync reconnect status only.
+     *
+     * Slave must NOT independently start mobile reconnect.
+     * Mobile links are owned by the current Master and
+     * propagated to Slave through IBRT/snoop.
+     */
+    if (ui_role == TWS_UI_SLAVE)
+    {
+        EARBUDS_TRACE(2,"[NTT_RECONNECT_SYNC] slave recv reconnect status dev=%d status=%d, do not reconnect",device_id,recon_status);
     }
+    else
+    {
+        EARBUDS_TRACE(2,"[NTT_RECONNECT_SYNC] master recv reconnect status dev=%d status=%d",device_id,recon_status);
+    }
+}
 #endif
 }
 

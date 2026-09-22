@@ -226,6 +226,23 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         return;
     }
 
+#ifdef IBRT
+    /*
+     * Profile recovery can only be driven by UI Master.
+     *
+     * If role switch happened while recovery timer was running,
+     * stop immediately on Slave.
+     */
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
+
+    if (ui_role == TWS_UI_SLAVE)
+    {
+        AUDIOPLAYERS_TRACE(1,"[NTT_PROFILE_RECOVERY] stop on UI slave role=%d",ui_role);
+        ntt_profile_recovery_stop();
+        return;
+    }
+#endif
+
     device_id = ntt_profile_recovery_device_id;
 
     if (device_id >= BT_DEVICE_NUM)
@@ -277,9 +294,6 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         profile_exchanged,
         a2dp_profile_exchanged);
 
-    /*
-     * 手機 ACL 已斷線，停止 recovery。
-     */
     if (!mobile_connected)
     {
         AUDIOPLAYERS_TRACE(
@@ -292,10 +306,6 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         return;
     }
 
-    /*
-     * Profile Exchange 已完成。
-     * 停止 recovery，重新建立 Master/Slave audio sync。
-     */
     if (profile_exchanged &&
         a2dp_profile_exchanged)
     {
@@ -313,28 +323,22 @@ static void ntt_profile_recovery_timer_handler(void const *param)
         return;
     }
 
-    /*
-     * Profile 尚未完成，累計檢查次數。
-     */
     if (ntt_profile_recovery_count < 0xFF)
     {
         ntt_profile_recovery_count++;
     }
 
-    /*
-     * Recovery timeout。
-     */
     if (ntt_profile_recovery_count >=
         NTT_PROFILE_RECOVERY_MAX_COUNT)
     {
-        uint8_t fallback_device_id = ntt_profile_recovery_device_id;
+        uint8_t fallback_device_id =
+            ntt_profile_recovery_device_id;
 
         AUDIOPLAYERS_TRACE(
             0,
             "[NTT_PROFILE_RECOVERY][TIMEOUT] "
             "dev=%d count=%d "
-            "profile=%d a2dp=%d, "
-            "fallback local trigger",
+            "profile=%d a2dp=%d",
             fallback_device_id,
             ntt_profile_recovery_count,
             profile_exchanged,
@@ -342,48 +346,78 @@ static void ntt_profile_recovery_timer_handler(void const *param)
 
         ntt_profile_recovery_stop();
 
-        ntt_profile_recovery_local_fallback(fallback_device_id);
+#ifdef IBRT
+        /*
+         * Never force local trigger on Slave.
+         * Slave audio must follow IBRT sync from Master.
+         */
+        if (app_ibrt_middleware_is_ui_slave())
+        {
+            AUDIOPLAYERS_TRACE(
+                0,
+                "[NTT_PROFILE_RECOVERY] "
+                "skip fallback on UI slave dev=%d",
+                fallback_device_id);
+
+            return;
+        }
+#endif
+
+        AUDIOPLAYERS_TRACE(
+            0,
+            "[NTT_PROFILE_RECOVERY] "
+            "fallback local trigger on master dev=%d",
+            fallback_device_id);
+
+        ntt_profile_recovery_local_fallback(
+            fallback_device_id);
 
         return;
     }
 
     /*
-     * 第一次以及每 4 次檢查，重新要求 SDK
-     * 對指定手機執行 Profile Exchange。
+     * Retry on count 1, 4, 8...
      *
-     * 500 ms 一次檢查時，相當於：
-     * count 1  -> 約 0.5 秒
-     * count 4  -> 約 2 秒
-     * count 8  -> 約 4 秒
-     * count 12 -> 約 6 秒
+     * NTT_PROFILE_RECOVERY_CHECK_MS = 100 ms
+     *
+     * count 1 -> ~100 ms
+     * count 4 -> ~400 ms
+     * count 8 -> ~800 ms
      */
     if ((ntt_profile_recovery_count == 1) ||
         ((ntt_profile_recovery_count % 4) == 0))
     {
-        bool ibrt_connected =bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote);
+        bool ibrt_connected =
+            bts_ibrt_if_is_ibrt_link_connected(
+                &curr_device->remote);
 
-    if (!ibrt_connected)
-    {
-        bool request_result =
-            app_bt_ntt_request_ibrt_link(
-                device_id);
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "IBRT not ready dev=%d request=%d",
-            device_id,
-            request_result);
-
-        if (ntt_profile_recovery_running &&
-            ntt_profile_recovery_timer != NULL)
+        if (!ibrt_connected)
         {
-            osTimerStart(ntt_profile_recovery_timer,NTT_PROFILE_RECOVERY_CHECK_MS);
+            bool request_result =
+                app_bt_ntt_request_ibrt_link(
+                    device_id);
+
+            AUDIOPLAYERS_TRACE(
+                0,
+                "[NTT_PROFILE_RECOVERY] "
+                "IBRT not ready dev=%d request=%d",
+                device_id,
+                request_result);
+
+            if (ntt_profile_recovery_running &&
+                ntt_profile_recovery_timer != NULL)
+            {
+                osTimerStart(
+                    ntt_profile_recovery_timer,
+                    NTT_PROFILE_RECOVERY_CHECK_MS);
+            }
+
+            return;
         }
 
-        return;
-    }
-        bool recovery_started = app_bt_ntt_restart_profile_exchange(device_id);
+        bool recovery_started =
+            app_bt_ntt_restart_profile_exchange(
+                device_id);
 
         AUDIOPLAYERS_TRACE(
             0,
@@ -393,18 +427,8 @@ static void ntt_profile_recovery_timer_handler(void const *param)
             device_id,
             ntt_profile_recovery_count,
             recovery_started);
-
-        /*
-         * Wrapper 無法取得 mobile context 時，
-         * 不必立即停止；下一次 timer 可以再次檢查，
-         * 因為 mobile_info 可能稍後才建立完成。
-         */
     }
 
-    /*
-     * 使用 one-shot timer，因此每次 handler 結束前
-     * 重新啟動下一次檢查。
-     */
     if (ntt_profile_recovery_running &&
         ntt_profile_recovery_timer != NULL)
     {
@@ -414,93 +438,81 @@ static void ntt_profile_recovery_timer_handler(void const *param)
     }
 }
 
-    static void ntt_profile_recovery_start(
-        uint8_t device_id)
+static void ntt_profile_recovery_start(uint8_t device_id)
+{
+    if (device_id >= BT_DEVICE_NUM)
     {
-        if (device_id >= BT_DEVICE_NUM)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_PROFILE_RECOVERY][ERROR] "
-                "start invalid dev=%d",
-                device_id);
+        AUDIOPLAYERS_TRACE(0,"[NTT_PROFILE_RECOVERY][ERROR] start invalid dev=%d",device_id);
+        return;
+    }
 
-            return;
-        }
+#ifdef IBRT
+    /*
+     * Only UI Master is allowed to drive IBRT/profile recovery.
+     *
+     * Slave must wait for Master profile/audio synchronization.
+     */
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
+
+    if (ui_role == TWS_UI_SLAVE)
+    {
+        AUDIOPLAYERS_TRACE(0,"[NTT_PROFILE_RECOVERY] skip start on UI slave dev=%d",device_id);
+        return;
+    }
+#endif
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        AUDIOPLAYERS_TRACE(0,"[NTT_PROFILE_RECOVERY] skip start: TWS disconnected dev=%d",device_id);
+        return;
+    }
+
+    if (ntt_profile_recovery_timer == NULL)
+    {
+        ntt_profile_recovery_timer = osTimerCreate(osTimer(NTT_PROFILE_RECOVERY_TIMER),osTimerOnce,NULL);
 
         if (ntt_profile_recovery_timer == NULL)
         {
-            ntt_profile_recovery_timer =
-                osTimerCreate(
-                    osTimer(
-                        NTT_PROFILE_RECOVERY_TIMER),
-                    osTimerOnce,
-                    NULL);
-
-            if (ntt_profile_recovery_timer == NULL)
-            {
-                AUDIOPLAYERS_TRACE(
-                    0,
-                    "[NTT_PROFILE_RECOVERY][ERROR] "
-                    "create timer failed");
-
-                return;
-            }
-        }
-
-        /*
-        * 同一支手機已在 recovery，不重複啟動。
-        */
-        if (ntt_profile_recovery_running &&
-            ntt_profile_recovery_device_id ==
-                device_id)
-        {
-            AUDIOPLAYERS_TRACE(
-                0,
-                "[NTT_PROFILE_RECOVERY] "
-                "already running dev=%d count=%d",
-                device_id,
-                ntt_profile_recovery_count);
-
+            AUDIOPLAYERS_TRACE(0,"[NTT_PROFILE_RECOVERY][ERROR] create timer failed");
             return;
         }
-
-        if (ntt_profile_recovery_timer != NULL)
-        {
-            osTimerStop(ntt_profile_recovery_timer);
-        }
-
-        ntt_profile_recovery_device_id = device_id;
-        ntt_profile_recovery_count = 0;
-        ntt_profile_recovery_running = true;
-
-        AUDIOPLAYERS_TRACE(
-            0,
-            "[NTT_PROFILE_RECOVERY] "
-            "start dev=%d",
-            device_id);
-
-        osTimerStart(
-            ntt_profile_recovery_timer,
-            10);
     }
 
-
     /*
-    * 等待第二支手機 Profile Exchange 完成的 packet 次數。
-    *
-    * 目的：
-    * Profile 尚未交換完成時，不要立即啟動 Master local trigger，
-    * 避免 Slave 收不到 APP_TWS_CMD_SET_TRIGGER_TIME 而無聲。
-    *
-    * 若等待超時，仍保留原本 local trigger fallback，
-    * 避免 Master 也永久無聲。
-    */
-    #define NTT_PROFILE_EXCHANGE_WAIT_MAX_PACKETS    400
+     * Same mobile is already under recovery.
+     */
+    if (ntt_profile_recovery_running && ntt_profile_recovery_device_id == device_id)
+    {
+        AUDIOPLAYERS_TRACE(0,"[NTT_PROFILE_RECOVERY] already running dev=%d count=%d",device_id,ntt_profile_recovery_count);
+        return;
+    }
 
-    static uint16_t
-        ntt_profile_exchange_wait_count[BT_DEVICE_NUM] = {0};
+    if (ntt_profile_recovery_timer != NULL)
+    {
+        osTimerStop(ntt_profile_recovery_timer);
+    }
 
+    ntt_profile_recovery_device_id = device_id;
+    ntt_profile_recovery_count = 0;
+    ntt_profile_recovery_running = true;
+
+    AUDIOPLAYERS_TRACE(0,"[NTT_PROFILE_RECOVERY] start master dev=%d",device_id);
+    osTimerStart(ntt_profile_recovery_timer,10);
+}
+
+
+/*
+* 等待第二支手機 Profile Exchange 完成的 packet 次數。
+*
+* 目的：
+* Profile 尚未交換完成時，不要立即啟動 Master local trigger，
+* 避免 Slave 收不到 APP_TWS_CMD_SET_TRIGGER_TIME 而無聲。
+*
+* 若等待超時，仍保留原本 local trigger fallback，
+* 避免 Master 也永久無聲。
+*/
+#define NTT_PROFILE_EXCHANGE_WAIT_MAX_PACKETS    400
+static uint16_t ntt_profile_exchange_wait_count[BT_DEVICE_NUM] = {0};
 
 int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
     uint8_t device_id,
