@@ -1675,23 +1675,66 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                     earBudsCloseOff_PogonIn_StartTimer();
                 }
             }
-            else if ((prams.charger == 0) && !g_battery_full_charged)
+            else if ((prams.charger == APP_BATTERY_CHARGER_PLUGOUT) &&
+                    !g_battery_full_charged)
             {
-                BATTERY_TRACE(0,
-                            "[POWER_OFF] charger=0 and not full -> cancel shutdown timer");
+                uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
+
+                bool no_charge_case_closed =
+                    ((chrg_sts2 == 0x00) ||
+                    (chrg_sts2 == 0x80));
+
+                BATTERY_TRACE(
+                    4,
+                    "[POWER_OFF] charger PLUGOUT pending=%d "
+                    "STS2=0x%02X no_charge_case=%d case=%d",
+                    ntt_charging_pwron_pending_shutdown,
+                    chrg_sts2,
+                    no_charge_case_closed,
+                    ntt_case_state_get_local());
 
                 /*
-                * Clear pending first so a callback already queued by the
-                * timer cannot continue the old shutdown request.
+                * Case-Close + charging box has no power:
+                *
+                * Do NOT cancel the shutdown transaction.
+                *
+                * Typical condition:
+                *   pending = 1
+                *   charger = 0
+                *   STS2 = 0x00 / 0x80
+                *
+                * Let PogonIn handler perform final validation.
                 */
-                ntt_charging_pwron_pending_shutdown = false;
-                earBudsCloseOff_PogonIn_StopTimer();
+                if (ntt_charging_pwron_pending_shutdown &&
+                    no_charge_case_closed)
+                {
+                    BATTERY_TRACE(
+                        1,
+                        "[NTT_POWER] charger removed but Case-Close pending, "
+                        "keep shutdown timer");
+
+                    /*
+                    * Timer might have already been stopped/restarted by another
+                    * charger event. Make sure shutdown validation is still armed.
+                    */
+                    earBudsCloseOff_PogonIn_StartTimer();
+                }
+                else
+                {
+                    BATTERY_TRACE(
+                        0,
+                        "[POWER_OFF] normal charger removal "
+                        "-> cancel shutdown timer");
+
+                    ntt_charging_pwron_pending_shutdown = false;
+                    earBudsCloseOff_PogonIn_StopTimer();
 
             #ifdef IBRT
-                g_pogonin_role_switch_requested = false;
-                g_pogonin_role_switch_wait_count = 0;
-                ntt_case_close_role_switch_reset();
+                    g_pogonin_role_switch_requested = false;
+                    g_pogonin_role_switch_wait_count = 0;
+                    ntt_case_close_role_switch_reset();
             #endif
+                }
             }
             if (prams.charger == APP_BATTERY_CHARGER_PLUGIN)
             {
