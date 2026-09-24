@@ -360,6 +360,19 @@ void Icp1205LoadComEnable(bool tx_enable, bool rx_enable)
  **
  ** \retval void            返回无
  ******************************************************************************/
+uint8_t icp1205_get_chrg_sts2(void)
+{
+    uint8_t sts2 = 0xFF;
+    if (readDataFrom_ICP1205(ICP1205_CHRG_STS2,&sts2,1) != 0)
+    {
+        DBGPRINT("[NTT_1205] read CHRG_STS2 failed");
+        return 0xFF;
+    }
+    DBGPRINT("[NTT_1205] CHRG_STS2=0x%02X",sts2);
+
+    return sts2;
+}
+
 void ICP1205_Init(void)
 {
 	uint8_t buffer[64]   = {0};
@@ -497,30 +510,61 @@ void hds_check_cmd_at_boot(void)
 
 static void Icp1205UpdataIntSts(void)
 {
-	uint8_t u8RegTable[40],u8dat1,u8tmp;
-	uint32_t ret ;
-	//Read REG0x14 Reg0x15
-	ret = readDataFrom_ICP1205(ICP1205_REV_DAT1,&u8RegTable[0],2);
-	DBGPRINT("Icp1205UpdataIntSts REG0x14=0x%02x Reg0x15=0x%02x ret=%d",u8RegTable[0],u8RegTable[1], ret);
-	(void)ret;
-	if ( 0xA5 != u8RegTable[0] || 0xA5 != u8RegTable[1]) {
-		ICP1205_Init();
-		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
-		Icp1205IntEnable();
-		return;
-	}
+    uint8_t u8RegTable[40] = {0};
+    uint8_t u8dat1;
+    uint8_t u8tmp;
 
-	//Reg10 ICP1205_ADS EnterTransparentMode
-	readDataFrom_ICP1205( ICP1205_COMM_CON, &u8tmp, 1);
-	DBGPRINT("Read Icp1205_Reg10 %02x",u8tmp);
-	if(u8tmp & C0MMON_BUSY_FLAG)
-	{
-		u8tmp = 0X03;//保留透传、载波错误与成功中断
-		DBGPRINT("Write Icp1205_Reg10 %02x",u8tmp);
-		writeDataTo_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
-	}
+    // NTT debug: always read latest charger status
+    uint8_t chrg_sts1 = 0;
+    uint8_t chrg_sts2 = 0;
+    uint8_t chrg_sts3 = 0;
 
-	do {
+    uint32_t ret;
+
+    // Read REG0x14 Reg0x15
+    ret = readDataFrom_ICP1205(ICP1205_REV_DAT1,&u8RegTable[0],2);
+
+    DBGPRINT("Icp1205UpdataIntSts REG0x14=0x%02x Reg0x15=0x%02x ret=%d",u8RegTable[0],u8RegTable[1],ret);
+
+    (void)ret;
+
+    if (0xA5 != u8RegTable[0] || 0xA5 != u8RegTable[1])
+    {
+        ICP1205_Init();
+        ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
+        Icp1205IntEnable();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // NTT: read real-time charger status
+    // ---------------------------------------------------------
+    readDataFrom_ICP1205(ICP1205_CHRG_STS1,&chrg_sts1,1);
+    readDataFrom_ICP1205(ICP1205_CHRG_STS2,&chrg_sts2,1);
+    readDataFrom_ICP1205(ICP1205_CHRG_STS3,&chrg_sts3,1);
+
+    DBGPRINT("[NTT_1205_STS] STS1=%02X STS2=%02X STS3=%02X VIN=%d UVLO=%d OVP=%d SHORT=%d",
+        chrg_sts1,
+        chrg_sts2,
+        chrg_sts3,
+        !!(chrg_sts2 & CHRGSTS2_VIN_STS),
+        !!(chrg_sts2 & CHRGSTS2_VIN_UVLO_STS),
+        !!(chrg_sts2 & CHRGSTS2_VIN_OVP_STS),
+        !!(chrg_sts2 & CHRGSTS2_SHORT_STS));
+
+    // Reg10 ICP1205_ADS EnterTransparentMode
+    readDataFrom_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
+    DBGPRINT("Read Icp1205_Reg10 %02x", u8tmp);
+
+    if (u8tmp & C0MMON_BUSY_FLAG)
+    {
+        u8tmp = 0X03;
+        DBGPRINT("Write Icp1205_Reg10 %02x", u8tmp);
+        writeDataTo_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
+    }
+
+    do
+    	{
 		//ICP1205_INT_STAT1 0x21 ICP1205_INT_STAT2 0x22 ICP1205_INT_STAT3 0x23
 	   if(readDataFrom_ICP1205(ICP1205_INT_STAT1,u8RegTable,6))
 	   {
@@ -636,11 +680,17 @@ static void Icp1205UpdataIntSts(void)
 				break;
 			case CHRGSTS1_CHRG_ERR_STS:
 				DBGPRINT("Charge error.");
-				if (u8RegTable[ICP1205_CHRG_STS2] & CHRGSTS2_VIN_OVP_STS) {
+
+				if (chrg_sts2 & CHRGSTS2_VIN_OVP_STS)
+				{
 					DBGPRINT("Charge error OVP!");
+					DBGPRINT("[NTT_1205_CASE] VIN PRESENT, STS2=%02X",chrg_sts2);
 				}
-				if (u8RegTable[ICP1205_CHRG_STS2] & CHRGSTS2_VIN_UVLO_STS) {
+
+				if (chrg_sts2 & CHRGSTS2_VIN_UVLO_STS)
+				{
 					DBGPRINT("Charge error UVLO!");
+					DBGPRINT("[NTT_1205_CASE] VIN ABSENT, STS2=%02X UVLO=%d",chrg_sts2,!!(chrg_sts2 & CHRGSTS2_VIN_UVLO_STS));
 				}
 				break;
 			default:
@@ -669,7 +719,7 @@ static void Icp1205UpdataIntSts(void)
 			//return;//DEBUG
 		}
 		//Bit3 :chrg_ntc
-		readDataFrom_ICP1205(ICP1205_CHRG_STS1, &u8RegTable[ICP1205_CHRG_STS3], 1);
+		readDataFrom_ICP1205(ICP1205_CHRG_STS3,&u8RegTable[ICP1205_CHRG_STS3],1);
 		if(u8RegTable[1]&INT2_NTC_FLG)
 		{
 			osDelay(100);

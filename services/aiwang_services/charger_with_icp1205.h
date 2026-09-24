@@ -20,6 +20,7 @@ void handle_batter_1205(void);
 
 uint32_t writeDataTo_ICP1205(unsigned char reg, unsigned char *data, unsigned char length);
 uint32_t readDataFrom_ICP1205(unsigned char reg, unsigned char *data, unsigned char length);
+uint8_t icp1205_get_chrg_sts2(void);
 
 #ifdef __cplusplus
 }

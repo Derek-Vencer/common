@@ -160,7 +160,7 @@ static bool g_low_bat_voice_first = true;
 #define APP_BATTERY_GET_PRAMS(appevt, prams) ((prams) = appevt&0xffff)
 #if defined(IBRT)
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
-
+extern "C" uint8_t icp1205_get_chrg_sts2(void);
 /*
  * Implemented by the Sparrow BLE service. It sends the three-byte battery
  * payload through the proactive 0x31 Notify packet.
@@ -492,92 +492,216 @@ void ntt_case_poweroff_enable(void)
     BATTERY_TRACE(2,"[POWER_OFF] enabled cancel=%d pending=%d",g_ntt_case_open_cancel,ntt_charging_pwron_pending_shutdown);
 }
 
+bool ntt_case_poweroff_is_open_cancelled(void)
+{
+    return g_ntt_case_open_cancel;
+}
+
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     int8_t charging = app_battery_is_charging();
+    uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
+    uint8_t case_state = ntt_case_state_get_local();
 
-    BATTERY_TRACE(2,"[POWER_OFF] PogonIn handler charging=%d pending=%d",charging,ntt_charging_pwron_pending_shutdown);
+    bool no_charge_case_closed =
+        ((chrg_sts2 == 0x00) ||
+         (chrg_sts2 == 0x80));
+
+    BATTERY_TRACE(
+        5,
+        "[POWER_OFF] PogonIn handler charging=%d pending=%d "
+        "STS2=0x%02X open_cancel=%d case=%d",
+        charging,
+        ntt_charging_pwron_pending_shutdown,
+        chrg_sts2,
+        g_ntt_case_open_cancel,
+        case_state);
 
     /*
-     * The charger event can toggle quickly during case open/close.
-     * Always validate the latest latched request before continuing.
+     * Timer callback already obsolete.
      */
     if (!ntt_charging_pwron_pending_shutdown)
     {
-        BATTERY_TRACE(0,"[POWER_OFF] pending=0 -> ignore stale timer callback");
+        BATTERY_TRACE(
+            0,
+            "[POWER_OFF] pending=0 -> ignore stale timer callback");
         return;
     }
 
     /*
-    * Do not use BES UI case state as the shutdown-cancel condition.
-    *
-    * During the 3-second Power-On prompt delay, BES UI may generate a
-    * delayed CASE_OPEN event even though the earbud is still charging
-    * inside the case.
-    *
-    * Cancel shutdown only when:
-    * 1. Charger is actually removed, or
-    * 2. A confirmed OPEN_CASE command has called
-    *    ntt_case_poweroff_cancel().
-    */
-    if (!charging || g_ntt_case_open_cancel)
+     * Priority 1:
+     * Explicit OPEN_CASE always cancels shutdown.
+     */
+    if (g_ntt_case_open_cancel)
     {
-        BATTERY_TRACE(3,
-                    "[POWER_OFF] cancel charging=%d open_cancel=%d case=%d",
-                    charging,
-                    g_ntt_case_open_cancel,
-                    ntt_case_state_get_local());
+        BATTERY_TRACE(
+            3,
+            "[POWER_OFF] OPEN_CASE confirmed "
+            "charging=%d STS2=0x%02X case=%d "
+            "-> cancel shutdown",
+            charging,
+            chrg_sts2,
+            case_state);
 
         ntt_charging_pwron_pending_shutdown = false;
 
-    #ifdef IBRT
+#ifdef IBRT
         g_pogonin_role_switch_requested = false;
         g_pogonin_role_switch_wait_count = 0;
         ntt_case_close_role_switch_reset();
-    #endif
+#endif
+
         return;
     }
 
     /*
-    * Log the inconsistent UI state, but do not cancel because the
-    * charger confirms that the earbud is still physically in the case.
-    */
-    if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE)
+     * Priority 2:
+     * Confirmed OUT_CASE must override STS2=0x00 / 0x80.
+     *
+     * This is required for OTA reboot outside the charging case:
+     *   charging=0
+     *   STS2=0x00/0x80
+     *   case=OUT_CASE
+     *
+     * In this situation the earbud must stay ON.
+     */
+    if (case_state == NTT_CASE_STATE_OUT_CASE)
     {
-        BATTERY_TRACE(2,
-                    "[POWER_OFF] ignore stale case=%d while charging=%d",
-                    ntt_case_state_get_local(),
-                    charging);
-    }
+        BATTERY_TRACE(
+            3,
+            "[POWER_OFF] OUT_CASE confirmed "
+            "charging=%d STS2=0x%02X "
+            "-> cancel pending shutdown",
+            charging,
+            chrg_sts2);
 
-    BATTERY_TRACE(0,"[POWER_OFF] condition valid -> check role switch");
+        ntt_charging_pwron_pending_shutdown = false;
 
 #ifdef IBRT
-        if (g_pogonin_role_switch_requested)
+        g_pogonin_role_switch_requested = false;
+        g_pogonin_role_switch_wait_count = 0;
+        ntt_case_close_role_switch_reset();
+#endif
+
+        return;
+    }
+
+    /*
+     * Priority 3:
+     * If charging is removed, normally cancel shutdown.
+     *
+     * Exception:
+     * STS2=0x00 / 0x80 is allowed only when OUT_CASE
+     * has NOT been confirmed.
+     */
+    if (!charging)
+    {
+        if (no_charge_case_closed)
         {
-            if (ntt_case_close_role_switch_can_shutdown())
+            BATTERY_TRACE(
+                3,
+                "[NTT_POWER] charging=0 STS2=0x%02X "
+                "case=%d -> allow Case-Close shutdown",
+                chrg_sts2,
+                case_state);
+        }
+        else
+        {
+            BATTERY_TRACE(
+                4,
+                "[POWER_OFF] charging=0 STS2=0x%02X "
+                "case=%d -> cancel shutdown",
+                chrg_sts2,
+                case_state);
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+#ifdef IBRT
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+            ntt_case_close_role_switch_reset();
+#endif
+
+            return;
+        }
+    }
+
+    /*
+     * UNKNOWN may occur during early boot.
+     * Do not cancel here yet.
+     *
+     * OUT_CASE has already been handled above.
+     */
+    if (case_state != NTT_CASE_STATE_IN_CASE)
+    {
+        BATTERY_TRACE(
+            3,
+            "[POWER_OFF] case not IN_CASE yet "
+            "case=%d charging=%d STS2=0x%02X "
+            "-> continue pending validation",
+            case_state,
+            charging,
+            chrg_sts2);
+    }
+
+    BATTERY_TRACE(
+        0,
+        "[POWER_OFF] condition valid -> check role switch");
+
+#ifdef IBRT
+
+    if (g_pogonin_role_switch_requested)
+    {
+        /*
+         * Case state may change while waiting role switch.
+         * Check again before continuing.
+         */
+        if (g_ntt_case_open_cancel ||
+            ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
+        {
+            BATTERY_TRACE(
+                2,
+                "[POWER_OFF] role switch wait canceled "
+                "by OPEN_CASE/OUT_CASE");
+
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+            ntt_case_close_role_switch_reset();
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+            return;
+        }
+
+        if (ntt_case_close_role_switch_can_shutdown())
+        {
+            set_pair_status(1);
+            wired_uart_get_battery_level();
+
+            /*
+             * Final check before shutdown.
+             */
+            if (g_ntt_case_open_cancel ||
+                ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
             {
-                set_pair_status(1);
-                wired_uart_get_battery_level();
-                BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
+                BATTERY_TRACE(
+                    2,
+                    "[POWER_OFF] final shutdown canceled "
+                    "by OPEN_CASE/OUT_CASE");
+
                 g_pogonin_role_switch_requested = false;
                 g_pogonin_role_switch_wait_count = 0;
+                ntt_case_close_role_switch_reset();
+
                 ntt_charging_pwron_pending_shutdown = false;
 
-                app_shutdown();
                 return;
             }
 
-            g_pogonin_role_switch_wait_count++;
-            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",g_pogonin_role_switch_wait_count);
-            if (g_pogonin_role_switch_wait_count <
-                POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
-            {
-                earBudsCloseOff_PogonIn_StartTimer();
-                return;
-            }
+            BATTERY_TRACE(
+                0,
+                "[POWER_OFF] role switch done, shutdown now");
 
-            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout, shutdown");
             g_pogonin_role_switch_requested = false;
             g_pogonin_role_switch_wait_count = 0;
             ntt_charging_pwron_pending_shutdown = false;
@@ -586,26 +710,105 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
             return;
         }
 
-        if (ntt_case_close_try_role_switch_before_shutdown())
-        {
-            BATTERY_TRACE(0,"[POWER_OFF] role switch requested");
-            g_pogonin_role_switch_requested = true;
-            g_pogonin_role_switch_wait_count = 0;
+        g_pogonin_role_switch_wait_count++;
 
+        BATTERY_TRACE(
+            1,
+            "[POWER_OFF] wait role switch cnt=%d",
+            g_pogonin_role_switch_wait_count);
+
+        if (g_pogonin_role_switch_wait_count <
+            POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
+        {
             earBudsCloseOff_PogonIn_StartTimer();
             return;
         }
-#endif
 
-    BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
-    ntt_charging_pwron_pending_shutdown = false;
+        /*
+         * Role switch timeout:
+         * Validate again before forced shutdown.
+         */
+        if (g_ntt_case_open_cancel ||
+            ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
+        {
+            BATTERY_TRACE(
+                2,
+                "[POWER_OFF] role switch timeout but "
+                "OPEN_CASE/OUT_CASE -> cancel shutdown");
 
-    if (g_ntt_case_open_cancel)
-    {
-        BATTERY_TRACE(0,
-                    "[POWER_OFF] final shutdown canceled by OPEN_CASE");
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+            ntt_case_close_role_switch_reset();
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+            return;
+        }
+
+        BATTERY_TRACE(
+            0,
+            "[POWER_OFF] role switch timeout, shutdown");
+
+        g_pogonin_role_switch_requested = false;
+        g_pogonin_role_switch_wait_count = 0;
+        ntt_charging_pwron_pending_shutdown = false;
+
+        app_shutdown();
         return;
     }
+
+    /*
+     * Check before requesting role switch.
+     */
+    if (g_ntt_case_open_cancel ||
+        ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
+    {
+        BATTERY_TRACE(
+            2,
+            "[POWER_OFF] before role switch "
+            "OPEN_CASE/OUT_CASE -> cancel");
+
+        ntt_charging_pwron_pending_shutdown = false;
+        return;
+    }
+
+    if (ntt_case_close_try_role_switch_before_shutdown())
+    {
+        BATTERY_TRACE(
+            0,
+            "[POWER_OFF] role switch requested");
+
+        g_pogonin_role_switch_requested = true;
+        g_pogonin_role_switch_wait_count = 0;
+
+        earBudsCloseOff_PogonIn_StartTimer();
+        return;
+    }
+
+#endif
+
+    /*
+     * Final protection before app_shutdown().
+     */
+    if (g_ntt_case_open_cancel ||
+        ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
+    {
+        BATTERY_TRACE(
+            3,
+            "[POWER_OFF] final shutdown canceled "
+            "open_cancel=%d case=%d",
+            g_ntt_case_open_cancel,
+            ntt_case_state_get_local());
+
+        ntt_charging_pwron_pending_shutdown = false;
+        return;
+    }
+
+    BATTERY_TRACE(
+        0,
+        "[POWER_OFF] shutdown now");
+
+    ntt_charging_pwron_pending_shutdown = false;
 
     app_shutdown();
 }
@@ -672,14 +875,21 @@ static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage){
 /*
  * App 專用精細電量百分比。
  *
- * 使用與手機 HFP 相同的電壓分級邊界，
- * 但在每個 10% 區間內做線性內插。
+ * 依照 SBC Battery Voltage Curve：
  *
- * 例如：
- * 3720mV -> 40%
- * 3735mV -> 45%
- * 3749mV -> 49%
- * 3750mV -> 50%
+ *   0% = 3200mV
+ *  10% = 3656mV
+ *  20% = 3705mV
+ *  30% = 3742mV
+ *  40% = 3768mV
+ *  50% = 3800mV
+ *  60% = 3847mV
+ *  70% = 3918mV
+ *  80% = 3987mV
+ *  90% = 4077mV
+ * 100% = 4140mV
+ *
+ * 各區間內使用線性內插。
  */
 uint8_t app_battery_get_precise_percent(void)
 {
@@ -692,11 +902,7 @@ uint8_t app_battery_get_precise_percent(void)
      */
     if (!g_battery_measure_valid)
     {
-        BATTERY_TRACE(2,
-                      "[BAT_PRECISE] invalid, boot volt=%d last=%d",
-                      app_battery_measure.currvolt,
-                      g_battery_last_valid_percent);
-
+        BATTERY_TRACE(2,"[BAT_PRECISE] invalid, boot volt=%d last=%d",app_battery_measure.currvolt,g_battery_last_valid_percent);
         return 0xFF;
     }
 
@@ -707,51 +913,48 @@ uint8_t app_battery_get_precise_percent(void)
 
     /*
      * Battery voltage thresholds in ascending order.
-     *
-     * 3300mV or below returns 0%.
-     * 4040mV or above returns 100%.
      */
     static const uint16_t voltage_table[] =
     {
-        3656,   //10%
-        3705,   //20%
-        3742,   //30%
-        3768,   //40%
-        3800,   //50%
-        3847,   //60%
-        3918,   //70%
-        3987,   //80%
-        4077,   //90%
-        4140    //100%
+        3200,   //   0%
+        3656,   //  10%
+        3705,   //  20%
+        3742,   //  30%
+        3768,   //  40%
+        3800,   //  50%
+        3847,   //  60%
+        3918,   //  70%
+        3987,   //  80%
+        4077,   //  90%
+        4140    // 100%
     };
 
     static const uint8_t percent_table[] =
     {
-        10,
-        20,
-        30,
-        40,
-        50,
-        60,
-        70,
-        80,
-        90,
+          0,
+         10,
+         20,
+         30,
+         40,
+         50,
+         60,
+         70,
+         80,
+         90,
         100
     };
 
-    const uint8_t table_count =
-        sizeof(voltage_table) /
-        sizeof(voltage_table[0]);
+    const uint8_t table_count = sizeof(voltage_table) / sizeof(voltage_table[0]);
 
     /*
-     * Voltage below the minimum threshold is reported as 0%.
+     * 3200mV or below = 0%.
      */
     if (volt <= voltage_table[0])
     {
         percent = 0;
     }
     /*
-     * Voltage at or above the maximum threshold is reported as 100%.
+     * 4195mV or above = 100%.
      */
     else if (volt >= voltage_table[table_count - 1])
     {
@@ -759,41 +962,22 @@ uint8_t app_battery_get_precise_percent(void)
     }
     else
     {
-        for (uint8_t i = 0;
-             i < (table_count - 1);
-             i++)
+        for (uint8_t i = 0; i < (table_count - 1); i++)
         {
-            uint16_t low_volt =
-                voltage_table[i];
-
-            uint16_t high_volt =
-                voltage_table[i + 1];
-
-            if ((volt >= low_volt) &&
-                (volt < high_volt))
+            uint16_t low_volt = voltage_table[i];
+            uint16_t high_volt = voltage_table[i + 1];
+            if ((volt >= low_volt) && (volt < high_volt))
             {
-                uint8_t low_percent =
-                    percent_table[i];
+                uint8_t low_percent = percent_table[i];
+                uint8_t high_percent = percent_table[i + 1];
+                uint32_t volt_offset = (uint32_t)(volt - low_volt);
+                uint32_t volt_range = (uint32_t)(high_volt - low_volt);
+                uint32_t percent_range = (uint32_t)(high_percent - low_percent);
 
-                uint8_t high_percent =
-                    percent_table[i + 1];
-
-                uint32_t volt_offset =
-                    (uint32_t)(volt - low_volt);
-
-                uint32_t volt_range =
-                    (uint32_t)(high_volt - low_volt);
-
-                uint32_t percent_range =
-                    (uint32_t)(high_percent -
-                               low_percent);
-
-                percent =
-                    low_percent +
-                    (uint8_t)(
-                        (volt_offset * percent_range) /
-                        volt_range);
-
+                /*
+                 * Linear interpolation.
+                 */
+                percent = low_percent + (uint8_t)((volt_offset * percent_range) / volt_range);
                 break;
             }
         }
@@ -803,12 +987,7 @@ uint8_t app_battery_get_precise_percent(void)
      * Save the latest valid percentage.
      */
     g_battery_last_valid_percent = percent;
-
-    BATTERY_TRACE(2,
-                  "[BAT_PRECISE] volt=%d percent=%d",
-                  volt,
-                  percent);
-
+    BATTERY_TRACE(2,"[BAT_PRECISE] volt=%d percent=%d",volt,percent);
     return percent;
 }
 

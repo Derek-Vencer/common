@@ -2740,9 +2740,45 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 		sparraw_service_init();
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
-            	MAIN_TRACE(0,"NORMAL POWERON!");
+            {
+                MAIN_TRACE(0, "NORMAL POWERON!");
+
                 nRet = 0;
+
+                uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
+                enum PMU_BOOT_CAUSE_T boot_cause = pmu_boot_cause_get();
+
+                MAIN_TRACE(2,"[NTT_BOOT] boot_cause=0x%04X ICP1205_STS2=0x%02X",boot_cause,chrg_sts2);
+                /*
+                * NTT:
+                *
+                * PMU_BOOT_CAUSE_AC_OUT (0x0010):
+                * Earbud was powered on by Pogo / charger AC OUT transition.
+                *
+                * Only in this boot condition may STS2=0x00 / 0x80 be used
+                * as the Case-Close/no-charge workaround.
+                *
+                * PMU_BOOT_CAUSE_AC_IN      (0x0008)
+                * PMU_BOOT_CAUSE_DIG_REBOOT (0x0004):
+                * OTA/software reboot.
+                * Do NOT start Case-Close shutdown only because STS2 is
+                * 0x00 / 0x80.
+                */
+
+                if ((boot_cause & PMU_BOOT_CAUSE_AC_OUT) && ((chrg_sts2 == 0x00) || (chrg_sts2 == 0x80)))
+                {
+                    MAIN_TRACE(2,"[NTT_POWER] AC_OUT wake + STS2=0x%02X -> start Case-Close shutdown timer",chrg_sts2);
+
+                    ntt_charging_pwron_pending_shutdown = true;
+                    earBudsCloseOff_PogonIn_StartTimer();
+                }
+                else
+                {
+                    MAIN_TRACE(2,"[NTT_POWER] no Case-Close shutdown boot=0x%04X STS2=0x%02X",boot_cause,chrg_sts2);
+                }
+
                 break;
+            }
             case APP_BATTERY_OPEN_MODE_CHARGING:
 #ifndef BESUI_TWS_EN
                 app_status_indication_set(APP_STATUS_INDICATION_CHARGING);
@@ -3148,6 +3184,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     if (ntt_charging_pwron_pending_shutdown)
     {
         int8_t charging = app_battery_is_charging();
+        uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
 
         MAIN_TRACE(
             2,
@@ -3162,6 +3199,11 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                 "[POWER_OFF] application ready and still charging, "
                 "start PogonIn shutdown timer");
 
+            earBudsCloseOff_PogonIn_StartTimer();
+        }
+        else if (chrg_sts2 == 0x00 || chrg_sts2 == 0x80)
+        {
+            MAIN_TRACE(1, "[NTT_POWER] ICP1205_STS2=0x%02X -> start shutdown timer",chrg_sts2);
             earBudsCloseOff_PogonIn_StartTimer();
         }
         else
