@@ -40,7 +40,6 @@
 #include "watchdog/watchdog.h"
 #include "hal_evr.h"
 #include "factory_section.h"
-
 #ifdef RTOS
 #include "cmsis_os.h"
 #include "app_factory.h"
@@ -74,7 +73,7 @@ extern "C" {
 #include "twsui_comm.h"
 #include "besui_common.h"
 #endif
-
+extern "C" bool ntt_case_poweroff_is_open_cancelled(void);
 extern "C" void log_dump_init(void);
 extern "C" void crash_dump_init(void);
 #ifdef USER_SECURE_BOOT
@@ -581,7 +580,17 @@ int main(void)
 #else
     app_deinit(ret);
 #endif
-    system_power_off_callback(sys_case);
+
+    if (ntt_case_poweroff_is_open_cancelled())
+    {
+        TR_INFO(TR_MOD(MAIN), "cancelled shutdown ...ntt_case_poweroff_is_open_cancelled\n");
+        //system_power_off_callback(2);
+        system_power_off_callback(sys_case);
+    }
+    else
+    {
+        system_power_off_callback(sys_case);
+    }   
 
     /*
     * OTA reboot uses HAL_SW_BOOTMODE_ENTER_HIDE_BOOT.
