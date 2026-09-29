@@ -55,7 +55,6 @@
 #include "bt_if.h"
 #include "intersyshci.h"
 #include "bt_app_api.h"
-#include "ICP1205.h"
 
 #ifdef SUPPORT_SINGLE_WIRE_COM
 #include "communication_svr.h"
@@ -415,7 +414,6 @@ extern bool aiWangBoxIsUsed(void);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
 //extern void charger_manager_start(void);
 extern void earBudsCloseOff_PogonIn_StartTimer(void);
-extern void earBudsCloseOff_PogonIn_StopTimer(void);
 extern void wired_uart_get_battery_level(void);
 #ifdef IBRT
 #include "app_ibrt_customif_cmd.h"
@@ -2742,47 +2740,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 		sparraw_service_init();
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
-            {
-                MAIN_TRACE(0, "NORMAL POWERON!");
-
+            	MAIN_TRACE(0,"NORMAL POWERON!");
                 nRet = 0;
-
-                uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
-                enum PMU_BOOT_CAUSE_T boot_cause = pmu_boot_cause_get();
-
-                bool case_power_lost = ((chrg_sts2 == 0x00) || ((chrg_sts2 & CHRGSTS2_VIN_UVLO_STS) != 0));
-
-                MAIN_TRACE(3,"[NTT_BOOT] boot_cause=0x%04X ICP1205_STS2=0x%02X power_lost=%d",boot_cause,chrg_sts2,case_power_lost);
-                /*
-                * NTT:
-                *
-                * PMU_BOOT_CAUSE_AC_OUT (0x0010):
-                * Earbud was powered on by Pogo / charger AC OUT transition.
-                *
-                * Only in this boot condition may STS2=0x00 / 0x80 be used
-                * as the Case-Close/no-charge workaround.
-                *
-                * PMU_BOOT_CAUSE_AC_IN      (0x0008)
-                * PMU_BOOT_CAUSE_DIG_REBOOT (0x0004):
-                * OTA/software reboot.
-                * Do NOT start Case-Close shutdown only because STS2 is
-                * 0x00 / 0x80.
-                */
-
-                if ((boot_cause & PMU_BOOT_CAUSE_AC_OUT) && case_power_lost)
-                {
-                    MAIN_TRACE(2,"[NTT_POWER] AC_OUT wake + STS2=0x%02X -> start Case-Close shutdown timer",chrg_sts2);
-
-                    ntt_charging_pwron_pending_shutdown = true;
-                    earBudsCloseOff_PogonIn_StartTimer();
-                }
-                else
-                {
-                    MAIN_TRACE(3,"[NTT_POWER] no shutdown boot=0x%04X STS2=0x%02X power_lost=%d",boot_cause,chrg_sts2,case_power_lost);
-                }
-
                 break;
-            }
             case APP_BATTERY_OPEN_MODE_CHARGING:
 #ifndef BESUI_TWS_EN
                 app_status_indication_set(APP_STATUS_INDICATION_CHARGING);
@@ -2805,10 +2765,9 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
             case APP_BATTERY_OPEN_MODE_CHARGING_PWRON:
             {
                 int8_t charging = app_battery_is_charging();
-                enum PMU_BOOT_CAUSE_T boot_cause = pmu_boot_cause_get();
 
                 MAIN_TRACE(0, "CHARGING PWRON!");
-                MAIN_TRACE(2,"[NTT_BOOT] CHARGING_PWRON boot_cause=0x%04X charging=%d",boot_cause,charging);
+                MAIN_TRACE(1,"[POWER_OFF] CHARGING_PWRON charging=%d",charging);
 
             #ifdef IBRT_SEARCH_UI
                 is_charging_poweron = true;
@@ -2829,56 +2788,31 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
                 goto exit;
             #endif
 
-                /*
-                * ============================================================
-                * NTT:
-                *
-                * AC_IN means VCHARGE / Pogo input has appeared.
-                *
-                * In the NTT charging-case protocol this is a normal
-                * CASE_OPEN / charging wake-up condition.
-                *
-                * AC_IN itself is NOT a CASE_CLOSE request.
-                *
-                * Therefore:
-                *     AC_IN + charging=1
-                * must NOT create pending shutdown.
-                *
-                * Real CASE_CLOSE is notified by CMD_POWER_OFF.
-                * ============================================================
-                */
-                if (boot_cause & PMU_BOOT_CAUSE_AC_IN)
+                if (charging)
                 {
-                    MAIN_TRACE(1,"[NTT_POWER] AC_IN wake charging=%d -> normal power-on, do NOT arm shutdown",charging);
-                    ntt_charging_pwron_pending_shutdown = false;
-
                     /*
-                    * In case an old timer callback still exists,
-                    * invalidate/stop it.
+                    * 系統仍在 early boot，先記錄待關機。
+                    * 等 main/app 初始化完成後再執行 app_shutdown()。
                     */
-                    earBudsCloseOff_PogonIn_StopTimer();
+                    ntt_charging_pwron_pending_shutdown = true;
+
+                    MAIN_TRACE(0,
+                            "[POWER_OFF] still charging, "
+                            "mark pending shutdown");
 
                     /*
-                    * Continue normal initialization.
+                    * 這裡要繼續完成必要的系統初始化，
+                    * 因此不要 nRet=0，也不要 goto exit。
                     */
                     break;
                 }
 
-                /*
-                * ============================================================
-                * Do not use charging=1 alone as CASE_CLOSE evidence.
-                *
-                * Earbud may be charging while the case lid is OPEN.
-                *
-                * Only:
-                *   1. CMD_POWER_OFF, or
-                *   2. AC_OUT + case-power-loss workaround
-                *
-                * should create a shutdown transaction.
-                * ============================================================
-                */
                 ntt_charging_pwron_pending_shutdown = false;
-                MAIN_TRACE(2,"[NTT_POWER] CHARGING_PWRON boot=0x%04X charging=%d -> wait for CASE_CLOSE command",boot_cause,charging);
+
+                MAIN_TRACE(0,
+                        "[POWER_OFF] charging removed, "
+                        "continue normal power-on");
+
                 break;
             }
             case APP_BATTERY_OPEN_MODE_INVALID:
@@ -3214,8 +3148,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     if (ntt_charging_pwron_pending_shutdown)
     {
         int8_t charging = app_battery_is_charging();
-        uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
-        bool case_power_lost = ((chrg_sts2 == 0x00) || ((chrg_sts2 & CHRGSTS2_VIN_UVLO_STS) != 0));
 
         MAIN_TRACE(
             2,
@@ -3225,12 +3157,11 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 
         if (charging)
         {
-            MAIN_TRACE(0,"[POWER_OFF] application ready and still charging, start PogonIn shutdown timer");
-            earBudsCloseOff_PogonIn_StartTimer();
-        }
-        else if (case_power_lost)
-        {
-            MAIN_TRACE(2,"[NTT_POWER] application ready STS2=0x%02X power_lost=%d -> keep shutdown pending",chrg_sts2,case_power_lost);
+            MAIN_TRACE(
+                0,
+                "[POWER_OFF] application ready and still charging, "
+                "start PogonIn shutdown timer");
+
             earBudsCloseOff_PogonIn_StartTimer();
         }
         else

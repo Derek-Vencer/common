@@ -120,7 +120,7 @@ uint8_t app_battery_get_display_percent(void);
 uint8_t app_battery_get_percent(void);
 uint8_t app_battery_get_precise_percent(void);
 bool app_battery_is_measurement_valid(void);
-bool ntt_case_poweroff_is_open_cancelled(void);
+
 /*
  * Battery 0x31 proactive-notify bridges.
  *

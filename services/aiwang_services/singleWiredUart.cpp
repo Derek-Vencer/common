@@ -83,7 +83,6 @@ extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 extern void earBudsCloseOff_PowerOff_StartTimer(void);
 extern bool ntt_manual_pairing_mode;
-extern "C" uint8_t icp1205_get_chrg_sts2(void);
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
@@ -2196,136 +2195,66 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
 static void uart_idle_timeout_callback(void const *argument)
 {
     int8_t charging = app_battery_is_charging();
-    uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
-
-    bool no_charge_case_closed =
-        ((chrg_sts2 == 0x00) ||
-         (chrg_sts2 == 0x80));
 
     DBGPRINT(
-        "UART idle timeout! %dms "
-        "charging=%d STS2=0x%02X pending=%d open_cancel=%d",
+        "UART idle timeout detected! No data received for %dms, charging=%d",
         UART_IDLE_TIMEOUT_MS,
-        charging,
-        chrg_sts2,
-        ntt_charging_pwron_pending_shutdown,
-        ntt_case_poweroff_is_open_cancelled());
+        charging);
 
     aiwang_box_battery_update_enable(false);
 
     /*
-     * ============================================================
-     * Case 1:
-     * Still charging.
-     *
-     * Earbud is physically on Pogo / inside case.
-     * UART idle must NOT be treated as OUT_CASE.
-     * ============================================================
+     * UART idle does not mean out of case.
+     * When still charging, keep the current state and do not trigger
+     * IBRT/UI state callbacks during early charging boot.
      */
     if (charging)
     {
         DBGPRINT(
-            "[NTT_INBOX] UART idle but still charging "
-            "-> keep IN_CASE");
+            "[NTT_INBOX] UART idle but still charging, "
+            "ignore OUT_CASE");
 
-        set_er_inbox_status(1);
-        ntt_audio_output_mute_refresh();
+        set_er_inbox_status(1);        
 
-        ntt_case_state_sync_local_update(true);
-
+                /*
+         * Update IBRT/UI state.
+         * Without this, UI may remain at IN_BOX_OPEN and CASE_CLOSE /
+         * power-off flow will never be triggered.
+         */
         app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
         app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
 
         goto exit;
     }
 
-    /*
-     * ============================================================
-     * Case 2:
-     * Charging case is CLOSED but the case has lost power.
-     *
-     * Typical condition:
-     *
-     *   charging   = 0
-     *   STS2       = 0x00 / 0x80
-     *   pending    = 1
-     *   open_cancel= 0
-     *
-     * The earbud is still physically inside the closed case.
-     *
-     * IMPORTANT:
-     * Do NOT change state to OUT_CASE here.
-     *
-     * Keep IN_CASE and allow the PogonIn shutdown timer
-     * to complete the power-off sequence.
-     * ============================================================
-     */
-    if (ntt_charging_pwron_pending_shutdown &&
-        !ntt_case_poweroff_is_open_cancelled() &&
-        no_charge_case_closed)
-    {
-        DBGPRINT(
-            "[NTT_INBOX] CASE_CLOSE pending + no case power "
-            "STS2=0x%02X -> keep IN_CASE, wait shutdown",
-            chrg_sts2);
-
-        set_er_inbox_status(1);
-        ntt_audio_output_mute_refresh();
-
-        ntt_case_state_sync_local_update(true);
-
-        app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
-        app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
-
-        goto exit;
-    }
-
-    /*
-     * ============================================================
-     * Case 3:
-     * Real OUT_CASE.
-     *
-     * No charging and no valid Case-Close shutdown transaction.
-     * ============================================================
-     */
     set_er_inbox_status(0);
     ntt_audio_output_mute_refresh();
-
     ntt_case_state_sync_local_update(false);
 
     DBGPRINT(
         "[NTT_OUTBOX] UART idle + charging=0 "
-        "STS2=0x%02X pending=%d open_cancel=%d "
-        "-> local OUT_CASE",
-        chrg_sts2,
-        ntt_charging_pwron_pending_shutdown,
-        ntt_case_poweroff_is_open_cancelled());
+        "-> local OUT_CASE and sync peer");
 
     /*
-     * Earbud is physically outside charging case.
+     * NTT:
+     * UART idle means earbud is out of pogo / out of box.
+     * Update UI box state first, otherwise slave may stay in IN_BOX_OPEN.
      */
     app_ui_set_local_box_state(IBRT_OUT_BOX);
     app_ui_sync_box_state(IBRT_OUT_BOX);
-
     /*
      * First pair mode:
-     *
      * No mobile record case.
      * Out case for 2 seconds:
-     * Do not shutdown.
-     * Only leave pairing / discoverable mode.
+     * Do not shutdown. Only leave pairing / discoverable mode.
      */
     if (ntt_first_no_mobile_pair_mode &&
         bts_tws_if_is_tws_link_connected() &&
         !app_bt_ibrt_has_mobile_link_connected())
     {
-        DBGPRINT(
-            "[NTT_PAIR] uart idle + no mobile record "
-            "+ tws connected + out case "
-            "-> exit pairing mode");
+        DBGPRINT("[NTT_PAIR] uart idle + no mobile record + tws connected + out case -> exit pairing mode");
 
-        app_bt_set_access_mode(
-            BTIF_BAM_NOT_ACCESSIBLE);
+        app_bt_set_access_mode(BTIF_BAM_NOT_ACCESSIBLE);
 
         ntt_first_no_mobile_pair_mode = false;
 
@@ -2333,7 +2262,6 @@ static void uart_idle_timeout_callback(void const *argument)
     }
 
 exit:
-
     osTimerDelete(uart_idle_timer_id);
     uart_idle_timer_id = NULL;
 }

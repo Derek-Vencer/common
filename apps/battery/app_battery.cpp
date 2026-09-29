@@ -160,7 +160,7 @@ static bool g_low_bat_voice_first = true;
 #define APP_BATTERY_GET_PRAMS(appevt, prams) ((prams) = appevt&0xffff)
 #if defined(IBRT)
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
-extern "C" uint8_t icp1205_get_chrg_sts2(void);
+
 /*
  * Implemented by the Sparrow BLE service. It sends the three-byte battery
  * payload through the proactive 0x31 Notify packet.
@@ -492,216 +492,92 @@ void ntt_case_poweroff_enable(void)
     BATTERY_TRACE(2,"[POWER_OFF] enabled cancel=%d pending=%d",g_ntt_case_open_cancel,ntt_charging_pwron_pending_shutdown);
 }
 
-bool ntt_case_poweroff_is_open_cancelled(void)
-{
-    return g_ntt_case_open_cancel;
-}
-
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     int8_t charging = app_battery_is_charging();
-    uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
-    uint8_t case_state = ntt_case_state_get_local();
 
-    bool no_charge_case_closed =
-        ((chrg_sts2 == 0x00) ||
-         (chrg_sts2 == 0x80));
-
-    BATTERY_TRACE(
-        5,
-        "[POWER_OFF] PogonIn handler charging=%d pending=%d "
-        "STS2=0x%02X open_cancel=%d case=%d",
-        charging,
-        ntt_charging_pwron_pending_shutdown,
-        chrg_sts2,
-        g_ntt_case_open_cancel,
-        case_state);
+    BATTERY_TRACE(2,"[POWER_OFF] PogonIn handler charging=%d pending=%d",charging,ntt_charging_pwron_pending_shutdown);
 
     /*
-     * Timer callback already obsolete.
+     * The charger event can toggle quickly during case open/close.
+     * Always validate the latest latched request before continuing.
      */
     if (!ntt_charging_pwron_pending_shutdown)
     {
-        BATTERY_TRACE(
-            0,
-            "[POWER_OFF] pending=0 -> ignore stale timer callback");
+        BATTERY_TRACE(0,"[POWER_OFF] pending=0 -> ignore stale timer callback");
         return;
     }
 
     /*
-     * Priority 1:
-     * Explicit OPEN_CASE always cancels shutdown.
-     */
-    if (g_ntt_case_open_cancel)
+    * Do not use BES UI case state as the shutdown-cancel condition.
+    *
+    * During the 3-second Power-On prompt delay, BES UI may generate a
+    * delayed CASE_OPEN event even though the earbud is still charging
+    * inside the case.
+    *
+    * Cancel shutdown only when:
+    * 1. Charger is actually removed, or
+    * 2. A confirmed OPEN_CASE command has called
+    *    ntt_case_poweroff_cancel().
+    */
+    if (!charging || g_ntt_case_open_cancel)
     {
-        BATTERY_TRACE(
-            3,
-            "[POWER_OFF] OPEN_CASE confirmed "
-            "charging=%d STS2=0x%02X case=%d "
-            "-> cancel shutdown",
-            charging,
-            chrg_sts2,
-            case_state);
+        BATTERY_TRACE(3,
+                    "[POWER_OFF] cancel charging=%d open_cancel=%d case=%d",
+                    charging,
+                    g_ntt_case_open_cancel,
+                    ntt_case_state_get_local());
 
         ntt_charging_pwron_pending_shutdown = false;
 
-#ifdef IBRT
+    #ifdef IBRT
         g_pogonin_role_switch_requested = false;
         g_pogonin_role_switch_wait_count = 0;
         ntt_case_close_role_switch_reset();
-#endif
-
+    #endif
         return;
     }
 
     /*
-     * Priority 2:
-     * Confirmed OUT_CASE must override STS2=0x00 / 0x80.
-     *
-     * This is required for OTA reboot outside the charging case:
-     *   charging=0
-     *   STS2=0x00/0x80
-     *   case=OUT_CASE
-     *
-     * In this situation the earbud must stay ON.
-     */
-    if (case_state == NTT_CASE_STATE_OUT_CASE)
+    * Log the inconsistent UI state, but do not cancel because the
+    * charger confirms that the earbud is still physically in the case.
+    */
+    if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE)
     {
-        BATTERY_TRACE(
-            3,
-            "[POWER_OFF] OUT_CASE confirmed "
-            "charging=%d STS2=0x%02X "
-            "-> cancel pending shutdown",
-            charging,
-            chrg_sts2);
-
-        ntt_charging_pwron_pending_shutdown = false;
-
-#ifdef IBRT
-        g_pogonin_role_switch_requested = false;
-        g_pogonin_role_switch_wait_count = 0;
-        ntt_case_close_role_switch_reset();
-#endif
-
-        return;
+        BATTERY_TRACE(2,
+                    "[POWER_OFF] ignore stale case=%d while charging=%d",
+                    ntt_case_state_get_local(),
+                    charging);
     }
 
-    /*
-     * Priority 3:
-     * If charging is removed, normally cancel shutdown.
-     *
-     * Exception:
-     * STS2=0x00 / 0x80 is allowed only when OUT_CASE
-     * has NOT been confirmed.
-     */
-    if (!charging)
-    {
-        if (no_charge_case_closed)
-        {
-            BATTERY_TRACE(
-                3,
-                "[NTT_POWER] charging=0 STS2=0x%02X "
-                "case=%d -> allow Case-Close shutdown",
-                chrg_sts2,
-                case_state);
-        }
-        else
-        {
-            BATTERY_TRACE(
-                4,
-                "[POWER_OFF] charging=0 STS2=0x%02X "
-                "case=%d -> cancel shutdown",
-                chrg_sts2,
-                case_state);
-
-            ntt_charging_pwron_pending_shutdown = false;
+    BATTERY_TRACE(0,"[POWER_OFF] condition valid -> check role switch");
 
 #ifdef IBRT
-            g_pogonin_role_switch_requested = false;
-            g_pogonin_role_switch_wait_count = 0;
-            ntt_case_close_role_switch_reset();
-#endif
-
-            return;
-        }
-    }
-
-    /*
-     * UNKNOWN may occur during early boot.
-     * Do not cancel here yet.
-     *
-     * OUT_CASE has already been handled above.
-     */
-    if (case_state != NTT_CASE_STATE_IN_CASE)
-    {
-        BATTERY_TRACE(
-            3,
-            "[POWER_OFF] case not IN_CASE yet "
-            "case=%d charging=%d STS2=0x%02X "
-            "-> continue pending validation",
-            case_state,
-            charging,
-            chrg_sts2);
-    }
-
-    BATTERY_TRACE(
-        0,
-        "[POWER_OFF] condition valid -> check role switch");
-
-#ifdef IBRT
-
-    if (g_pogonin_role_switch_requested)
-    {
-        /*
-         * Case state may change while waiting role switch.
-         * Check again before continuing.
-         */
-        if (g_ntt_case_open_cancel ||
-            ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
+        if (g_pogonin_role_switch_requested)
         {
-            BATTERY_TRACE(
-                2,
-                "[POWER_OFF] role switch wait canceled "
-                "by OPEN_CASE/OUT_CASE");
-
-            g_pogonin_role_switch_requested = false;
-            g_pogonin_role_switch_wait_count = 0;
-            ntt_case_close_role_switch_reset();
-
-            ntt_charging_pwron_pending_shutdown = false;
-
-            return;
-        }
-
-        if (ntt_case_close_role_switch_can_shutdown())
-        {
-            set_pair_status(1);
-            wired_uart_get_battery_level();
-
-            /*
-             * Final check before shutdown.
-             */
-            if (g_ntt_case_open_cancel ||
-                ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
+            if (ntt_case_close_role_switch_can_shutdown())
             {
-                BATTERY_TRACE(
-                    2,
-                    "[POWER_OFF] final shutdown canceled "
-                    "by OPEN_CASE/OUT_CASE");
-
+                set_pair_status(1);
+                wired_uart_get_battery_level();
+                BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
                 g_pogonin_role_switch_requested = false;
                 g_pogonin_role_switch_wait_count = 0;
-                ntt_case_close_role_switch_reset();
-
                 ntt_charging_pwron_pending_shutdown = false;
 
+                app_shutdown();
                 return;
             }
 
-            BATTERY_TRACE(
-                0,
-                "[POWER_OFF] role switch done, shutdown now");
+            g_pogonin_role_switch_wait_count++;
+            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",g_pogonin_role_switch_wait_count);
+            if (g_pogonin_role_switch_wait_count <
+                POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
+            {
+                earBudsCloseOff_PogonIn_StartTimer();
+                return;
+            }
 
+            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout, shutdown");
             g_pogonin_role_switch_requested = false;
             g_pogonin_role_switch_wait_count = 0;
             ntt_charging_pwron_pending_shutdown = false;
@@ -710,105 +586,26 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
             return;
         }
 
-        g_pogonin_role_switch_wait_count++;
-
-        BATTERY_TRACE(
-            1,
-            "[POWER_OFF] wait role switch cnt=%d",
-            g_pogonin_role_switch_wait_count);
-
-        if (g_pogonin_role_switch_wait_count <
-            POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
+        if (ntt_case_close_try_role_switch_before_shutdown())
         {
+            BATTERY_TRACE(0,"[POWER_OFF] role switch requested");
+            g_pogonin_role_switch_requested = true;
+            g_pogonin_role_switch_wait_count = 0;
+
             earBudsCloseOff_PogonIn_StartTimer();
             return;
         }
-
-        /*
-         * Role switch timeout:
-         * Validate again before forced shutdown.
-         */
-        if (g_ntt_case_open_cancel ||
-            ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
-        {
-            BATTERY_TRACE(
-                2,
-                "[POWER_OFF] role switch timeout but "
-                "OPEN_CASE/OUT_CASE -> cancel shutdown");
-
-            g_pogonin_role_switch_requested = false;
-            g_pogonin_role_switch_wait_count = 0;
-            ntt_case_close_role_switch_reset();
-
-            ntt_charging_pwron_pending_shutdown = false;
-
-            return;
-        }
-
-        BATTERY_TRACE(
-            0,
-            "[POWER_OFF] role switch timeout, shutdown");
-
-        g_pogonin_role_switch_requested = false;
-        g_pogonin_role_switch_wait_count = 0;
-        ntt_charging_pwron_pending_shutdown = false;
-
-        app_shutdown();
-        return;
-    }
-
-    /*
-     * Check before requesting role switch.
-     */
-    if (g_ntt_case_open_cancel ||
-        ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
-    {
-        BATTERY_TRACE(
-            2,
-            "[POWER_OFF] before role switch "
-            "OPEN_CASE/OUT_CASE -> cancel");
-
-        ntt_charging_pwron_pending_shutdown = false;
-        return;
-    }
-
-    if (ntt_case_close_try_role_switch_before_shutdown())
-    {
-        BATTERY_TRACE(
-            0,
-            "[POWER_OFF] role switch requested");
-
-        g_pogonin_role_switch_requested = true;
-        g_pogonin_role_switch_wait_count = 0;
-
-        earBudsCloseOff_PogonIn_StartTimer();
-        return;
-    }
-
 #endif
 
-    /*
-     * Final protection before app_shutdown().
-     */
-    if (g_ntt_case_open_cancel ||
-        ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE)
-    {
-        BATTERY_TRACE(
-            3,
-            "[POWER_OFF] final shutdown canceled "
-            "open_cancel=%d case=%d",
-            g_ntt_case_open_cancel,
-            ntt_case_state_get_local());
+    BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
+    ntt_charging_pwron_pending_shutdown = false;
 
-        ntt_charging_pwron_pending_shutdown = false;
+    if (g_ntt_case_open_cancel)
+    {
+        BATTERY_TRACE(0,
+                    "[POWER_OFF] final shutdown canceled by OPEN_CASE");
         return;
     }
-
-    BATTERY_TRACE(
-        0,
-        "[POWER_OFF] shutdown now");
-
-    ntt_charging_pwron_pending_shutdown = false;
 
     app_shutdown();
 }
@@ -1675,66 +1472,23 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                     earBudsCloseOff_PogonIn_StartTimer();
                 }
             }
-            else if ((prams.charger == APP_BATTERY_CHARGER_PLUGOUT) &&
-                    !g_battery_full_charged)
+            else if ((prams.charger == 0) && !g_battery_full_charged)
             {
-                uint8_t chrg_sts2 = icp1205_get_chrg_sts2();
-
-                bool no_charge_case_closed =
-                    ((chrg_sts2 == 0x00) ||
-                    (chrg_sts2 == 0x80));
-
-                BATTERY_TRACE(
-                    4,
-                    "[POWER_OFF] charger PLUGOUT pending=%d "
-                    "STS2=0x%02X no_charge_case=%d case=%d",
-                    ntt_charging_pwron_pending_shutdown,
-                    chrg_sts2,
-                    no_charge_case_closed,
-                    ntt_case_state_get_local());
+                BATTERY_TRACE(0,
+                            "[POWER_OFF] charger=0 and not full -> cancel shutdown timer");
 
                 /*
-                * Case-Close + charging box has no power:
-                *
-                * Do NOT cancel the shutdown transaction.
-                *
-                * Typical condition:
-                *   pending = 1
-                *   charger = 0
-                *   STS2 = 0x00 / 0x80
-                *
-                * Let PogonIn handler perform final validation.
+                * Clear pending first so a callback already queued by the
+                * timer cannot continue the old shutdown request.
                 */
-                if (ntt_charging_pwron_pending_shutdown &&
-                    no_charge_case_closed)
-                {
-                    BATTERY_TRACE(
-                        1,
-                        "[NTT_POWER] charger removed but Case-Close pending, "
-                        "keep shutdown timer");
-
-                    /*
-                    * Timer might have already been stopped/restarted by another
-                    * charger event. Make sure shutdown validation is still armed.
-                    */
-                    earBudsCloseOff_PogonIn_StartTimer();
-                }
-                else
-                {
-                    BATTERY_TRACE(
-                        0,
-                        "[POWER_OFF] normal charger removal "
-                        "-> cancel shutdown timer");
-
-                    ntt_charging_pwron_pending_shutdown = false;
-                    earBudsCloseOff_PogonIn_StopTimer();
+                ntt_charging_pwron_pending_shutdown = false;
+                earBudsCloseOff_PogonIn_StopTimer();
 
             #ifdef IBRT
-                    g_pogonin_role_switch_requested = false;
-                    g_pogonin_role_switch_wait_count = 0;
-                    ntt_case_close_role_switch_reset();
+                g_pogonin_role_switch_requested = false;
+                g_pogonin_role_switch_wait_count = 0;
+                ntt_case_close_role_switch_reset();
             #endif
-                }
             }
             if (prams.charger == APP_BATTERY_CHARGER_PLUGIN)
             {
