@@ -246,7 +246,7 @@ extern FIR_CFG_T audio_eq_hw_fir_adaptive_eq_cfg;
 extern const DrcConfig audio_drc_cfg;
 #endif
 
-#define AUDIO_DRC_CFG_LIST_NUM    5
+#define AUDIO_DRC_CFG_LIST_NUM    7
 extern const DrcConfig * const audio_drc_cfg_list[AUDIO_DRC_CFG_LIST_NUM];
 
 #ifdef __AUDIO_DYNAMIC_BOOST__
@@ -3381,6 +3381,8 @@ static const int32_t ntt_drc_band0_value[] = {
     -22,   /* More treble */
     -20,   /* Clear voice */
     -26,   /* Dynamic */
+    -26,   /* Type01 */
+    -26,   /* Type02 */
 };
 
 static const char * const ntt_drc_mode_name[] = {
@@ -3389,6 +3391,8 @@ static const char * const ntt_drc_mode_name[] = {
     "More treble",
     "Clear voice",
     "Dynamic",
+    "Type01",
+    "Type02",
 };
 
 void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index)

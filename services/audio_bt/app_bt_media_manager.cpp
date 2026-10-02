@@ -802,7 +802,7 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
 		struct nvrecord_env_t *nvrecord_env;
 	    nv_record_env_get(&nvrecord_env);
 		uint8_t eq_index = nvrecord_env->eq_index_data;
-		if((eq_index >=0) && (eq_index <= 5))
+		if((eq_index >=0) && (eq_index <= 6))
 		{
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
             ntt_audio_drc_apply_by_eq_index(eq_index);

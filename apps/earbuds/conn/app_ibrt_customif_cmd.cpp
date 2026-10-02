@@ -1377,7 +1377,7 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
 	struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
 	uint8_t eq_index = p_buff[0];
-	if((eq_index >=0) && (eq_index <= 5))
+	if((eq_index >=0) && (eq_index <= 6))
 	{
 		if(eq_index != nvrecord_env->eq_index_data){
 			nvrecord_env->eq_index_data = eq_index;

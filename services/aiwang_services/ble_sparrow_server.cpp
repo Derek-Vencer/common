@@ -243,7 +243,7 @@ typedef enum {
     FUNC_EQ_CLEAR_VOICE = 0x0A
 } function_t;
 
-#define NTT_EQ_PRESET_COUNT              5
+#define NTT_EQ_PRESET_COUNT              7
 #define NTT_EQ_CLEAR_VOICE_PRESET        3
 #define NTT_EQ_PRESET_INVALID             0xFF
 
@@ -1482,13 +1482,15 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
 
 static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
 {
-    static const AUD_ID_ENUM eq_prompt_map[5] =
+    static const AUD_ID_ENUM eq_prompt_map[7] =
     {
-        AUD_ID_NUM_1,  /* EQ mode 0: 1 tone */
-        AUD_ID_NUM_2,  /* EQ mode 1: 2 tones */
-        AUD_ID_NUM_3,  /* EQ mode 2: 3 tones */
-        AUD_ID_NUM_4,  /* EQ mode 3: 4 tones / Clear Voice */
-        AUD_ID_NUM_5,  /* EQ mode 4: 5 tones */
+        AUD_ID_NUM_1,  /* EQ mode 0 */
+        AUD_ID_NUM_2,  /* EQ mode 1 */
+        AUD_ID_NUM_3,  /* EQ mode 2 */
+        AUD_ID_NUM_4,  /* EQ mode 3 / Clear Voice */
+        AUD_ID_NUM_5,  /* EQ mode 4 */
+        AUD_ID_NUM_6,  /* EQ mode 5 / Type01 */
+        AUD_ID_NUM_7,  /* EQ mode 6 / Type02 */
     };
 
     if (eq_preset >= ARRAY_SIZE(eq_prompt_map))
