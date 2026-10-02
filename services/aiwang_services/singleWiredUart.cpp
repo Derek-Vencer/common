@@ -68,7 +68,7 @@
 #endif
 
 #include "hal_sleep.h"
-
+#include "charger_with_icp1205.h"
 // 串口空闲定时器
 static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
@@ -83,6 +83,7 @@ extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 extern void earBudsCloseOff_PowerOff_StartTimer(void);
 extern bool ntt_manual_pairing_mode;
+extern "C" uint8_t icp1205_get_chrg_sts2(void);
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
 extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
@@ -128,6 +129,9 @@ static uint32_t ntt_last_box_battery_case_tick = 0;
     hal_trace_printf(2, "[goc-uart] " fmt, ##__VA_ARGS__)
 
 #endif
+
+static bool g_ntt_ota_reboot_boot = false;
+static bool g_ntt_ota_reboot_checked = false;
 
 //format
 // 55 aa  cmd  chanl_index  00 data
@@ -688,6 +692,31 @@ void wired_uart_get_battery_level(void)
     }
 }
 
+static void ntt_ota_reboot_flag_init(void)
+{
+    uint32_t bootmode = hal_sw_bootmode_get();
+    g_ntt_ota_reboot_boot = ((bootmode & HAL_SW_BOOTMODE_ENTER_HIDE_BOOT) != 0);
+    g_ntt_ota_reboot_checked = true;
+    DBGPRINT("[NTT_OTA_BOOT] bootmode=0x%08X ota_reboot=%d",bootmode,g_ntt_ota_reboot_boot);
+}
+
+static bool g_ntt_power_key_boot = false;
+
+static void ntt_poweron_reason_init(void)
+{
+    enum PMU_BOOT_CAUSE_T cause = pmu_boot_cause_get();
+    g_ntt_power_key_boot = (cause == PMU_BOOT_CAUSE_POWER_KEY);
+    DBGPRINT("[NTT_PWR_BOOT] cause=0x%04X power_key=%d",cause,g_ntt_power_key_boot);
+}
+
+static volatile bool g_ntt_1wire_active = false;
+static volatile uint32_t g_ntt_1wire_last_rx_time = 0;
+
+extern "C" bool ntt_1wire_is_active(void)
+{
+    return g_ntt_1wire_active;
+}
+
 extern "C" void dtm_enter_pairing_mode(void)
 {
     bool tws_connected;
@@ -1172,9 +1201,17 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
      */
     boxChargerStatus.getBatteryOK        = true;
     boxChargerStatus.boxChargerBattery   = box_battery;
-    boxChargerStatus.leftEarBudsBattery  = left_percent;
-    boxChargerStatus.rightEarBudsBattery = right_percent;
-
+    /*
+    * NTT:
+    * Charging case L/R battery values are only for debug/reference.
+    * Do NOT overwrite earbud battery values here.
+    *
+    * Earbud L/R battery source:
+    *   LOCAL = app_battery_current_level()
+    *   PEER  = TWS battery sync
+    */
+    // boxChargerStatus.leftEarBudsBattery  = left_percent;
+    // boxChargerStatus.rightEarBudsBattery = right_percent;
     box_battery_cache_valid = true;
 
     /*
@@ -1183,14 +1220,14 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
     box_battery_nv_save(box_battery);
 
     DBGPRINT(
-        "[BOX_BAT][UPDATED][%s] "
-        "CASE=%u%% L=%u%% R=%u%% "
+        "[BOX_BAT][CASE_REPORT][%s] "
+        "CASE=%u%% CASE_L=%u%% CASE_R=%u%% "
         "(raw L=%u R=%u)",
         isRightEarbuds == RIGHT_BUDS ?
             "RIGHT_EAR_FW" : "LEFT_EAR_FW",
-        boxChargerStatus.boxChargerBattery,
-        boxChargerStatus.leftEarBudsBattery,
-        boxChargerStatus.rightEarBudsBattery,
+        box_battery,
+        left_percent,
+        right_percent,
         left_level,
         right_level);
 
@@ -1389,6 +1426,7 @@ bool aiWangBoxIsUsed(void)
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
+    DBGPRINT("%s", __func__);
     uint8_t cmd_event = 0xff;
     uint16_t crc_dat = 0;
     uint8_t  operateLeftOrRight = 0xFF;
@@ -1427,7 +1465,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         ntt_audio_output_mute_refresh();
 		osTimerStop(uart_idle_timer_id);
 		osTimerStart(uart_idle_timer_id, UART_IDLE_TIMEOUT_MS);
-		//DBGPRINT("UART idle timer reset\n");
+		DBGPRINT("UART idle timer reset\n");
 	}
 	else{
 		uart_idle_detection_init();
@@ -1472,27 +1510,31 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
          }
     case CMD_GET_EAR_POWER:               // Get headphone battery level
     {
-        int8_t local_battery_raw = app_battery_current_level();
-        uint8_t local_battery = 0xFF;
+        uint8_t local_battery = app_battery_get_percent();
         uint8_t peer_battery = getPeerBattery();
 
+        pmu_ntt_case_closed_latch_set(false);
+        DBGPRINT("[NTT_CASE_LATCH] CMD_GET_EAR_POWER -> CASE OPEN latch=0");
+
         /*
-        * app_battery_current_level() 預期回傳 0~100。
-        * 小於 0 視為無效，大於 100 則限制為 100。
+        * NTT:
+        * Use the same precise battery percentage source as:
+        *   - BLE APP 0x31
+        *   - TWS battery sync
+        *
+        * Do not use app_battery_current_level() here,
+        * otherwise UART / BLE / TWS may report different values.
         */
-        if (local_battery_raw < 0)
+        if (local_battery > 100)
         {
             local_battery = 0xFF;
         }
-        else if (local_battery_raw > 100)
-        {
-            local_battery = 100;
-        }
-        else
-        {
-            local_battery = (uint8_t)local_battery_raw;
-        }
 
+        DBGPRINT(
+            "[EAR_POWER][%s] precise LOCAL=%u PEER=%u",
+            (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+            local_battery,
+            peer_battery);
         /*
         * 將本機電量與 TWS Peer 電量寫入正確的左右耳欄位。
         *
@@ -1528,70 +1570,16 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                 boxChargerStatus.rightEarBudsBattery = peer_battery;
             }
         }
-#if 0
-        /*
-        * 顯示本機與 Peer 電量。
-        * 無效值使用 INVALID，避免顯示成 255%。
-        */
-        if (local_battery <= 100 && peer_battery <= 100)
-        {
-            DBGPRINT("[EAR_POWER][%s] LOCAL=%u%% PEER=%u%%",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
-                    local_battery,
-                    peer_battery);
-        }
-        else if (local_battery <= 100)
-        {
-            DBGPRINT("[EAR_POWER][%s] LOCAL=%u%% PEER=INVALID",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
-                    local_battery);
-        }
-        else if (peer_battery <= 100)
-        {
-            DBGPRINT("[EAR_POWER][%s] LOCAL=INVALID PEER=%u%%",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
-                    peer_battery);
-        }
-        else
-        {
-            DBGPRINT("[EAR_POWER][%s] LOCAL=INVALID PEER=INVALID",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT");
-        }
 
-        /*
-        * 顯示目前保存的左耳、右耳與充電盒電量。
-        */
-        if (boxChargerStatus.leftEarBudsBattery <= 100 &&
-            boxChargerStatus.rightEarBudsBattery <= 100 &&
-            boxChargerStatus.boxChargerBattery <= 100)
-        {
-            DBGPRINT("[EAR_POWER][%s] L=%u%% R=%u%% CASE=%u%%",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
-                    boxChargerStatus.leftEarBudsBattery,
-                    boxChargerStatus.rightEarBudsBattery,
-                    boxChargerStatus.boxChargerBattery);
-        }
-        else
-        {
-            DBGPRINT("[EAR_POWER][%s] L=%s R=%s CASE=%s",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+        DBGPRINT(
+            "[EAR_POWER][%s] LOCAL=%u PEER=%u -> L=%u R=%u CASE=%u",
+            (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
+            local_battery,
+            peer_battery,
+            boxChargerStatus.leftEarBudsBattery,
+            boxChargerStatus.rightEarBudsBattery,
+            boxChargerStatus.boxChargerBattery);
 
-                    (boxChargerStatus.leftEarBudsBattery <= 100) ?
-                        "VALID" : "INVALID",
-
-                    (boxChargerStatus.rightEarBudsBattery <= 100) ?
-                        "VALID" : "INVALID",
-
-                    (boxChargerStatus.boxChargerBattery <= 100) ?
-                        "VALID" : "INVALID");
-
-            DBGPRINT("[EAR_POWER][%s][RAW] L=%u R=%u CASE=%u",
-                    (isRightEarbuds == RIGHT_BUDS) ? "RIGHT" : "LEFT",
-                    boxChargerStatus.leftEarBudsBattery,
-                    boxChargerStatus.rightEarBudsBattery,
-                    boxChargerStatus.boxChargerBattery);
-        }
-#endif
         /*
         * 目前只有右耳保存充電盒版本。
         *
@@ -1669,6 +1657,17 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             DBGPRINT("[POWER_OFF] received, wait 1.6s and check charger state");
 
             /*
+            * Charging-case MCU explicitly confirmed CASE CLOSED.
+            *
+            * Latch this state in PMU retention before any delayed shutdown.
+            * Pogo HIGH/LOW, charger PLUGIN/PLUGOUT and AC_IN/AC_OUT
+            * are NOT allowed to clear this state.
+            */
+            pmu_ntt_case_closed_latch_set(true);
+
+            DBGPRINT("[NTT_CASE_LATCH] CMD_POWER_OFF -> CLOSED latch=1");
+
+            /*
             * Do not shutdown immediately.
             * Mark close state and start delayed check.
             * If CMD_OPEN_CASE comes before timer expires,
@@ -1709,6 +1708,16 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_OPEN_CASE:
         {
             DBGPRINT("[CASE] OPEN received");
+            /*
+            * NTT:
+            * This is the authoritative event that releases
+            * the Case-Close retention latch.
+            *
+            * Pogo/charger events must NEVER clear this latch.
+            */
+            pmu_ntt_case_closed_latch_set(false);
+            DBGPRINT("[NTT_CASE_LATCH] CMD_OPEN_CASE -> CLOSED latch=0");
+
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
@@ -1798,7 +1807,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -2011,6 +2020,9 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             }
         }
 
+        pmu_ntt_case_closed_latch_set(false);
+        DBGPRINT("[NTT_CASE_LATCH] CMD_SEND_BOX_BATTERY_LEVEL -> CASE OPEN latch=0");
+
         ntt_case_state_sync_local_update(true);
         ntt_last_box_battery_case_tick = now;
         DBGPRINT("[BOX_BAT][PROCESS][%s] crc=0x%04X",isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",crc_dat);
@@ -2172,6 +2184,18 @@ static void wired_uart_communication_post_msg(uint8_t *uart_data, uint8_t len)
 static void wired_uart_communication_rx_data_pre(uint8_t *data_buf, uint8_t data_len)
 {
 	if( data_buf[0] != 0x55 || data_len < 3) return;
+
+    g_ntt_1wire_active = true;
+    g_ntt_1wire_last_rx_time = hal_sys_timer_get();
+
+    DBGPRINT("[NTT_1WIRE_RX] len=%u first=0x%02X cmd=0x%02X",
+        data_len,
+        data_buf[0],
+        (data_len >= 3) ? data_buf[2] : 0xFF);
+
+    REL_TRACE_NOCRLF(0, "[NTT_1WIRE_RX] DATA: ");
+    DUMP8("%02X ", data_buf, data_len);
+
 	memset(wiredUartReceiveData, 0x00, MAX_RX_SIZE);
 	memcpy(wiredUartReceiveData, data_buf, (data_len>MAX_RX_SIZE?MAX_RX_SIZE:data_len));
 	wired_uart_communication_post_msg(data_buf, (data_len>MAX_RX_SIZE?MAX_RX_SIZE:data_len));
@@ -2195,71 +2219,253 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
 static void uart_idle_timeout_callback(void const *argument)
 {
     int8_t charging = app_battery_is_charging();
+    uint8_t icp1205_reg10 = 0xFF;
+    uint8_t chrg_sts2 = 0xFF;
+    uint32_t ret = 0;
+    bool ota_reboot = g_ntt_ota_reboot_boot;
+    bool key_reboot = g_ntt_power_key_boot;
+    bool case_closed_latch = pmu_ntt_case_closed_latch_get();
 
-    DBGPRINT(
-        "UART idle timeout detected! No data received for %dms, charging=%d",
+    bool vin = false;
+    bool uvlo = false;
+    bool ovp = false;
+    bool shorted = false;
+    bool vin_normal = false;
+
+    g_ntt_1wire_active = false;
+
+    DBGPRINT("UART idle timeout detected! No data received for %dms, charging=%d ota_reboot=%d power_key=%d",
         UART_IDLE_TIMEOUT_MS,
-        charging);
+        charging,
+        ota_reboot,
+        key_reboot);
 
     aiwang_box_battery_update_enable(false);
 
     /*
      * UART idle does not mean out of case.
-     * When still charging, keep the current state and do not trigger
-     * IBRT/UI state callbacks during early charging boot.
+     * If charging is still active, keep CASE CLOSED.
      */
     if (charging)
     {
-        DBGPRINT(
-            "[NTT_INBOX] UART idle but still charging, "
-            "ignore OUT_CASE");
+        DBGPRINT("[NTT_INBOX] UART idle but still charging -> keep CASE CLOSED");
 
         set_er_inbox_status(1);        
 
-                /*
-         * Update IBRT/UI state.
-         * Without this, UI may remain at IN_BOX_OPEN and CASE_CLOSE /
-         * power-off flow will never be triggered.
-         */
         app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
         app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
 
         goto exit;
     }
 
+    /*
+     * charging == 0 does NOT always mean OUT_CASE.
+     *
+     * Read live ICP1205 Reg10 and CHRG_STS2.
+     */
+    ret = readDataFrom_ICP1205(ICP1205_COMM_CON,&icp1205_reg10,1);
+
+    chrg_sts2 = icp1205_get_chrg_sts2();
+
+    /*
+     * Decode CHRG_STS2.
+     *
+     * VIN_NORMAL:
+     *   VIN   = 1
+     *   UVLO  = 0
+     *   OVP   = 0
+     */
+    vin     = !!(chrg_sts2 & CHRGSTS2_VIN_STS);
+    uvlo    = !!(chrg_sts2 & CHRGSTS2_VIN_UVLO_STS);
+    ovp     = !!(chrg_sts2 & CHRGSTS2_VIN_OVP_STS);
+    shorted = !!(chrg_sts2 & CHRGSTS2_SHORT_STS);
+
+    vin_normal = vin && !uvlo && !ovp;
+
+    if (ret != 0)
+    {
+        DBGPRINT("[NTT_CASE_CHECK] Read ICP1205 Reg10 failed ret=%d STS2=0x%02X VIN=%d UVLO=%d OVP=%d SHORT=%d",
+            ret,
+            chrg_sts2,
+            vin,
+            uvlo,
+            ovp,
+            shorted);
+    }
+    else
+    {
+        DBGPRINT("[NTT_CASE_CHECK] charging=0 Reg10_live=0x%02X Reg10_cache=0x%02X STS2=0x%02X VIN=%d UVLO=%d OVP=%d SHORT=%d VIN_NORMAL=%d ota=%d key=%d",
+            icp1205_reg10,
+            Icp1205_Reg10_get(),
+            chrg_sts2,
+            vin,
+            uvlo,
+            ovp,
+            shorted,
+            vin_normal,
+            ota_reboot,
+            key_reboot);
+    }
+
+    /*
+     * NTT:
+     * VIN_NORMAL means ICP1205 still detects normal VIN.
+     *
+     * Even if app_battery_is_charging() == 0 and UART becomes idle,
+     * do NOT enter OUT_CASE / shutdown flow.
+     *
+     * Keep earbud powered on.
+     */
+    if (vin_normal)
+    {
+        DBGPRINT("[NTT_POWER_KEEP] VIN_NORMAL STS2=0x%02X VIN=%d UVLO=%d OVP=%d -> KEEP POWER ON",
+            chrg_sts2,
+            vin,
+            uvlo,
+            ovp);
+
+        /*
+        * Original OUT_CASE processing continues here...
+        */
+
+        pmu_ntt_case_closed_latch_set(false);
+
+        DBGPRINT(
+            "[NTT_OUTBOX] "
+            "UART idle + charging=0 "
+            "Reg10=0x%02X STS2=0x%02X -> CASE OPEN latch=0",
+            icp1205_reg10,
+            chrg_sts2);
+
+        set_er_inbox_status(0);
+        ntt_audio_output_mute_refresh();
+        ntt_case_state_sync_local_update(false);
+
+        app_ui_set_local_box_state(IBRT_OUT_BOX);
+        app_ui_sync_box_state(IBRT_OUT_BOX);
+
+        /*
+        * Keep your existing OUT_CASE / pairing handling below here.
+        */
+        /*
+         * Important:
+         * Do NOT start/continue OUT_CASE shutdown decision here.
+         */
+        goto exit;
+    }
+
+    /*
+     * Existing CASE CLOSED protection.
+     *
+     * NOTE:
+     * Reg10 bit4 is COMM transparent-mode status.
+     * Use live Reg10 here instead of stale cached Reg10.
+     */
+
+    DBGPRINT("[NTT_CASE_CHECK] latch=%d Reg10=0x%02X STS2=0x%02X ota=%d key=%d",
+        case_closed_latch,
+        icp1205_reg10,
+        chrg_sts2,
+        ota_reboot,
+        key_reboot);
+
+    /*
+    * If latch == 0, CASE OPEN has already been confirmed.
+    *
+    * UART idle / STS2 / Reg10 must NOT force the state back to CASE CLOSED.
+    * Keep the earbud powered on.
+    */
+    if (!case_closed_latch)
+    {
+        DBGPRINT("[NTT_POWER_KEEP] latch=0 -> CASE OPEN confirmed, keep power ON");
+
+        /*
+        * Original OUT_CASE processing continues here...
+        */
+
+        pmu_ntt_case_closed_latch_set(false);
+
+        DBGPRINT(
+            "[NTT_OUTBOX] "
+            "UART idle + charging=0 "
+            "Reg10=0x%02X STS2=0x%02X -> CASE OPEN latch=0",
+            icp1205_reg10,
+            chrg_sts2);
+
+        set_er_inbox_status(0);
+        ntt_audio_output_mute_refresh();
+        ntt_case_state_sync_local_update(false);
+
+        app_ui_set_local_box_state(IBRT_OUT_BOX);
+        app_ui_sync_box_state(IBRT_OUT_BOX);
+
+        /*
+        * Keep your existing OUT_CASE / pairing handling below here.
+        */
+
+        /*
+        * Do not set inbox=1.
+        * Do not set IBRT_IN_BOX_CLOSED.
+        * Do not restart shutdown flow.
+        */
+        goto exit;
+    }
+
+    /*
+    * Only when latch == 1 are we allowed to maintain CASE CLOSED.
+    */
+    if ((ret == 0) &&
+        (
+            ((chrg_sts2 == 0x00) &&
+            ((icp1205_reg10 == 0x13) || ((icp1205_reg10 == 0x03) &&
+            !ota_reboot &&
+            !key_reboot)))
+            ||
+            ((chrg_sts2 == 0x80) &&
+            (icp1205_reg10 == 0x03))
+        ))
+    {
+        DBGPRINT("[NTT_INBOX] latch=1 UART idle + charging=0 Reg10=0x%02X STS2=0x%02X ota=%d key=%d -> keep CASE CLOSED",
+            icp1205_reg10,
+            chrg_sts2,
+            ota_reboot,
+            key_reboot);
+
+        /*
+        * latch is already 1.
+        * No need to recreate CLOSED state from UART idle.
+        */
+        set_er_inbox_status(1);
+
+        app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
+        app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
+
+        goto exit;
+    }
+
+    /*
+     * Original OUT_CASE processing continues here...
+     */
+
+    pmu_ntt_case_closed_latch_set(false);
+
+    DBGPRINT(
+        "[NTT_OUTBOX] "
+        "UART idle + charging=0 "
+        "Reg10=0x%02X STS2=0x%02X -> CASE OPEN latch=0",
+        icp1205_reg10,
+        chrg_sts2);
+
     set_er_inbox_status(0);
     ntt_audio_output_mute_refresh();
     ntt_case_state_sync_local_update(false);
 
-    DBGPRINT(
-        "[NTT_OUTBOX] UART idle + charging=0 "
-        "-> local OUT_CASE and sync peer");
-
-    /*
-     * NTT:
-     * UART idle means earbud is out of pogo / out of box.
-     * Update UI box state first, otherwise slave may stay in IN_BOX_OPEN.
-     */
     app_ui_set_local_box_state(IBRT_OUT_BOX);
     app_ui_sync_box_state(IBRT_OUT_BOX);
+
     /*
-     * First pair mode:
-     * No mobile record case.
-     * Out case for 2 seconds:
-     * Do not shutdown. Only leave pairing / discoverable mode.
+     * Keep your existing OUT_CASE / pairing handling below here.
      */
-    if (ntt_first_no_mobile_pair_mode &&
-        bts_tws_if_is_tws_link_connected() &&
-        !app_bt_ibrt_has_mobile_link_connected())
-    {
-        DBGPRINT("[NTT_PAIR] uart idle + no mobile record + tws connected + out case -> exit pairing mode");
-
-        app_bt_set_access_mode(BTIF_BAM_NOT_ACCESSIBLE);
-
-        ntt_first_no_mobile_pair_mode = false;
-
-        goto exit;
-    }
 
 exit:
     osTimerDelete(uart_idle_timer_id);
@@ -2272,6 +2478,7 @@ exit:
  */
 void uart_idle_detection_init(void)
 {
+    DBGPRINT("%s", __func__);
     // 创建空闲定时器
     if (uart_idle_timer_id == NULL) {
         uart_idle_timer_id = osTimerCreate(osTimer(UART_IDLE_TIMER), osTimerOnce, NULL);
@@ -2288,8 +2495,16 @@ void uart_idle_detection_init(void)
 
 void wired_uart_communication_modual_init(void)
 {
+    DBGPRINT("%s", __func__);
     if(!wiredUartInitFlag)
     {
+        DBGPRINT("wiredUartInitFlag = 0\n");
+        /*
+         * Capture OTA reboot flag as early as possible.
+         */
+        ntt_ota_reboot_flag_init();
+        ntt_poweron_reason_init();
+
         DBGPRINT("%s", __func__);
         app_set_threadhandle(APP_MODUAL_AIWANG_WIRED_UART, wired_uart_communication_msg_handle_process);
         communication_init();

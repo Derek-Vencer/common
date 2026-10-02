@@ -62,6 +62,7 @@ static osThreadId charger_manager_thread_id = NULL;
 static void charger_manager_handler_thread(const void *arg);
 osThreadExDef(charger_manager_handler_thread, osPriorityNormal, 1, 1024*3, "charger_manager_thread", 1U);
 
+extern "C" bool ntt_1wire_is_active(void);
 
 static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin);
 /*********************************************************************************
@@ -94,7 +95,7 @@ void ICP1205_BES_I2c_Init(void)
     i2c_cfg.addr_as_slave  = 0;
     i2c_cfg.rising_time_ns = 0;
     uint32_t ret = hal_i2c_open(HAL_I2C_ID_3, &i2c_cfg);
-    printf("%s open I2C Failed: 0x%x", __func__, ret);
+    printf("%s open I2C : 0x%x", __func__, ret);
 	(void)ret;
 }
 
@@ -192,6 +193,7 @@ static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin)
  ******************************************************************************/
 void Icp1205SetChrgFunDisable(void)
 {
+	  DBGPRINT("Icp1205SetChrgFunDisable");
 	  uint8_t dat;
 	  readDataFrom_ICP1205(ICP1205_CHRG_CON1, &dat, 1);
 	  dat &=0XFC;//(~CHRGCON1_CHRG_EN);
@@ -208,6 +210,7 @@ void Icp1205SetChrgFunDisable(void)
  ******************************************************************************/
 void Icp1205SetChrgFunEnable(void)
 {
+   DBGPRINT("Icp1205SetChrgFunEnable");
    uint8_t dat;
    readDataFrom_ICP1205(ICP1205_CHRG_CON1,&dat,1);
    dat |=0x23;
@@ -224,6 +227,7 @@ void Icp1205SetChrgFunEnable(void)
  ******************************************************************************/
 void Icp1205Cmp0P15IntEnable(void)
 {
+   DBGPRINT("Icp1205Cmp0P15IntEnable");
    uint8_t dat;
    readDataFrom_ICP1205(ICP1205_INT_MASK2,&dat,1);
    dat &=(~INT2_0P15CMP_MSK);
@@ -239,6 +243,7 @@ void Icp1205Cmp0P15IntEnable(void)
  ******************************************************************************/
 void Icp1205Cmp0P15IntDisable(void)
 {
+   DBGPRINT("Icp1205Cmp0P15IntDisable");	
    uint8_t dat;
    readDataFrom_ICP1205(ICP1205_INT_MASK2,&dat,1);
    dat |=INT2_0P15CMP_MSK;
@@ -256,6 +261,7 @@ void Icp1205Cmp0P15IntDisable(void)
  ******************************************************************************/
 void Icp1205ClearIntFlag(void)
 {
+	DBGPRINT("Icp1205ClearIntFlag");	
 	uint8_t u8dat[3]={0x00,0x00,0x00};
 	writeDataTo_ICP1205(ICP1205_INT_STAT1,u8dat,sizeof(u8dat));
 }
@@ -270,6 +276,7 @@ void Icp1205ClearIntFlag(void)
  ******************************************************************************/
 void Icp1205IntEnable(void)
 {
+  DBGPRINT("Icp1205IntEnable");	
   uint8_t u8dat;
   //readDataFrom_ICP1205(ICP1205_INT_EN,&u8dat,1);
   u8dat =0X01;
@@ -287,6 +294,7 @@ void Icp1205IntEnable(void)
  ******************************************************************************/
 void Icp1205IntDisable(void)
 {
+	DBGPRINT("Icp1205IntDisable");	
 	uint8_t u8dat;
     u8dat =0;
     writeDataTo_ICP1205(ICP1205_INT_EN,&u8dat,1);
@@ -345,6 +353,7 @@ void Icp1205ShipEnable(void)
  ******************************************************************************/
 void Icp1205LoadComEnable(bool tx_enable, bool rx_enable)
 {
+	 DBGPRINT("Icp1205LoadComEnable");	
 	 uint8_t data = 0;
      if(tx_enable)  data |=(1<<1);
      if(rx_enable)  data |=(1<<0);
@@ -360,6 +369,33 @@ void Icp1205LoadComEnable(bool tx_enable, bool rx_enable)
  **
  ** \retval void            返回无
  ******************************************************************************/
+uint8_t icp1205_get_chrg_sts2(void)
+{
+    uint8_t sts2 = 0xFF;
+    if (readDataFrom_ICP1205(ICP1205_CHRG_STS2,&sts2,1) != 0)
+    {
+        DBGPRINT("[NTT_1205] read CHRG_STS2 failed");
+        return 0xFF;
+    }
+    DBGPRINT("[NTT_1205] CHRG_STS2=0x%02X",sts2);
+
+    return sts2;
+}
+
+static uint8_t g_icp1205_reg10 = 0xFF;
+
+uint8_t Icp1205_Reg10_get(void)
+{
+    return g_icp1205_reg10;
+}
+
+void Icp1205_Reg10_set(uint8_t status)
+{
+    g_icp1205_reg10 = status;
+
+    DBGPRINT("[ICP1205] Reg10 cache set = 0x%02X",g_icp1205_reg10);
+}
+
 void ICP1205_Init(void)
 {
 	uint8_t buffer[64]   = {0};
@@ -391,6 +427,7 @@ void ICP1205_Init(void)
 	writeDataTo_ICP1205(ICP1205_COMM_CON,&buffer[0],1);
 	readDataFrom_ICP1205(ICP1205_COMM_CON,&buffer[0],1);
 	DBGPRINT("Read Icp1205_Reg10 0x%02x",buffer[0]);
+	Icp1205_Reg10_set(buffer[0]);
 
 #if 1
 	//deafult_value reg
@@ -416,9 +453,65 @@ void ICP1205_Init(void)
 	REL_TRACE_NOCRLF(0, "initSettingsRegsValue: ");
 	DUMP8("%02x ",&initSettingsRegsValue[0], 16);
 
+	// Read ICP1205 charge / communication status
+	{
+		uint8_t sts2  = initSettingsRegsValue[ICP1205_CHRG_STS2];
+		uint8_t reg10 = 0xFF;
 
-	//read charge status
-	DBGPRINT("charge status: %02X", initSettingsRegsValue[ICP1205_CHRG_STS2]);
+		uint32_t reg10_ret =
+			readDataFrom_ICP1205(
+				ICP1205_COMM_CON,
+				&reg10,
+				1);
+
+		bool vin     = !!(sts2 & CHRGSTS2_VIN_STS);
+		bool uvlo    = !!(sts2 & CHRGSTS2_VIN_UVLO_STS);
+		bool ovp     = !!(sts2 & CHRGSTS2_VIN_OVP_STS);
+		bool shorted = !!(sts2 & CHRGSTS2_SHORT_STS);
+		bool bit1    = !!(sts2 & (1u << 1));
+
+		bool transparent =
+			(reg10_ret == 0) &&
+			!!(reg10 & COMMCON_BUSY_STS);
+
+		const char *vin_state;
+
+		if (ovp)
+		{
+			vin_state = "VIN_OVP";
+		}
+		else if (uvlo && vin)
+		{
+			vin_state = "VIN_PRESENT_UVLO";
+		}
+		else if (uvlo && !vin)
+		{
+			vin_state = "VIN_LOW_OR_OFF";
+		}
+		else if (vin)
+		{
+			vin_state = "VIN_NORMAL";
+		}
+		else
+		{
+			vin_state = "VIN_NOT_PRESENT";
+		}
+
+		DBGPRINT(
+			"[ICP1205_STATUS] "
+			"STS2=0x%02X VIN=%d UVLO=%d OVP=%d SHORT=%d BIT1=%d state=%s "
+			"REG10=0x%02X TRANSPARENT=%d 1WIRE=%d",
+			sts2,
+			vin,
+			uvlo,
+			ovp,
+			shorted,
+			bit1,
+			vin_state,
+			reg10,
+			transparent,
+			ntt_1wire_is_active());
+	}
 #endif
 
 #if 1
@@ -497,30 +590,61 @@ void hds_check_cmd_at_boot(void)
 
 static void Icp1205UpdataIntSts(void)
 {
-	uint8_t u8RegTable[40],u8dat1,u8tmp;
-	uint32_t ret ;
-	//Read REG0x14 Reg0x15
-	ret = readDataFrom_ICP1205(ICP1205_REV_DAT1,&u8RegTable[0],2);
-	DBGPRINT("Icp1205UpdataIntSts REG0x14=0x%02x Reg0x15=0x%02x ret=%d",u8RegTable[0],u8RegTable[1], ret);
-	(void)ret;
-	if ( 0xA5 != u8RegTable[0] || 0xA5 != u8RegTable[1]) {
-		ICP1205_Init();
-		ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
-		Icp1205IntEnable();
-		return;
-	}
+    uint8_t u8RegTable[40] = {0};
+    uint8_t u8dat1;
+    uint8_t u8tmp;
 
-	//Reg10 ICP1205_ADS EnterTransparentMode
-	readDataFrom_ICP1205( ICP1205_COMM_CON, &u8tmp, 1);
-	DBGPRINT("Read Icp1205_Reg10 %02x",u8tmp);
-	if(u8tmp & C0MMON_BUSY_FLAG)
-	{
-		u8tmp = 0X03;//保留透传、载波错误与成功中断
-		DBGPRINT("Write Icp1205_Reg10 %02x",u8tmp);
-		writeDataTo_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
-	}
+    // NTT debug: always read latest charger status
+    uint8_t chrg_sts1 = 0;
+    uint8_t chrg_sts2 = 0;
+    uint8_t chrg_sts3 = 0;
 
-	do {
+    uint32_t ret;
+
+    // Read REG0x14 Reg0x15
+    ret = readDataFrom_ICP1205(ICP1205_REV_DAT1,&u8RegTable[0],2);
+
+    DBGPRINT("Icp1205UpdataIntSts REG0x14=0x%02x Reg0x15=0x%02x ret=%d",u8RegTable[0],u8RegTable[1],ret);
+
+    (void)ret;
+
+    if (0xA5 != u8RegTable[0] || 0xA5 != u8RegTable[1])
+    {
+        ICP1205_Init();
+        ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
+        Icp1205IntEnable();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // NTT: read real-time charger status
+    // ---------------------------------------------------------
+    readDataFrom_ICP1205(ICP1205_CHRG_STS1,&chrg_sts1,1);
+    readDataFrom_ICP1205(ICP1205_CHRG_STS2,&chrg_sts2,1);
+    readDataFrom_ICP1205(ICP1205_CHRG_STS3,&chrg_sts3,1);
+
+    DBGPRINT("[NTT_1205_STS] STS1=%02X STS2=%02X STS3=%02X VIN=%d UVLO=%d OVP=%d SHORT=%d",
+        chrg_sts1,
+        chrg_sts2,
+        chrg_sts3,
+        !!(chrg_sts2 & CHRGSTS2_VIN_STS),
+        !!(chrg_sts2 & CHRGSTS2_VIN_UVLO_STS),
+        !!(chrg_sts2 & CHRGSTS2_VIN_OVP_STS),
+        !!(chrg_sts2 & CHRGSTS2_SHORT_STS));
+
+    // Reg10 ICP1205_ADS EnterTransparentMode
+    readDataFrom_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
+    DBGPRINT("Read Icp1205_Reg10 %02x", u8tmp);
+
+    if (u8tmp & C0MMON_BUSY_FLAG)
+    {
+        u8tmp = 0X03;
+        DBGPRINT("Write Icp1205_Reg10 %02x", u8tmp);
+        writeDataTo_ICP1205(ICP1205_COMM_CON,&u8tmp,1);
+    }
+
+    do
+    	{
 		//ICP1205_INT_STAT1 0x21 ICP1205_INT_STAT2 0x22 ICP1205_INT_STAT3 0x23
 	   if(readDataFrom_ICP1205(ICP1205_INT_STAT1,u8RegTable,6))
 	   {
@@ -636,11 +760,17 @@ static void Icp1205UpdataIntSts(void)
 				break;
 			case CHRGSTS1_CHRG_ERR_STS:
 				DBGPRINT("Charge error.");
-				if (u8RegTable[ICP1205_CHRG_STS2] & CHRGSTS2_VIN_OVP_STS) {
+
+				if (chrg_sts2 & CHRGSTS2_VIN_OVP_STS)
+				{
 					DBGPRINT("Charge error OVP!");
+					DBGPRINT("[NTT_1205_CASE] VIN PRESENT, STS2=%02X",chrg_sts2);
 				}
-				if (u8RegTable[ICP1205_CHRG_STS2] & CHRGSTS2_VIN_UVLO_STS) {
+
+				if (chrg_sts2 & CHRGSTS2_VIN_UVLO_STS)
+				{
 					DBGPRINT("Charge error UVLO!");
+					DBGPRINT("[NTT_1205_CASE] VIN ABSENT, STS2=%02X UVLO=%d",chrg_sts2,!!(chrg_sts2 & CHRGSTS2_VIN_UVLO_STS));
 				}
 				break;
 			default:
@@ -669,7 +799,7 @@ static void Icp1205UpdataIntSts(void)
 			//return;//DEBUG
 		}
 		//Bit3 :chrg_ntc
-		readDataFrom_ICP1205(ICP1205_CHRG_STS1, &u8RegTable[ICP1205_CHRG_STS3], 1);
+		readDataFrom_ICP1205(ICP1205_CHRG_STS3,&u8RegTable[ICP1205_CHRG_STS3],1);
 		if(u8RegTable[1]&INT2_NTC_FLG)
 		{
 			osDelay(100);

@@ -55,6 +55,7 @@
 #include "bt_if.h"
 #include "intersyshci.h"
 #include "bt_app_api.h"
+#include "ICP1205.h"
 
 #ifdef SUPPORT_SINGLE_WIRE_COM
 #include "communication_svr.h"
@@ -2528,6 +2529,7 @@ int app_init(void)
     app_sysfreq_req(APP_SYSFREQ_USER_APP_INIT, APP_SYSFREQ_208M);
 
     int nRet = 0;
+    bool case_closed_latched = false;
     struct nvrecord_env_t *nvrecord_env;
 #if defined(IGNORE_POWER_ON_KEY_DURING_BOOT_UP) || defined(BESUI_TWS_EN) || defined(FORCE_NOSIGNALINGMODE) || defined(FORCE_NOSIGNALINGMODE)
     MAIN_TRACE(0,"IGNORE_POWER_ON_KEY_DURING_BOOT_UP ........");
@@ -2732,12 +2734,15 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     stereoui_init();
 #endif
 
-
-    nRet = app_battery_open();
-    MAIN_TRACE(1,"BATTERY %d pwron_case=%d", nRet, pwron_case);
     if (pwron_case != APP_POWERON_CASE_TEST){
         charger_manager_start();
 		sparraw_service_init();
+        nRet = app_battery_open();
+        MAIN_TRACE(1,"BATTERY %d pwron_case=%d", nRet, pwron_case);
+
+        case_closed_latched = pmu_ntt_case_closed_latch_get();
+        MAIN_TRACE(3,"[NTT_BOOT_LATCH] closed=%d boot=0x%04X nRet=%d",case_closed_latched,pmu_boot_cause_get(),nRet);
+
         switch (nRet) {
             case APP_BATTERY_OPEN_MODE_NORMAL:
             	MAIN_TRACE(0,"NORMAL POWERON!");
@@ -3140,36 +3145,39 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
 
     app_application_ready_to_start_callback();
 
-    /*
-    * NTT:
-    * Charging power-on 時先讓 app/audio/BT/UI 初始化完成。
-    * 到這裡系統已經 ready，再啟動 PogonIn 關機檢查。
-    */
-    if (ntt_charging_pwron_pending_shutdown)
+    case_closed_latched = pmu_ntt_case_closed_latch_get();
+
+    if (case_closed_latched)
+    {
+        MAIN_TRACE(2,"[NTT_BOOT_LATCH] CASE CLOSED retained boot=0x%04X -> force shutdown pending",pmu_boot_cause_get());
+
+        /*
+        * CASE_CLOSED latch has highest priority.
+        *
+        * charging=0 may be caused by pogo bounce /
+        * CHG_OUT_PWRON / temporary charger removal.
+        *
+        * Do NOT cancel pending shutdown here.
+        */
+        ntt_charging_pwron_pending_shutdown = true;
+
+        earBudsCloseOff_PogonIn_StartTimer();
+    }
+    else if (ntt_charging_pwron_pending_shutdown)
     {
         int8_t charging = app_battery_is_charging();
 
-        MAIN_TRACE(
-            2,
-            "[POWER_OFF] application ready, pending=%d charging=%d",
-            ntt_charging_pwron_pending_shutdown,
-            charging);
+        MAIN_TRACE(2,"[POWER_OFF] application ready, pending=%d charging=%d latch=0",ntt_charging_pwron_pending_shutdown,charging);
 
         if (charging)
         {
-            MAIN_TRACE(
-                0,
-                "[POWER_OFF] application ready and still charging, "
-                "start PogonIn shutdown timer");
+            MAIN_TRACE(0,"[POWER_OFF] application ready and still charging -> start shutdown timer");
 
             earBudsCloseOff_PogonIn_StartTimer();
         }
         else
         {
-            MAIN_TRACE(
-                0,
-                "[POWER_OFF] application ready but charging removed, "
-                "cancel pending shutdown");
+            MAIN_TRACE(0,"[POWER_OFF] charging removed and latch=0 -> cancel pending shutdown");
 
             ntt_charging_pwron_pending_shutdown = false;
         }

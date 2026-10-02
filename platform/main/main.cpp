@@ -74,7 +74,7 @@ extern "C" {
 #include "twsui_comm.h"
 #include "besui_common.h"
 #endif
-
+extern "C" bool ntt_case_poweroff_is_open_cancelled(void);
 extern "C" void log_dump_init(void);
 extern "C" void crash_dump_init(void);
 #ifdef USER_SECURE_BOOT
@@ -599,24 +599,51 @@ int main(void)
     }
 
     TR_INFO(TR_MOD(MAIN), "byebye~~~ %d\n", sys_case);
-    if ((sys_case == 1)||(sys_case == 0)){
+
+    if ((sys_case == 1) || (sys_case == 0))
+    {
+        bool case_latch = pmu_ntt_case_closed_latch_get();
+
+        TR_INFO(TR_MOD(MAIN),"[NTT_SHUTDOWN_CHECK] final latch=%d sys_case=%d",case_latch, sys_case);
+
+        if (case_latch == 0)
+        {
+            TR_INFO(TR_MOD(MAIN),"[NTT_SHUTDOWN_CHECK] CASE OPEN -> redirect shutdown to reset");
+
+            sys_case = 2;
+            goto system_reset;
+        }
+
         TR_INFO(TR_MOD(MAIN), "shutdown\n");
+
 #if defined(_AUTO_TEST_)
         AUTO_TEST_SEND("System shutdown.");
         osDelay(50);
 #endif
+
         hal_sw_bootmode_clear(HAL_SW_BOOTMODE_REBOOT);
+
 #ifdef BESUI_TWS_EN
-        if((uicom.ship_mode_flag)&&(app_shipmode_gpio_cfg.pin != HAL_IOMUX_PIN_NUM))
+        if ((uicom.ship_mode_flag) &&
+            (app_shipmode_gpio_cfg.pin != HAL_IOMUX_PIN_NUM))
         {
             TR_INFO(TR_MOD(MAIN), "ship mode\n");
-            hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_shipmode_gpio_cfg.pin, HAL_GPIO_DIR_OUT, 1);
+            hal_gpio_pin_set_dir(
+                (enum HAL_GPIO_PIN_T)app_shipmode_gpio_cfg.pin,
+                HAL_GPIO_DIR_OUT,
+                1);
             osDelay(200);
         }
-#endif     
+#endif
+
         pmu_shutdown();
-    }else if (sys_case == 2){
+    }
+    else if (sys_case == 2)
+    {
+    system_reset:
+
         TR_INFO(TR_MOD(MAIN), "reset\n");
+
 #if defined(_AUTO_TEST_)
         AUTO_TEST_SEND("System reset.");
         osDelay(50);

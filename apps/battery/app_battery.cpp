@@ -160,7 +160,7 @@ static bool g_low_bat_voice_first = true;
 #define APP_BATTERY_GET_PRAMS(appevt, prams) ((prams) = appevt&0xffff)
 #if defined(IBRT)
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
-
+extern "C" uint8_t icp1205_get_chrg_sts2(void);
 /*
  * Implemented by the Sparrow BLE service. It sends the three-byte battery
  * payload through the proactive 0x31 Notify packet.
@@ -495,12 +495,33 @@ void ntt_case_poweroff_enable(void)
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
     int8_t charging = app_battery_is_charging();
-
-    BATTERY_TRACE(2,"[POWER_OFF] PogonIn handler charging=%d pending=%d",charging,ntt_charging_pwron_pending_shutdown);
+    uint8_t case_state = ntt_case_state_get_local();
 
     /*
-     * The charger event can toggle quickly during case open/close.
-     * Always validate the latest latched request before continuing.
+     * NTT:
+     * Persistent Case-Close latch stored in PMU NOT_RESET register.
+     *
+     * latch = 1:
+     *   Charging case has explicitly sent CMD_POWER_OFF.
+     *
+     * latch = 0:
+     *   Case Close has not been confirmed, or CMD_OPEN_CASE
+     *   has explicitly cleared it.
+     */
+    bool case_closed_latched = pmu_ntt_case_closed_latch_get();
+
+    BATTERY_TRACE(5,"[POWER_OFF] PogonIn handler charging=%d pending=%d open_cancel=%d case=%d latch=%d",
+        charging,
+        ntt_charging_pwron_pending_shutdown,
+        g_ntt_case_open_cancel,
+        case_state,
+        case_closed_latched);
+
+    /*
+     * ------------------------------------------------------------
+     * Priority 0:
+     * Obsolete timer callback.
+     * ------------------------------------------------------------
      */
     if (!ntt_charging_pwron_pending_shutdown)
     {
@@ -509,75 +530,214 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
     }
 
     /*
-    * Do not use BES UI case state as the shutdown-cancel condition.
-    *
-    * During the 3-second Power-On prompt delay, BES UI may generate a
-    * delayed CASE_OPEN event even though the earbud is still charging
-    * inside the case.
-    *
-    * Cancel shutdown only when:
-    * 1. Charger is actually removed, or
-    * 2. A confirmed OPEN_CASE command has called
-    *    ntt_case_poweroff_cancel().
-    */
-    if (!charging || g_ntt_case_open_cancel)
+     * ------------------------------------------------------------
+     * Priority 1:
+     * Explicit CMD_OPEN_CASE has the highest priority.
+     *
+     * ntt_case_poweroff_cancel() sets:
+     *     g_ntt_case_open_cancel = true
+     *
+     * CMD_OPEN_CASE also clears PMU Case-Close latch.
+     *
+     * Therefore a real OPEN_CASE always cancels shutdown.
+     * ------------------------------------------------------------
+     */
+    if (g_ntt_case_open_cancel)
     {
-        BATTERY_TRACE(3,
-                    "[POWER_OFF] cancel charging=%d open_cancel=%d case=%d",
-                    charging,
-                    g_ntt_case_open_cancel,
-                    ntt_case_state_get_local());
+        BATTERY_TRACE(4,"[POWER_OFF] OPEN_CASE confirmed charging=%d case=%d latch=%d -> cancel shutdown",
+            charging,
+            case_state,
+            case_closed_latched);
 
         ntt_charging_pwron_pending_shutdown = false;
 
-    #ifdef IBRT
+#ifdef IBRT
         g_pogonin_role_switch_requested = false;
         g_pogonin_role_switch_wait_count = 0;
         ntt_case_close_role_switch_reset();
-    #endif
+#endif
+
         return;
     }
 
     /*
-    * Log the inconsistent UI state, but do not cancel because the
-    * charger confirms that the earbud is still physically in the case.
-    */
-    if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE)
+     * ------------------------------------------------------------
+     * Priority 2:
+     * CASE_CLOSED retention latch.
+     *
+     * Once CMD_POWER_OFF has confirmed Case Close:
+     *
+     *   charging=0
+     *   charger PLUGOUT
+     *   AC_OUT
+     *   Pogo HIGH/LOW bounce
+     *   temporary OUT_CASE
+     *
+     * are NOT allowed to cancel shutdown.
+     *
+     * Only CMD_OPEN_CASE may clear this latch.
+     * ------------------------------------------------------------
+     */
+    if (case_closed_latched)
     {
-        BATTERY_TRACE(2,
-                    "[POWER_OFF] ignore stale case=%d while charging=%d",
-                    ntt_case_state_get_local(),
-                    charging);
+        if (!charging)
+        {
+            BATTERY_TRACE(3,"[POWER_OFF] charging=0 but CASE_CLOSED latch=1 case=%d -> ignore pogo bounce",case_state);
+        }
+
+        if (case_state == NTT_CASE_STATE_OUT_CASE)
+        {
+            BATTERY_TRACE(2,"[POWER_OFF] OUT_CASE detected but CASE_CLOSED latch=1 -> ignore false OUT_CASE");
+        }
+    }
+    else
+    {
+        /*
+         * --------------------------------------------------------
+         * No Case-Close latch:
+         *
+         * In the normal condition charger removal means
+         * the earbud should remain powered on.
+         * --------------------------------------------------------
+         */
+        if (!charging)
+        {
+            BATTERY_TRACE(3,"[POWER_OFF] charging=0 latch=0 case=%d -> cancel shutdown",case_state);
+            ntt_charging_pwron_pending_shutdown = false;
+
+#ifdef IBRT
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+            ntt_case_close_role_switch_reset();
+#endif
+
+            return;
+        }
+
+        /*
+         * If there is no Case-Close latch and OUT_CASE
+         * has been confirmed, shutdown must also be canceled.
+         */
+        if (case_state == NTT_CASE_STATE_OUT_CASE)
+        {
+            BATTERY_TRACE(3,"[POWER_OFF] OUT_CASE confirmed and latch=0 -> cancel shutdown");
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+#ifdef IBRT
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+            ntt_case_close_role_switch_reset();
+#endif
+
+            return;
+        }
+    }
+
+    /*
+     * ------------------------------------------------------------
+     * At this point:
+     *
+     * Case A:
+     *   latch=1
+     *   -> Case Close has been explicitly confirmed.
+     *
+     * Case B:
+     *   latch=0 + charging=1
+     *   -> legacy charging shutdown flow is still valid.
+     *
+     * Continue toward role-switch/shutdown.
+     * ------------------------------------------------------------
+     */
+    if (case_state != NTT_CASE_STATE_IN_CASE)
+    {
+        BATTERY_TRACE(3,"[POWER_OFF] case=%d not IN_CASE charging=%d latch=%d -> continue shutdown validation",
+            case_state,
+            charging,
+            case_closed_latched);
     }
 
     BATTERY_TRACE(0,"[POWER_OFF] condition valid -> check role switch");
 
 #ifdef IBRT
-        if (g_pogonin_role_switch_requested)
+
+    /*
+     * ------------------------------------------------------------
+     * Role switch already requested.
+     * ------------------------------------------------------------
+     */
+    if (g_pogonin_role_switch_requested)
+    {
+        /*
+         * Re-check OPEN_CASE before every delayed shutdown step.
+         */
+        if (g_ntt_case_open_cancel)
         {
-            if (ntt_case_close_role_switch_can_shutdown())
+            BATTERY_TRACE(0,"[POWER_OFF] role switch wait canceled by OPEN_CASE");
+
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+
+            ntt_case_close_role_switch_reset();
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+            return;
+        }
+
+        /*
+         * OUT_CASE cancels only if Case Close is NOT latched.
+         */
+        if (!pmu_ntt_case_closed_latch_get() && (ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE))
+        {
+            BATTERY_TRACE(0,"[POWER_OFF] role switch wait canceled by OUT_CASE with latch=0");
+
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+            ntt_case_close_role_switch_reset();
+            ntt_charging_pwron_pending_shutdown = false;
+
+            return;
+        }
+
+        if (ntt_case_close_role_switch_can_shutdown())
+        {
+            set_pair_status(1);
+            wired_uart_get_battery_level();
+
+            /*
+             * Final protection before shutdown.
+             *
+             * Only real OPEN_CASE can cancel a latched
+             * Case-Close shutdown.
+             */
+            if (g_ntt_case_open_cancel)
             {
-                set_pair_status(1);
-                wired_uart_get_battery_level();
-                BATTERY_TRACE(0,"[POWER_OFF] role switch done, shutdown now");
+                BATTERY_TRACE(0,"[POWER_OFF] final shutdown canceled by OPEN_CASE");
+
                 g_pogonin_role_switch_requested = false;
                 g_pogonin_role_switch_wait_count = 0;
+                ntt_case_close_role_switch_reset();
                 ntt_charging_pwron_pending_shutdown = false;
 
-                app_shutdown();
                 return;
             }
 
-            g_pogonin_role_switch_wait_count++;
-            BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",g_pogonin_role_switch_wait_count);
-            if (g_pogonin_role_switch_wait_count <
-                POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
+            bool final_latch = pmu_ntt_case_closed_latch_get();
+
+            if (!final_latch && (ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE))
             {
-                earBudsCloseOff_PogonIn_StartTimer();
+                BATTERY_TRACE(0,"[POWER_OFF] final shutdown canceled by OUT_CASE latch=0");
+
+                g_pogonin_role_switch_requested = false;
+                g_pogonin_role_switch_wait_count = 0;
+                ntt_case_close_role_switch_reset();
+                ntt_charging_pwron_pending_shutdown = false;
+
                 return;
             }
 
-            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout, shutdown");
+            BATTERY_TRACE(2,"[POWER_OFF] role switch done latch=%d -> shutdown now",final_latch);
             g_pogonin_role_switch_requested = false;
             g_pogonin_role_switch_wait_count = 0;
             ntt_charging_pwron_pending_shutdown = false;
@@ -586,26 +746,129 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
             return;
         }
 
-        if (ntt_case_close_try_role_switch_before_shutdown())
-        {
-            BATTERY_TRACE(0,"[POWER_OFF] role switch requested");
-            g_pogonin_role_switch_requested = true;
-            g_pogonin_role_switch_wait_count = 0;
+        g_pogonin_role_switch_wait_count++;
 
+        BATTERY_TRACE(1,"[POWER_OFF] wait role switch cnt=%d",g_pogonin_role_switch_wait_count);
+
+        if (g_pogonin_role_switch_wait_count < POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT)
+        {
             earBudsCloseOff_PogonIn_StartTimer();
             return;
         }
-#endif
 
-    BATTERY_TRACE(0, "[POWER_OFF] shutdown now");
-    ntt_charging_pwron_pending_shutdown = false;
+        /*
+         * --------------------------------------------------------
+         * Role switch timeout.
+         *
+         * Again, only OPEN_CASE or real OUT_CASE with
+         * latch=0 can cancel.
+         * --------------------------------------------------------
+         */
+        if (g_ntt_case_open_cancel)
+        {
+            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout but OPEN_CASE -> cancel");
 
-    if (g_ntt_case_open_cancel)
-    {
-        BATTERY_TRACE(0,
-                    "[POWER_OFF] final shutdown canceled by OPEN_CASE");
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+
+            ntt_case_close_role_switch_reset();
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+            return;
+        }
+
+        bool timeout_latch = pmu_ntt_case_closed_latch_get();
+
+        if (!timeout_latch && (ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE))
+        {
+            BATTERY_TRACE(0,"[POWER_OFF] role switch timeout OUT_CASE latch=0 -> cancel");
+
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+
+            ntt_case_close_role_switch_reset();
+
+            ntt_charging_pwron_pending_shutdown = false;
+
+            return;
+        }
+
+        BATTERY_TRACE(2,"[POWER_OFF] role switch timeout latch=%d -> shutdown",timeout_latch);
+
+        g_pogonin_role_switch_requested = false;
+        g_pogonin_role_switch_wait_count = 0;
+
+        ntt_charging_pwron_pending_shutdown = false;
+
+        app_shutdown();
         return;
     }
+
+    /*
+     * ------------------------------------------------------------
+     * Before requesting role switch, validate once again.
+     * ------------------------------------------------------------
+     */
+    if (g_ntt_case_open_cancel)
+    {
+        BATTERY_TRACE(0,"[POWER_OFF] before role switch OPEN_CASE -> cancel");
+
+        ntt_charging_pwron_pending_shutdown = false;
+        return;
+    }
+
+    bool before_rs_latch = pmu_ntt_case_closed_latch_get();
+
+    if (!before_rs_latch && (ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE))
+    {
+        BATTERY_TRACE(0,"[POWER_OFF] before role switch OUT_CASE latch=0 -> cancel");
+        ntt_charging_pwron_pending_shutdown = false;
+        return;
+    }
+
+    if (ntt_case_close_try_role_switch_before_shutdown())
+    {
+        BATTERY_TRACE(1,"[POWER_OFF] role switch requested latch=%d",before_rs_latch);
+        g_pogonin_role_switch_requested = true;
+        g_pogonin_role_switch_wait_count = 0;
+        earBudsCloseOff_PogonIn_StartTimer();
+        return;
+    }
+
+#endif
+
+    /*
+     * ------------------------------------------------------------
+     * Final shutdown guard.
+     * ------------------------------------------------------------
+     */
+    if (g_ntt_case_open_cancel)
+    {
+        BATTERY_TRACE(0,"[POWER_OFF] final shutdown canceled by OPEN_CASE");
+        ntt_charging_pwron_pending_shutdown = false;
+        return;
+    }
+
+    bool final_latch = pmu_ntt_case_closed_latch_get();
+
+    /*
+     * OUT_CASE is only authoritative when there is
+     * no retained Case-Close confirmation.
+     */
+    if (!final_latch && (ntt_case_state_get_local() == NTT_CASE_STATE_OUT_CASE))
+    {
+        BATTERY_TRACE(0,"[POWER_OFF] final shutdown canceled OUT_CASE latch=0");
+        ntt_charging_pwron_pending_shutdown = false;
+        return;
+    }
+
+    BATTERY_TRACE(2,"[POWER_OFF] shutdown now charging=%d case=%d latch=%d",
+        app_battery_is_charging(),
+        ntt_case_state_get_local(),
+        final_latch);
+
+    ntt_charging_pwron_pending_shutdown = false;
 
     app_shutdown();
 }
@@ -1201,6 +1464,13 @@ static bool g_battery_full_charged = false;
 int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PRAMS prams)
 {
     BATTERY_TRACE(0,"app_battery_handle_process_normal status = %d",status);
+    BATTERY_TRACE(5,"[BAT_PROCESS] status=%d prams.volt=%d currvolt=%d valid=%d charger=%d",
+                    status,
+                    prams.volt,
+                    app_battery_measure.currvolt,
+                    g_battery_measure_valid,
+                    app_battery_is_charging());
+
     int8_t level = 0;
     switch (status)
     {
@@ -1442,63 +1712,66 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 #endif
             break;
         case APP_BATTERY_STATUS_CHARGING:
-            /*
-            * Debug actual charger plug-in / plug-out event.
-            */
-            BATTERY_TRACE(4,
-                        "[BAT_CHG] evt=%d charger=%d volt=%d level=%d",
-                        status,
-                        prams.charger,
-                        app_battery_measure.currvolt,
-                        app_battery_measure.currlevel);
+            BATTERY_TRACE(4,"[BAT_CHG] evt=%d charger=%d volt=%d level=%d",
+                status,
+                prams.charger,
+                app_battery_measure.currvolt,
+                app_battery_measure.currlevel);
 
-            BATTERY_TRACE(1,"CHARGING-->APP_BATTERY_CHARGER :%d", prams.charger);
-            BATTERY_TRACE(1,
-                        "CHARGING-->APP_BATTERY_CHARGER :%d full=%d",
-                        prams.charger,
-                        g_battery_full_charged);
+            BATTERY_TRACE(1,"CHARGING-->APP_BATTERY_CHARGER :%d",prams.charger);
+            BATTERY_TRACE(1,"CHARGING-->APP_BATTERY_CHARGER :%d full=%d",prams.charger,g_battery_full_charged);
 
-            if ((ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
-                ((prams.charger == 1) || g_battery_full_charged))
             {
-                BATTERY_TRACE(2,
-                            "[POWER_OFF] IN_CASE charger=%d full=%d -> start timer",
-                            prams.charger,
-                            g_battery_full_charged);
+                bool case_closed_latched = pmu_ntt_case_closed_latch_get();
 
-                if (!ntt_charging_pwron_pending_shutdown)
+                if (case_closed_latched)
                 {
-                    ntt_charging_pwron_pending_shutdown = true;
-                    earBudsCloseOff_PogonIn_StartTimer();
+                    BATTERY_TRACE(4,"[POWER_OFF] CASE_CLOSED latch=1 charger=%d full=%d case=%d pending=%d -> keep current shutdown state",
+                        prams.charger,
+                        g_battery_full_charged,
+                        ntt_case_state_get_local(),
+                        ntt_charging_pwron_pending_shutdown);
+
+                    if (!ntt_charging_pwron_pending_shutdown)
+                    {
+                        BATTERY_TRACE(0,"[POWER_OFF] CASE_CLOSED latch=1 but pending=0 -> restore shutdown timer");
+                        ntt_charging_pwron_pending_shutdown = true;
+                        earBudsCloseOff_PogonIn_StartTimer();
+                    }
+                }
+                else if ((ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) && ((prams.charger == 1) || g_battery_full_charged))
+                {
+                    BATTERY_TRACE(3,"[POWER_OFF] IN_CASE charger=%d full=%d latch=0 -> start timer",prams.charger,g_battery_full_charged);
+
+                    if (!ntt_charging_pwron_pending_shutdown)
+                    {
+                        ntt_charging_pwron_pending_shutdown = true;
+                        earBudsCloseOff_PogonIn_StartTimer();
+                    }
+                }
+                else if ((prams.charger == 0) && !g_battery_full_charged)
+                {
+                    BATTERY_TRACE(3,"[POWER_OFF] charger=0 and not full latch=0 case=%d -> cancel shutdown timer",ntt_case_state_get_local());
+                    ntt_charging_pwron_pending_shutdown = false;
+                    earBudsCloseOff_PogonIn_StopTimer();
+
+#ifdef IBRT
+                    g_pogonin_role_switch_requested = false;
+                    g_pogonin_role_switch_wait_count = 0;
+                    ntt_case_close_role_switch_reset();
+#endif
                 }
             }
-            else if ((prams.charger == 0) && !g_battery_full_charged)
-            {
-                BATTERY_TRACE(0,
-                            "[POWER_OFF] charger=0 and not full -> cancel shutdown timer");
 
-                /*
-                * Clear pending first so a callback already queued by the
-                * timer cannot continue the old shutdown request.
-                */
-                ntt_charging_pwron_pending_shutdown = false;
-                earBudsCloseOff_PogonIn_StopTimer();
-
-            #ifdef IBRT
-                g_pogonin_role_switch_requested = false;
-                g_pogonin_role_switch_wait_count = 0;
-                ntt_case_close_role_switch_reset();
-            #endif
-            }
             if (prams.charger == APP_BATTERY_CHARGER_PLUGIN)
             {
 #ifdef BT_USB_AUDIO_DUAL_MODE
-                BATTERY_TRACE(1,"%s:PLUGIN.", __func__);
+                BATTERY_TRACE(1,"%s:PLUGIN.",__func__);
                 btusb_switch(BTUSB_MODE_USB);
 #else
 
 #if CHARGER_PLUGINOUT_RESET
-                //app_reset();
+                // app_reset();
 #else
                 app_battery_measure.status = APP_BATTERY_STATUS_CHARGING;
 #endif
@@ -1531,11 +1804,25 @@ int app_battery_handle_process_charging(uint32_t status,  union APP_BATTERY_MSG_
         case APP_BATTERY_STATUS_OVERVOLT:
         case APP_BATTERY_STATUS_NORMAL:
         case APP_BATTERY_STATUS_UNDERVOLT:
+        {
+            /*
+            * prams.volt comes from the completed ADC measurement path.
+            * At this point the battery voltage is valid for APP/TWS reporting.
+            */
             app_battery_measure.currvolt = prams.volt;
+
+            if (!g_battery_measure_valid)
+            {
+                g_battery_measure_valid = true;
+                BATTERY_TRACE(2,"[BAT_VALID] first charging ADC valid, volt=%d",app_battery_measure.currvolt);
+            }
+
             level = aiWangReportNormalLevelHandler(app_battery_measure.currvolt);
-            BATTERY_TRACE(1,"[UIBAT] status=%d, volt=%d, level=%d",status, prams.volt, level);
+            BATTERY_TRACE(4,"[UIBAT] status=%d volt=%d level=%d valid=%d",status,prams.volt,level,g_battery_measure_valid);
             app_status_battery_report(level/*prams.volt*/);
+
             break;
+        }
         case APP_BATTERY_STATUS_CHARGING:
             BATTERY_TRACE(1,"[UIBAT] CHARGING:%d", prams.charger);
             if (prams.charger == APP_BATTERY_CHARGER_PLUGOUT)
@@ -1715,10 +2002,10 @@ static void app_battery_gpadc_configuration_init(void)
 
 int app_battery_open(void)
 {
-    BATTERY_TRACE(3,"%s batt range:%d~%d",__func__, APP_BATTERY_MIN_MV, APP_BATTERY_MAX_MV);
-
+    BATTERY_TRACE(3,"%s batt range:%d~%d",__func__,APP_BATTERY_MIN_MV,APP_BATTERY_MAX_MV);
     int nRet = APP_BATTERY_OPEN_MODE_INVALID;
-        /*
+
+    /*
      * Battery ADC data is not valid yet.
      */
     g_battery_measure_valid = false;
@@ -1728,15 +2015,20 @@ int app_battery_open(void)
     app_battery_gpadc_configuration_init();
 #endif
 
-    BATTERY_TRACE(0, "%s: app_vbat_ch=%d app_vbat_volt_div=%d", __func__, app_vbat_ch, app_vbat_volt_div);
+    BATTERY_TRACE(0,"%s: app_vbat_ch=%d app_vbat_volt_div=%d",__func__,app_vbat_ch,app_vbat_volt_div);
 
     if (app_battery_timer == NULL)
-        app_battery_timer = osTimerCreate (osTimer(APP_BATTERY), osTimerPeriodic, NULL);
+    {
+        app_battery_timer = osTimerCreate(osTimer(APP_BATTERY),osTimerPeriodic,NULL);
+    }
 
     if (app_battery_pluginout_debounce_timer == NULL)
-        app_battery_pluginout_debounce_timer = osTimerCreate (osTimer(APP_BATTERY_PLUGINOUT_DEBOUNCE), osTimerOnce, &app_battery_pluginout_debounce_ctx);
+    {
+        app_battery_pluginout_debounce_timer = osTimerCreate(osTimer(APP_BATTERY_PLUGINOUT_DEBOUNCE),osTimerOnce,&app_battery_pluginout_debounce_ctx);
+    }
 
     app_battery_measure.status = APP_BATTERY_STATUS_NORMAL;
+
 #ifdef __INTERCONNECTION__
     app_battery_measure.currentBatteryInfo = APP_BATTERY_DEFAULT_INFO;
     app_battery_measure.lastBatteryInfo = APP_BATTERY_DEFAULT_INFO;
@@ -1744,12 +2036,12 @@ int app_battery_open(void)
 #else
     app_battery_measure.currlevel = APP_BATTERY_LEVEL_MAX;
 #endif
+
     app_battery_measure.currvolt = APP_BATTERY_MAX_MV;
     app_battery_measure.lowvolt = APP_BATTERY_MIN_MV;
     app_battery_measure.highvolt = APP_BATTERY_MAX_MV;
     app_battery_measure.pdvolt = APP_BATTERY_PD_MV;
     app_battery_measure.chargetimeout = APP_BATTERY_CHARGE_TIMEOUT_MIN;
-
     app_battery_measure.periodic = APP_BATTERY_MEASURE_PERIODIC_QTY;
     app_battery_measure.cb = app_battery_event_process;
     app_battery_measure.user_cb = NULL;
@@ -1759,53 +2051,78 @@ int app_battery_open(void)
     app_battery_measure.charger_status.cnt = 0;
 
     /*
-     * Debug:
-     * Check the initialized battery values before charger detection.
+     * ------------------------------------------------------------
+     * NTT BOOT DEBUG #1
+     *
+     * These are still initialization/default values.
+     * ADC is not valid yet.
+     * ------------------------------------------------------------
      */
-    BATTERY_TRACE(3,
-                  "[BAT_BOOT] status=%d volt=%d level=%d",
-                  app_battery_measure.status,
-                  app_battery_measure.currvolt,
-                  app_battery_measure.currlevel);
+    BATTERY_TRACE(3,"[BAT_BOOT] status=%d volt=%d level=%d",app_battery_measure.status,app_battery_measure.currvolt,app_battery_measure.currlevel);
 
-    app_set_threadhandle(APP_MODULE_BATTERY, app_battery_handle_process);
+    app_set_threadhandle(APP_MODULE_BATTERY,app_battery_handle_process);
 
     if (app_battery_ext_charger_detecter_cfg.pin != HAL_IOMUX_PIN_NUM)
     {
-        hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)&app_battery_ext_charger_detecter_cfg, 1);
-        hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_IN, 1);
+        hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)&app_battery_ext_charger_detecter_cfg,1);
+        hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin,HAL_GPIO_DIR_IN,1);
     }
 
 #ifndef BESUI_TWS_EN
     if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
     {
-        hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)&app_battery_ext_charger_detecter_cfg, 1);
-        hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_OUT, 1);
+        hal_iomux_init((struct HAL_IOMUX_PIN_FUNCTION_MAP *)&app_battery_ext_charger_detecter_cfg,1);
+        hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin,HAL_GPIO_DIR_OUT,1);
     }
 #endif
 
-    if (app_battery_charger_indication_open() == APP_BATTERY_CHARGER_PLUGIN)
+    /*
+     * ------------------------------------------------------------
+     * NTT BOOT DEBUG #2
+     *
+     * Read charger indication ONCE.
+     *
+     * Important:
+     * Do not call app_battery_charger_indication_open()
+     * several times only for debug purposes.
+     * ------------------------------------------------------------
+     */
+    enum APP_BATTERY_CHARGER_T boot_charger_status = (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+    /*
+     * Read ICP1205 electrical status at the same timing.
+     */
+    uint8_t boot_chrg_sts2 = icp1205_get_chrg_sts2();
+
+    BATTERY_TRACE(4,"[BAT_BOOT_DETECT] charger=%d STS2=0x%02X status=%d valid=%d",
+        boot_charger_status,
+        boot_chrg_sts2,
+        app_battery_measure.status,
+        g_battery_measure_valid);
+
+    /*
+     * ------------------------------------------------------------
+     * CHARGER PLUGIN
+     * ------------------------------------------------------------
+     */
+    if (boot_charger_status == APP_BATTERY_CHARGER_PLUGIN)
     {
         app_battery_measure.status = APP_BATTERY_STATUS_CHARGING;
         app_battery_measure.start_time = hal_sys_timer_get();
-        //pmu_charger_plugin_config();
+
 #ifndef BESUI_TWS_EN
         if (app_battery_ext_charger_enable_cfg.pin != HAL_IOMUX_PIN_NUM)
         {
-            hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin, HAL_GPIO_DIR_OUT, 0);
+            hal_gpio_pin_set_dir((enum HAL_GPIO_PIN_T)app_battery_ext_charger_detecter_cfg.pin,HAL_GPIO_DIR_OUT,0);
         }
 #endif
 
-        /*
-         * Debug:
-         * Check whether battery voltage/level still contains
-         * the initialized MAX values after charger detection.
-         */
-        BATTERY_TRACE(3,
-                      "[BAT_BOOT_CHG] status=%d volt=%d level=%d",
-                      app_battery_measure.status,
-                      app_battery_measure.currvolt,
-                      app_battery_measure.currlevel);
+        BATTERY_TRACE(4,"[BAT_BOOT_CHG] charger=%d status=%d STS2=0x%02X volt=%d level=%d",
+            boot_charger_status,
+            app_battery_measure.status,
+            boot_chrg_sts2,
+            app_battery_measure.currvolt,
+            app_battery_measure.currlevel);
 
 #if (CHARGER_PLUGINOUT_RESET == 0)
         nRet = APP_BATTERY_OPEN_MODE_CHARGING_PWRON;
@@ -1815,18 +2132,41 @@ int app_battery_open(void)
     }
     else
     {
-        app_battery_measure.status = APP_BATTERY_STATUS_NORMAL;
-        //pmu_charger_plugout_config();
-        nRet = APP_BATTERY_OPEN_MODE_NORMAL;
         /*
-         * Debug normal power-on state.
+         * --------------------------------------------------------
+         * NORMAL / CHARGER PLUGOUT
+         * --------------------------------------------------------
          */
-        BATTERY_TRACE(3,
-                      "[BAT_BOOT_NORMAL] status=%d volt=%d level=%d",
-                      app_battery_measure.status,
-                      app_battery_measure.currvolt,
-                      app_battery_measure.currlevel);
+        app_battery_measure.status = APP_BATTERY_STATUS_NORMAL;
+
+        nRet = APP_BATTERY_OPEN_MODE_NORMAL;
+
+        BATTERY_TRACE(4,"[BAT_BOOT_NORMAL] charger=%d status=%d STS2=0x%02X volt=%d level=%d",
+            boot_charger_status,
+            app_battery_measure.status,
+            boot_chrg_sts2,
+            app_battery_measure.currvolt,
+            app_battery_measure.currlevel);
     }
+
+    /*
+     * ------------------------------------------------------------
+     * NTT BOOT DEBUG #3
+     *
+     * Final app_battery_open() classification.
+     *
+     * nRet:
+     *   NORMAL
+     *   CHARGING
+     *   CHARGING_PWRON
+     * ------------------------------------------------------------
+     */
+    BATTERY_TRACE(4,"[BAT_BOOT_RESULT] ret=%d charger=%d status=%d STS2=0x%02X",
+        nRet,
+        boot_charger_status,
+        app_battery_measure.status,
+        boot_chrg_sts2);
+
     return nRet;
 }
 
@@ -2505,6 +2845,11 @@ int app_battery_open(void)
     app_set_threadhandle(APP_MODULE_BATTERY, app_battery_handle_process);
 
     app_battery_charger_indication_open();
+
+    if (pmu_ntt_case_closed_latch_get())
+    {
+        ntt_case_state_sync_local_update(true);
+    }
 #endif
 
     // initialize the custom battery manager here

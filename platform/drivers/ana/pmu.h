@@ -281,6 +281,10 @@ enum PMU_BOOT_CAUSE_T pmu_boot_cause_get(void);
 
 bool pmu_boot_first_power_up(void);
 
+void pmu_ntt_case_closed_latch_set(bool closed);
+
+bool pmu_ntt_case_closed_latch_get(void);
+
 void pmu_power_key_hw_reset_enable(uint8_t seconds);
 
 void pmu_power_key_hw_reset_disable(void);

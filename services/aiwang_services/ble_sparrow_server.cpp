@@ -392,6 +392,22 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     local_valid = app_battery_is_measurement_valid() && (local_battery != 0xFF) && (local_battery <= 100);
 
     peer_valid = tws_connected && (peer_battery != 0xFF) && (peer_battery <= 100);
+
+    /*
+     * NTT:
+     * TWS disconnected means peer battery is invalid.
+     *
+     * Do not expose the last cached peer battery through
+     * 0x31 / 0x32 after TWS disconnect.
+     */
+    if (!tws_connected)
+    {
+        peer_battery = 0xFF;
+        peer_valid = false;
+
+        TRACE(0,"[BAT_COMMON] TWS disconnected -> force peer=0xFF");
+    }
+
     TRACE(
         6,
         "[APP_BAT_READ] local=%u peer=%u box=%u "
@@ -402,7 +418,7 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
         local_valid,
         peer_valid,
         tws_connected);
-
+    
     /*
      * Do not send a successful battery response while the local
      * battery measurement is not ready.
@@ -425,19 +441,39 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
         return false;
     }
 
+    /*
+     * Default:
+     * L = 0xFF
+     * R = 0xFF
+     * CASE = current case battery
+     */
+
     battery_array[0] = 0xFF;
     battery_array[1] = 0xFF;
     battery_array[2] = box_battery;
 
+    /*
+     * battery_array[0] = Left
+     * battery_array[1] = Right
+     */
+
     if (app_ibrt_if_is_right_side())
     {
-        battery_array[0] = peer_battery;
+        /*
+         * Local = RIGHT
+         * Peer  = LEFT
+         */
+        battery_array[0] = peer_valid ? peer_battery : 0xFF;
         battery_array[1] = local_battery;
     }
     else
     {
+        /*
+         * Local = LEFT
+         * Peer  = RIGHT
+         */
         battery_array[0] = local_battery;
-        battery_array[1] = peer_battery;
+        battery_array[1] = peer_valid ? peer_battery : 0xFF;
     }
 
     TRACE(0,

@@ -1194,7 +1194,9 @@ static void BOOT_TEXT_FLASH_LOC pmu_boot_cause_init(void)
         pmu_boot_first_pwr_up = true;
     }
 #if !(defined(OTA_BOOT_IMAGE) || defined(ARM_CMSE))
+    
     val |= REG_NOT_RESET_CHIP_PWR_ON;
+    PMU_INFO_TRACE(2,"[NTT_REG61_WRITE][BOOT] before write val=0x%04X caller=%p",val,__builtin_return_address(0));
     pmu_write(PMU_REG_NOT_RESET_61, val);
 #endif
 }
@@ -1207,6 +1209,52 @@ enum PMU_BOOT_CAUSE_T pmu_boot_cause_get(void)
 bool pmu_boot_first_power_up(void)
 {
     return pmu_boot_first_pwr_up;
+}
+
+/*
+ * NTT Case-Close retention latch
+ *
+ * PMU_REG_NOT_RESET_61:
+ *
+ * bit15   : REG_COMMAND_RST_DIS      - SDK reserved
+ * bit1~14 : REG_NOT_RESET field      - retention bits
+ * bit0    : REG_NOT_RESET_CHIP_PWR_ON - SDK used
+ *
+ * NTT uses bit14.
+ *
+ * This bit survives system reboot / pogo bounce related wakeup,
+ * and is cleared ONLY after a confirmed CMD_OPEN_CASE.
+ */
+#define NTT_CASE_CLOSED_LATCH_BIT        (1U << 14)
+
+void pmu_ntt_case_closed_latch_set(bool closed)
+{
+    uint16_t val = 0;
+    pmu_read(PMU_REG_NOT_RESET_61, &val);
+    uint16_t old_val = val;
+    PMU_INFO_TRACE(0,"[NTT_CASE_LATCH][SET] req=%d old=0x%04X caller=%p",closed,old_val,__builtin_return_address(0));
+
+    if (closed)
+    {
+        val |= 0x4000;
+    }
+    else
+    {
+        val &= ~0x4000;
+    }
+
+    pmu_write(PMU_REG_NOT_RESET_61, val);
+    PMU_INFO_TRACE(0,"[NTT_CASE_LATCH][SET] req=%d old=0x%04X new=0x%04X latch=%d",closed,old_val,val,!!(val & 0x4000));
+}
+
+bool pmu_ntt_case_closed_latch_get(void)
+{
+    uint16_t val = 0;
+    pmu_read(PMU_REG_NOT_RESET_61,&val);
+    bool closed = ((val & NTT_CASE_CLOSED_LATCH_BIT) != 0);
+    PMU_INFO_TRACE(3,"[NTT_CASE_LATCH] GET REG61=0x%04X latch=%d",val,closed);
+
+    return closed;
 }
 
 void BOOT_TEXT_FLASH_LOC pmu_boot_init(void)
