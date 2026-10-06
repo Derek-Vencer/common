@@ -106,7 +106,7 @@ extern bool ntt_charging_pwron_pending_shutdown;
 static uint32_t ntt_last_box_tws_reconnect_tick = 0;
 
 static uint32_t ntt_last_box_battery_case_tick = 0;
-
+extern bool ntt_user_manual_pairing_request;
 #define NTT_DEFAULT_BT_NAME     "nwm CLIPS"
 #define NTT_DEFAULT_BLE_NAME    "LE nwm CLIPS"
 
@@ -460,7 +460,7 @@ uint8_t get_tws_peer_battery_percent(void)
     return g_tws_peer_battery_percent;
 }
 
-#define PAIR_NOTIFY_REPEAT_COUNT    3
+#define PAIR_NOTIFY_REPEAT_COUNT    10
 
 void wired_uart_get_battery_level(void)
 {
@@ -544,6 +544,18 @@ void wired_uart_get_battery_level(void)
 
     tws_connected = bts_tws_if_is_tws_link_connected();
 
+
+    DBGPRINT("[NTT_PAIR] get status tws_connected=%u success=%u enter=%u manual=%u "
+        "access=%u general=%u pair_status=%u limit=%u",
+        tws_connected,
+        pair_success_status,
+        enter_pair_status,
+        ntt_manual_pairing_mode,
+        (uint8_t)access_mode,
+        general_accessible,
+        pair_status,
+        limit_pair_notify);
+
     /*
      * Pair status reported to charging case:
      *
@@ -573,14 +585,26 @@ void wired_uart_get_battery_level(void)
      */
     limit_pair_notify = (enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || (pair_success_status != 0);
 
+    /*
+    * Pairing-in-progress:
+    * pair_status = 2
+    * must continuously report to charging case.
+    *
+    * Only pairing-success:
+    * pair_status = 1
+    * is limited to PAIR_NOTIFY_REPEAT_COUNT.
+    */
+    //limit_pair_notify = (pair_success_status != 0);
+
     DBGPRINT(
         "[NTT_PAIR] success=%u enter=%u manual=%u "
-        "access=%u general=%u limit=%u",
+        "access=%u general=%u pair_status=%u limit=%u",
         pair_success_status,
         enter_pair_status,
         ntt_manual_pairing_mode,
         (uint8_t)access_mode,
         general_accessible,
+        pair_status,
         limit_pair_notify);
 
     /*
@@ -627,6 +651,8 @@ void wired_uart_get_battery_level(void)
         allow_send = true;
         s_pair_status_send_count = 0;
     }
+
+    DBGPRINT("[BOX_BAT] allow_send =%d, write pair status = %d",allow_send, pair_status);
 
     if (allow_send)
     {
@@ -690,6 +716,15 @@ void wired_uart_get_battery_level(void)
             ntt_manual_pairing_mode,
             (uint8_t)access_mode);
     }
+
+    DBGPRINT(
+        "[NTT_PAIR_STATE] ui=%d discover=%d "
+        "manual=%d user_manual=%d access=%d",
+        app_ui_in_pairing_mode(),
+        get_er_discover_connectable_status(),
+        ntt_manual_pairing_mode,
+        ntt_user_manual_pairing_request,
+        app_bt_get_curr_access_mode());
 }
 
 static void ntt_ota_reboot_flag_init(void)
@@ -785,6 +820,7 @@ extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
 
         ntt_first_no_mobile_pair_mode = false;
         ntt_manual_pairing_mode = false;
+        ntt_user_manual_pairing_request = false;
 
         /*
         * Disable permission to enter discoverable mode first.
@@ -1807,7 +1843,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -1936,6 +1972,10 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             */
             ntt_first_no_mobile_pair_mode = false;
             ntt_manual_pairing_mode = true;
+            /*
+            * Explicit user / charging-case manual pairing request.
+            */
+            ntt_user_manual_pairing_request = true;
 
             DBGPRINT(
                 "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",

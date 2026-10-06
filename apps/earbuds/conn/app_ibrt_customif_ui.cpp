@@ -117,10 +117,11 @@ extern void earBudsCloseOff_PogonIn_StopTimer(void);
 #endif
 extern uint8_t out_of_case_reconnect;
 static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
-extern bool ntt_manual_pairing_mode;
+extern bool ntt_user_manual_pairing_request;
 extern bool ntt_first_no_mobile_pair_mode;
 bool pairing_exited_on_out = false;
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
+extern bool ntt_user_manual_pairing_request;
 /*
  * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
  */
@@ -2496,75 +2497,85 @@ static void ntt_first_out_role_check_start(void)
  */
 static void ntt_first_out_start_mobile_reconnect(void)
 {
-    if (pairing_exited_on_out)
-    {        
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] skip first out mobile reconnect after pairing exit");
+    /*
+     * Case 1:
+     * No mobile pairing record exists.
+     *
+     * Product requirement:
+     * stay in pairing mode and do NOT start
+     * automatic mobile reconnect.
+     */
+    if (ntt_first_no_mobile_pair_mode)
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] skip reconnect: no mobile record");
         return;
     }
 
-    if (!g_ntt_first_out_owner)
+    /*
+     * Case 2:
+     * Mobile record exists, but the user explicitly
+     * requested manual pairing.
+     *
+     * Automatic reconnect must stay blocked.
+     */
+    if (ntt_user_manual_pairing_request || pairing_exited_on_out)
     {
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: not owner");
-
-        return;
-    }
-
-    if (g_ntt_first_out_reconnect_started)
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect already started");
-
-        return;
-    }
-
-    if (!ntt_case_state_is_local_out())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect denied: local not OUT_CASE");
-
-        return;
-    }
-
-    if (!bts_tws_if_is_tws_link_connected())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] reconnect denied: TWS disconnected");
-
-        return;
-    }
-
-    if (!ntt_first_out_is_master())
-    {
-        EARBUDS_TRACE(
-            1,
-            "[NTT_FIRST_OUT] reconnect wait: role=%d",
-            app_ibrt_if_get_ui_role());
+        EARBUDS_TRACE(2,"[NTT_FIRST_OUT] skip reconnect: manual pairing active request=%d exit_block=%d",
+            ntt_user_manual_pairing_request,
+            pairing_exited_on_out);
 
         return;
     }
 
     /*
-     * 已經有手機連線時，不需要再次 opening reconnect。
+     * From here:
+     *
+     * - mobile record exists
+     * - not in explicit manual pairing
+     *
+     * Normal First-Out reconnect is allowed.
      */
+
+    if (!g_ntt_first_out_owner)
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: not owner");
+        return;
+    }
+
+    if (g_ntt_first_out_reconnect_started)
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect already started");
+        return;
+    }
+
+    if (!ntt_case_state_is_local_out())
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: local not OUT_CASE");
+        return;
+    }
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: TWS disconnected");
+        return;
+    }
+
+    if (!ntt_first_out_is_master())
+    {
+        EARBUDS_TRACE(1,"[NTT_FIRST_OUT] reconnect wait: role=%d",app_ibrt_if_get_ui_role());
+        return;
+    }
+
     if (app_bt_ibrt_has_mobile_link_connected())
     {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_FIRST_OUT] mobile already connected");
-
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] mobile already connected");
         g_ntt_first_out_reconnect_started = true;
         return;
     }
 
     g_ntt_first_out_reconnect_started = true;
 
-    EARBUDS_TRACE(
-        3,
-        "[NTT_FIRST_OUT] MASTER reconnect mobile "
-        "local=%d peer=%d",
+    EARBUDS_TRACE(3,"[NTT_FIRST_OUT] MASTER reconnect mobile local=%d peer=%d",
         ntt_case_state_get_local(),
         ntt_case_state_get_peer());
 
@@ -2584,9 +2595,26 @@ static void ntt_first_out_start_mobile_reconnect(void)
  */
 static void ntt_first_out_master_recovery(const char *reason)
 {
-    if (pairing_exited_on_out)
-    {        
-        EARBUDS_TRACE(0,"[NTT_FIRST_OUT] skip reconnect after pairing exit");
+    /*
+     * No mobile record:
+     * pairing mode has priority.
+     */
+    if (ntt_first_no_mobile_pair_mode)
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT][RECOVERY] skip: no mobile record");
+        return;
+    }
+
+    /*
+     * Explicit manual pairing:
+     * do not start automatic mobile reconnect.
+     */
+    if (ntt_user_manual_pairing_request || pairing_exited_on_out)
+    {
+        EARBUDS_TRACE(2,"[NTT_FIRST_OUT][RECOVERY] skip: manual pairing request=%d exit_block=%d",
+            ntt_user_manual_pairing_request,
+            pairing_exited_on_out);
+
         return;
     }
 
@@ -3231,27 +3259,37 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
      * Exit SDK pairing mode immediately when the earbud
      * changes to OUT_CASE.
      */
-    if (app_ui_in_pairing_mode() ||
-        get_er_discover_connectable_status())
+    if (app_ui_in_pairing_mode() || get_er_discover_connectable_status())
     {
         if (!ntt_dut_speech_tx_1mic_ns_bypass_get())
         {
-            EARBUDS_TRACE(
-                0,
-                "[NTT_PAIR] OUT_CASE -> force SDK pairing exit");
+            /*
+            * Snapshot BEFORE app_ui_exit_pairing_mode().
+            *
+            * Pairing exit callback may clear
+            * ntt_user_manual_pairing_request.
+            */
+            bool was_user_manual_pairing = ntt_user_manual_pairing_request;
+
+            EARBUDS_TRACE(3,"[NTT_PAIR] OUT_CASE -> exit pairing first_no_mobile=%d manual_gate=%d user_manual=%d",
+                ntt_first_no_mobile_pair_mode,
+                ntt_manual_pairing_mode,
+                was_user_manual_pairing);
 
             app_ui_exit_pairing_mode(true);
 
             /*
-             * 不在同一個 OUT_CASE event 立刻做 opening reconnect。
-             */
-            pairing_exited_on_out = true;
+            * Only explicit manual pairing blocks reconnect.
+            *
+            * Automatic boot pairing must NOT block
+            * First-Out reconnect when mobile records exist.
+            */
+            pairing_exited_on_out = was_user_manual_pairing;
+            EARBUDS_TRACE(1,"[NTT_PAIR] OUT_CASE pairing exit block_reconnect=%d",pairing_exited_on_out);
         }
         else
         {
-            EARBUDS_TRACE(
-                0,
-                "[NTT_PAIR] OUT_CASE -> DTM keep pairing mode");
+            EARBUDS_TRACE(0,"[NTT_PAIR] OUT_CASE -> DTM keep pairing mode");
         }
     }
 

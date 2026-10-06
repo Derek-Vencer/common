@@ -92,6 +92,16 @@
 #include "app_bt_stream.h"
 #endif
 bool ntt_manual_pairing_mode = false;
+/*
+ * true:
+ * User / charging case explicitly requested manual mobile pairing.
+ *
+ * Do NOT set this flag for:
+ * - power-on automatic pairing
+ * - first-no-mobile pairing
+ * - GFPS automatic first pairing
+ */
+bool ntt_user_manual_pairing_request = false;
 
 #ifdef BIS_SELFSCAN_ENABLED
 extern void app_bis_selfscan_cmd_init(void);
@@ -2198,6 +2208,11 @@ void app_ibrt_init(void)
 
                 ntt_first_no_mobile_pair_mode = true;
                 ntt_manual_pairing_mode = true;
+                /*
+                * This is automatic first pairing,
+                * NOT an explicit manual pairing request.
+                */
+                ntt_user_manual_pairing_request = false;
 
                 set_pair_status(0);
                 enable_pair_status(1);
@@ -2214,6 +2229,7 @@ void app_ibrt_init(void)
 
                 ntt_first_no_mobile_pair_mode = false;
                 ntt_manual_pairing_mode = false;
+                ntt_user_manual_pairing_request = false;
 
                 set_er_discover_connectable_status(0);
 

@@ -1702,13 +1702,25 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
 
         case APP_BATTERY_STATUS_PDVOLT:
 #ifndef BT_USB_AUDIO_DUAL_MODE
-            BATTERY_TRACE(1,"PDVOLT-->POWEROFF:%d", prams.volt);
+            BATTERY_TRACE(2,"[NTT_LOW_BAT] PDVOLT=%d <= %d -> set latch=1 before poweroff",prams.volt,APP_BATTERY_PD_MV);
+
+            /*
+            * NTT:
+            * Battery has reached power-down voltage.
+            *
+            * Set retention latch before shutdown to prevent
+            * repeated abnormal reboot at critically low battery voltage.
+            */
+            pmu_ntt_case_closed_latch_set(true);
+            BATTERY_TRACE(1,"PDVOLT-->POWEROFF:%d",prams.volt);
             osTimerStop(app_battery_timer);
+
 #if defined(BESUI_TWS_EN)
-			app_ui_shutdown();
+            app_ui_shutdown();
 #else
             app_shutdown();
 #endif
+
 #endif
             break;
         case APP_BATTERY_STATUS_CHARGING:
