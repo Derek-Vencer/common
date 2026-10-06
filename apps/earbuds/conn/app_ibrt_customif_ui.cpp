@@ -127,6 +127,7 @@ extern bool ntt_user_manual_pairing_request;
  */
 extern void app_key_handle_pause_music_on_pogo_in(void);
 extern "C" void wired_uart_mobile_connected_get_box_battery(void);
+static bool g_ntt_mobile_reconnect_after_pairing_exit = false;
 
 void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *buffer, uint8_t length)
 {
@@ -372,6 +373,40 @@ void app_ibrt_customif_pairing_mode_exit()
     uint8_t resume_sco_device = g_device_id_need_resume_sco;
     EARBUDS_TRACE(0,"custom_ui pairing mode exit: resume_sco_device %x",resume_sco_device);
     ntt_mobile_pairing_mode_exit(true);
+
+    /*
+     * NTT:
+     * TWS peer disappeared while pairing mode was active.
+     *
+     * app_ui_exit_pairing_mode() is asynchronous, therefore
+     * start mobile reconnect only after pairing exit callback
+     * has actually been received.
+     */
+    if (g_ntt_mobile_reconnect_after_pairing_exit)
+    {
+        g_ntt_mobile_reconnect_after_pairing_exit = false;
+
+        if (!app_bt_ibrt_has_mobile_link_connected() &&
+            !ntt_first_no_mobile_pair_mode)
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_TWS_DISC] "
+                "pairing exit complete -> start mobile reconnect");
+
+            app_bt_profile_connect_manager_opening_reconnect();
+        }
+        else
+        {
+            EARBUDS_TRACE(
+                0,
+                "[NTT_TWS_DISC] "
+                "pairing exit reconnect canceled "
+                "mobile=%d first_no_mobile=%d",
+                app_bt_ibrt_has_mobile_link_connected(),
+                ntt_first_no_mobile_pair_mode);
+        }
+    }
 
     if ((p_app_ui_config->pairing_with_disc_hf_cfg == IBRT_PAIRING_DISC_SCO) && (resume_sco_device != BT_DEVICE_INVALID_ID))
     {
@@ -960,25 +995,69 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                 EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_AUTH_COMPLETE ");
             break;
         case IBRT_CONN_ACL_DISCONNECTED:
-            EARBUDS_TRACE(0, "[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_DISCONNECTED ");
+        {
+            EARBUDS_TRACE(0,"[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_DISCONNECTED");
+            bool mobile_connected = app_bt_ibrt_has_mobile_link_connected();
+            bool pairing = app_ui_in_pairing_mode();
+            EARBUDS_TRACE(0,"[NTT_TWS_DISC] mobile=%d pairing=%d manual=%d first_no_mobile=%d reason=0x%x",
+                mobile_connected,
+                pairing,
+                ntt_manual_pairing_mode,
+                ntt_first_no_mobile_pair_mode,
+                reason_code);
 
-            /*
-             * The UI role may already have changed to UNKNOWN at this point.
-             * Do not use UI-role checking here; the local mobile-link owner
-             * is the only ear that can notify the App.
-             */
-            if (app_bt_ibrt_has_mobile_link_connected())
+            if (mobile_connected)
             {
-                EARBUDS_TRACE(0,
-                              "[BAT31] TWS peer disconnected -> push peer=FF");
+                EARBUDS_TRACE(0,"[BAT31] TWS peer disconnected -> push peer=FF");
                 sparrow_push_battery_level_notify(true);
             }
             else
             {
-                EARBUDS_TRACE(1,
-                              "[BAT31] TWS peer disconnected, no local mobile link");
+                EARBUDS_TRACE(1,"[BAT31] TWS peer disconnected, no local mobile link");
+
+                /*
+                * NTT:
+                *
+                * Peer disappeared while local ear has no mobile link.
+                *
+                * Do NOT interfere with:
+                * 1. Manual pairing requested by user
+                * 2. First boot / no-mobile-record pairing
+                */
+                if (!ntt_manual_pairing_mode && !ntt_first_no_mobile_pair_mode)
+                {
+                    if (pairing)
+                    {
+                        /*
+                        * SDK refuses internal mobile reconnect while
+                        * pairing mode is still active.
+                        *
+                        * Request pairing exit first, then reconnect
+                        * from app_ibrt_customif_pairing_mode_exit().
+                        */
+                        g_ntt_mobile_reconnect_after_pairing_exit = true;
+                        EARBUDS_TRACE(0,"[NTT_TWS_DISC] pairing active -> exit pairing first, mobile reconnect pending=1");
+                        app_ui_exit_pairing_mode(true);
+                    }
+                    else
+                    {
+                        /*
+                        * Pairing is already inactive.
+                        * Reconnect phone immediately.
+                        */
+                        g_ntt_mobile_reconnect_after_pairing_exit = false;
+                        EARBUDS_TRACE(0,"[NTT_TWS_DISC] pairing=0 -> start mobile reconnect now");
+                        app_bt_profile_connect_manager_opening_reconnect();
+                    }
+                }
+                else
+                {
+                    EARBUDS_TRACE(0,"[NTT_TWS_DISC] skip mobile reconnect manual=%d first_no_mobile=%d",ntt_manual_pairing_mode,ntt_first_no_mobile_pair_mode);
+                }
             }
+
             break;
+        }
         case IBRT_CONN_ACL_CONNECTING_CANCELED:
             break;
         case IBRT_CONN_ACL_CONNECTING_FAILURE:

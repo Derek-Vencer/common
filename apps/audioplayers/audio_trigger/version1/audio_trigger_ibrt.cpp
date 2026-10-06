@@ -669,6 +669,50 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
             app_ibrt_if_force_audio_retrigger(
                 RETRIGGER_BY_ROLE_MISMATCH);
         }
+
+        /*
+        * NTT:
+        *
+        * Single-ear standalone playback.
+        *
+        * When peer TWS disappears but this ear already owns a valid
+        * mobile ACL, IBRT Profile Exchange is no longer required.
+        *
+        * Do NOT enter:
+        *   WAIT_PROFILE_RECOVERY
+        *   WAIT_IBRT_PROCESS
+        *   TWS_INITIAL_SYNC
+        *
+        * Start local A2DP trigger directly.
+        */
+        else if (!bts_tws_if_is_tws_link_connected() && mobile_link_connected)
+        {
+            ntt_profile_exchange_wait_count[device_id] = 0;
+
+            /*
+            * Stop any stale recovery timer/state left from the
+            * previous TWS session.
+            */
+            ntt_profile_recovery_stop();
+
+            AUDIOPLAYERS_TRACE(0,"[NTT_DUAL_PHONE_TRIGGER] branch=STANDALONE_LOCAL dev=%d mobile=%d profile=%d a2dp_profile=%d start_ibrt=%d sync_a2dp=%d",
+                device_id,
+                mobile_link_connected,
+                profile_exchanged,
+                a2dp_profile_exchanged,
+                start_ibrt_onprocess,
+                sync_a2dp_onprocess);
+
+            /*
+            * Existing NTT local fallback path.
+            *
+            * This starts playback locally without waiting for
+            * TWS/Profile Exchange.
+            */
+            ntt_profile_recovery_local_fallback(device_id);
+            return 0;
+        }
+
         /*
          * Profile Exchange 尚未完成。
          *
