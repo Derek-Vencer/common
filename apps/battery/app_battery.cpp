@@ -298,6 +298,23 @@ static bool g_low_bat_role_switch_pending = false;
 static uint8_t g_low_bat_role_switch_pending_count = 0;
 static uint8_t g_low_bat_role_battery_check_count = 0;
 
+#define NTT_LOW_BAT_POWEROFF_DELAY_MS    (10000)
+
+static osTimerId ntt_low_bat_poweroff_timer = NULL;
+
+static void ntt_low_bat_poweroff_timer_handler(void const *argument)
+{
+    BATTERY_TRACE(0,"[NTT_LOW_BAT] prompt delay done -> shutdown");
+
+#if defined(BESUI_TWS_EN)
+    app_ui_shutdown();
+#else
+    app_shutdown();
+#endif
+}
+
+osTimerDef(NTT_LOW_BAT_POWEROFF_TIMER,ntt_low_bat_poweroff_timer_handler);
+
 static void ntt_low_battery_role_switch_check(void)
 {
     uint8_t local_level;
@@ -1295,6 +1312,7 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
         BATTERY_TRACE(1, "[UIBAT]%s app_battery_measure.currlevel %d", __func__, app_battery_measure.currlevel);
 #endif
     }
+
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     user_bat_volt_set(app_battery_measure.currvolt);
     if (app_battery_measure.index > APP_BATTERY_STABLE_COUNT)
@@ -1701,28 +1719,54 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
         }
 
         case APP_BATTERY_STATUS_PDVOLT:
-#ifndef BT_USB_AUDIO_DUAL_MODE
-            BATTERY_TRACE(2,"[NTT_LOW_BAT] PDVOLT=%d <= %d -> set latch=1 before poweroff",prams.volt,APP_BATTERY_PD_MV);
+        #ifndef BT_USB_AUDIO_DUAL_MODE
+        {
+            BATTERY_TRACE(2,"[NTT_LOW_BAT] PDVOLT=%d <= %d -> latch=1 + poweroff prompt",prams.volt,APP_BATTERY_PD_MV);
+            if (ntt_low_bat_poweroff_timer == NULL)
+            {
+                ntt_low_bat_poweroff_timer = osTimerCreate(osTimer(NTT_LOW_BAT_POWEROFF_TIMER),osTimerOnce,NULL);
+            }
+            /*
+            * Prevent repeated low-voltage reboot.
+            */
+            app_ui_user_role_switch(false);
+            pmu_ntt_case_closed_latch_set(true);
+            BATTERY_TRACE(1,"[NTT_LOW_BAT] latch=1, play POWER_OFF prompt");            
 
             /*
-            * NTT:
-            * Battery has reached power-down voltage.
+            * Play POWER_OFF prompt first.
             *
-            * Set retention latch before shutdown to prevent
-            * repeated abnormal reboot at critically low battery voltage.
+            * Existing log:
+            * media_PlayAudio,id:1
+            * aud_id:f001 [POWER_OFF]
             */
-            pmu_ntt_case_closed_latch_set(true);
-            BATTERY_TRACE(1,"PDVOLT-->POWEROFF:%d",prams.volt);
+            media_PlayAudio(AUD_ID_POWER_OFF,0);
             osTimerStop(app_battery_timer);
+            /*
+            * Give prompt enough time to finish before shutdown.
+            */
+            if (ntt_low_bat_poweroff_timer != NULL)
+            {
+                osTimerStop(ntt_low_bat_poweroff_timer);
+                osTimerStart(ntt_low_bat_poweroff_timer,NTT_LOW_BAT_POWEROFF_DELAY_MS);
+                BATTERY_TRACE(1,"[NTT_LOW_BAT] shutdown delayed %d ms",NTT_LOW_BAT_POWEROFF_DELAY_MS);
+            }
+            else
+            {
+                /*
+                * Fallback: timer creation failed.
+                */
+                BATTERY_TRACE(0,"[NTT_LOW_BAT] timer NULL -> shutdown directly");
+        #if defined(BESUI_TWS_EN)
+                app_ui_shutdown();
+        #else
+                app_shutdown();
+        #endif
+            }
 
-#if defined(BESUI_TWS_EN)
-            app_ui_shutdown();
-#else
-            app_shutdown();
-#endif
-
-#endif
             break;
+        }
+        #endif
         case APP_BATTERY_STATUS_CHARGING:
             BATTERY_TRACE(4,"[BAT_CHG] evt=%d charger=%d volt=%d level=%d",
                 status,

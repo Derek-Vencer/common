@@ -1843,7 +1843,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -2356,7 +2356,7 @@ static void uart_idle_timeout_callback(void const *argument)
      *
      * Keep earbud powered on.
      */
-    if (vin_normal)
+    if (vin_normal || key_reboot || ota_reboot)
     {
         DBGPRINT("[NTT_POWER_KEEP] VIN_NORMAL STS2=0x%02X VIN=%d UVLO=%d OVP=%d -> KEEP POWER ON",
             chrg_sts2,
