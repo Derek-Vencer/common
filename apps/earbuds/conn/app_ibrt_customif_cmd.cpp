@@ -87,7 +87,7 @@ extern bool ntt_color_code_is_valid(uint8_t color);
 #ifdef IBRT
 extern "C" bool app_ibrt_middleware_is_ui_slave(void);
 #endif
-
+extern "C" void aiwang_box_battery_update_from_tws(uint8_t box_battery);
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
@@ -759,6 +759,16 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     {
         g_tws_peer_box_battery_level = peer_box_raw;
         g_tws_peer_box_battery_valid = true;
+
+        /*
+        * Peer has fresh CASE battery data.
+        * Update Master's local canonical CASE battery.
+        */
+        aiwang_box_battery_update_from_tws(peer_box_raw);
+
+        EARBUDS_TRACE(1,
+                    "[BAT_SYNC][CASE_UPDATE] peer box=%u%% -> local cache",
+                    peer_box_raw);
     }
     else
     {

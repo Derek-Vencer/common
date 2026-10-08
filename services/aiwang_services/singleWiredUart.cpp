@@ -1072,33 +1072,44 @@ static uint8_t box_battery_nv_get(void)
 
     return box_battery_nv_cache;
 }
-/*
-static void box_battery_nv_reset(void)
+
+extern "C" void aiwang_box_battery_update_from_tws(uint8_t box_battery)
 {
-    struct nvrecord_env_t *nvrecord_env = NULL;
-
-    nv_record_env_get(&nvrecord_env);
-
-    if (nvrecord_env == NULL)
+    if (box_battery > 100)
     {
-        DBGPRINT("[BOX_BAT][RESET] nv env null");
+        DBGPRINT(
+            "[BOX_BAT][TWS_UPDATE] invalid box=%u",
+            box_battery);
         return;
     }
 
-    nvrecord_env->chargerBoxBattery = BOX_BATTERY_INVALID;
-    nv_record_env_set(nvrecord_env);
+    uint8_t old_box = boxChargerStatus.boxChargerBattery;
 
-    box_battery_nv_cache = BOX_BATTERY_INVALID;
-    box_battery_nv_loaded = true;
-    box_battery_cache_valid = false;
+    /*
+     * Peer has just received fresh battery data directly
+     * from the charging case.
+     *
+     * Make it the local canonical CASE battery so that
+     * getBoxChargerBattery(), BLE 0x31 and 0x32 all use
+     * the latest value.
+     */
+    boxChargerStatus.getBatteryOK = true;
+    boxChargerStatus.boxChargerBattery = box_battery;
+    box_battery_cache_valid = true;
 
-    boxChargerStatus.boxChargerBattery = BOX_BATTERY_INVALID;
-    boxChargerStatus.leftEarBudsBattery = BOX_BATTERY_INVALID;
-    boxChargerStatus.rightEarBudsBattery = BOX_BATTERY_INVALID;
+    /*
+     * Keep NV cache consistent as well.
+     * box_battery_nv_save() already avoids unnecessary
+     * writes when the value has not changed.
+     */
+    box_battery_nv_save(box_battery);
 
-    DBGPRINT("[BOX_BAT][RESET] box battery reset to 0xFF");
+    DBGPRINT(
+        "[BOX_BAT][TWS_UPDATE] CASE %u -> %u",
+        old_box,
+        box_battery);
 }
-*/
+
 uint8_t getBoxChargerBattery(void)
 {
     uint8_t tws_box_battery = 0xFF;
@@ -2067,6 +2078,27 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         ntt_last_box_battery_case_tick = now;
         DBGPRINT("[BOX_BAT][PROCESS][%s] crc=0x%04X",isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",crc_dat);
         wired_uart_get_box_battery(&uart_cmd_dat[4],6);
+
+        DBGPRINT("[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",
+            isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
+            boxChargerStatus.boxChargerBattery,
+            boxChargerStatus.leftEarBudsBattery,
+            boxChargerStatus.rightEarBudsBattery);
+
+        /*
+        * Charging case has just supplied fresh CASE battery data.
+        *
+        * If this ear is TWS Slave, immediately synchronize:
+        *
+        *   byte[0] = ear battery %
+        *   byte[1] = CASE battery %
+        *
+        * to TWS Master.
+        *
+        * app_ibrt_customif_cmd_sync_battery_level() itself checks
+        * TWS connection and role, therefore it is safe to call here.
+        */
+        app_ibrt_customif_cmd_sync_battery_level(app_battery_get_percent());
 
         DBGPRINT("[BOX_BAT][RESULT][%s] CASE=%u L=%u R=%u",isRightEarbuds == RIGHT_BUDS ? "RIGHT" : "LEFT",
             boxChargerStatus.boxChargerBattery,
