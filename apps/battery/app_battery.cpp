@@ -286,19 +286,19 @@ static bool g_pogonin_role_switch_requested = false;
 static uint8_t g_pogonin_role_switch_wait_count = 0;
 #endif
 
-#define LOW_BAT_ROLE_SWITCH_PENDING_TIMEOUT_COUNT    (3)
+#define LOW_BAT_ROLE_SWITCH_PENDING_TIMEOUT_COUNT    (180)
 
 /*
  * ntt_low_battery_role_switch_check() is called every 10 seconds.
  * 30 calls = 300 seconds.
  */
-#define LOW_BAT_ROLE_BATTERY_CHECK_COUNT             (30)
+#define LOW_BAT_ROLE_BATTERY_CHECK_COUNT             (3)
 
 static bool g_low_bat_role_switch_pending = false;
 static uint8_t g_low_bat_role_switch_pending_count = 0;
 static uint8_t g_low_bat_role_battery_check_count = 0;
 
-#define NTT_LOW_BAT_POWEROFF_DELAY_MS    (10000)
+#define NTT_LOW_BAT_POWEROFF_DELAY_MS    (4000)
 
 static osTimerId ntt_low_bat_poweroff_timer = NULL;
 
@@ -317,9 +317,8 @@ osTimerDef(NTT_LOW_BAT_POWEROFF_TIMER,ntt_low_bat_poweroff_timer_handler);
 
 static void ntt_low_battery_role_switch_check(void)
 {
-    uint8_t local_level;
-    uint8_t peer_percent;
-    uint8_t peer_level;
+    uint8_t local_percent = 0xFF;
+    uint8_t peer_percent  = 0xFF;
     TWS_UI_ROLE_E current_role;
 
     current_role = app_ibrt_if_get_ui_role();
@@ -395,6 +394,7 @@ static void ntt_low_battery_role_switch_check(void)
     if (g_low_bat_role_battery_check_count <
         LOW_BAT_ROLE_BATTERY_CHECK_COUNT)
     {
+        BATTERY_TRACE(1,"[LOW_BAT_ROLE] 300s check_count =%d",g_low_bat_role_battery_check_count);
         return;
     }
 
@@ -404,17 +404,34 @@ static void ntt_low_battery_role_switch_check(void)
                   "[LOW_BAT_ROLE] 300s battery check");
 
     /*
-     * Local battery uses the same HFP level table.
-     */
-    local_level =
-        aiWangReportNormalLevelHandler(
-            app_battery_measure.currvolt);
+    * Local battery percentage: 0~100%.
+    */
+    local_percent = app_battery_get_percent();
 
     /*
-     * Peer battery is synchronized as 0~100%.
-     */
-    peer_percent =
-        app_ibrt_customif_get_tws_peer_battery_level();
+    * Peer battery percentage synchronized through TWS: 0~100%.
+    * 0xFF means invalid / unavailable.
+    */
+    peer_percent = app_ibrt_customif_get_tws_peer_battery_level();
+
+    BATTERY_TRACE(2,"[LOW_BAT_ROLE] local=%d%% peer=%d%%",local_percent,peer_percent);
+
+    if (current_role == TWS_UI_MASTER)
+    {
+        if ((local_percent <= 100) && (peer_percent <= 100))
+        {
+            BATTERY_TRACE(2,"[LOW_BAT_ROLE] battery local=%d%% peer=%d%%",local_percent,peer_percent);
+
+            if (peer_percent < local_percent)
+            {
+                BATTERY_TRACE(2,"[LOW_BAT_ROLE] peer battery lower %d < %d",peer_percent,local_percent);
+
+                /* role switch condition */
+                return;
+            }
+        }
+
+    }
 
     if ((peer_percent == 0xFF) ||
         (peer_percent > 100))
@@ -425,40 +442,11 @@ static void ntt_low_battery_role_switch_check(void)
         return;
     }
 
-    /*
-     * Convert peer percentage to HFP-style 0~9 level.
-     */
-    if (peer_percent >= 100)
-    {
-        peer_level = 9;
-    }
-    else if (peer_percent < 10)
-    {
-        peer_level = 0;
-    }
-    else
-    {
-        peer_level =
-            (uint8_t)((peer_percent / 10) - 1);
-    }
-
     BATTERY_TRACE(5,
-                  "[LOW_BAT_ROLE] role=%d volt=%d local=L%d peer=%d%% L%d",
-                  current_role,
-                  app_battery_measure.currvolt,
-                  local_level,
-                  peer_percent,
-                  peer_level);
-
-    /*
-     * Peer must be at least one level higher.
-     */
-    if (peer_level <= local_level)
-    {
-        BATTERY_TRACE(0,
-                      "[LOW_BAT_ROLE] no switch");
-        return;
-    }
+        "[LOW_BAT_ROLE] local=%d peer_percent=%d role=%d",
+        local_percent,
+        peer_percent,
+        current_role);
 
     BATTERY_TRACE(0,
                   "[LOW_BAT_ROLE] peer higher -> role switch");
@@ -1740,7 +1728,7 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
             * media_PlayAudio,id:1
             * aud_id:f001 [POWER_OFF]
             */
-            media_PlayAudio(AUD_ID_POWER_OFF,0);
+            //media_PlayAudio(AUD_ID_POWER_OFF,0);
             osTimerStop(app_battery_timer);
             /*
             * Give prompt enough time to finish before shutdown.
