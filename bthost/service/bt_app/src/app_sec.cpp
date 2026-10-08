@@ -26,6 +26,7 @@
 #include "app_trace_rx.h"
 #include "app_media_player.h"
 #include "audio_player_adapter.h"
+#include "app_ibrt_internal.h"
 
 uint8_t pair_status = 0;
 uint8_t enter_pair_status = 0;
@@ -68,44 +69,129 @@ static void pair_handler_func(enum pair_event event, void *data)
     enum pair_event app_pair_evt = PAIR_EVENT_COMPLETE;
     bt_pair_state_change_cb_t cb = NULL;
 
-    DEBUG_INFO(1,"!!!pair_handler_func event:%d\n", event);
+    DEBUG_INFO(1, "!!!pair_handler_func event:%d\n", event);
 
-    switch(event) {
-    case PAIRING_OK:
-        DEBUG_INFO(0,"PAIRING_OK\n");
-        app_pair_evt = PAIR_EVENT_COMPLETE;
-        err_code = 0;
-
-        cb = app_bt_get_pair_state_callback();
-        if (cb)
+    switch (event)
+    {
+        case PAIRING_OK:
         {
-            cb((bt_bdaddr_t *)data, APP_BT_PAIRED);
+            bt_bdaddr_t *paired_addr = (bt_bdaddr_t *)data;
+            bool is_tws_peer = false;
+        #ifdef IBRT
+            ibrt_ctrl_t *p_ibrt_ctrl =
+                app_ibrt_if_get_bt_ctrl_ctx();
+
+            /*
+            * PAIRING_OK may come from:
+            *
+            * 1. TWS peer pairing
+            * 2. Mobile phone pairing
+            *
+            * TWS pairing completion must NOT terminate
+            * the mobile pairing flow.
+            */
+            if ((paired_addr != NULL) && (p_ibrt_ctrl != NULL))
+            {
+                is_tws_peer = (memcmp(paired_addr->address,p_ibrt_ctrl->peer_addr.address,BTIF_BD_ADDR_SIZE) == 0);
+
+                DEBUG_INFO(1,"[NTT_PAIR] PAIRING_OK is_tws_peer=%d\n",is_tws_peer);
+                DEBUG_INFO(6,"[NTT_PAIR] paired=%02x:%02x:%02x:%02x:%02x:%02x\n",
+                    paired_addr->address[0],
+                    paired_addr->address[1],
+                    paired_addr->address[2],
+                    paired_addr->address[3],
+                    paired_addr->address[4],
+                    paired_addr->address[5]);
+
+                DEBUG_INFO(6,"[NTT_PAIR] tws_peer=%02x:%02x:%02x:%02x:%02x:%02x\n",
+                    p_ibrt_ctrl->peer_addr.address[0],
+                    p_ibrt_ctrl->peer_addr.address[1],
+                    p_ibrt_ctrl->peer_addr.address[2],
+                    p_ibrt_ctrl->peer_addr.address[3],
+                    p_ibrt_ctrl->peer_addr.address[4],
+                    p_ibrt_ctrl->peer_addr.address[5]);
+            }
+        #endif
+
+            app_pair_evt = PAIR_EVENT_COMPLETE;
+            err_code = 0;
+            cb = app_bt_get_pair_state_callback();
+
+            if (cb)
+            {
+                cb(paired_addr,APP_BT_PAIRED);
+            }
+
+            /*
+            * TWS peer pairing completed.
+            *
+            * Do NOT:
+            *   - set pair_status = 1
+            *   - exit mobile pairing
+            *   - stop charging-case pairing LED
+            */
+            if (is_tws_peer)
+            {
+                DEBUG_INFO(0,"[NTT_PAIR] TWS PAIRING_OK -> keep mobile pairing active\n");
+                break;
+            }
+
+            /*
+            * Real mobile phone pairing success.
+            */
+            DEBUG_INFO(0,"[NTT_PAIR] MOBILE PAIRING_OK -> finish pairing / stop case LED\n");
+            pair_status = 1;
+            set_er_discover_connectable_status(0);
+            ntt_mobile_pairing_mode_exit(true);
+
+            break;
         }
-		pair_status = 1;
-		set_er_discover_connectable_status(0);
-        ntt_mobile_pairing_mode_exit(true);
-        break;
-    case PAIRING_TIMEOUT:
-        DEBUG_INFO(0,"PAIRING_TIMEOUT\n");
-		pair_status = 1;
-		set_er_discover_connectable_status(0);
-        ntt_mobile_pairing_mode_exit(true);
-        break;
-    case PAIRING_FAILED:
-        DEBUG_INFO(0,"PAIRING_FAILED\n");
-        err_code = 1;
-        app_pair_evt = PAIR_EVENT_COMPLETE;
-		pair_status = 1;
-		set_er_discover_connectable_status(0);
-        ntt_mobile_pairing_mode_exit(true);
-        break;
-    default:
-        break;
+
+        case PAIRING_TIMEOUT:
+        {
+            DEBUG_INFO(0,"PAIRING_TIMEOUT\n");
+
+            /*
+             * Charging-case protocol:
+             *
+             * pair=1 = pairing finished / LED OFF
+             */
+            pair_status = 1;
+
+            set_er_discover_connectable_status(0);
+
+            ntt_mobile_pairing_mode_exit(false);
+
+            break;
+        }
+
+        case PAIRING_FAILED:
+        {
+            DEBUG_INFO(0,"PAIRING_FAILED\n");
+
+            err_code = 1;
+
+            app_pair_evt = PAIR_EVENT_COMPLETE;
+
+            /*
+             * Pairing failed -> stop charging-case LED.
+             */
+            pair_status = 1;
+
+            set_er_discover_connectable_status(0);
+
+            ntt_mobile_pairing_mode_exit(false);
+
+            break;
+        }
+
+        default:
+            break;
     }
 
     _event.errCode = err_code;
-	
-    app_pair_handler_func(app_pair_evt, (btif_event_t*)&_event);
+
+    app_pair_handler_func(app_pair_evt,(btif_event_t *)&_event);
 
     return;
 }

@@ -347,67 +347,172 @@ static void ntt_role_switch_delay_handler(void const *param)
 
 *****************************************************************************/
 extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success);
+extern void wired_uart_get_battery_level(void);
+
 void app_ibrt_customif_pairing_mode_exit()
 {
-    /*
-     * 開機時完全沒有手機配對紀錄：
-     *
-     * app_ibrt_start_power_on_tws_pairing() 完成後也可能進入這個
-     * pairing exit callback。
-     *
-     * 此時不能清除 manual pairing 狀態，否則新手機發起 SSP 時，
-     * APP_BT callback 會把它當成 automatic mobile SSP 而拒絕。
-     */
-    if (ntt_first_no_mobile_pair_mode)
-    {
-        ntt_manual_pairing_mode = true;
-        EARBUDS_TRACE(0,"[NTT_PAIR] pairing exit from TWS flow, keep first-no-mobile manual mode=1");
-    }
-    else
-    {
-        ntt_manual_pairing_mode = false;
-        EARBUDS_TRACE(0,"[NTT_PAIR] pairing exit, manual mode=0");        
-    }
-
+    bool mobile_connected = app_bt_ibrt_has_mobile_link_connected();
+    bool first_no_mobile = ntt_first_no_mobile_pair_mode;
+    bool user_manual = ntt_user_manual_pairing_request;
     app_ui_config_t *p_app_ui_config = app_ui_get_config();
     uint8_t resume_sco_device = g_device_id_need_resume_sco;
-    EARBUDS_TRACE(0,"custom_ui pairing mode exit: resume_sco_device %x",resume_sco_device);
-    ntt_mobile_pairing_mode_exit(true);
+    EARBUDS_TRACE(5,"[NTT_PAIR] pairing mode exit first_no_mobile=%d manual=%d user_manual=%d mobile=%d reconnect_pending=%d",
+        first_no_mobile,
+        ntt_manual_pairing_mode,
+        user_manual,
+        mobile_connected,
+        g_ntt_mobile_reconnect_after_pairing_exit);
 
     /*
-     * NTT:
+     * ---------------------------------------------------------
+     * CASE 1:
+     * Factory Reset / no-mobile-record boot flow
+     *
+     * TWS pairing completion may trigger this SDK callback.
+     *
+     * This is NOT the end of MOBILE pairing.
+     *
+     * Do NOT:
+     *   - set pair_status = 1
+     *   - clear ntt_first_no_mobile_pair_mode
+     *   - disable discoverable mode
+     *
+     * Instead:
+     *   - keep first-no-mobile pairing active
+     *   - remain GENERAL_ACCESSIBLE
+     *   - immediately report pair=2 to charging case
+     * ---------------------------------------------------------
+     */
+    if (first_no_mobile && !mobile_connected && !user_manual && !g_ntt_mobile_reconnect_after_pairing_exit)
+    {
+        EARBUDS_TRACE(0,"[NTT_PAIR] TWS flow exit only -> keep first mobile pairing active");
+
+        /*
+         * Preserve first-pairing state.
+         */
+        ntt_first_no_mobile_pair_mode = true;
+        ntt_manual_pairing_mode = true;
+
+        /*
+         * Allow new phone discovery / connection.
+         */
+        set_er_discover_connectable_status(1);
+
+        /*
+         * Important:
+         * Ensure this is not interpreted as pair-finished.
+         */
+        set_pair_status(0);
+        enable_pair_status(1);
+
+        /*
+         * Stay discoverable + connectable.
+         */
+        app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+
+        app_bt_reset_delay_power_off();
+
+        /*
+         * TWS is now connected.
+         *
+         * wired_uart_get_battery_level():
+         *
+         * tws_connected = 1
+         * first/manual  = 1
+         * success       = 0
+         *
+         * => pair_status = 2
+         *
+         * Charging-case pairing LED starts blinking
+         * immediately.
+         */
+        wired_uart_get_battery_level();
+
+        EARBUDS_TRACE(4,"[NTT_PAIR] TWS flow exit handled discover=%d access=%d first_no_mobile=%d manual=%d",
+            get_er_discover_connectable_status(),
+            app_bt_get_curr_access_mode(),
+            ntt_first_no_mobile_pair_mode,
+            ntt_manual_pairing_mode);
+
+        /*
+         * IMPORTANT:
+         * Do NOT call ntt_mobile_pairing_mode_exit()
+         * in this path.
+         *
+         * Continue only with generic SDK cleanup below.
+         */
+        goto pairing_exit_common;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * CASE 2:
+     * Real pairing-mode termination
+     *
+     * Includes:
+     *   - pairing timeout
+     *   - OUT_CASE forced exit
+     *   - TWS disconnect recovery
+     *
+     * According to charging-case protocol:
+     *
+     * pair=1 means pairing flow has finished and
+     * charging case must stop blinking its pairing LED.
+     *
+     * Real mobile connection success is also reported by:
+     *
+     * wired_uart_mobile_connected_get_box_battery()
+     * ---------------------------------------------------------
+     */
+
+    EARBUDS_TRACE(0,"[NTT_PAIR] real pairing exit -> stop charging-case pairing LED");
+
+    /*
+     * false here means this callback itself is not used
+     * to claim "phone authentication success".
+     *
+     * ntt_mobile_pairing_mode_exit() should nevertheless
+     * send pair_status=1 according to your current
+     * charging-case definition:
+     *
+     * pair=1 = pairing finished / LED OFF.
+     */
+    ntt_mobile_pairing_mode_exit(false);
+
+pairing_exit_common:
+
+    EARBUDS_TRACE(3,"[NTT_PAIR] pairing exit common mobile=%d reconnect_pending=%d first_no_mobile=%d",
+        app_bt_ibrt_has_mobile_link_connected(),
+        g_ntt_mobile_reconnect_after_pairing_exit,
+        ntt_first_no_mobile_pair_mode);
+
+    /*
      * TWS peer disappeared while pairing mode was active.
      *
-     * app_ui_exit_pairing_mode() is asynchronous, therefore
-     * start mobile reconnect only after pairing exit callback
-     * has actually been received.
+     * app_ui_exit_pairing_mode() is asynchronous,
+     * therefore reconnect mobile only after this
+     * pairing-exit callback.
      */
     if (g_ntt_mobile_reconnect_after_pairing_exit)
     {
         g_ntt_mobile_reconnect_after_pairing_exit = false;
 
-        if (!app_bt_ibrt_has_mobile_link_connected() &&
-            !ntt_first_no_mobile_pair_mode)
+        if (!app_bt_ibrt_has_mobile_link_connected() && !ntt_first_no_mobile_pair_mode)
         {
-            EARBUDS_TRACE(
-                0,
-                "[NTT_TWS_DISC] "
-                "pairing exit complete -> start mobile reconnect");
-
+            EARBUDS_TRACE(0,"[NTT_TWS_DISC] pairing exit complete -> start mobile reconnect");
             app_bt_profile_connect_manager_opening_reconnect();
         }
         else
         {
-            EARBUDS_TRACE(
-                0,
-                "[NTT_TWS_DISC] "
-                "pairing exit reconnect canceled "
-                "mobile=%d first_no_mobile=%d",
+            EARBUDS_TRACE(2,"[NTT_TWS_DISC] pairing exit reconnect canceled mobile=%d first_no_mobile=%d",
                 app_bt_ibrt_has_mobile_link_connected(),
                 ntt_first_no_mobile_pair_mode);
         }
     }
 
+    /*
+     * Restore SCO if SDK pairing entry disconnected it.
+     */
     if ((p_app_ui_config->pairing_with_disc_hf_cfg == IBRT_PAIRING_DISC_SCO) && (resume_sco_device != BT_DEVICE_INVALID_ID))
     {
         app_ibrt_if_hf_create_audio_link(resume_sco_device);
@@ -415,11 +520,9 @@ void app_ibrt_customif_pairing_mode_exit()
 
     g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 
-    if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb
-            ->ibrt_mgr_pairing_mode_exit_hook)
+    if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb ->ibrt_mgr_pairing_mode_exit_hook)
     {
-        ibrt_mgr_status_changed_client_cb
-            ->ibrt_mgr_pairing_mode_exit_hook();
+        ibrt_mgr_status_changed_client_cb ->ibrt_mgr_pairing_mode_exit_hook();
     }
 }
 
@@ -1037,7 +1140,10 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                         */
                         g_ntt_mobile_reconnect_after_pairing_exit = true;
                         EARBUDS_TRACE(0,"[NTT_TWS_DISC] pairing active -> exit pairing first, mobile reconnect pending=1");
-                        app_ui_exit_pairing_mode(true);
+                        /*
+                        * TWS peer disconnect is NOT mobile pairing success.
+                        */
+                        app_ui_exit_pairing_mode(false);
                     }
                     else
                     {
@@ -3335,9 +3441,9 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         get_enable_pair_status());
 
     /*
-     * Exit SDK pairing mode immediately when the earbud
-     * changes to OUT_CASE.
-     */
+    * Exit SDK pairing mode immediately when the earbud
+    * changes to OUT_CASE.
+    */
     if (app_ui_in_pairing_mode() || get_er_discover_connectable_status())
     {
         if (!ntt_dut_speech_tx_1mic_ns_bypass_get())
@@ -3349,19 +3455,23 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
             * ntt_user_manual_pairing_request.
             */
             bool was_user_manual_pairing = ntt_user_manual_pairing_request;
-
             EARBUDS_TRACE(3,"[NTT_PAIR] OUT_CASE -> exit pairing first_no_mobile=%d manual_gate=%d user_manual=%d",
                 ntt_first_no_mobile_pair_mode,
                 ntt_manual_pairing_mode,
                 was_user_manual_pairing);
 
-            app_ui_exit_pairing_mode(true);
+            /*
+            * OUT_CASE is NOT mobile pairing success.
+            *
+            * false means this is a forced / normal exit.
+            */
+            app_ui_exit_pairing_mode(false);
 
             /*
             * Only explicit manual pairing blocks reconnect.
             *
-            * Automatic boot pairing must NOT block
-            * First-Out reconnect when mobile records exist.
+            * Automatic first-no-mobile pairing must NOT
+            * incorrectly block First-Out reconnect.
             */
             pairing_exited_on_out = was_user_manual_pairing;
             EARBUDS_TRACE(1,"[NTT_PAIR] OUT_CASE pairing exit block_reconnect=%d",pairing_exited_on_out);

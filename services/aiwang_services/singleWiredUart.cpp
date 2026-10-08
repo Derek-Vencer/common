@@ -557,19 +557,20 @@ void wired_uart_get_battery_level(void)
         limit_pair_notify);
 
     /*
-     * Pair status reported to charging case:
-     *
-     * 0 = Normal / no pairing status
-     * 1 = Pairing success
-     * 2 = TWS connected and currently in pairing mode
-     *
-     * Pairing success has the highest priority.
-     */
-    if (pair_success_status)
+    * Charging case pairing status:
+    *
+    * 0 = Normal
+    * 1 = Pairing finished -> stop LED
+    * 2 = Pairing in progress -> blink LED
+    *
+    * Pair-finished status must have highest priority
+    * because BES access mode changes asynchronously.
+    */
+    if (pair_success_status != 0)
     {
         pair_status = 1;
     }
-    else if (tws_connected && (enter_pair_status || ntt_manual_pairing_mode || general_accessible))
+    else if (tws_connected && ((enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible))
     {
         pair_status = 2;
     }
@@ -594,7 +595,7 @@ void wired_uart_get_battery_level(void)
     * pair_status = 1
     * is limited to PAIR_NOTIFY_REPEAT_COUNT.
     */
-    //limit_pair_notify = (pair_success_status != 0);
+    limit_pair_notify = pair_status == 1;
 
     DBGPRINT(
         "[NTT_PAIR] success=%u enter=%u manual=%u "
@@ -809,41 +810,48 @@ extern "C" void ntt_mobile_pairing_mode_exit(bool pairing_success)
 {
     if (!ntt_dut_speech_tx_1mic_ns_bypass_get())
     {
-        DBGPRINT(
-            "[NTT_PAIR] exit pair mode success=%d before discover=%d access=%d",
+        DBGPRINT("[NTT_PAIR] exit pair mode reason_success=%d before discover=%d access=%d",
             pairing_success,
             get_er_discover_connectable_status(),
             app_bt_get_curr_access_mode());
 
+        /*
+         * Pairing flow has ended.
+         */
         enable_pair_status(0);
-        set_pair_status(1);//disable cc pair led.
+
+        /*
+         * Charging-case protocol:
+         *
+         * 1 = pairing finished -> LED OFF
+         *
+         * Applies to:
+         *   - mobile pairing success
+         *   - pairing timeout
+         *   - OUT_CASE
+         *
+         * TWS-flow temporary exit is filtered in
+         * app_ibrt_customif_pairing_mode_exit()
+         * and will NOT reach here.
+         */
+        set_pair_status(1);
 
         ntt_first_no_mobile_pair_mode = false;
         ntt_manual_pairing_mode = false;
         ntt_user_manual_pairing_request = false;
-
-        /*
-        * Disable permission to enter discoverable mode first.
-        */
         set_er_discover_connectable_status(0);
-
-        /*
-        * Then disable Inquiry Scan while retaining Page Scan.
-        */
         app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
 
-        //set_pair_status(pairing_success ? 1 : 0);
-
-        DBGPRINT(
-            "[NTT_PAIR] exit done discover=%d access=%d",
+        DBGPRINT("[NTT_PAIR] exit done reason_success=%d pair_status=%d discover=%d access=%d",
+            pairing_success,
+            get_pair_status(),
             get_er_discover_connectable_status(),
             app_bt_get_curr_access_mode());
-            
+
+        /*
+         * Immediately notify charging case.
+         */
         wired_uart_get_battery_level();
-    }
-    else 
-    {
-        DBGPRINT("[NTT_PAIR] Enter DTM Mode Keep Pairing...");
     }
 }
 
