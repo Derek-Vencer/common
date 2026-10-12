@@ -31,7 +31,19 @@
 #define APP_RSSI_ALWAYS_TRIGGER         (0)
 #define APP_RSSI_EVENT_TRIGGER          (1)
 
-#define APP_RSSI_TRIGGER_MODE           APP_RSSI_EVENT_TRIGGER
+#define APP_RSSI_TRIGGER_MODE           APP_RSSI_ALWAYS_TRIGGER
+
+/*
+ * NTT automatic RSSI role switch
+ *
+ * Slave Mobile RSSI must be stronger than Master
+ * Mobile RSSI by more than 10 dB.
+ */
+#define NTT_RSSI_ROLE_SWITCH_ENABLE       (1)
+
+#define NTT_RSSI_ROLE_SWITCH_THRESHOLD_DB (10)
+#define NTT_RSSI_ROLE_SWITCH_CONFIRM      (3)
+#define NTT_RSSI_ROLE_SWITCH_COOLDOWN_MS  (30000)
 
 typedef struct
 {

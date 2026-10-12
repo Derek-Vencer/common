@@ -21,6 +21,7 @@
 #include "app_tws_ibrt.h"
 #include "app_ibrt_middleware.h"
 #include "app_rssi.h"
+#include "app_ui_api.h"
 #include "bt_drv_reg_op.h"
 #include "hal_trace.h"
 #include "bts_module_if.h"
@@ -56,10 +57,10 @@ static int8_t app_rssi_min_value_get(rssi_window_t *w);
 static int8_t app_rssi_max_value_get(rssi_window_t *w);
 
 
-static void app_rssi_read_tws_rssi();
-static void app_rssi_dump_tws_rssi();
-static void app_rssi_read_mobile_rssi();
-static void app_rssi_dump_mobile_rssi();
+POSSIBLY_UNUSED static void app_rssi_read_tws_rssi();
+POSSIBLY_UNUSED static void app_rssi_dump_tws_rssi();
+POSSIBLY_UNUSED static void app_rssi_read_mobile_rssi();
+POSSIBLY_UNUSED static void app_rssi_dump_mobile_rssi();
 
 
 typedef struct
@@ -94,6 +95,121 @@ typedef struct
 } rssi_contrl_t;
 
 static rssi_contrl_t rssi_contrl;
+
+/*
+ * ============================================================
+ * NTT Automatic RSSI Role Switch
+ * ============================================================
+ *
+ * Condition:
+ *
+ * Slave Mobile RSSI - Master Mobile RSSI > 10 dB
+ *
+ * Confirm 3 consecutive peer RSSI responses.
+ *
+ * Role switch cooldown: 30 seconds.
+ *
+ * The actual role switch is disabled by default
+ * for initial RSSI verification.
+ * ============================================================
+ */
+
+static uint8_t ntt_rssi_switch_confirm_count = 0;
+static uint32_t ntt_rssi_switch_cooldown_count = 0;
+
+static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
+{
+    int16_t diff;
+
+    /*
+     * Only Master may request role switch.
+     */
+    if (bts_core_get_ui_role() != TWS_UI_MASTER)
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    /*
+     * TWS must be connected.
+     */
+    if (!APP_RSSI_IS_TWS_CONNECT())
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    /*
+     * Reject uninitialized RSSI values.
+     *
+     * RSSI normally uses negative dBm values.
+     */
+    if ((master_rssi >= 0) || (slave_rssi >= 0))
+    {
+        ntt_rssi_switch_confirm_count = 0;
+
+        BTAPP_TRACE(2,"[NTT_RSSI] invalid master=%d slave=%d",master_rssi,slave_rssi);
+        return;
+    }
+
+    diff = (int16_t)slave_rssi - (int16_t)master_rssi;
+    BTAPP_TRACE(3,"[NTT_RSSI] MASTER=%d SLAVE=%d DIFF=%d",master_rssi,slave_rssi,diff);
+
+    /*
+     * Cooldown counter is based on peer RSSI
+     * response interval, approximately 3 seconds.
+     */
+    if (ntt_rssi_switch_cooldown_count > 0)
+    {
+        ntt_rssi_switch_cooldown_count--;
+        ntt_rssi_switch_confirm_count = 0;
+        BTAPP_TRACE(1,"[NTT_RSSI] cooldown=%d",ntt_rssi_switch_cooldown_count);
+
+        return;
+    }
+
+    /*
+     * Slave must be stronger than Master
+     * by MORE than 10 dB.
+     */
+    if (diff <= NTT_RSSI_ROLE_SWITCH_THRESHOLD_DB)
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    /*
+     * Consecutive confirmation.
+     */
+    if (ntt_rssi_switch_confirm_count < NTT_RSSI_ROLE_SWITCH_CONFIRM)
+    {
+        ntt_rssi_switch_confirm_count++;
+    }
+
+    BTAPP_TRACE(2,"[NTT_RSSI] switch condition %d/%d",ntt_rssi_switch_confirm_count,NTT_RSSI_ROLE_SWITCH_CONFIRM);
+
+    if (ntt_rssi_switch_confirm_count < NTT_RSSI_ROLE_SWITCH_CONFIRM)
+    {
+        return;
+    }
+
+    ntt_rssi_switch_confirm_count = 0;
+
+#if NTT_RSSI_ROLE_SWITCH_ENABLE
+
+    /*
+     * Start cooldown before asynchronous request.
+     */
+    ntt_rssi_switch_cooldown_count = NTT_RSSI_ROLE_SWITCH_COOLDOWN_MS / APP_RSSI_GET_PEER_RSSI_INTERVAL;
+    BTAPP_TRACE(0,"[NTT_RSSI] request role switch");
+    app_ui_user_role_switch(false);
+
+#else
+
+    BTAPP_TRACE(0,"[NTT_RSSI] switch condition met (TEST ONLY)");
+
+#endif
+}
 
 static void app_rssi_window_init(rssi_window_t *w)
 {
@@ -263,18 +379,65 @@ static void app_rssi_read_mobile_rssi()
     static bt_bdaddr_t device_addr[BT_DEVICE_NUM];
     uint8_t count = bts_bt_if_get_dev_connected_list(&device_addr[0]);
 
-    for (uint8_t i = 0; i < count; i++) {
-        remote_rssi_obj_t *rssi_obj = app_rssi_find_and_new_remote_obj(&device_addr[i]);
+    /*
+     * Avoid overflowing device_addr[].
+     */
+    if (count > BT_DEVICE_NUM)
+    {
+        count = BT_DEVICE_NUM;
+    }
 
-        if (rssi_obj != NULL) {
-            rx_agc_t agc = {0};
-            bt_drv_reg_op_read_rssi_in_dbm(app_rssi_get_mobile_acl_handle_by_addr(&rssi_obj->rssi.addr), &agc);
-            rssi_obj->rssi.local_rssi.rxgain = agc.rxgain;
-            app_rssi_window_push(&rssi_obj->window, agc.rssi);
-            rssi_obj->rssi.local_rssi.rssi = app_rssi_value_get(&rssi_obj->window);
-            rssi_obj->rssi.local_rssi.rssi_min = app_rssi_min_value_get(&rssi_obj->window);
-            rssi_obj->rssi.local_rssi.rssi_max = app_rssi_max_value_get(&rssi_obj->window);
+    /*
+     * Print only when connection count changes.
+     */
+    static int last_count = -1;
+    if (last_count != (int)count)
+    {
+        BTAPP_TRACE(2,"[NTT_RSSI] role=%d mobile_count=%d",bts_core_get_ui_role(),count);
+        last_count = count;
+    }
+
+    for (uint8_t i = 0; i < count; i++)
+    {
+        remote_rssi_obj_t *rssi_obj = app_rssi_find_and_new_remote_obj(&device_addr[i]);
+        if (rssi_obj == NULL)
+        {
+            BTAPP_TRACE(1,"[NTT_RSSI] remote object NULL index=%d",i);
+            continue;
         }
+
+        uint16_t handle = app_rssi_get_mobile_acl_handle_by_addr(&rssi_obj->rssi.addr);
+        if ((handle == BT_INVALID_CONN_HANDLE) || (handle == 0))
+        {
+            BTAPP_TRACE(1,"[NTT_RSSI] invalid mobile handle index=%d",i);
+            continue;
+        }
+
+        rx_agc_t agc = {0};
+        bool ret = bt_drv_reg_op_read_rssi_in_dbm(handle, &agc);
+        if (!ret)
+        {
+            BTAPP_TRACE(2,"[NTT_RSSI] read failed handle=0x%X role=%d",handle,bts_core_get_ui_role());
+            continue;
+        }
+
+        /*
+         * RSSI must be a valid negative dBm value.
+         */
+        if ((agc.rssi >= 0) || (agc.rssi < -110))
+        {
+            BTAPP_TRACE(2,"[NTT_RSSI] invalid RSSI=%d handle=0x%X",agc.rssi,handle);
+            continue;
+        }
+
+        //BTAPP_TRACE(3,"[NTT_RSSI] role=%d mobile_handle=0x%X count=%d",bts_core_get_ui_role(),handle,count);
+
+        rssi_obj->rssi.local_rssi.rxgain = agc.rxgain;
+
+        app_rssi_window_push(&rssi_obj->window, agc.rssi);
+        rssi_obj->rssi.local_rssi.rssi = app_rssi_value_get(&rssi_obj->window);
+        rssi_obj->rssi.local_rssi.rssi_min = app_rssi_min_value_get(&rssi_obj->window);
+        rssi_obj->rssi.local_rssi.rssi_max = app_rssi_max_value_get(&rssi_obj->window);
     }
 }
 
@@ -363,25 +526,40 @@ void app_rssi_sample_task_stop()
 
 static void app_rssi_tws_sync_process()
 {
-    rssi_tws_pkt_t req_pkt;
+    rssi_tws_pkt_t req_pkt = {};
     int pos = 0;
 
-    if (!APP_RSSI_IS_TWS_CONNECT()) {
+    if (!APP_RSSI_IS_TWS_CONNECT())
+    {
         return;
     }
 
-    if (bts_core_get_ui_role() != TWS_UI_MASTER) {
+    if (bts_core_get_ui_role() != TWS_UI_MASTER)
+    {
         return;
     }
 
-    for (int i = 0; i < APP_RSSI_MAX_RECORD_NUM; i++) {
+    for (int i = 0; i < APP_RSSI_MAX_RECORD_NUM; i++)
+    {
         remote_rssi_obj_t *cur_obj = &rssi_contrl.remote_rssi_obj[i];
-        if (app_rssi_get_mobile_acl_handle_by_addr(&cur_obj->rssi.addr) != BT_INVALID_CONN_HANDLE) {
+
+        if (app_rssi_get_mobile_acl_handle_by_addr(&cur_obj->rssi.addr) != BT_INVALID_CONN_HANDLE)
+        {
+            /*
+             * Do not request peer RSSI before
+             * local RSSI sampling is ready.
+             */
+            if (cur_obj->window.size == 0)
+            {
+                continue;
+            }
+
             req_pkt.remote_rssi[pos++] = cur_obj->rssi;
         }
     }
 
-    if (pos) {
+    if (pos > 0)
+    {
         app_rssi_send_get_peer_rssi_req(&req_pkt);
     }
 }
@@ -391,36 +569,111 @@ static void app_rssi_send_get_peer_rssi_req(rssi_tws_pkt_t *preq_pkt)
     bts_ibrt_if_send_peer_rssi_req((uint8_t *)preq_pkt, sizeof(rssi_tws_pkt_t));
 }
 
-void app_rssi_get_peer_rssi_handle(uint16_t rsp_seq, rssi_tws_pkt_t *prcv_pkt)
+void app_rssi_get_peer_rssi_handle(uint16_t rsp_seq,rssi_tws_pkt_t *prcv_pkt)
 {
-    rssi_tws_pkt_t rsp_pkt;
+    BTAPP_TRACE(1,"[NTT_RSSI] Slave received request seq=%d",rsp_seq);
+
+    rssi_tws_pkt_t rsp_pkt = {};
     int rsp_pos = 0;
 
-    if (APP_RSSI_TRIGGER_MODE == APP_RSSI_EVENT_TRIGGER) {
+    if (prcv_pkt == NULL)
+    {
+        return;
+    }
+
+    if (APP_RSSI_TRIGGER_MODE == APP_RSSI_EVENT_TRIGGER)
+    {
         app_rssi_sample_task_start();
     }
 
-    for (int i = 0; i < APP_RSSI_MAX_RECORD_NUM; i++) {
+    for (int i = 0; i < APP_RSSI_MAX_RECORD_NUM; i++)
+    {
         remote_rssi_t *pprssi = &prcv_pkt->remote_rssi[i];
-        if (app_rssi_get_mobile_acl_handle_by_addr(&pprssi->addr) != BT_INVALID_CONN_HANDLE) {
-            for (int j = 0; j < APP_RSSI_MAX_RECORD_NUM; j++) {
-                remote_rssi_obj_t *cur_obj = &rssi_contrl.remote_rssi_obj[j];
 
-                if (memcmp(&pprssi->addr, &cur_obj->rssi.addr, sizeof(bt_bdaddr_t)) == 0) {
-                    cur_obj->rssi.peer_rssi = pprssi->local_rssi;
-                    rsp_pkt.remote_rssi[rsp_pos++] = cur_obj->rssi;
-                }
-            }
+        /*
+         * Find Mobile ACL or IBRT Snoop handle.
+         */
+        uint16_t handle = app_rssi_get_mobile_acl_handle_by_addr(&pprssi->addr);
+
+        if ((handle == BT_INVALID_CONN_HANDLE) || (handle == 0))
+        {
+            continue;
         }
+
+        /*
+         * Create RSSI object using the Mobile address
+         * supplied by Master.
+         *
+         * This avoids relying on Slave's
+         * bts_bt_if_get_dev_connected_list().
+         */
+        remote_rssi_obj_t *cur_obj = app_rssi_find_and_new_remote_obj(&pprssi->addr);
+
+        if (cur_obj == NULL)
+        {
+            BTAPP_TRACE(1,"[NTT_RSSI] Slave object NULL index=%d",i);
+
+            continue;
+        }
+
+        /*
+         * Read Slave Snoop Mobile RSSI directly.
+         */
+        rx_agc_t agc = {0};
+        bool ret = bt_drv_reg_op_read_rssi_in_dbm(handle,&agc);
+        if (!ret)
+        {
+            BTAPP_TRACE(2,"[NTT_RSSI] Slave read failed handle=0x%X",handle);
+            continue;
+        }
+
+        /*
+         * Reject invalid RSSI samples.
+         */
+        if ((agc.rssi >= 0) || (agc.rssi < -110))
+        {
+            BTAPP_TRACE(2,"[NTT_RSSI] Slave invalid RSSI=%d",agc.rssi);
+            continue;
+        }
+
+        /*
+         * Update RSSI moving average.
+         */
+        cur_obj->rssi.local_rssi.rxgain = agc.rxgain;
+        app_rssi_window_push(&cur_obj->window,agc.rssi);
+        cur_obj->rssi.local_rssi.rssi = app_rssi_value_get(&cur_obj->window);
+        cur_obj->rssi.local_rssi.rssi_min = app_rssi_min_value_get(&cur_obj->window);
+        cur_obj->rssi.local_rssi.rssi_max = app_rssi_max_value_get(&cur_obj->window);
+
+        /*
+         * Save Master's RSSI.
+         */
+        cur_obj->rssi.peer_rssi = pprssi->local_rssi;
+
+        /*
+         * Return Slave's RSSI to Master.
+         */
+        rsp_pkt.remote_rssi[rsp_pos++] = cur_obj->rssi;
+        BTAPP_TRACE(3,"[NTT_RSSI] Slave handle=0x%X RSSI=%d MasterRSSI=%d",handle,cur_obj->rssi.local_rssi.rssi,pprssi->local_rssi.rssi);
     }
 
-    if (rsp_pos != 0) {
-        BTAPP_TRACE(0,"rcv_peer:update rssi");
-#ifdef APP_RSSI_DEBUG
-        app_rssi_dump_mobile_rssi();
-#endif
-        app_rssi_send_get_peer_rssi_rsp(rsp_seq, &rsp_pkt);
+    if (rsp_pos > 0)
+    {
+        BTAPP_TRACE(1,"[NTT_RSSI] Slave response count=%d",rsp_pos);
     }
+    else
+    {
+        BTAPP_TRACE(0,"[NTT_RSSI] Slave no valid RSSI");
+    }
+
+    /*
+     * Always send a response, even when no valid
+     * RSSI is available.
+     *
+     * The packet is zero-initialized.
+     * Master must reject invalid RSSI entries.
+     */
+    app_rssi_send_get_peer_rssi_rsp(rsp_seq,&rsp_pkt);
 }
 
 static void app_rssi_send_get_peer_rssi_rsp(uint16_t rsp_seq, rssi_tws_pkt_t *prsp_pkt)
@@ -430,19 +683,68 @@ static void app_rssi_send_get_peer_rssi_rsp(uint16_t rsp_seq, rssi_tws_pkt_t *pr
 
 void app_rssi_get_peer_rssi_rsp_handle(rssi_tws_pkt_t *prcv_pkt)
 {
-    for (int i = 0; i < APP_RSSI_MAX_RECORD_NUM; i++) {
-        remote_rssi_t *pprssi = &prcv_pkt->remote_rssi[i];
-        if (app_rssi_get_mobile_acl_handle_by_addr(&pprssi->addr) != BT_INVALID_CONN_HANDLE) {
-            for (int j = 0; j < APP_RSSI_MAX_RECORD_NUM; j++) {
-                remote_rssi_obj_t *cur_obj = &rssi_contrl.remote_rssi_obj[j];
+    if (prcv_pkt == NULL)
+    {
+        return;
+    }
 
-                if (memcmp(&pprssi->addr, &cur_obj->rssi.addr, sizeof(bt_bdaddr_t)) == 0) {
-                    cur_obj->rssi.peer_rssi = pprssi->local_rssi;
-                }
+    /*
+     * Only Master evaluates RSSI role switch.
+     */
+    if (bts_core_get_ui_role() != TWS_UI_MASTER)
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    for (int i = 0; i < APP_RSSI_MAX_RECORD_NUM; i++)
+    {
+        remote_rssi_t *pprssi = &prcv_pkt->remote_rssi[i];
+        if (app_rssi_get_mobile_acl_handle_by_addr(&pprssi->addr) == BT_INVALID_CONN_HANDLE)
+        {
+            continue;
+        }
+
+        for (int j = 0; j < APP_RSSI_MAX_RECORD_NUM; j++)
+        {
+            remote_rssi_obj_t *cur_obj = &rssi_contrl.remote_rssi_obj[j];
+            if (memcmp(&pprssi->addr,&cur_obj->rssi.addr,sizeof(bt_bdaddr_t)) != 0)
+            {
+                continue;
             }
+
+            /*
+             * Master local RSSI must be sampled.
+             */
+            if (cur_obj->window.size == 0)
+            {
+                continue;
+            }
+
+            /*
+             * Peer local RSSI is the Slave
+             * Snoop Mobile RSSI.
+             */
+            cur_obj->rssi.peer_rssi = pprssi->local_rssi;
+            int8_t master_rssi = cur_obj->rssi.local_rssi.rssi;
+            int8_t slave_rssi = cur_obj->rssi.peer_rssi.rssi;
+            BTAPP_TRACE(3,"[NTT_RSSI] master=%d slave=%d diff=%d",
+                master_rssi,
+                slave_rssi,
+                (int)slave_rssi - (int)master_rssi);
+
+            /*
+             * Evaluate automatic role switch.
+             */
+            ntt_rssi_role_switch_check(master_rssi,slave_rssi);
+
+            break;
         }
     }
-    BTAPP_TRACE(0,"rcv_rsp:update rssi");
+    /*
+     * BES original RSSI debug output.
+     */
+    BTAPP_TRACE(0, "[NTT_RSSI] peer RSSI response received");
     app_rssi_dump_tws_rssi();
     app_rssi_dump_mobile_rssi();
 }
