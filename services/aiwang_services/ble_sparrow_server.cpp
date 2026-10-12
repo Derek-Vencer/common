@@ -768,7 +768,7 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
         (ntt_bt_name_sync_buf[0] != 0))
     {
         localname = ntt_bt_name_sync_buf;
-        name_len = ntt_bt_name_sync_len;
+        name_len = ntt_bt_name_sync_len - 1U;
 
         TRACE(1,
               "[GET_NAME] return pending RAM name: %s",
@@ -789,7 +789,7 @@ void handleGetDeviceName(const uint8_t *data, uint16_t len)
         }
 
         name_len =
-            (uint16_t)strlen((char *)localname) + 1U;
+            (uint16_t)strlen((char *)localname);
 
         TRACE(1,
               "[GET_NAME] return flash name: %s",
@@ -3871,7 +3871,7 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
                 (ntt_bt_name_sync_buf[0] != 0))
             {
                 localname = ntt_bt_name_sync_buf;
-                name_len = ntt_bt_name_sync_len;
+                name_len = ntt_bt_name_sync_len - 1U;
 
                 TRACE(1,
                     "[GET_NAME][READ] pending name=%s len=%d",
