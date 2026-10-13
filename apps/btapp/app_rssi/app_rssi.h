@@ -83,5 +83,15 @@ void app_rssi_init();
 void app_rssi_update_date_pkt(rssi_pkt_t *p_pkt);
 void app_rssi_sample_task_start();
 void app_rssi_sample_task_stop();
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void ntt_rssi_role_switch_set_ota_lock(bool locked);
+bool ntt_rssi_role_switch_is_ota_locked(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*__APP_RSSI_H__ */

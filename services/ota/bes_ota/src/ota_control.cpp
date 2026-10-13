@@ -27,7 +27,7 @@
 #include "hal_aud.h"
 #include "btapp.h"
 #include "watchdog.h"
-
+#include "../../apps/btapp/app_rssi/app_rssi.h"
 #ifdef __IAG_BLE_INCLUDE__
 #include "bluetooth_ble_api.h"
 #include "app_ble.h"
@@ -2591,6 +2591,10 @@ static void _handle_received_data(uint8_t *otaBuf, bool isViaBle,uint16_t dataLe
 #endif
             if (BES_OTA_START_MAGIC_CODE == packet->payload.cmdOtaStart.magicCode)
             {
+                /*
+                * NTT: OTA START confirmed.
+                */
+                ntt_rssi_role_switch_set_ota_lock(true);
                 OTA_TRACE(0,"Receive command start request:");
                 ota_control_reset_env(false);
                 /// init flash offset to write data
@@ -2856,6 +2860,10 @@ static void _handle_received_data(uint8_t *otaBuf, bool isViaBle,uint16_t dataLe
         {
             if (BES_OTA_START_MAGIC_CODE == packet->payload.cmdApply.magicCode && ota_control_env.isPendingForReboot)
             {
+                /*
+                * NTT: Keep RSSI switching disabled until reboot.
+                */
+                ntt_rssi_role_switch_set_ota_lock(true);
                 ota.permissionToApply = 1;
                 bool overWrite = OTA_RESULT_PASSED;
                 errOtaCode = 1;

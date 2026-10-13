@@ -871,6 +871,12 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
             audio_prompt_clear_pending_stream(PENDING_TO_STOP_A2DP_STREAMING);
 #endif
 
+            AUDIO_BT_TRACE(4,"[NTT_SCO_START] dev=%d media_active=%d voice_active=%d current=0x%x",
+                device_id,
+                bt_media_is_media_active_by_type(BT_STREAM_MEDIA),
+                bt_media_is_media_active_by_type(BT_STREAM_VOICE),
+                bt_media_get_current_media());
+
             if (bt_media_is_media_active_by_type(BT_STREAM_MEDIA))
             {
 #ifdef __AI_VOICE__
@@ -1150,6 +1156,13 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
             uint8_t curr_playing_sco = app_audio_manager_get_active_sco_num();
             uint8_t curr_request_sco = device_id;
 
+            AUDIO_BT_TRACE(4,
+                    "[NTT_SCO_START] NORMAL dev=%d curr_sco=%d current=0x%x hfp_run=%d",
+                    device_id,
+                    curr_playing_sco,
+                    bt_media_get_current_media(),
+                    app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM));
+
             if (curr_playing_sco == BT_DEVICE_INVALID_ID)
                 app_audio_manager_set_active_sco_num(device_id);
 
@@ -1201,6 +1214,13 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
 #endif // #ifndef AUDIO_PROMPT_USE_DAC2_ENABLED
 #endif // #if defined(MEDIA_PLAYER_SUPPORT)&&(!defined(PROMPT_SELF_MANAGEMENT))
 
+            AUDIO_BT_TRACE(4,
+                    "[NTT_SCO_START] NORMAL dev=%d curr_sco=%d current=0x%x hfp_run=%d",
+                    device_id,
+                    curr_playing_sco,
+                    bt_media_get_current_media(),
+                    app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM));
+                    
             if (curr_playing_sco == BT_DEVICE_INVALID_ID)
             {
                 app_audio_manager_set_active_sco_num(curr_request_sco);

@@ -26,6 +26,7 @@
 #include "hal_trace.h"
 #include "bts_module_if.h"
 #include "bts_tws_conn.h"
+#include "app_bt.h"
 
 /* Open for debug */
 // #define APP_RSSI_DEBUG
@@ -114,17 +115,79 @@ static rssi_contrl_t rssi_contrl;
  * ============================================================
  */
 
+static volatile bool ntt_rssi_ota_lock = false;
 static uint8_t ntt_rssi_switch_confirm_count = 0;
 static uint32_t ntt_rssi_switch_cooldown_count = 0;
+
+/*
+ * ============================================================
+ * NTT RSSI Role Switch - A2DP Streaming Check
+ *
+ * Only allow automatic RSSI role switching while at least
+ * one connected mobile device is A2DP streaming.
+ *
+ * Supports dual mobile connections.
+ * ============================================================
+ */
+static bool ntt_rssi_is_a2dp_streaming(void)
+{
+    for (uint8_t device_id = 0; device_id < BT_DEVICE_NUM; device_id++)
+    {
+        if (app_bt_is_a2dp_streaming(device_id))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+extern "C" void ntt_rssi_role_switch_set_ota_lock(bool locked)
+{
+    if (ntt_rssi_ota_lock == locked)
+    {
+        return;
+    }
+
+    ntt_rssi_ota_lock = locked;
+
+    // Clear accumulated RSSI role-switch confirmations.
+    ntt_rssi_switch_confirm_count = 0;
+
+    BTAPP_TRACE(1, "[NTT_RSSI] OTA_LOCK=%d", locked ? 1 : 0);
+}
+
+extern "C" bool ntt_rssi_role_switch_is_ota_locked(void)
+{
+    return ntt_rssi_ota_lock;
+}
 
 static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
 {
     int16_t diff;
 
     /*
-     * Only Master may request role switch.
+     * 1. OTA must not be active.
+     */
+    if (ntt_rssi_role_switch_is_ota_locked())
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    /*
+     * 2. Only TWS Master can request role switch.
      */
     if (bts_core_get_ui_role() != TWS_UI_MASTER)
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    /*
+     * 3. A2DP must be streaming.
+     */
+    if (!ntt_rssi_is_a2dp_streaming())
     {
         ntt_rssi_switch_confirm_count = 0;
         return;
@@ -201,6 +264,13 @@ static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
      * Start cooldown before asynchronous request.
      */
     ntt_rssi_switch_cooldown_count = NTT_RSSI_ROLE_SWITCH_COOLDOWN_MS / APP_RSSI_GET_PEER_RSSI_INTERVAL;
+    if (ntt_rssi_role_switch_is_ota_locked())
+    {
+        ntt_rssi_switch_confirm_count = 0;
+
+        BTAPP_TRACE(0, "[NTT_RSSI] role switch blocked by OTA");
+        return;
+    }
     BTAPP_TRACE(0,"[NTT_RSSI] request role switch");
     app_ui_user_role_switch(false);
 

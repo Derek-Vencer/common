@@ -885,6 +885,7 @@ static void hfp_connected_ind_handler(uint8_t device_id, btif_hf_channel_t* chan
 
     //app_bt_stream_hfpvolume_reset();
     hfp_volume = hfp_volume_get((enum BT_DEVICE_ID_T)device_id);
+    DEBUG_INFO(3,"[NTT_HFP_VOL] HFP_CONNECTED dev=%d local=%d bt=%d",device_id,hfp_volume_local_get(device_id),hfp_volume);
     /*
     if(hfp_volume == MAX_HFP_VOL || hfp_volume == MIN_HFP_VOL)
     {
@@ -893,6 +894,7 @@ static void hfp_connected_ind_handler(uint8_t device_id, btif_hf_channel_t* chan
     }
     */
     DEBUG_INFO(1,"hfp connect report volume:%d", hfp_volume);
+    DEBUG_INFO(2, "[NTT_HFP_VOL] HFP_CONNECTED TX_GAIN dev=%d gain=%d",device_id,hfp_volume);
     btif_hf_report_speaker_volume(chan, hfp_volume);
 #if defined(HFP_DISABLE_NREC)
     btif_hf_disable_nrec(chan);
@@ -1210,6 +1212,10 @@ static void hfp_audio_connected_handler(uint8_t device_id, btif_hf_channel_t* ch
     bt_adapter_set_hfp_sco_codec_type(device_id, codec_id);
     curr_device->switch_sco_to_earbud = 0;
     curr_device->hf_audio_state = BT_HFP_AUDIO_CON;
+    DEBUG_INFO(3,"[NTT_HFP_RING] SCO CONNECTED dev=%d callsetup=%d hfp_vol=%d",
+        device_id,
+        curr_device->hfchan_callSetup,
+        hfp_volume_local_get(device_id));
 
     bt_audio_event_handler(device_id, APP_BT_AUDIO_EVENT_HFP_SCO_CONNECTED, 0);
     param.p.audio_connected.device_id = device_id;
@@ -1258,6 +1264,11 @@ static void hfp_audio_disconnected_handler(uint8_t device_id, btif_hf_channel_t*
 
     curr_device->hf_audio_state = BT_HFP_AUDIO_DISCON;
 
+    DEBUG_INFO(3,"[NTT_HFP_RING] SCO DISCONNECTED dev=%d callsetup=%d reason=%d",
+        device_id,
+        curr_device->hfchan_callSetup,
+        ctx->disc_reason);
+
     //app_hfp_mute_upstream(device_id, true);
 
     /* Dont clear callsetup status when audio disc: press iphone volume button
@@ -1285,6 +1296,7 @@ void hfp_speak_volume_handler(uint8_t device_id, btif_hf_channel_t* chan, struct
 {
     DEBUG_INFO(2,"::HF_EVENT_SPEAKER_VOLUME  chan_id:%d,speaker gain = %d\n", device_id, ctx->speaker_volume);
     hfp_volume_set(device_id, (uint8_t)ctx->speaker_volume);
+    DEBUG_INFO(2,"[NTT_HFP_VOL] SPK_GAIN updated_local=%d",hfp_volume_local_get(device_id));
 }
 
 static void hfp_voice_rec_state_ind_handler(uint8_t device_id, btif_hf_channel_t* chan, struct hfp_context *ctx)

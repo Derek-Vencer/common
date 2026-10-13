@@ -2527,18 +2527,16 @@ static void on_reject_call(void)
 {
     CALL_STATE_E call_state = app_bt_get_call_state();
 
-    TRACE(0,
-          "[CALL] reject/end call_state=%d",
-          call_state);
+    TRACE(0,"[CALL] reject/end call_state=%d",call_state);
 
-    if (call_state == CALL_STATE_OUTGOING)
+    if ((call_state == CALL_STATE_DIALING) ||
+        (call_state == CALL_STATE_ALERTING) ||
+        (call_state == CALL_STATE_OUTGOING))
     {
         /*
          * Cancel outgoing dialing or alerting call.
          */
-        TRACE(0,
-              "[CALL] cancel outgoing call state=%d",
-              call_state);
+        TRACE(0,"[CALL] cancel outgoing call state=%d",call_state);
 
         app_audio_control_call_terminate();
     }
@@ -2548,9 +2546,7 @@ static void on_reject_call(void)
         /*
          * Terminate active call.
          */
-        TRACE(0,
-              "[CALL] terminate active call state=%d",
-              call_state);
+        TRACE(0,"[CALL] terminate active call state=%d",call_state);
 
         app_audio_control_call_terminate();
     }
@@ -2560,17 +2556,13 @@ static void on_reject_call(void)
         /*
          * Reject incoming call.
          */
-        TRACE(0,
-              "[CALL] reject incoming call state=%d",
-              call_state);
+        TRACE(0,"[CALL] reject incoming call state=%d",call_state);
 
         app_audio_control_call_terminate();
     }
     else
     {
-        TRACE(0,
-              "[CALL] reject ignored, state=%d",
-              call_state);
+        TRACE(0,"[CALL] reject ignored, state=%d",call_state);
     }
 }
 static void on_play_pause(void)     {
@@ -3132,6 +3124,14 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_CLICK:
         {
             ntt_cancel_double_hold_state("single click");
+        #ifdef SUPPORT_SIRI
+            if (ntt_voice_assist_is_active())
+            {
+                TRACE(0, "[NTT_VA] SINGLE_CLICK ignored, VA remains active");
+
+                break;
+            }
+        #endif
             TRACE(0, "[KEYMAP] CLICK_SINGLE");
             handle_key_event(CLICK_SINGLE, key_side);
         }
@@ -3139,17 +3139,32 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 
         case KEY_DOUBLE_CLICK:
         {
-    #ifdef SUPPORT_SIRI
+            ntt_cancel_double_hold_state("double click");
+            CALL_STATE_E call_state = app_bt_get_call_state();
+
+            /*
+            * Priority 1: Call
+            */
+            if (call_state != CALL_STATE_IDLE)
+            {
+                TRACE(0, "[NTT_CALL] DOUBLE_CLICK state=%d", call_state);
+                handle_key_event(CLICK_DOUBLE, key_side);
+                break;
+            }
+        #ifdef SUPPORT_SIRI
+            /*
+            * Priority 2: Voice Assistant
+            */
             if (ntt_voice_assist_is_active())
             {
-                TRACE(0,"[KEY] DOUBLE_CLICK -> CLOSE_VOICE_ASSIST");
-                ntt_cancel_double_hold_state("double click close voice assist");
+                TRACE(0, "[NTT_VA] DOUBLE_CLICK -> CLOSE VA");
                 ntt_voice_assist_close();
                 break;
             }
-    #endif
-
-            ntt_cancel_double_hold_state("normal double click");
+        #endif
+            /*
+            * Priority 3: Idle / Music Keymap
+            */
             TRACE(0, "[KEYMAP] CLICK_DOUBLE");
             handle_key_event(CLICK_DOUBLE, key_side);
         }
@@ -3158,6 +3173,14 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_TRIPLE_CLICK:
         {
             ntt_cancel_double_hold_state("triple click");
+        #ifdef SUPPORT_SIRI
+            if (ntt_voice_assist_is_active())
+            {
+                TRACE(0, "[NTT_VA] SINGLE_CLICK ignored, VA remains active");
+
+                break;
+            }
+            #endif
             TRACE(0, "[KEYMAP] CLICK_TRIPLE");
             handle_key_event(CLICK_TRIPLE, key_side);
         }
@@ -3178,6 +3201,14 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         {
             TRACE(0, "[KEYMAP] CLICK_HOLD_2S");
             ntt_cancel_double_hold_state("hold 2s event");
+        #ifdef SUPPORT_SIRI
+            if (ntt_voice_assist_is_active())
+            {
+                TRACE(0, "[NTT_VA] HOLD_2S ignored, VA remains active");
+
+                break;
+            }
+        #endif
             handle_key_event(CLICK_HOLD_2S, key_side);
         }
         break;

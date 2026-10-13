@@ -10,6 +10,7 @@
 #include "ota_control.h"
 #include "ota_spp.h"
 #include "ota_ble.h"
+#include "../../apps/btapp/app_rssi/app_rssi.h"
 #ifdef OTA_OVER_TOTA_ENABLED
 #include "app_tota.h"
 #include "app_tota_common.h"
@@ -247,9 +248,39 @@ void app_ota_connected(BES_OTA_PATH_TYPE_E connType, uint8_t conidx)
 void app_ota_disconnected(BES_OTA_PATH_TYPE_E connType)
 {
     OTA_TRACE(0,"Ota is disconnected connType %d", connType);
+
+    /*
+     * NTT:
+     * Capture OTA state BEFORE Bes_exit_ota_state().
+     *
+     * Bes_exit_ota_state() calls ota_control_reset_env(true),
+     * which clears isPendingForReboot.
+     */
+    bool ota_was_in_progress = ota_is_in_progress();
+
+    /*
+     * Reset OTA transport and BES OTA environment.
+     */
+
     app_ota_env_init();
 
     Bes_exit_ota_state();
+
+    /*
+     * NTT:
+     * Restore RSSI switching only if OTA was not
+     * actively transferring firmware.
+     */
+    if (!ota_was_in_progress)
+    {
+        ntt_rssi_role_switch_set_ota_lock(false);
+
+        OTA_TRACE(0,"[NTT_OTA] OTA disconnected, RSSI switch enabled");
+    }
+    else
+    {
+        OTA_TRACE(0,"[NTT_OTA] OTA was in progress, keep RSSI locked");
+    }
 #if defined(IBRT) && !defined(FREEMAN_OTA_ENABLED)
     if (DATA_PATH_BLE == connType) {
         tws_ctrl_send_cmd(APP_TWS_CMD_OTA_MOBILE_DISC_CMD, (uint8_t*)&connType, 1);
@@ -324,6 +355,11 @@ void app_ota_data_handle(bes_ota_event_param_t *param, BES_OTA_RX_FLAG_E flag)
         if (NO_OTA_CONNECTION != app_ota_get_connected_type()) {
             break;
         }
+        /*
+        * NTT: Disable RSSI role switching as soon as
+        * the OTA transport connection is accepted.
+        */
+        ntt_rssi_role_switch_set_ota_lock(true);
         app_ota_connected(param->pathType, param->conidx);
         if (DATA_PATH_SPP == param->pathType) {
             app_ota_bt_mac_addr_set(param->param.address);

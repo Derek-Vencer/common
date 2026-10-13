@@ -6726,6 +6726,13 @@ static int bt_sco_player(bool on, enum APP_SYSFREQ_FREQ_T freq)
         af_set_priority(AF_USER_SCO, osPriorityHigh);
         bt_media_volume_ptr_update_by_mediatype(BT_STREAM_VOICE);
         stream_local_volume = btdevice_volume_p->hfp_vol;
+
+        AUDIO_BT_TRACE(0,"[NTT_HFP_VOL] SCO START ptr=%p nv_vol=%d current_vol=%d stream_vol=%d",
+                btdevice_volume_p,
+                btdevice_volume_p->hfp_vol,
+                current_btdevice_volume.hfp_vol,
+                stream_local_volume);
+
         app_audio_manager_sco_status_checker();
 
         freq = sco_player_reselect_freq(freq);
@@ -8429,6 +8436,10 @@ void app_bt_stream_update_local_hfp_vol(uint8_t updatedLocalVol)
         hfp_volume_local_set(curr_device->device_id, updatedLocalVol);
 
         app_bt_stream_volumeset(btdevice_volume_p->hfp_vol);
+        AUDIO_BT_TRACE(3,"[NTT_HFP_VOL] SYNC dev=%d local=%d nv=%d",
+            curr_device->device_id,
+            current_btdevice_volume.hfp_vol,
+            btdevice_volume_p->hfp_vol);
     }
 
     AUDIO_BT_TRACE(2,"%s hfp: %d", __func__, btdevice_volume_p->hfp_vol);
