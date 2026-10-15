@@ -245,6 +245,7 @@ typedef enum {
 
 #define NTT_EQ_PRESET_COUNT              7
 #define NTT_EQ_CLEAR_VOICE_PRESET        3
+#define NTT_EQ_TYPE1_PRESET              5
 #define NTT_EQ_PRESET_INVALID             0xFF
 
 /*
@@ -252,6 +253,7 @@ typedef enum {
  * enter Clear Voice and restore the EQ that was active immediately before it.
  */
 static uint8_t ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
+static bool ntt_eq6_mode_active = false;
 
 // 单个映射条目
 typedef struct {
@@ -307,6 +309,8 @@ typedef enum {
 #define ERR_GET_EQ_PRESET      0x47
 #define ERR_SET_EQ_PRESET      0x4B
 #define ERR_GET_FW_VERSION     0x4F
+#define ERR_GET_EQ_MODE_STATUS 0x53
+#define ERR_SET_EQ_MODE_STATUS 0x57
 
 static const char *ntt_api_error_string(uint8_t err)
 {
@@ -1523,6 +1527,10 @@ static bool ntt_eq_preset_is_valid(uint8_t preset)
     return (preset < NTT_EQ_PRESET_COUNT);
 }
 
+static bool ntt_eq_original_preset_is_valid(uint8_t preset)
+{
+    return (preset <= 4);
+}
 
 /*
  * Apply EQ only.
@@ -1533,25 +1541,26 @@ static bool ntt_eq_preset_is_valid(uint8_t preset)
  * APP / BLE / SPP can call this function directly,
  * so APP EQ operation will remain silent.
  */
-static void ntt_keymap_apply_eq_preset(uint8_t preset)
+static void ntt_keymap_apply_eq_preset_internal(uint8_t preset,bool save_nv,bool sync_tws)
 {
     if (!ntt_eq_preset_is_valid(preset))
     {
-        TRACE(0, "[KEYMAP][EQ] invalid preset=%u",
-              (unsigned)preset);
         return;
     }
 
-    audio_eq_set_cfg(
-        NULL,
-        audio_eq_cfg_vol_list[preset],
-        AUDIO_EQ_TYPE_HW_DAC_IIR);
+    audio_eq_set_cfg(NULL,audio_eq_cfg_vol_list[preset],AUDIO_EQ_TYPE_HW_DAC_IIR);
 
     ntt_audio_drc_apply_by_eq_index(preset);
 
-    handleSetEqIndex(preset);
+    if (save_nv)
+    {
+        handleSetEqIndex(preset);
+    }
 
-    app_ibrt_customif_cmd_sync_music_eq(preset);
+    if (sync_tws)
+    {
+        app_ibrt_customif_cmd_sync_music_eq(preset);
+    }
 
 #ifdef AUDIO_DYNAMIC_BOOST
 #ifdef DYNAMIC_BOOST_USE_HW_EQ
@@ -1561,18 +1570,21 @@ static void ntt_keymap_apply_eq_preset(uint8_t preset)
 #endif
 #endif
 
-    /*
-     * Do NOT play prompt here.
-     *
-     * APP / BLE / SPP EQ operations also pass through
-     * this function, therefore prompt playback must
-     * be handled by key event only.
-     */
-
-    TRACE(0, "[KEYMAP][EQ] applied preset=%u",
-          (unsigned)preset);
+    TRACE(0,"[EQ] preset=%u save_nv=%u sync=%u",(unsigned)preset,(unsigned)save_nv,(unsigned)sync_tws);
 }
 
+/*
+ * Normal EQ preset application.
+ *
+ * Save selected EQ to NV and synchronize it to Peer.
+ *
+ * APP Set EQ Preset and normal key EQ switching
+ * continue using this interface.
+ */
+static void ntt_keymap_apply_eq_preset(uint8_t preset)
+{
+    ntt_keymap_apply_eq_preset_internal(preset,true,true);
+}
 
 /*
  * Key operation only.
@@ -1584,13 +1596,11 @@ static void ntt_keymap_apply_eq_preset_by_key(uint8_t preset)
 {
     if (!ntt_eq_preset_is_valid(preset))
     {
-        TRACE(0, "[KEYMAP][EQ][KEY] invalid preset=%u",
-              (unsigned)preset);
+        TRACE(0, "[KEYMAP][EQ][KEY] invalid preset=%u",(unsigned)preset);
         return;
     }
 
-    TRACE(0, "[KEYMAP][EQ][KEY] apply preset=%u",
-          (unsigned)preset);
+    TRACE(0, "[KEYMAP][EQ][KEY] apply preset=%u",(unsigned)preset);
 
     /*
      * Apply EQ setting first.
@@ -1604,12 +1614,152 @@ static void ntt_keymap_apply_eq_preset_by_key(uint8_t preset)
     ntt_keymap_play_eq_mode_prompt(preset);
 }
 
+static bool ntt_eq6_set_mode(bool enable, bool from_key)
+{
+    uint8_t current_preset = NTT_EQ_PRESET_INVALID;
+    uint8_t target_preset = NTT_EQ_PRESET_INVALID;
+
+    if (ntt_eq6_mode_active == enable)
+    {
+        TRACE(0,"[EQ6] already mode=%u",(unsigned)enable);
+
+        return true;
+    }
+
+    if (enable)
+    {
+        handleGetEqIndex(&current_preset);
+
+        if (!ntt_eq_original_preset_is_valid(current_preset))
+        {
+            TRACE(0,"[EQ6] invalid NV original EQ=%u, reset to 0",(unsigned)current_preset);
+            current_preset = 0;
+            handleSetEqIndex(current_preset);
+        }
+
+        ntt_eq_preset_before_clear_voice = current_preset;
+
+        target_preset = NTT_EQ_TYPE1_PRESET;
+    }
+    else
+    {
+        target_preset = ntt_eq_preset_before_clear_voice;
+
+        if (!ntt_eq_original_preset_is_valid(target_preset))
+        {
+            TRACE(0,"[EQ6] invalid restore preset=%u",(unsigned)target_preset);
+
+            return false;
+        }
+    }
+
+    /*
+    * EQ6 is a temporary DSP mode.
+    *
+    * Do not overwrite the original EQ preset in NV.
+    * Do not send the normal MUSIC_EQ TWS command,
+    * because its receiver writes the EQ index to NV.
+    */
+    ntt_keymap_apply_eq_preset_internal(target_preset,false,false);
+
+    /*
+    * Physical key operation only:
+    * play EQ prompt.
+    */
+    if (from_key)
+    {
+        ntt_keymap_play_eq_mode_prompt(target_preset);
+    }
+
+    ntt_eq6_mode_active = enable;
+
+    if (!enable)
+    {
+        ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
+    }
+
+    /*
+    * Synchronize EQ6 state and original EQ to Peer.
+    */
+    app_ibrt_customif_cmd_sync_eq6_mode(enable ? 1 : 0,enable ? ntt_eq_preset_before_clear_voice : target_preset);
+
+    TRACE(0,"[EQ6] mode=%u preset=%u source=%s",(unsigned)enable,(unsigned)target_preset,from_key ? "KEY" : "APP");
+
+    return true;
+}
+
+static uint8_t ntt_eq_get_selected_preset(void)
+{
+    uint8_t preset = NTT_EQ_PRESET_INVALID;
+
+    if (ntt_eq6_mode_active)
+    {
+        return ntt_eq_preset_before_clear_voice;
+    }
+
+    handleGetEqIndex(&preset);
+
+    return preset;
+}
+
+extern "C" bool ntt_eq6_is_active(void)
+{
+    return ntt_eq6_mode_active;
+}
+
+extern "C" uint8_t ntt_eq_get_effective_index(void)
+{
+    uint8_t preset = 0;
+
+    if (ntt_eq6_mode_active)
+    {
+        return NTT_EQ_TYPE1_PRESET;
+    }
+
+    handleGetEqIndex(&preset);
+
+    if (preset > 4)
+    {
+        preset = 0;
+    }
+
+    return preset;
+}
+
+extern "C" void ntt_eq6_sync_from_peer(uint8_t enable,uint8_t original_eq_index)
+{
+    if (original_eq_index > 4)
+    {
+        TRACE(0,"[EQ6][TWS] invalid original=%u",(unsigned)original_eq_index);
+        return;
+    }
+
+    ntt_eq6_mode_active = (enable != 0);
+
+    if (ntt_eq6_mode_active)
+    {
+        ntt_eq_preset_before_clear_voice = original_eq_index;
+    }
+    else
+    {
+        ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
+    }
+
+    /*
+     * Keep the original EQ in NV.
+     */
+    handleSetEqIndex(original_eq_index);
+    uint8_t effective_eq = ntt_eq6_mode_active ?NTT_EQ_TYPE1_PRESET :original_eq_index;
+    audio_eq_set_cfg(NULL,audio_eq_cfg_vol_list[effective_eq],AUDIO_EQ_TYPE_HW_DAC_IIR);
+    ntt_audio_drc_apply_by_eq_index(effective_eq);
+
+    TRACE(0,"[EQ6][TWS] active=%u original=%u effective=%u",
+          (unsigned)ntt_eq6_mode_active,(unsigned)original_eq_index,(unsigned)effective_eq);
+}
+
 void handleGetEqPresent(const uint8_t *data, uint16_t len)
 {
-    TRACE(0,
-          "[EQ][REQ] data=%p len=%u",
-          data,
-          (unsigned)len);
+    TRACE(0,"[EQ][REQ] data=%p len=%u",data,(unsigned)len);
 
     if (data != NULL)
     {
@@ -1621,43 +1771,57 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
      *
      *   44 00 00
      */
-    if ((data == NULL) ||
-        (len != 3U) ||
-        (data[0] != GET_EQ_PRESET) ||
-        (data[1] != 0x00) ||
-        (data[2] != 0x00))
+    if ((data == NULL) || (len != 3U) || (data[0] != GET_EQ_PRESET) || (data[1] != 0x00) || (data[2] != 0x00))
     {
-        TRACE(0,
-              "[EQ][REQ] invalid packet");
-
-        ntt_api_send_error_notify(
-            ERR_GET_EQ_PRESET,
-            API_ERR_INVALID_PARAM);
-
+        TRACE(0,"[EQ][REQ] invalid packet");
+        ntt_api_send_error_notify(ERR_GET_EQ_PRESET,API_ERR_INVALID_PARAM);
         return;
     }
 
-    uint8_t index = 0xFF;
-
-    handleGetEqIndex(&index);
+    uint8_t index = ntt_eq_get_selected_preset();
 
     if (index >= 6)
     {
-        ntt_api_send_error_notify(
-            ERR_GET_EQ_PRESET,
-            API_ERR_STORAGE_ERROR);
-
+        ntt_api_send_error_notify(ERR_GET_EQ_PRESET,API_ERR_STORAGE_ERROR);
         return;
     }
 
-    TRACE(0,
-          "[EQ][RSP] preset=%u",
-          (unsigned)index);
+    TRACE(0,"[EQ][RSP] preset=%u",(unsigned)index);
+    sparraw_tx_msg(RSP_GET_EQ_PRESET,&index,sizeof(index));
+}
 
-    sparraw_tx_msg(
-        RSP_GET_EQ_PRESET,
-        &index,
-        sizeof(index));
+void handleGetEqModeStatus(const uint8_t *data, uint16_t len)
+{
+    if ((data == NULL) || (len != 3U) || (data[0] != GET_EQ_MODE_STATUS) || (data[1] != 0x00) || (data[2] != 0x00))
+    {
+        ntt_api_send_error_notify(ERR_GET_EQ_MODE_STATUS,API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    uint8_t status = ntt_eq6_mode_active ? 0x01 : 0x00;
+    TRACE(0,"[EQ6][GET] status=%u",(unsigned)status);
+    sparraw_tx_msg(RSP_GET_EQ_MODE_STATUS,&status,sizeof(status));
+}
+
+void handleSetEqModeStatus(const uint8_t *data, uint16_t len)
+{
+    if ((data == NULL) || (len != 4U) || (data[0] != SET_EQ_MODE_STATUS) || (data[1] != 0x00) || (data[2] != 0x01) || (data[3] > 1))
+    {
+        ntt_api_send_error_notify(ERR_SET_EQ_MODE_STATUS,API_ERR_INVALID_PARAM);
+        return;
+    }
+
+    bool enable = (data[3] == 0x01);
+    TRACE(0,"[EQ6][SET] enable=%u",(unsigned)enable);
+    if (!ntt_eq6_set_mode(enable, false))
+    {
+        ntt_api_send_error_notify(ERR_SET_EQ_MODE_STATUS,API_ERR_STORAGE_ERROR);
+        return;
+    }
+
+#if need_send_data_by_notify
+    sparraw_tx_msg(RSP_SET_EQ_MODE_STATUS,(const uint8_t *)"",0);
+#endif
 }
 
 #include "hw_codec_iir_process.h"
@@ -1711,6 +1875,7 @@ void handleSetEqPresent(const uint8_t *data, uint16_t len)
     TRACE(0, "%s[%d].", __func__, presetId);
 
     /* An App EQ change starts a new EQ selection, not a Clear Voice toggle. */
+    ntt_eq6_mode_active = false;
     ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
     ntt_keymap_apply_eq_preset(presetId);
 
@@ -2132,6 +2297,8 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
 		{SET_KEY_MAPPING,	  handleSetKeyMapping},
 		{GET_EQ_PRESET,		  handleGetEqPresent},
 		{SET_EQ_PRESET,       handleSetEqPresent},
+        {GET_EQ_MODE_STATUS,  handleGetEqModeStatus},
+        {SET_EQ_MODE_STATUS,  handleSetEqModeStatus},
 		{GET_FW_VERSION,      handleGetFwVersion},
         {SET_DTM_ENABLE,      handleSetDtmEnable},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},
@@ -2625,6 +2792,7 @@ static void on_eq_next(void)
         current_preset = 0;
     }
 
+    ntt_eq6_mode_active = false;
     ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
     ntt_keymap_apply_eq_preset_by_key((uint8_t)((current_preset + 1) % NTT_EQ_PRESET_COUNT));
 }
@@ -2635,56 +2803,7 @@ static void on_eq_next(void)
  */
 static void on_eq_clear_voice_toggle(void)
 {
-    uint8_t current_preset = 0;
-    uint8_t target_preset = 0;
-
-    handleGetEqIndex(&current_preset);
-
-    if (!ntt_eq_preset_is_valid(current_preset))
-    {
-        TRACE(0, "[KEYMAP][EQ] invalid current=%u, use Clear Voice",
-              (unsigned)current_preset);
-        current_preset = NTT_EQ_CLEAR_VOICE_PRESET;
-    }
-
-    /*
-     * No saved EQ:
-     * Save current EQ (including preset 3), then enter/stay Clear Voice.
-     */
-    if (!ntt_eq_preset_is_valid(ntt_eq_preset_before_clear_voice))
-    {
-        ntt_eq_preset_before_clear_voice = current_preset;
-        target_preset = NTT_EQ_CLEAR_VOICE_PRESET;
-
-        TRACE(0, "[KEYMAP][EQ] Clear Voice ON, save=%u",
-              (unsigned)current_preset);
-    }
-    /*
-     * A previous EQ was saved and current EQ is still Clear Voice:
-     * Restore it, then clear the temporary saved value.
-     */
-    else if (current_preset == NTT_EQ_CLEAR_VOICE_PRESET)
-    {
-        target_preset = ntt_eq_preset_before_clear_voice;
-        ntt_eq_preset_before_clear_voice = NTT_EQ_PRESET_INVALID;
-
-        TRACE(0, "[KEYMAP][EQ] Clear Voice OFF, restore=%u",
-              (unsigned)target_preset);
-    }
-    /*
-     * EQ was changed externally after Clear Voice was entered.
-     * Start a new Clear Voice sequence using this new EQ as the restore target.
-     */
-    else
-    {
-        ntt_eq_preset_before_clear_voice = current_preset;
-        target_preset = NTT_EQ_CLEAR_VOICE_PRESET;
-
-        TRACE(0, "[KEYMAP][EQ] Clear Voice ON again, save=%u",
-              (unsigned)current_preset);
-    }
-
-    ntt_keymap_apply_eq_preset_by_key(target_preset);
+    ntt_eq6_set_mode(!ntt_eq6_mode_active,true);
 }
 
 void key_function_execute(function_t func)
@@ -3541,7 +3660,7 @@ static void sparraw_handle_set_color_code_cmd(const uint8_t *data, uint16_t len)
 
     /*
      * APP packet:
-     * 50 00 08 73 70 61 72 72 6F 77 XX
+     * 80 00 08 73 70 61 72 72 6F 77 XX
      *
      * Last byte is color code:
      * Black        0x4B
@@ -4045,9 +4164,7 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 		}
         case GET_EQ_PRESET:
         {
-            uint8_t index = 0xFF;
-
-            handleGetEqIndex(&index);
+            uint8_t index = ntt_eq_get_selected_preset();
 
             if (index >= 6)
             {
@@ -4089,6 +4206,17 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 			sparraw_read_rsp_msg(RSP_SET_EQ_PRESET, param->aw_connhdl,param->aw_token,read_send_data, 0+2);			
 			break;
 		}
+        case GET_EQ_MODE_STATUS:
+        {
+            uint8_t status = ntt_eq6_mode_active ? 0x01 : 0x00;
+            sparraw_read_rsp_msg(RSP_GET_EQ_MODE_STATUS,param->aw_connhdl,param->aw_token,&status,sizeof(status));
+            break;
+        }
+        case SET_EQ_MODE_STATUS:
+        {
+            sparraw_read_rsp_msg(RSP_SET_EQ_MODE_STATUS,param->aw_connhdl,param->aw_token,(const uint8_t *)"",0);
+            break;
+        }
         case GET_FW_VERSION:
         {
             uint8_t version[NTT_DUAL_EARBUD_FW_VERSION_LEN];

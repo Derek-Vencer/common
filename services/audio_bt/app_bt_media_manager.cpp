@@ -797,27 +797,6 @@ void  bt_media_start(uint16_t stream_type, int device_id, uint16_t media_id)
           media_id);
 
     AUDIO_BT_TRACE(1, "bt_media_start %s\n", app_bt_get_active_media_state());
-#if 0
-	if(BT_STREAM_MUSIC == stream_type){
-		struct nvrecord_env_t *nvrecord_env;
-	    nv_record_env_get(&nvrecord_env);
-		uint8_t eq_index = nvrecord_env->eq_index_data;
-		if((eq_index >=0) && (eq_index <= 6))
-		{
-			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
-            ntt_audio_drc_apply_by_eq_index(eq_index);
-
-		}
-		else
-		{
-			eq_index = 0;
-			nvrecord_env->eq_index_data = eq_index;
-			nv_record_env_set(nvrecord_env);
-			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
-            ntt_audio_drc_apply_by_eq_index(eq_index);
-		}
-	}
-#endif
     switch(stream_type)
     {
 #ifdef RB_CODEC

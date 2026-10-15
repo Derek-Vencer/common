@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 
-#define DuAL_EARBUDS_VERSION   "0.9.31"
+#define DuAL_EARBUDS_VERSION   "0.9.32"
 
 #define NTT_FW_VER_MAJOR  (DuAL_EARBUDS_VERSION[0] - '0')
 #define NTT_FW_VER_MINOR  (DuAL_EARBUDS_VERSION[2] - '0')
@@ -84,12 +84,19 @@ typedef enum
     APP_TWS_CMD_SYNC_CASE_STATE  = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x19,
     APP_TWS_CMD_KEY_RECONNECT_REQUEST = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1A,
     APP_TWS_CMD_GET_PEER_FW_VERSION = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1B,
+    APP_TWS_CMD_SYNC_EQ6_MODE    = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1C,
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
 
     //new customer cmd add here
 } app_ibrt_custom_cmd_code_e;
+
+typedef struct
+{
+    uint8_t enable;
+    uint8_t original_eq_index;
+} NTT_TWS_EQ6_SYNC_T;
 
 typedef struct
 {
@@ -168,6 +175,7 @@ void twsui_wear_pp_tx(bool role, uint8_t sta);
 typedef void(*keymap_load_config_cb)(void);
 
 void app_ibrt_customif_cmd_sync_music_eq(uint8_t index);
+void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_index);
 void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length);
 void app_ibrt_customifsetbuttonmap_cb(keymap_load_config_cb callback);
 void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length);

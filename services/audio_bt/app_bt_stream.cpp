@@ -237,6 +237,9 @@ extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ
 extern "C" uint8_t get_er_inbox_status(void);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 
+extern "C" uint8_t ntt_eq_get_effective_index(void);
+extern "C" bool ntt_eq6_is_active(void);
+
 void(*app_bt_stream_ext_sco_playback)(uint8_t *buf, uint32_t len) = NULL;
 uint32_t (*app_bt_stream_ext_sco_capture)(uint8_t *buf, uint32_t len) = NULL;
 void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32_t len),
@@ -306,6 +309,8 @@ extern IIR_CFG_T audio_eq_hw_dac_iir_adaptive_eq_cfg;
 static uint8_t audio_eq_hw_iir_index = 0;
 extern const IIR_CFG_T * const audio_eq_hw_iir_cfg_list[];
 #endif
+
+extern "C" uint8_t ntt_eq_get_effective_index(void);
 
 #if defined(HW_DC_FILTER_WITH_IIR)
 #include "hw_filter_codec_iir.h"
@@ -4460,7 +4465,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 		{
 			struct nvrecord_env_t *nvrecord_env;
 			nv_record_env_get(&nvrecord_env);
-			uint8_t eq_index = nvrecord_env->eq_index_data;
+			uint8_t eq_index = ntt_eq_get_effective_index();
 			if((eq_index >=0) && (eq_index <= 6))
 			{
 				audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
@@ -4478,9 +4483,12 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 
 			if (app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
             {
-                AUDIO_BT_TRACE(2,"[EQ_SYNC] Master sync EQ, index=%d",eq_index);
+                AUDIO_BT_TRACE(2,"[EQ_SYNC] Master sync EQ, index=%d ntt_eq6_is_active=%d",eq_index,ntt_eq6_is_active());
 
-                app_ibrt_customif_cmd_sync_music_eq(eq_index);
+                if (!ntt_eq6_is_active())
+                {
+                    app_ibrt_customif_cmd_sync_music_eq(eq_index);
+                }
             }
             else
             {

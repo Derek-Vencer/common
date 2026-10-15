@@ -92,6 +92,15 @@ extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
 extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
 extern uint8_t out_of_case_reconnect;
+
+/*
+ * NTT EQ6 TWS command handlers.
+ *
+ * Forward declarations are required because the
+ * TWS command table appears before their definitions.
+ */
+static void app_ibrt_customif_eq6_mode_cmd_send(uint8_t *p_buff,uint16_t length);
+static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void)
 {
     return g_tws_peer_battery_valid ? g_tws_peer_battery_level : 0xFF;
@@ -160,6 +169,8 @@ static void app_ibrt_customif_button_map_cmd_send_handler(uint16_t rsp_seq, uint
 
 static void app_ibrt_customif_sync_bt_name_cmd_send(uint8_t *p_buff, uint16_t length);
 static void app_ibrt_customif_sync_bt_name_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
+
+extern "C" bool ntt_eq6_is_active(void);
 
 static void ntt_master_sync_eq_to_peer(void);
 static void ntt_master_sync_keymap_to_peer(void);
@@ -329,6 +340,15 @@ static void ntt_master_sync_eq_to_peer(void)
         eq_index);
 
     app_ibrt_customif_cmd_sync_music_eq(eq_index);
+
+    if (ntt_eq6_is_active())
+    {
+        app_ibrt_customif_cmd_sync_eq6_mode(1,eq_index);
+    }
+    else
+    {
+        app_ibrt_customif_cmd_sync_eq6_mode(0,eq_index);
+    }
 }
 
 static void ntt_master_sync_keymap_to_peer(void)
@@ -976,6 +996,23 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
 	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq, 2);
 }
 
+void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_index)
+{
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        return;
+    }
+
+    uint8_t payload[2];
+
+    payload[0] = enable;
+    payload[1] = original_eq_index;
+
+    EARBUDS_TRACE(0,"[EQ6][TWS][TX] enable=%u original=%u",(unsigned)enable,(unsigned)original_eq_index);
+
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE,payload,sizeof(payload));
+}
+
 void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length)
 {
     if (!bts_tws_if_is_tws_link_connected())
@@ -1257,6 +1294,14 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         APP_TWS_CMD_PRIO_0
     },
     {
+        APP_TWS_CMD_SYNC_EQ6_MODE,                              "TWS_CMD_SYNC_EQ6_MODE",
+        app_ibrt_customif_eq6_mode_cmd_send,
+        app_ibrt_customif_eq6_mode_cmd_receive,                  0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
         APP_TWS_CMD_SYNC_BUTTON_MAP,                              "TWS_CMD_BUTTON_MAO",
         app_ibrt_customif_button_map_cmd_send,
         app_ibrt_customif_button_map_cmd_send_handler,               0,
@@ -1389,17 +1434,47 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
 	uint8_t eq_index = p_buff[0];
 	if((eq_index >=0) && (eq_index <= 6))
 	{
-		if(eq_index != nvrecord_env->eq_index_data){
-			nvrecord_env->eq_index_data = eq_index;
-			nv_record_env_set(nvrecord_env);
+        if (eq_index != nvrecord_env->eq_index_data)
+        {
+            nvrecord_env->eq_index_data = eq_index;
+            nv_record_env_set(nvrecord_env);
+        }
+
 			audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[eq_index], AUDIO_EQ_TYPE_HW_DAC_IIR);
             ntt_audio_drc_apply_by_eq_index(eq_index);
 			
 			EARBUDS_TRACE(1, "success_set_eq %s", __func__);
-		}
+
 		EARBUDS_TRACE(1, "%s,eq_index:%d", __func__,eq_index);
 	}
 			
+}
+
+extern "C" void ntt_eq6_sync_from_peer(uint8_t enable,uint8_t original_eq_index);
+
+static void app_ibrt_customif_eq6_mode_cmd_send(uint8_t *p_buff,uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_SYNC_EQ6_MODE,p_buff,length);
+}
+
+static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
+{
+    if ((p_buff == NULL) || (length < 2))
+    {
+        EARBUDS_TRACE(0,"[EQ6][TWS][RX] invalid length=%u",(unsigned)length);
+        return;
+    }
+
+    uint8_t enable = p_buff[0];
+    uint8_t original_eq = p_buff[1];
+
+    if ((enable > 1) || (original_eq > 4))
+    {
+        EARBUDS_TRACE(0,"[EQ6][TWS][RX] invalid enable=%u original=%u",(unsigned)enable,(unsigned)original_eq);
+        return;
+    }
+
+    ntt_eq6_sync_from_peer(enable,original_eq);
 }
 
 static void app_ibrt_customif_button_map_cmd_send(uint8_t *p_buff, uint16_t length)
