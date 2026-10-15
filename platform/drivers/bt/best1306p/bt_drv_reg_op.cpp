@@ -2163,31 +2163,35 @@ void bt_drv_reg_op_trigger_controller_assert(void)
 void bt_drv_reg_op_afh_assess_en(bool en)
 {
 #if defined(__AFH_ASSESS__)
+
     static bool en_back = false;
-    if(en == en_back)
+    uintptr_t caller = (uintptr_t)__builtin_return_address(0);
+    DRIVERS_TRACE(3,"[NTT_AFH_E3] req=%d current=%d caller=0x%08X",en,en_back,(unsigned int)caller);
+
+    if (en == en_back)
     {
         return;
     }
-    en_back = en;
 
-    DRIVERS_TRACE(1,"BT_REG_OP:set afh assess=%d",en);
+    en_back = en;
 
     struct hci_dbg_set_afh_assess_params hci_afh_assess_init_config
     {
-        .enable  = 0,
+        .enable = 0,
         .interval_factor = 1,
         .afh_average_cnt = 7,
         .afh_good_chl_thr = -90,
-
         .afh_sch_expect_assess_num = 40,
     };
 
-    if(en)
+    if (en)
     {
         hci_afh_assess_init_config.enable = 1;
     }
 
-    btdrv_send_hci_cmd_bystack(HCI_DBG_AFH_ASSESS_CMD_OPCODE, (uint8_t *)&hci_afh_assess_init_config, sizeof(struct hci_dbg_set_afh_assess_params));
+    DRIVERS_TRACE(2,"[NTT_AFH_E3] SEND FCD4 enable=%d",hci_afh_assess_init_config.enable);
+    btdrv_send_hci_cmd_bystack(HCI_DBG_AFH_ASSESS_CMD_OPCODE,(uint8_t *)&hci_afh_assess_init_config,sizeof(struct hci_dbg_set_afh_assess_params));
+
 #endif
 }
 

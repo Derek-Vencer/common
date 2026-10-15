@@ -45,6 +45,7 @@
 #include "app_bt_stream.h"
 #include "app_audio.h"
 #include "bt_if.h"
+#include "hci_service.h"
 #include "intersyshci.h"
 #include "app_utils.h"
 #include "ecc_p192.h"
@@ -224,9 +225,221 @@ static bool ntt_bt_connected_prompt_pending = false;
 static uint8_t ntt_bt_connected_prompt_device_id = 0;
 static uint8_t ntt_bt_connected_prompt_retry_count = 0;
 static uint8_t ntt_bt_connected_prompt_stable_count = 0;
-static uint8_t ntt_bt_connected_prompt_last_role =
-    NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
+static uint8_t ntt_bt_connected_prompt_last_role = NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
+
+#if defined(IBRT)
+
+#define NTT_AFH_READ_OPCODE  0x1406
+
+/*
+ * HCI Command Complete:
+ *
+ * HCI_Read_AFH_Channel_Map
+ *
+ * Return Parameters:
+ *   Status             1 byte
+ *   Connection_Handle  2 bytes
+ *   AFH_Mode           1 byte
+ *   AFH_Channel_Map   10 bytes
+ */
+
+#define NTT_AFH_READ_OPCODE 0x1406
+
+static uint16_t ntt_afh_mobile_handle = 0xFFFF;
+static uint16_t ntt_afh_peer_handle = 0xFFFF;
+
+static uint8_t ntt_afh_count_channels(const uint8_t *map)
+{
+    uint8_t count = 0;
+
+    for (uint8_t ch = 0; ch < 79; ch++)
+    {
+        if (map[ch / 8] & (1U << (ch % 8)))
+        {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+static void ntt_afh_hci_callback(uint16_t opcode,struct hci_cmd_evt_param_t *param)
+{
+    if (opcode != NTT_AFH_READ_OPCODE || param == NULL)
+    {
+        return;
+    }
+
+    if (param->event_code != 0x0E ||
+        param->cmpl_event == NULL ||
+        param->cmpl_event_len < 14)
+    {
+        DEBUG_INFO(2,"[NTT_AFH] invalid response evt=%d len=%d",param->event_code,param->cmpl_event_len);
+        return;
+    }
+
+    const uint8_t *p = param->cmpl_event;
+
+    uint8_t status = p[0];
+
+    uint16_t handle = (uint16_t)p[1] | ((uint16_t)p[2] << 8);
+
+    uint8_t mode = p[3];
+
+    const uint8_t *map = &p[4];
+
+    const char *link = "UNKNOWN";
+
+    if (handle == ntt_afh_peer_handle)
+    {
+        link = "PEER";
+    }
+    else if (handle == ntt_afh_mobile_handle)
+    {
+        link = "MOBILE";
+    }
+
+    if (status != 0)
+    {
+        DEBUG_INFO(3,"[NTT_AFH] %s handle=0x%04X status=%d",link, handle, status);
+        return;
+    }
+
+    uint8_t channels = ntt_afh_count_channels(map);
+
+    DEBUG_INFO(4,"[NTT_AFH] %s handle=0x%04X mode=%d channels=%d",link, handle, mode, channels);
+    DEBUG_INFO(5,"[NTT_AFH] MAP=%02X %02X %02X %02X %02X",map[0], map[1], map[2], map[3], map[4]);
+    DEBUG_INFO(5,"[NTT_AFH] MAP=%02X %02X %02X %02X %02X",map[5], map[6], map[7], map[8], map[9]);
+}
+
+/*
+ * Must execute in BT Thread.
+ */
+static void ntt_afh_read_peer_map_bt_thread(uint32_t param0,uint32_t param1)
+{
+    (void)param0;
+    (void)param1;
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        DEBUG_INFO(0, "[NTT_AFH] TWS not connected");
+        return;
+    }
+
+    uint16_t handle = bts_tws_if_get_tws_acl_handle();
+
+    if (handle == BT_INVALID_CONN_HANDLE)
+    {
+        DEBUG_INFO(0, "[NTT_AFH] invalid TWS handle");
+        return;
+    }
+
+    uint8_t cmd_params[2];
+    cmd_params[0] = (uint8_t)(handle & 0xFF);
+    cmd_params[1] = (uint8_t)((handle >> 8) & 0xFF);
+    DEBUG_INFO(1,"[NTT_AFH] READ PEER handle=0x%04X",handle);
+    bt_status_t ret = hci_send_command_with_callback(NTT_AFH_READ_OPCODE,cmd_params,sizeof(cmd_params),ntt_afh_hci_callback);
+    DEBUG_INFO(1,"[NTT_AFH] send ret=%d",ret);
+}
+
+/*
+ * Public Debug Entry
+ */
+void ntt_afh_read_peer_map(void)
+{
+    app_bt_start_custom_function_in_bt_thread(0,0,(uint32_t)(uintptr_t)ntt_afh_read_peer_map_bt_thread);
+}
+
+static void ntt_afh_read_map(uint16_t handle)
+{
+    uint8_t cmd[2];
+
+    cmd[0] = (uint8_t)(handle & 0xFF);
+    cmd[1] = (uint8_t)((handle >> 8) & 0xFF);
+    bt_status_t ret = hci_send_command_with_callback(NTT_AFH_READ_OPCODE,cmd,sizeof(cmd),ntt_afh_hci_callback);
+    DEBUG_INFO(2,"[NTT_AFH] READ handle=0x%04X ret=%d",handle, ret);
+}
+
+static void ntt_afh_read_all_bt_thread(uint32_t param0, uint32_t param1)
+{
+    (void)param0;
+    (void)param1;
+
+#ifdef IBRT_UI
+    /*
+     * NTT AFH - UI Role / TWS Baseband Role
+     */
+    uint8_t ui_role = app_ibrt_if_get_ui_role();
+    btif_connection_role_t tws_role = bts_tws_if_get_local_tws_role();
+    DEBUG_INFO(3,"[NTT_AFH] ROLE UI=%d TWS_BB=%d BB_MASTER=%d",ui_role,tws_role,(tws_role == BTIF_BCR_MASTER));
+#endif
+
+    /*
+     * 1. Read Mobile ACL AFH Maps
+     */
+    for (uint8_t device_id = 0;
+         device_id < BT_DEVICE_NUM;
+         device_id++)
+    {
+        uint16_t handle = app_bt_get_handle_by_device_id(device_id);
+        if (handle != 0 && handle != 0xFFFF)
+        {
+            ntt_afh_mobile_handle = handle;
+            DEBUG_INFO(2,"[NTT_AFH] MOBILE device=%d handle=0x%04X",device_id,handle);
+            ntt_afh_read_map(handle);
+        }
+    }
+
+#ifdef IBRT_UI
+    /*
+     * 2. Read TWS Peer ACL AFH Map
+     */
+    if (bts_tws_if_is_tws_link_connected())
+    {
+        uint16_t peer_handle = bts_tws_if_get_tws_acl_handle();
+        if (peer_handle != 0 && peer_handle != 0xFFFF)
+        {
+            ntt_afh_peer_handle = peer_handle;
+
+            /*
+             * Read Peer Baseband Role
+             */
+            btif_remote_device_t *peer_dev = btif_me_get_remote_device_by_handle(peer_handle);
+            if (peer_dev != NULL)
+            {
+                btif_connection_role_t peer_role = btif_me_get_remote_device_role(peer_dev);
+                DEBUG_INFO(3,"[NTT_AFH] PEER ACL=0x%04X BB_ROLE=%d MASTER=%d",peer_handle,peer_role,(peer_role == BTIF_BCR_MASTER));
+            }
+            else
+            {
+                DEBUG_INFO(1,"[NTT_AFH] PEER role unavailable handle=0x%04X",peer_handle);
+            }
+
+            /*
+             * Read Peer AFH Channel Map
+             */
+            DEBUG_INFO(1,"[NTT_AFH] PEER read map handle=0x%04X",peer_handle);
+            ntt_afh_read_map(peer_handle);
+        }
+        else
+        {
+            DEBUG_INFO(1,"[NTT_AFH] invalid PEER handle=0x%04X",peer_handle);
+        }
+    }
+    else
+    {
+        DEBUG_INFO(0,"[NTT_AFH] TWS not connected");
+    }
+#endif
+}
+
+void ntt_afh_read_all_maps(void)
+{
+    app_bt_start_custom_function_in_bt_thread(0,0,(uint32_t)(uintptr_t)ntt_afh_read_all_bt_thread);
+}
+
+#endif
 static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
     uint8_t device_id = ntt_bt_connected_prompt_device_id;

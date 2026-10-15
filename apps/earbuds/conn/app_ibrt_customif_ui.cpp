@@ -160,10 +160,24 @@ void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *bu
             break;
 
         case HCI_LL_MONITOR_EVT_CODE:
-#if defined(__CONNECTIVITY_LOG_REPORT__)
-            app_ibrt_if_update_link_monitor_info(&buffer[3]);
-#endif
+        {
+            EARBUDS_TRACE(1,"[NTT_LL_MON] EVENT len=%u",(unsigned int)length);
+
+            if (buffer != NULL && length >= 8)
+            {
+                EARBUDS_TRACE(4,"[NTT_LL_MON] DATA0=%02X %02X %02X %02X",buffer[0],buffer[1],buffer[2],buffer[3]);
+                EARBUDS_TRACE(4,"[NTT_LL_MON] DATA1=%02X %02X %02X %02X",buffer[4],buffer[5],buffer[6],buffer[7]);
+            }
+
+        #if defined(__CONNECTIVITY_LOG_REPORT__)
+            if (buffer != NULL && length > 3)
+            {
+                app_ibrt_if_update_link_monitor_info(&buffer[3]);
+            }
+        #endif
+
             break;
+        }
 
         case HCI_GET_TWS_SLAVE_MOBILE_RSSI_CODE:
             break;
@@ -261,6 +275,136 @@ EARBUDS_TRACE(0,
 
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->ibrt_mgr_pairing_mode_entry_hook) {
         ibrt_mgr_status_changed_client_cb->ibrt_mgr_pairing_mode_entry_hook();
+    }
+}
+
+/*
+ * NTT AFH 60-second Monitor
+ *
+ * Read Mobile + Peer AFH Channel Maps every 5 seconds.
+ *
+ * Duration : 60 seconds
+ * Samples  : 0, 5, 10, ... 60 seconds
+ *
+ * Monitoring only.
+ * Does not modify AFH assessment or IBRT role switching.
+ */
+
+#define NTT_AFH_MONITOR_INTERVAL_MS     1000
+#define NTT_AFH_MONITOR_DURATION_MS     20000
+
+static osTimerId ntt_afh_monitor_timer = NULL;
+
+static bool ntt_afh_monitor_running = false;
+
+static uint32_t ntt_afh_monitor_elapsed_ms = 0;
+
+
+/*
+ * Timer callback
+ */
+static void ntt_afh_monitor_timer_handler(void const *argument);
+osTimerDef(NTT_AFH_MONITOR_TIMER,ntt_afh_monitor_timer_handler
+);
+
+
+/*
+ * Stop monitoring
+ */
+static void ntt_afh_monitor_stop(void)
+{
+    if (ntt_afh_monitor_timer != NULL)
+    {
+        osTimerStop(ntt_afh_monitor_timer);
+    }
+
+    if (ntt_afh_monitor_running)
+    {
+        EARBUDS_TRACE(1,"[NTT_AFH_MON] STOP elapsed=%u ms",ntt_afh_monitor_elapsed_ms);
+    }
+
+    ntt_afh_monitor_running = false;
+}
+
+
+/*
+ * Timer callback
+ */
+static void ntt_afh_monitor_timer_handler(void const *argument)
+{
+    (void)argument;
+
+    if (!ntt_afh_monitor_running)
+    {
+        return;
+    }
+
+    ntt_afh_monitor_elapsed_ms += NTT_AFH_MONITOR_INTERVAL_MS;
+    EARBUDS_TRACE(1,"[NTT_AFH_MON] SAMPLE t=%u ms",ntt_afh_monitor_elapsed_ms);
+
+    /*
+     * Existing function dispatches AFH reading
+     * to the Bluetooth thread.
+     */
+    ntt_afh_read_all_maps();
+
+    /*
+     * Stop after the 60-second sample.
+     */
+    if (ntt_afh_monitor_elapsed_ms >= NTT_AFH_MONITOR_DURATION_MS)
+    {
+        ntt_afh_monitor_stop();
+    }
+}
+
+
+/*
+ * Start monitoring
+ */
+static void ntt_afh_monitor_start(void)
+{
+    /*
+     * Prevent repeated A2DP Streaming events
+     * from restarting the 60-second monitor.
+     */
+    if (ntt_afh_monitor_running)
+    {
+        EARBUDS_TRACE(0,"[NTT_AFH_MON] already running");
+        return;
+    }
+
+    /*
+     * Create timer once.
+     */
+    if (ntt_afh_monitor_timer == NULL)
+    {
+        ntt_afh_monitor_timer = osTimerCreate(osTimer(NTT_AFH_MONITOR_TIMER),osTimerPeriodic,NULL);
+        if (ntt_afh_monitor_timer == NULL)
+        {
+            EARBUDS_TRACE(0,"[NTT_AFH_MON] timer create failed");
+            return;
+        }
+    }
+
+    ntt_afh_monitor_elapsed_ms = 0;
+    ntt_afh_monitor_running = true;
+    EARBUDS_TRACE(0,"[NTT_AFH_MON] START duration=20s interval=1s");
+
+    /*
+     * Initial sample at t=0.
+     */
+    EARBUDS_TRACE(0,"[NTT_AFH_MON] SAMPLE t=0 ms");
+    ntt_afh_read_all_maps();
+
+    /*
+     * Start periodic sampling.
+     */
+    osStatus status = osTimerStart(ntt_afh_monitor_timer,NTT_AFH_MONITOR_INTERVAL_MS);
+
+    if (status != osOK)
+    {
+        EARBUDS_TRACE(1,"[NTT_AFH_MON] timer start failed status=%d",status);
+        ntt_afh_monitor_running = false;
     }
 }
 
@@ -738,21 +882,59 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
             break;
         case IBRT_CONN_A2DP_STREAMING:
-            if (bts_ibrt_if_is_ibrt_link_connected(addr)) {
-                bt_drv_reg_op_afh_assess_en(false);
-            } else {
-                bt_drv_reg_op_afh_assess_en(true);
-            }
-            //just add Qos setting interface for music state, if need, uncomment it.
-            //app_ibrt_if_update_mobile_link_qos(state->device_id, 40);
+        {
+            uint8_t ui_role = app_ibrt_if_get_ui_role();
+            btif_connection_role_t bb_role = bts_tws_if_get_local_tws_role();
+            bool tws_connected = bts_tws_if_is_tws_link_connected();
+            EARBUDS_TRACE(3, "[NTT_AFH_CTRL] E2_GROUP STREAMING UI=%d BB=%d TWS=%d", ui_role, bb_role, tws_connected);
+
+            /*
+            * NTT AFH Test Group C
+            *
+            * Restore BES SDK original AFH Assessment control.
+            *
+            * AFH Assessment is managed by the BES Earbuds UI Library.
+            *
+            * Do NOT call:
+            * bt_drv_reg_op_afh_assess_en()
+            *
+            * Only monitor the actual AFH Channel Map.
+            */
+
+            ntt_afh_monitor_start();
+
             break;
+        }
         case IBRT_CONN_A2DP_SUSPENED:
-            break;
-        case IBRT_CONN_A2DP_CLOSED:
-            if (app_bt_audio_count_streaming_a2dp() == 0) {
-                bt_drv_reg_op_afh_assess_en(false);
+        {
+            if (app_bt_audio_count_streaming_a2dp() == 0)
+            {
+                EARBUDS_TRACE(0,"[NTT_AFH_MON] A2DP suspended, stop monitor");
+                ntt_afh_monitor_stop();
             }
+
             break;
+        }
+
+        case IBRT_CONN_A2DP_CLOSED:
+        {
+            uint8_t streaming_count = app_bt_audio_count_streaming_a2dp();
+            EARBUDS_TRACE(1,"[NTT_AFH_CTRL] C_GROUP A2DP_CLOSED STREAM_CNT=%d",streaming_count);
+
+            if (streaming_count == 0)
+            {
+                EARBUDS_TRACE(0,"[NTT_AFH_MON] A2DP closed, stop monitor");
+                ntt_afh_monitor_stop();
+            }
+
+            /*
+            * Group C:
+            * Do not modify AFH Assessment.
+            * BES SDK Earbuds UI Library owns Assessment control.
+            */
+
+            break;
+        }
         default:
             break;
     }
@@ -1455,15 +1637,23 @@ void app_ibrt_customif_on_tws_role_switch_status_ind(const bt_bdaddr_t *addr,ibr
     {
         case IBRT_CONN_ROLE_SWAP_INITIATED: //this msg will be notified if initiate role switch
             break;
-        case IBRT_CONN_ROLE_SWAP_COMPLETE: //role switch complete,both sides will receice this msg
-            if (app_bt_audio_count_streaming_a2dp()) {
-                if (role == IBRT_MASTER) {
-                    bt_drv_reg_op_afh_assess_en(true);
-                } else {
-                    bt_drv_reg_op_afh_assess_en(false);
-                }
-            }
+        case IBRT_CONN_ROLE_SWAP_COMPLETE:
+        {
+            uint8_t ui_role = app_ibrt_if_get_ui_role();
+            btif_connection_role_t bb_role = bts_tws_if_get_local_tws_role();
+            bool streaming = (app_bt_audio_count_streaming_a2dp() > 0);
+            bool tws_connected = bts_tws_if_is_tws_link_connected();
+            EARBUDS_TRACE(4,"[NTT_AFH_CTRL] C_GROUP ROLE_SWAP UI=%d BB=%d STREAM=%d TWS=%d",ui_role,bb_role,streaming,tws_connected);
+
+            /*
+            * Group C:
+            *
+            * Role switch does not override AFH Assessment.
+            * Assessment is managed by BES Earbuds UI Library.
+            */
+
             break;
+        }
         case IBRT_CONN_ROLE_CHANGE_COMPLETE://nv role changed
             break;
         default:
