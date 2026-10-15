@@ -1780,7 +1780,7 @@ void handleGetEqPresent(const uint8_t *data, uint16_t len)
 
     uint8_t index = ntt_eq_get_selected_preset();
 
-    if (index >= 6)
+    if (index >= 7)
     {
         ntt_api_send_error_notify(ERR_GET_EQ_PRESET,API_ERR_STORAGE_ERROR);
         return;
