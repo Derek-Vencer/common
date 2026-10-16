@@ -212,12 +212,28 @@ void app_bt_audio_hfp_recon_timeout_handler(void const *param)
     return;
 }
 
+static uint8_t ntt_hfp_percent_to_level(uint8_t percent)
+{
+    if (percent >= 100)
+    {
+        return 9;
+    }
+
+    return (uint8_t)(percent / 10);
+}
+
 void app_hfp_set_battery_level(uint8_t level)
 {
-    if (report_battery_level == 0xff) {
-        report_battery_level = level;
-        btif_osapi_notify_evm();
+    if (level > 9)
+    {
+        DEBUG_INFO(0,"[NTT_BAT][HFP_INVALID] level=%d",level);
+        return;
     }
+
+    uint8_t old_level = report_battery_level;
+    report_battery_level = level;
+    DEBUG_INFO(0,"[NTT_BAT][HFP_QUEUE] old=%d new=%d",old_level,level);
+    btif_osapi_notify_evm();
 }
 
 #if defined(SUPPORT_BATTERY_REPORT) || defined(SUPPORT_HF_INDICATORS)
@@ -351,7 +367,7 @@ int app_hfp_battery_report(uint8_t level)
 
     uint8_t i;
     int nRet = 0;
-
+    DEBUG_INFO(0,"[NTT_BAT][06_HFP_REPORT] level=%d",level);
     if (level > 9)
         return -1;
 
@@ -359,44 +375,26 @@ int app_hfp_battery_report(uint8_t level)
 
     bthost_cfg_t* bt_host_cfg = bt_host_get_cfg();
 
-    DEBUG_WARNING(0,
-        "[TWS_CHECK][HFP_BATT] enter level=%d percent=%d tws=%d",
-        level,
-        percent,
-        bts_tws_if_is_tws_link_connected());
+    DEBUG_INFO(0,"[TWS_CHECK][HFP_BATT] enter level=%d percent=%d tws=%d",level,percent,bts_tws_if_is_tws_link_connected());
 
     for (i = 0; i < BT_DEVICE_NUM; i++)
     {
         chan = app_bt_get_device(i)->hf_channel;
 
-        DEBUG_WARNING(0,
-            "[TWS_CHECK][HFP_BATT] dev=%d hf_state=%d tws=%d",
-            i,
-            btif_get_hf_chan_state(chan),
-            bts_tws_if_is_tws_link_connected());
+        DEBUG_INFO(0,"[TWS_CHECK][HFP_BATT] dev=%d hf_state=%d tws=%d",i,btif_get_hf_chan_state(chan),bts_tws_if_is_tws_link_connected());
 
         if (btif_get_hf_chan_state(chan) == BT_HFP_CHAN_STATE_OPEN)
         {
-            if (!bt_host_cfg->apple_hf_at_support ||
-                btif_hf_is_hf_indicators_support(chan))
+            if (!bt_host_cfg->apple_hf_at_support || btif_hf_is_hf_indicators_support(chan))
             {
                 if (app_bt_get_device(i)->battery_level != level)
                 {
 #if defined(BLE_BATT_ENABLE)
-                    DEBUG_WARNING(0,
-                        "[BLE_BATT] dev=%d level=%d percent=%d tws=%d",
-                        i,
-                        level,
-                        percent,
-                        bts_tws_if_is_tws_link_connected());
-
+                    DEBUG_INFO(0,"[BLE_BATT] dev=%d level=%d percent=%d tws=%d",i,level,percent,bts_tws_if_is_tws_link_connected());
                     app_ble_report_battery_level(i, percent);
 #endif
 
-                    status =
-                        btif_hf_update_indicators_batt_level(
-                            chan,
-                            percent);
+                    status = btif_hf_update_indicators_batt_level(chan,percent);
                 }
             }
             else if (btif_hf_is_batt_report_support(chan))
@@ -408,29 +406,19 @@ int app_hfp_battery_report(uint8_t level)
 #endif
 
 #if defined(BLE_BATT_ENABLE)
-                    DEBUG_WARNING(0,
-                        "[BLE_BATT] dev=%d level=%d percent=%d tws=%d",
-                        i,
-                        level,
-                        percent,
-                        bts_tws_if_is_tws_link_connected());
-
+                    DEBUG_INFO(0,"[BLE_BATT] dev=%d level=%d percent=%d tws=%d",i,level,percent,bts_tws_if_is_tws_link_connected());
                     app_ble_report_battery_level(i, percent);
 #endif
 
 #ifdef __INTERACTION_CUSTOMER_AT_COMMAND__
-                    status =
-                        Send_customer_battery_report_AT_command(
-                            chan,
-                            level);
+                    status = Send_customer_battery_report_AT_command(chan,level);
 #endif
 
-                    status =
-                        btif_hf_batt_report(
-                            chan,
-                            level);
+                    status = btif_hf_batt_report(chan,level);
                 }
             }
+
+            DEBUG_INFO(0,"[NTT_BAT][07_HFP_SEND] dev=%d level=%d status=%d",i, level, status);
 
             if (BT_STS_PENDING == status)
             {
@@ -444,10 +432,7 @@ int app_hfp_battery_report(uint8_t level)
         else
         {
 #if defined(BLE_BATT_ENABLE)
-            DEBUG_WARNING(0,
-                "[BLE_BATT] skip report dev=%d hf not connected tws=%d",
-                i,
-                bts_tws_if_is_tws_link_connected());
+            DEBUG_INFO(0,"[BLE_BATT] skip report dev=%d hf not connected tws=%d",i,bts_tws_if_is_tws_link_connected());
 #endif
 
             app_bt_get_device(i)->battery_level = 0xFF;
@@ -508,11 +493,7 @@ void app_bt_hfp_enahnced_battery_report(uint8_t level) // level range 0~100
             app_bt_get_device(i)->battery_level = 0xff;
         }
 #if defined(BLE_BATT_ENABLE)
-        DEBUG_WARNING(0,
-                      "[BLE_BATT][HFP_ENH] %s dev=%d percent=%d",
-                      __func__,
-                      i,
-                      level);
+        DEBUG_INFO(0,"[BLE_BATT][HFP_ENH] %s dev=%d percent=%d",__func__,i,level);
 
         app_ble_report_battery_level(i, level);
 #endif
@@ -529,10 +510,13 @@ void app_bt_hfp_enahnced_battery_report(uint8_t level) // level range 0~100
 
 void app_hfp_battery_report_proc(void)
 {
-    if(report_battery_level != 0xff)
+    if (report_battery_level != 0xff)
     {
-        app_hfp_battery_report(report_battery_level);
+        uint8_t level = report_battery_level;
         report_battery_level = 0xff;
+        DEBUG_INFO(0,"[NTT_BAT][HFP_REPORT_PROC] level=%d",level);
+        int ret = app_hfp_battery_report(level);
+        DEBUG_INFO(0,"[NTT_BAT][HFP_REPORT_RESULT] level=%d ret=%d",level,ret);
     }
 }
 
@@ -877,10 +861,21 @@ static void hfp_connected_ind_handler(uint8_t device_id, btif_hf_channel_t* chan
     curr_device->hf_conn_flag = 1;
 
 #if defined(SUPPORT_BATTERY_REPORT) || defined(SUPPORT_HF_INDICATORS)
-    uint8_t battery_level;
+
+    uint8_t battery_percent = 0;
+    uint8_t battery_level = 0;
     app_hfp_battery_report_reset(device_id);
-    app_battery_get_info(NULL, &battery_level, NULL);
+    app_battery_get_info(NULL, &battery_percent, NULL);
+
+    if (battery_percent > 100)
+    {
+        battery_percent = 100;
+    }
+
+    battery_level = ntt_hfp_percent_to_level(battery_percent);
+    DEBUG_INFO(0,"[NTT_BAT][HFP_CONNECT] dev=%d percent=%d level=%d",device_id,battery_percent,battery_level);
     app_hfp_set_battery_level(battery_level);
+
 #endif
 
     //app_bt_stream_hfpvolume_reset();

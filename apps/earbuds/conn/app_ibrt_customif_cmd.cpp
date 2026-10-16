@@ -71,7 +71,7 @@ extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 extern "C" uint8_t app_battery_get_percent(void);
-
+extern "C" void ntt_battery_notify_0x31(void);
 
 static uint8_t g_tws_peer_battery_level = 0xFF;
 static bool g_tws_peer_battery_valid = false;
@@ -698,6 +698,7 @@ void app_tws_battery_update(bool tws_connect_flag)
         if((bts_tws_if_is_tws_link_connected())&&(TWS_UI_MASTER == app_ibrt_if_get_ui_role())&&(conn_devices > 0))
         {
             level = app_battery_level_compare();
+            EARBUDS_TRACE(0,"[NTT_BAT][09_TWS_HFP_UPDATE] level=%d conn=%d",level, conn_devices);
             app_hfp_set_battery_level(level);
         }
     }
@@ -775,6 +776,11 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     g_tws_peer_battery_level = peer_percent;
     g_tws_peer_battery_valid = true;
 
+    EARBUDS_TRACE(0,"[NTT_BAT][08_TWS_PEER_READY] peer=%d box=%d role=%d",
+        g_tws_peer_battery_level,
+        g_tws_peer_box_battery_level,
+        role);
+
     if (peer_box_raw <= 100)
     {
         g_tws_peer_box_battery_level = peer_box_raw;
@@ -808,6 +814,9 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     app_battery_set_other_battery_level(peer_percent);
     app_tws_battery_update(true);
 #endif
+
+    EARBUDS_TRACE(0,"[BAT31][TWS_SYNC_READY] peer=%d box=%d",g_tws_peer_battery_level,g_tws_peer_box_battery_level);
+    ntt_battery_notify_0x31();
 }
 
 #ifdef BESUI_GAME_EN

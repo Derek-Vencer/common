@@ -500,6 +500,52 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     return true;
 }
 
+extern "C" void ntt_battery_notify_0x31(void)
+{
+    uint8_t localBattery;
+    uint8_t peerBattery;
+    uint8_t boxBattery;
+
+    uint8_t batteryArray[3];
+
+    bool twsConnected;
+
+    localBattery = app_battery_current_level();
+
+    peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+
+    boxBattery = getBoxChargerBattery();
+
+    twsConnected = bts_tws_if_is_tws_link_connected();
+
+    if (!twsConnected || peerBattery > 100)
+    {
+        peerBattery = 0xFF;
+    }
+
+#ifdef IBRT
+    if (app_ibrt_if_is_right_side())
+    {
+        batteryArray[0] = peerBattery;
+        batteryArray[1] = localBattery;
+    }
+    else
+    {
+        batteryArray[0] = localBattery;
+        batteryArray[1] = peerBattery;
+    }
+#else
+    batteryArray[0] = localBattery;
+    batteryArray[1] = 0xFF;
+#endif
+
+    batteryArray[2] = boxBattery;
+
+    TRACE(0, "[BAT31][PUSH] L=%d R=%d BOX=%d TWS=%d", batteryArray[0], batteryArray[1], batteryArray[2], twsConnected);
+
+    sparraw_tx_msg(0x31, batteryArray, 3);
+}
+
 void handleGetBatteryLevel(const uint8_t *data,
                            uint16_t len)
 {
@@ -3882,18 +3928,19 @@ static void sparraw_event_handler_thread(void const *argument)
 
 void sparraw_connected(uint8_t conidx, bool enableNotify)
 {
-    TRACE(0,"%s.", __func__);
+    TRACE(0, "%s.", __func__);
+
     app_sparraw_env.conidx = conidx;
     app_sparraw_env.notifyEnable = enableNotify;
 
+    aw_ntc_detect_volt_timer_onoff(false);
+
     if (enableNotify)
     {
-        /* This callback is reached after the BLE client enables Notify. */
-        sparrow_api_set_transport(SPARROW_API_TRANSPORT_BLE);
-        sparrow_try_push_initial_battery_notify();
-    }
+        TRACE(0, "[BAT31] BLE notify ready");
 
-	aw_ntc_detect_volt_timer_onoff(false);
+        ntt_battery_notify_0x31();
+    }
 }
 
 void sparraw_disconnected(void)
