@@ -791,6 +791,70 @@ bool ble_adv_is_allowed(void)
     return true;
 }
 
+/*
+ * NTT BLE Non-discoverable
+ *
+ * Clear LE Limited / General Discoverable bits.
+ * Preserve all other Advertising Data.
+ */
+static bool ntt_ble_make_non_discoverable(gap_dt_buf_t *buf)
+{
+    const uint8_t *src = gap_dt_buf_data(buf);
+    uint16_t len = gap_dt_buf_len(buf);
+    uint16_t pos = 0;
+    uint16_t flag_pos = 0;
+    bool found = false;
+
+    if (src == NULL || len == 0)
+        return true;
+
+    while (pos < len)
+    {
+        uint8_t ad_len = src[pos];
+
+        if (ad_len == 0 || (uint32_t)pos + ad_len + 1 > len)
+        {
+            return false;
+        }
+
+        if (ad_len >= 2 && src[pos + 1] == GAP_DT_FLAGS)
+        {
+            flag_pos = pos + 2;
+            found = true;
+            break;
+        }
+
+        pos += ad_len + 1;
+    }
+
+    if (!found)
+        return true;
+
+    if ((src[flag_pos] & 0x03) == 0)
+        return true;
+
+    /*
+     * EXT_ADV_DATA_LEN is defined by BES SDK.
+     */
+    if (len > EXT_ADV_DATA_LEN)
+        return false;
+
+    uint8_t data[EXT_ADV_DATA_LEN];
+    memcpy(data, src, len);
+    uint8_t old_flags = data[flag_pos];
+    data[flag_pos] &= (uint8_t)~0x03;
+    gap_dt_buf_clear(buf);
+
+    if (!gap_dt_add_raw_data(buf, data, len))
+    {
+        DEBUG_INFO(0,"[NTT_BLE] rebuild ADV flags failed");
+        return false;
+    }
+
+    DEBUG_INFO(0,"[NTT_BLE] Non-discoverable flags %02X -> %02X",old_flags, data[flag_pos]);
+    return true;
+}
+
 void app_ble_dt_set_flags(gap_adv_param_t *adv_param, bool simu_bredr_support)
 {
     uint8_t discoverable_mode = GAP_FLAGS_LE_NON_DISCOVERABLE_MODE;
@@ -2332,6 +2396,16 @@ static void app_ble_refresh_advertising(uint8_t adv_handle, gap_adv_param_t *adv
         adv_param->own_addr_type);
 
     DEBUG_INFO(0, "TEST_ADV_REFRESH");
+
+    /*
+    * NTT: Force BLE Non-discoverable
+    * before sending advertising data to GAP stack.
+    */
+    if (!ntt_ble_make_non_discoverable(&adv_param->adv_data))
+    {
+        DEBUG_INFO(0,"[NTT_BLE] Invalid ADV data, handle=%d",adv_handle);
+        return;
+    }
 
     gap_refresh_advertising(adv_handle, adv_param, app_ble_server_callback);
 }
