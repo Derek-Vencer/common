@@ -841,7 +841,6 @@ static bool ntt_ble_make_non_discoverable(gap_dt_buf_t *buf)
 
     uint8_t data[EXT_ADV_DATA_LEN];
     memcpy(data, src, len);
-    uint8_t old_flags = data[flag_pos];
     data[flag_pos] &= (uint8_t)~0x03;
     gap_dt_buf_clear(buf);
 
@@ -851,7 +850,7 @@ static bool ntt_ble_make_non_discoverable(gap_dt_buf_t *buf)
         return false;
     }
 
-    DEBUG_INFO(0,"[NTT_BLE] Non-discoverable flags %02X -> %02X",old_flags, data[flag_pos]);
+    DEBUG_INFO(0,"[NTT_BLE] Non-discoverable flags = %02X",data[flag_pos]);
     return true;
 }
 
