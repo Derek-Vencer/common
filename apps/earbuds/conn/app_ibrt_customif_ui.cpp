@@ -738,13 +738,9 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             EARBUDS_TRACE(0,"custom_ui delay report support %d", state->delay_report_support);
             break;
         case IBRT_CONN_A2DP_STREAMING:
-            if (bts_ibrt_if_is_ibrt_link_connected(addr)) {
-                bt_drv_reg_op_afh_assess_en(false);
-            } else {
-                bt_drv_reg_op_afh_assess_en(true);
-            }
-            //just add Qos setting interface for music state, if need, uncomment it.
-            //app_ibrt_if_update_mobile_link_qos(state->device_id, 40);
+            EARBUDS_TRACE(0,"[NTT_AFH] A2DP STREAMING, IBRT=%d, ASSESS=ON",bts_ibrt_if_is_ibrt_link_connected(addr));
+
+            bt_drv_reg_op_afh_assess_en(true);
             break;
         case IBRT_CONN_A2DP_SUSPENED:
             break;
