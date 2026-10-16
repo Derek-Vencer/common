@@ -231,6 +231,7 @@ void app_hfp_set_battery_level(uint8_t level)
     }
 
     uint8_t old_level = report_battery_level;
+    (void)old_level;
     report_battery_level = level;
     DEBUG_INFO(0,"[NTT_BAT][HFP_QUEUE] old=%d new=%d",old_level,level);
     btif_osapi_notify_evm();
@@ -516,6 +517,7 @@ void app_hfp_battery_report_proc(void)
         report_battery_level = 0xff;
         DEBUG_INFO(0,"[NTT_BAT][HFP_REPORT_PROC] level=%d",level);
         int ret = app_hfp_battery_report(level);
+        (void)ret;
         DEBUG_INFO(0,"[NTT_BAT][HFP_REPORT_RESULT] level=%d ret=%d",level,ret);
     }
 }

@@ -56,7 +56,7 @@ struct TX_PWR_SELECT_ITEM
 
 static const struct TX_PWR_SELECT_ITEM tx_pwr_select[] =
 {
-    {12,  0x4200, 0x015f, 0x0000, TX_PWR_1P2_PA},   //12dbm
+    {12,  0x4200, 0x018f, 0x0000, TX_PWR_1P2_PA},   //12dbm
     {11,  0x4200, 0x00f8, 0x0000, TX_PWR_1P2_PA},   //11dbm
     {10,  0x4200, 0x00e3, 0x0000, TX_PWR_1P2_PA},   //10dbm
     {9,   0x4200, 0x00c2, 0x0000, TX_PWR_1P2_PA},   //9dbm
