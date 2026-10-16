@@ -1688,6 +1688,35 @@ static bool ntt_eq6_set_mode(bool enable, bool from_key)
     return true;
 }
 
+extern "C" void ntt_eq6_resync_to_peer(void)
+{
+    uint8_t original_eq = 0;
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        TRACE(0,"[EQ6][RESYNC] TWS not connected");
+        return;
+    }
+
+    if (ntt_eq6_mode_active)
+    {
+        original_eq = ntt_eq_preset_before_clear_voice;
+    }
+    else
+    {
+        handleGetEqIndex(&original_eq);
+    }
+
+    if (original_eq >= NTT_EQ_PRESET_COUNT)
+    {
+        TRACE(0,"[EQ6][RESYNC] invalid EQ index=%u",(unsigned)original_eq);
+        return;
+    }
+
+    TRACE(0,"[EQ6][RESYNC][TX] active=%u original=%u",(unsigned)ntt_eq6_mode_active,(unsigned)original_eq);
+    app_ibrt_customif_cmd_sync_eq6_mode(ntt_eq6_mode_active ? 1 : 0, original_eq);
+}
+
 static uint8_t ntt_eq_get_selected_preset(void)
 {
     uint8_t preset = NTT_EQ_PRESET_INVALID;

@@ -1023,6 +1023,62 @@ static void ntt_user_setting_sync_delay_start(void)
 }
 #endif
 
+#ifdef IBRT
+
+#define NTT_EQ6_RESYNC_DELAY_MS    2000
+
+extern "C" void ntt_eq6_resync_to_peer(void);
+
+static osTimerId ntt_eq6_resync_timer = NULL;
+
+static void ntt_eq6_resync_timer_handler(void const *param)
+{
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(0,"[EQ6][RESYNC] skip, TWS disconnected");
+        return;
+    }
+
+    if (app_ibrt_middleware_is_ui_slave())
+    {
+        EARBUDS_TRACE(0,"[EQ6][RESYNC] skip, local is Slave");
+        return;
+    }
+
+    EARBUDS_TRACE(0,"[EQ6][RESYNC] TWS connected, sync EQ6");
+    ntt_eq6_resync_to_peer();
+}
+
+osTimerDef(NTT_EQ6_RESYNC_TIMER,ntt_eq6_resync_timer_handler);
+
+static void ntt_eq6_resync_delay_start(void)
+{
+    if (ntt_eq6_resync_timer == NULL)
+    {
+        ntt_eq6_resync_timer = osTimerCreate(osTimer(NTT_EQ6_RESYNC_TIMER),osTimerOnce,NULL);
+    }
+
+    if (ntt_eq6_resync_timer == NULL)
+    {
+        EARBUDS_TRACE(0,"[EQ6][RESYNC] timer create failed");
+        return;
+    }
+
+    osTimerStop(ntt_eq6_resync_timer);
+    osTimerStart(ntt_eq6_resync_timer,NTT_EQ6_RESYNC_DELAY_MS);
+    EARBUDS_TRACE(0,"[EQ6][RESYNC] timer start 2000ms");
+}
+
+static void ntt_eq6_resync_delay_stop(void)
+{
+    if (ntt_eq6_resync_timer != NULL)
+    {
+        osTimerStop(ntt_eq6_resync_timer);
+    }
+}
+
+#endif
+
 void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *state, uint8_t reason_code)
 {
     EARBUDS_TRACE(0,"custom_ui tws acl state changed = %d with reason 0x%x role %d", state->state.acl_state, reason_code, state->current_role);
@@ -1072,6 +1128,7 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                 if (ui_role == TWS_UI_MASTER)
                 {
                     ntt_user_setting_sync_delay_start();
+                    ntt_eq6_resync_delay_start();
 
                     EARBUDS_TRACE(
                         0,
@@ -1113,6 +1170,7 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
             {
                 EARBUDS_TRACE(0,"[BAT31] TWS peer disconnected -> push peer=FF");
                 sparrow_push_battery_level_notify(true);
+                ntt_eq6_resync_delay_stop();
             }
             else
             {
