@@ -119,6 +119,47 @@ static volatile bool ntt_rssi_ota_lock = false;
 static uint8_t ntt_rssi_switch_confirm_count = 0;
 static uint32_t ntt_rssi_switch_cooldown_count = 0;
 
+ /*
+  * ============================================================
+ * NTT RSSI Role Switch - HFP Protection
+ *
+ * Block RSSI role switch during:
+ * - Incoming call
+ * - Outgoing call
+ * - Active call
+ * - SCO audio connection
+ *
+ * Supports dual mobile connections.
+  * ============================================================
+ */
+static bool ntt_rssi_hfp_call_is_active(void)
+{
+    for (uint8_t device_id = 0;device_id < BT_DEVICE_NUM;device_id++)
+    {
+        struct BT_DEVICE_T *device = app_bt_get_device(device_id);
+
+        if (device == NULL)
+        {
+            continue;
+        }
+
+        if ((device->hfchan_callSetup != BT_HF_CALLSETUP_NONE) ||
+            (device->hfchan_call != BT_HFP_CALL_NONE) ||
+            (device->hf_audio_state != BT_HFP_AUDIO_DISCON))
+        {
+            BTAPP_TRACE(4,"[NTT_RSSI] HFP busy dev=%d setup=%d call=%d audio=%d",
+                device_id,
+                device->hfchan_callSetup,
+                device->hfchan_call,
+                device->hf_audio_state);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /*
  * ============================================================
  * NTT RSSI Role Switch - A2DP Streaming Check
@@ -129,6 +170,7 @@ static uint32_t ntt_rssi_switch_cooldown_count = 0;
  * Supports dual mobile connections.
  * ============================================================
  */
+
 static bool ntt_rssi_is_a2dp_streaming(void)
 {
     for (uint8_t device_id = 0; device_id < BT_DEVICE_NUM; device_id++)
@@ -172,6 +214,16 @@ static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
     if (ntt_rssi_role_switch_is_ota_locked())
     {
         ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
+
+    /*
+    * HFP protection.
+    */
+    if (ntt_rssi_hfp_call_is_active())
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        BTAPP_TRACE(0,"[NTT_RSSI] Role switch blocked by HFP");
         return;
     }
 

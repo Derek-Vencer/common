@@ -29,6 +29,7 @@
 #include "apps.h"
 #include "app_hfp.h"
 #include "bts_tws_if.h"
+#include "../../services/ota/bes_ota/inc/ota_control.h"
 #include "earbud_ux_api.h"
 #include "bts_core_type.h"
 #include "app_ui_api.h"
@@ -315,6 +316,66 @@ static void ntt_low_bat_poweroff_timer_handler(void const *argument)
 
 osTimerDef(NTT_LOW_BAT_POWEROFF_TIMER,ntt_low_bat_poweroff_timer_handler);
 
+/*
+ * NTT Battery Role Switch Protection
+ *
+ * Block battery-triggered role switch during:
+ * 1. HFP incoming / outgoing / active call
+ * 2. HFP SCO connection
+ * 3. OTA firmware upgrade
+ */
+
+static bool ntt_battery_role_switch_hfp_busy(void)
+{
+    for (uint8_t device_id = 0;device_id < BT_DEVICE_NUM;device_id++)
+    {
+        struct BT_DEVICE_T *device = app_bt_get_device(device_id);
+        if (device == NULL)
+        {
+            continue;
+        }
+
+        if ((device->hfchan_callSetup != BT_HF_CALLSETUP_NONE) ||
+            (device->hfchan_call != BT_HFP_CALL_NONE) ||
+            (device->hf_audio_state != BT_HFP_AUDIO_DISCON))
+        {
+            BATTERY_TRACE(4,"[LOW_BAT_ROLE] HFP busy dev=%d setup=%d call=%d audio=%d",
+                device_id,
+                device->hfchan_callSetup,
+                device->hfchan_call,
+                device->hf_audio_state);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+static bool ntt_battery_role_switch_is_blocked(void)
+{
+    /*
+     * OTA firmware upgrade protection
+     */
+    if (ota_is_in_progress())
+    {
+        BATTERY_TRACE(0,"[LOW_BAT_ROLE] BLOCK: OTA in progress");
+        return true;
+    }
+
+    /*
+     * HFP call protection
+     */
+    if (ntt_battery_role_switch_hfp_busy())
+    {
+        BATTERY_TRACE(0,"[LOW_BAT_ROLE] BLOCK: HFP active");
+        return true;
+    }
+
+    return false;
+}
+
 static void ntt_low_battery_role_switch_check(void)
 {
     uint8_t local_percent = 0xFF;
@@ -448,12 +509,30 @@ static void ntt_low_battery_role_switch_check(void)
         peer_percent,
         current_role);
 
-    BATTERY_TRACE(0,
-                  "[LOW_BAT_ROLE] peer higher -> role switch");
+    /*
+    * NTT HFP / OTA Role Switch Protection
+    *
+    * Battery comparison remains unchanged.
+    * Only block the actual role-switch request.
+    */
+    if (ntt_battery_role_switch_is_blocked())
+    {
+        BATTERY_TRACE(0,"[LOW_BAT_ROLE] Role switch deferred: HFP/OTA busy");
+
+        /*
+        * Do not set role-switch pending.
+        *
+        * The next periodic battery check will retry
+        * after HFP / OTA becomes idle.
+        */
+        return;
+    }
+
+    BATTERY_TRACE(0,"[LOW_BAT_ROLE] peer higher -> role switch");
 
     /*
-     * Set pending before sending the asynchronous role-switch request.
-     */
+    * Set pending before sending the asynchronous role-switch request.
+    */
     g_low_bat_role_switch_pending = true;
     g_low_bat_role_switch_pending_count = 0;
 
