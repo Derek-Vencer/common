@@ -510,7 +510,14 @@ extern "C" void ntt_battery_notify_0x31(void)
 
     bool twsConnected;
 
-    localBattery = app_battery_current_level();
+    localBattery = app_battery_get_percent();
+
+    if (!app_battery_is_measurement_valid() || localBattery == 0xFF || localBattery > 100)
+    {
+        TRACE(0,
+            "[BAT31][NOTIFY] local battery not ready");
+        return;
+    }
 
     peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
 

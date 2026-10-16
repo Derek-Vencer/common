@@ -862,19 +862,23 @@ static void hfp_connected_ind_handler(uint8_t device_id, btif_hf_channel_t* chan
 
 #if defined(SUPPORT_BATTERY_REPORT) || defined(SUPPORT_HF_INDICATORS)
 
-    uint8_t battery_percent = 0;
-    uint8_t battery_level = 0;
+    uint8_t battery_percent;
+    uint8_t battery_level;
+
     app_hfp_battery_report_reset(device_id);
-    app_battery_get_info(NULL, &battery_percent, NULL);
 
-    if (battery_percent > 100)
+    battery_percent = app_battery_get_percent();
+
+    if (battery_percent <= 100)
     {
-        battery_percent = 100;
+        battery_level = ntt_hfp_percent_to_level(battery_percent);
+        DEBUG_INFO(0, "[NTT_BAT][HFP_CONNECT] percent=%d level=%d",battery_percent,battery_level);
+        app_hfp_set_battery_level(battery_level);
     }
-
-    battery_level = ntt_hfp_percent_to_level(battery_percent);
-    DEBUG_INFO(0,"[NTT_BAT][HFP_CONNECT] dev=%d percent=%d level=%d",device_id,battery_percent,battery_level);
-    app_hfp_set_battery_level(battery_level);
+    else
+    {
+        DEBUG_INFO(0,"[NTT_BAT][HFP_CONNECT] battery not ready");
+    }
 
 #endif
 
