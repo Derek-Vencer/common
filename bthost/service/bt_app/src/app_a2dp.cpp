@@ -381,6 +381,14 @@ void a2dp_init(void)
             btif_a2dp_stream_init(curr_device->btif_a2dp_stream);
 
             a2dp_codec_sbc_init(i);
+
+            DEBUG_INFO(0,
+                "[NTT_SBC] index=%d codec=%p elements=%p const=%p",
+                i,
+                &a2dp_avdtpcodec,
+                a2dp_avdtpcodec.elements,
+                a2dp_codec_elements);
+
             /* Print the registered SBC Sink codec capability for BQB verification. */
             DEBUG_INFO(0,
                 "[BQB_SBC_CAP] index=%d cap=%02X %02X %02X %02X",
@@ -460,6 +468,55 @@ void a2dp_init(void)
         }
         app_bt_manager.curr_a2dp_stream_id = BT_DEVICE_ID_1;
     }
+}
+
+#define NTT_SBC_MAX_BITPOOL 39
+
+static uint8_t ntt_sbc_codec_elements[4] = {
+    0x3F, 0xFF, 0x02, NTT_SBC_MAX_BITPOOL
+};
+
+extern "C" bt_status_t __real_btif_a2dp_register(
+    btif_a2dp_stream_t *Stream,
+    btif_a2dp_endpoint_type_t sep_type,
+    btif_avdtp_codec_t *sep_codec,
+    btif_avdtp_content_prot_t *sep_cp,
+    uint8_t sep_priority,
+    btif_a2dp_callback Callback);
+
+extern "C" bt_status_t __wrap_btif_a2dp_register(
+    btif_a2dp_stream_t *Stream,
+    btif_a2dp_endpoint_type_t sep_type,
+    btif_avdtp_codec_t *sep_codec,
+    btif_avdtp_content_prot_t *sep_cp,
+    uint8_t sep_priority,
+    btif_a2dp_callback Callback)
+{
+    if (sep_codec &&
+        sep_codec->codecType == BT_A2DP_CODEC_TYPE_SBC &&
+        sep_codec->elemLen == 4 &&
+        sep_codec->elements)
+    {
+        memcpy(ntt_sbc_codec_elements,
+               sep_codec->elements,
+               sizeof(ntt_sbc_codec_elements));
+
+        ntt_sbc_codec_elements[3] = NTT_SBC_MAX_BITPOOL;
+
+        sep_codec->elements = ntt_sbc_codec_elements;
+
+        DEBUG_INFO(0,
+            "[NTT_SBC_WRAP] max_bitpool=%d",
+            sep_codec->elements[3]);
+    }
+
+    return __real_btif_a2dp_register(
+        Stream,
+        sep_type,
+        sep_codec,
+        sep_cp,
+        sep_priority,
+        Callback);
 }
 
 static bool a2dp_bdaddr_from_id(uint8_t id, bt_bdaddr_t *bd_addr) {

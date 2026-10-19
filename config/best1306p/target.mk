@@ -71,6 +71,8 @@ AUDIO_OUTPUT_MONO ?= 0
 
 AUDIO_OUTPUT_DIFF ?= 0
 
+# NTT SBC Bitpool 39 test
+LDFLAGS_IMAGE += --wrap=btif_a2dp_register
 
 export CFG_APP_BAS ?= 1
 
