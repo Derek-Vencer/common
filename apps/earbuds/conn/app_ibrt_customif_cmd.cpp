@@ -1163,10 +1163,10 @@ static void imu_data_rcv_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t len
 
 #endif //#ifdef BESUI_TWS_EN
 
-#if defined(CUSTOM_BITRATE) && !defined(FREEMAN_ENABLED_STERO)
-static void app_ibrt_codec_user_info_sync(uint8_t *p_buff, uint16_t length);
-static void app_ibrt_codec_user_info_sync_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
-#endif
+//#if defined(CUSTOM_BITRATE) && !defined(FREEMAN_ENABLED_STERO)
+//static void app_ibrt_codec_user_info_sync(uint8_t *p_buff, uint16_t length);
+//static void app_ibrt_codec_user_info_sync_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
+//#endif
 
 static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
 {

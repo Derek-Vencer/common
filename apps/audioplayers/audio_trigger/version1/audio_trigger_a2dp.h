@@ -4,7 +4,8 @@
 
 #define A2DP_PLAYER_PLAYBACK_WATER_LINE ((uint32_t)(3.f * a2dp_audio_latency_factor_get() + 0.5f))
 #define A2DP_PLAYER_PLAYBACK_WATER_LINE_UPPER (25)
-
+#define NTT_A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU (64)
+#define NTT_A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU (16)
 /********************************
         AUD_BITS_16
         dma_buffer_delay_us = stream_cfg->data_size/stream_cfg->channel_num/2*1000000LL/stream_cfg->sample_rate;

@@ -68,8 +68,7 @@ ccflags-y := \
     -Iutils/aes_cmac \
     -Iservices/audio_manager \
     -Iapps/key \
-    -Ibthost/service/ble_app_new/inc 
-
+    -Ibthost/service/ble_app_new/inc     
 ifeq ($(FLASH_SUSPEND),1)
 ccflags-y += -DFLASH_SUSPEND
 endif

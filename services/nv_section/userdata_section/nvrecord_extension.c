@@ -62,6 +62,22 @@ extern void nvrecord_rebuild_fp_account_key(NV_FP_ACCOUNT_KEY_RECORD_T* pFpAccou
 extern void nvrecord_rebuild_dma_configuration(NV_DMA_CONFIGURATION_T* pDmaConfig);
 #endif
 
+#ifdef CUSTOM_BITRATE
+
+#ifndef USER_CONFIG_DEFAULT_AAC_BITRATE
+#define USER_CONFIG_DEFAULT_AAC_BITRATE (256 * 1024)
+#endif
+
+#ifndef USER_CONFIG_DEFAULT_SBC_BITPOOL
+#define USER_CONFIG_DEFAULT_SBC_BITPOOL (39)
+#endif
+
+#ifndef USER_CONFIG_DEFAULT_AUDIO_LATENCY
+#define USER_CONFIG_DEFAULT_AUDIO_LATENCY (1.0f)
+#endif
+
+#endif
+
 typedef enum
 {
     NV_STATE_IDLE,

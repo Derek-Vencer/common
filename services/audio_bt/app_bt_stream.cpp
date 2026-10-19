@@ -2624,7 +2624,7 @@ int app_bt_stream_detect_next_packet_cb(uint8_t device_id, btif_media_header_t *
     return 0;
 }
 
-#if defined(CUSTOM_BITRATE) || defined(BESUI_STEREO_EN)
+#if defined(CUSTOM_BITRATE) || defined(BESUI_STEREO_EN) || defined(NTT_A2DP_CUSTOM_BUFFER)
 typedef struct{
     uint8_t a2dp_sbc_delay_mtu;
     uint8_t a2dp_aac_delay_mtu;
@@ -2632,8 +2632,10 @@ typedef struct{
 
 static a2dp_customer_codec_delay_mtu a2dp_player_playback_delay_mtu =
 {
-    A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU,
-    A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU,
+    //A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU,
+    //A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU,
+    NTT_A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU,  // SBC target MTU
+    NTT_A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU,  // AAC target MTU
 };
 
 void app_audio_dynamic_update_dest_packet_mtu_set(uint8_t codec_index, uint8_t packet_mtu, uint8_t user_configure)
@@ -2663,18 +2665,34 @@ void app_audio_dynamic_update_dest_packet_mtu_set(uint8_t codec_index, uint8_t p
         a2dp_player_playback_delay_mtu.a2dp_sbc_delay_mtu = A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU;
         a2dp_player_playback_delay_mtu.a2dp_aac_delay_mtu = A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU;
     }
+
+    AUDIO_BT_TRACE(0,"[NTT_A2DP_MTU_SET] codec=%d packet_mtu=%d user_configure=%d SBC=%d AAC=%d",
+        codec_index,
+        packet_mtu,
+        user_configure,
+        a2dp_player_playback_delay_mtu.a2dp_sbc_delay_mtu,
+        a2dp_player_playback_delay_mtu.a2dp_aac_delay_mtu);
 }
 
 uint8_t app_audio_a2dp_player_playback_delay_mtu_get(uint16_t codec_type)
 {
     uint8_t mtu = 0;
+
     if (codec_type == A2DP_AUDIO_CODEC_TYPE_SBC)
+    {
         mtu = a2dp_player_playback_delay_mtu.a2dp_sbc_delay_mtu;
-    else if (codec_type == A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC)
-        mtu = a2dp_player_playback_delay_mtu.a2dp_aac_delay_mtu;
-    else{
-        AUDIO_BT_TRACE(0,"error codec tpye [%d]",codec_type);
+        AUDIO_BT_TRACE(0,"[NTT_A2DP_MTU] SBC MTU=%d",mtu);
     }
+    else if (codec_type == A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC)
+    {
+        mtu = a2dp_player_playback_delay_mtu.a2dp_aac_delay_mtu;
+        AUDIO_BT_TRACE(0,"[NTT_A2DP_MTU] AAC MTU=%d",mtu);
+    }
+    else
+    {
+        AUDIO_BT_TRACE(0,"[NTT_A2DP_MTU] ERROR codec_type=%d",codec_type);
+    }
+
     return mtu;
 }
 #endif
@@ -4018,9 +4036,10 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
 #endif
 #endif
-#ifdef CUSTOM_BITRATE
+#if defined(CUSTOM_BITRATE) || defined(NTT_A2DP_CUSTOM_BUFFER)
                     dest_packet_mut = app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_SBC);
                     offset_mut = 0;
+                    AUDIO_BT_TRACE(2,"[NTT_MTU][SBC] dest_mtu=%d",(int)dest_packet_mut);
 #endif
                     break;
                 case BT_A2DP_CODEC_TYPE_MPEG2_4_AAC:
@@ -4042,9 +4061,10 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
 #endif
 #endif
-#ifdef CUSTOM_BITRATE
+#if defined(CUSTOM_BITRATE) || defined(NTT_A2DP_CUSTOM_BUFFER)
                     dest_packet_mut = app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC);
                     offset_mut = 0;
+                    AUDIO_BT_TRACE(2,"[NTT_MTU][AAC] dest_mtu=%d",(int)dest_packet_mut);
 #endif
                     break;
                 case BT_A2DP_CODEC_TYPE_NON_A2DP:
@@ -4255,19 +4275,35 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
             {
                 case BT_A2DP_CODEC_TYPE_SBC:
                     a2dp_audio_codec_type = A2DP_AUDIO_CODEC_TYPE_SBC;
-#ifdef BESUI_GAME_EN
+
+            #ifdef BESUI_GAME_EN
                     dest_packet_mut = uicom.latency_delay_sbc_mtu;
-#else
+            #else
                     dest_packet_mut = A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU;
-#endif
+            #endif
+
+            #if defined(NTT_A2DP_CUSTOM_BUFFER)
+                    // NTT: Apply custom SBC playback buffer MTU
+                    dest_packet_mut = app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_SBC);
+                    AUDIO_BT_TRACE(2,"[NTT_MTU][PATH_B][SBC] dest_mtu=%d",(int)dest_packet_mut);
+            #endif
                     break;
+
                 case BT_A2DP_CODEC_TYPE_MPEG2_4_AAC:
                     a2dp_audio_codec_type = A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC;
-#ifdef BESUI_GAME_EN
+
+            #ifdef BESUI_GAME_EN
                     dest_packet_mut = uicom.latency_delay_aac_mtu;
-#else
+            #else
                     dest_packet_mut = A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU;
-#endif
+            #endif
+
+            #if defined(NTT_A2DP_CUSTOM_BUFFER)
+                    // NTT: Apply custom AAC playback buffer MTU
+                    dest_packet_mut = app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC);
+                    AUDIO_BT_TRACE(2,"[NTT_MTU][PATH_B][AAC] dest_mtu=%d",(int)dest_packet_mut);
+            #endif
+
                     break;
                 case BT_A2DP_CODEC_TYPE_NON_A2DP:
                     if (nonType == BT_A2DP_CODEC_NONE_TYPE_INVALID)

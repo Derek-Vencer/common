@@ -6285,6 +6285,11 @@ endif
 # TODO: Array alignment?
 #LDFLAGS += --sort-common --sort-section=alignment
 
+# NTT A2DP playback buffer customization
+KBUILD_CPPFLAGS += -DNTT_A2DP_CUSTOM_BUFFER
+
+$(info NTT A2DP CUSTOM BUFFER ENABLED)
+
 ifeq ($(CTYPE_PTR_DEF),1)
 ifeq ($(TOOLCHAIN),armclang)
 $(error CTYPE_PTR_DEF is not supported in $(TOOLCHAIN))

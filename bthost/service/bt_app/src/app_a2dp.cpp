@@ -41,6 +41,7 @@
 #include "app_a2dp.h"
 #include "app_trace_rx.h"
 #include "ecc_p192.h"
+#include "audio_trigger_a2dp.h"
 
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
 #include "lhdcUtil.h"
@@ -214,6 +215,11 @@ static void app_a2dp_reject_sniff_guard_timer_callback(void const *param);
 osTimerDef (APP_A2DP_REJECTSNIFF_TIMER, app_a2dp_reject_sniff_guard_timer_callback);
 #endif
 
+#if defined(CUSTOM_BITRATE) || defined(NTT_A2DP_CUSTOM_BUFFER)
+extern uint8_t app_audio_a2dp_player_playback_delay_mtu_get(uint16_t codec_type);
+extern void app_audio_dynamic_update_dest_packet_mtu_set(uint8_t codec_index,uint8_t packet_mtu,uint8_t user_configure);
+#endif
+
 void get_value1_pos(U8 mask,U8 *start_pos, U8 *end_pos)
 {
     U8 num = 0;
@@ -312,12 +318,19 @@ void a2dp_init(void)
 #ifdef CUSTOM_BITRATE
     a2dp_avdtpcodec_sbc_user_configure_set(nv_record_get_extension_entry_ptr()->codec_user_info.sbc_bitpool, true);
     a2dp_avdtpcodec_aac_user_configure_set(nv_record_get_extension_entry_ptr()->codec_user_info.aac_bitrate, true);
-    app_audio_dynamic_update_dest_packet_mtu_set(A2DP_AUDIO_CODEC_TYPE_SBC, (nv_record_get_extension_entry_ptr()->codec_user_info.audio_latentcy-USER_CONFIG_SBC_AUDIO_LATENCY_ERROR)/3, true);//sbc
-    app_audio_dynamic_update_dest_packet_mtu_set(A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC, (nv_record_get_extension_entry_ptr()->codec_user_info.audio_latentcy-USER_CONFIG_AAC_AUDIO_LATENCY_ERROR)/23, true);//aac
+#endif
+
+#if defined(CUSTOM_BITRATE) || defined(NTT_A2DP_CUSTOM_BUFFER)
+
+    app_audio_dynamic_update_dest_packet_mtu_set(A2DP_AUDIO_CODEC_TYPE_SBC,NTT_A2DP_PLAYER_PLAYBACK_DELAY_SBC_MTU,true);
+    app_audio_dynamic_update_dest_packet_mtu_set(A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC,NTT_A2DP_PLAYER_PLAYBACK_DELAY_AAC_MTU,true);
+    DEBUG_INFO(2, "[NTT_MTU]-1 SBC=%d AAC=%d",
+        app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_SBC),
+        app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC));
+
 #endif
 
     btif_a2dp_register_multi_link_close_req_allowed_callback(app_bt_audio_a2dp_close_req_allow);
-
     btif_a2dp_init(a2dp_callback,
 #ifdef BT_SOURCE
         a2dp_source_callback
@@ -325,6 +338,12 @@ void a2dp_init(void)
         NULL
 #endif
         );
+
+#if defined(CUSTOM_BITRATE) || defined(NTT_A2DP_CUSTOM_BUFFER)
+    DEBUG_INFO(2, "[NTT_MTU]-2 SBC=%d AAC=%d",
+        app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_SBC),
+        app_audio_a2dp_player_playback_delay_mtu_get(A2DP_AUDIO_CODEC_TYPE_MPEG2_4_AAC));
+#endif
 
     btif_a2dp_get_codec_info_func(a2dp_get_codec_info);
 
