@@ -450,7 +450,10 @@ ifeq ($(BOX_COMM_UNUSE_EN),1)
 KBUILD_CPPFLAGS += -DBOX_COMM_UNUSE_EN
 endif
 
+export BESUI_GAME_EN        		?= 0
+ifeq ($(BESUI_GAME_EN),1)
 KBUILD_CPPFLAGS += -DBESUI_GAME_EN
+endif
 
 export BESUI_GAME_NV_EN         		?= 1
 ifeq ($(BESUI_GAME_NV_EN),1)

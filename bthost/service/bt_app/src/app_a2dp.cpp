@@ -470,7 +470,7 @@ void a2dp_init(void)
     }
 }
 
-#define NTT_SBC_MAX_BITPOOL 39
+#define NTT_SBC_MAX_BITPOOL 35
 
 static uint8_t ntt_sbc_codec_elements[4] = {
     0x3F, 0xFF, 0x02, NTT_SBC_MAX_BITPOOL
