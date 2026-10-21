@@ -294,27 +294,27 @@ const DrcConfig audio_drc_cfg_4 = {
     }
 };
 
-/* Type01 */
+/* Type01 update 20261020 to voice-boost_01*/
 const DrcConfig audio_drc_cfg_5 = {
     .knee = 3,
     .filter_type = {300,-1},
     .band_num = 2,
     .look_ahead_time = 0,
     .band_settings= {
-        {-26 ,0.0 ,8 ,1 ,100 ,1},
-        {0 ,0.0 ,1 ,1 ,1 ,1},
+        {-20 ,0.0 ,8 ,1 ,100 ,1},
+        {-9 ,0.0 ,2 ,1 ,100 ,1},
     }
 };
 
-/* Type02 */
+/* Type02 update 20261020 to voice-boost_02*/
 const DrcConfig audio_drc_cfg_6 = {
     .knee = 3,
     .filter_type = {300,-1},
     .band_num = 2,
     .look_ahead_time = 0,
     .band_settings= {
-        {-26 ,0.0 ,8 ,1 ,100 ,1},
-        {0 ,0.0 ,1 ,1 ,1 ,1},
+        {-20 ,0.0 ,8 ,1 ,100 ,1},
+        {-15 ,0.0 ,2 ,1 ,100 ,1},
     }
 };
 
@@ -641,43 +641,39 @@ const IIR_CFG_T audio_eq_cfg_vol_4 = {
     }
 };
 
-// Type01
+// Type01 update 20261020 to voice-boost_01
 const IIR_CFG_T audio_eq_cfg_vol_5 = {
-    .gain0 = 8.0,
-    .gain1 = 8.0,
-    .num = 10,
+    .gain0 = 7.5,
+    .gain1 = 7.5,
+    .num = 7,
     .param = {
-        {IIR_TYPE_PEAK, 5.0, 90, 1.0},
-        {IIR_TYPE_LOW_SHELF, 3.0, 200, 0.7},
-        {IIR_TYPE_PEAK, -12.0, 2100, 1.5},
-        {IIR_TYPE_PEAK, -3.0, 4200, 3.0},
-        {IIR_TYPE_PEAK, -2.0, 1200, 3.0},
-        {IIR_TYPE_HIGH_SHELF, -8.0, 4000, 1.0},
-        {IIR_TYPE_HIGH_SHELF, -6.0, 200, 0.7},
+        {IIR_TYPE_LOW_SHELF, -3.0, 200, 1.0},
+        {IIR_TYPE_PEAK, -6.0, 6000, 2.0},
+        {IIR_TYPE_HIGH_SHELF, -10.0, 4000, 1.0},
+        {IIR_TYPE_HIGH_SHELF, -2.0, 200, 0.7},
         {IIR_TYPE_PEAK, -5.0, 500, 0.3},
-        {IIR_TYPE_HIGH_PASS, 0, 60, 0.7},
-        {IIR_TYPE_PEAK, -10.0, 6000, 2.0},
+        {IIR_TYPE_HIGH_PASS, 0, 120, 0.7},
+        {IIR_TYPE_LOW_PASS, 0, 10000, 0.7},
     }
 };
 
-// Type02
+
+// Type02 update 20261020 to voice-boost_02
 const IIR_CFG_T audio_eq_cfg_vol_6 = {
-    .gain0 = 8.0,
-    .gain1 = 8.0,
-    .num = 10,
+    .gain0 = 10.5,
+    .gain1 = 10.5,
+    .num = 7,
     .param = {
-        {IIR_TYPE_PEAK, 5.0, 90, 1.0},
-        {IIR_TYPE_LOW_SHELF, 3.0, 200, 1.0},
-        {IIR_TYPE_PEAK, -4.0, 2100, 3.0},
-        {IIR_TYPE_PEAK, -6.0, 4200, 3.0},
-        {IIR_TYPE_PEAK, 2.0, 1200, 3.0},
+        {IIR_TYPE_LOW_SHELF, -3.0, 200, 1.0},
+        {IIR_TYPE_PEAK, -6.0, 6000, 2.0},
         {IIR_TYPE_HIGH_SHELF, -10.0, 4000, 1.0},
-        {IIR_TYPE_HIGH_SHELF, -6.0, 200, 0.7},
+        {IIR_TYPE_HIGH_SHELF, -2.0, 200, 0.7},
         {IIR_TYPE_PEAK, -5.0, 500, 0.3},
-        {IIR_TYPE_HIGH_PASS, 0, 60, 0.7},
-        {IIR_TYPE_PEAK, -16.0, 6000, 1.0},
+        {IIR_TYPE_HIGH_PASS, 0, 120, 0.7},
+        {IIR_TYPE_LOW_PASS, 0, 10000, 0.7},
     }
 };
+
 
 const IIR_CFG_T audio_eq_cfg_vol_7 = {
     .gain0 = 0,
