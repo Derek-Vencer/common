@@ -426,6 +426,7 @@ extern "C" void app_ibrt_if_init_open_box_state_for_evb(void);
 //extern void charger_manager_start(void);
 extern void earBudsCloseOff_PogonIn_StartTimer(void);
 extern void wired_uart_get_battery_level(void);
+extern "C" void ntt_dut_1wire_init(void);
 #ifdef IBRT
 #include "app_ibrt_customif_cmd.h"
 #endif
@@ -3321,6 +3322,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
         app_nvrecord_rebuild();
 #endif
         app_factorymode_key_init();
+        ntt_dut_1wire_init();
 #ifdef BESUI_KEY_EN
         besui_tws_key_init();
 #endif

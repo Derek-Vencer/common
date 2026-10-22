@@ -753,6 +753,15 @@ extern "C" bool ntt_1wire_is_active(void)
     return g_ntt_1wire_active;
 }
 
+void wired_uart_communication_modual_init(void);
+
+extern "C" void ntt_dut_1wire_init(void)
+{
+    DBGPRINT("[DUT] Initialize 1-Wire RX app_factorymode_get(%d)", app_factorymode_get());
+    wired_uart_communication_modual_init();
+    DBGPRINT("[DUT] 1-Wire RX Ready");
+}
+
 extern "C" void dtm_enter_pairing_mode(void)
 {
     bool tws_connected;
@@ -1536,6 +1545,15 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         ntt_case_state_sync_local_update(NTT_CASE_STATE_IN_CASE);
     }
 
+    bool factory_mode = app_factorymode_get();
+    //DBGPRINT("[DUT][1WIRE] RX CMD=0x%02X, factory_mode=%d",cmd_event, factory_mode);
+
+    if (factory_mode && cmd_event != CMD_SET_EARBUD_SHIP_MOD)
+    {
+        //DBGPRINT("[DUT][1WIRE] Ignore CMD=0x%02X", cmd_event);
+        return;
+    }
+
 	uart_rx_handle_data_count = 0;
 	
     switch(cmd_event)
@@ -1970,6 +1988,9 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_SET_EARBUD_SHIP_MOD:
        {
     	  DBGPRINT("CMD_SET_EARBUD_SHIP_MOD!!!");
+          DBGPRINT("[DUT][SHIPPING] CMD 0x0D received");
+          wired_uart_send_cmd_ack_ok();
+          osDelay(20);
     	  Icp1205ShipEnable();
     	  app_shutdown();
     	  break;
