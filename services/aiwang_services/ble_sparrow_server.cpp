@@ -281,7 +281,7 @@ static uint8_t s_key_map_count = 0;
 // 5001 5102 5200 5300 5400 6001 6102 6200 6300 6400
 
 const key_map_entry_t s_key_default_map[21]{
-	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x08},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x08},
+	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x0A},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x0A},
 	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x07},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x06},{0x64,0x00},
 };
 
@@ -2574,72 +2574,6 @@ static void sparraw_tx_cmd_data_rsp_neg(uint8_t error_code, uint8_t cmd_type, ui
 	if(app_sparraw_env.notifyEnable) ble_aiwang_srv_send_data_via_notification(rsp_buffer, 6);
 }
 
-//extern void handleGetKeyMapActionAndFunc(uint8_t index,uint8_t *action,uint8_t *func);
-
-#if 0
-//button function
-/***********************************************/
-/***********************************************/
-// 操作类型（高4位）
-typedef enum {
-    ACTION_IDLE_MUSIC = 0x00,   // 空闲/音乐播放
-    ACTION_CALL       = 0x01,   // 通话
-    ACTION_LEFT       = 0x20,   // 左
-    ACTION_RIGHT      = 0x30    // 右
-} action_type_t;
-
-// 点击类型（低4位）
-typedef enum {
-    CLICK_SINGLE       = 0x00,  // 单击
-    CLICK_DOUBLE       = 0x01,  // 双击
-    CLICK_TRIPLE       = 0x02,  // 三击
-    CLICK_DOUBLE_HOLD  = 0x03,  // 双击并按住
-    CLICK_HOLD_2S      = 0x04   // 按住2秒
-} click_type_t;
-
-// 功能码
-typedef enum {
-    FUNC_NOT_ASSIGNED   = 0x00,
-    FUNC_ACCEPT_CALL    = 0x01,
-    FUNC_REJECT_CALL    = 0x02,
-    FUNC_PLAY_PAUSE     = 0x03,
-    FUNC_NEXT_SONG      = 0x04,
-    FUNC_PREV_SONG      = 0x05,
-    FUNC_VOLUME_UP      = 0x06,
-    FUNC_VOLUME_DOWN    = 0x07,
-    FUNC_VOICE_ASSIST   = 0x08
-} function_t;
-
-// 单个映射条目
-typedef struct {
-    uint8_t actions;    // 高4位操作类型 + 低4位点击类型
-    uint8_t function;   // 对应的功能
-} key_map_entry_t;
-// 整个映射块头部（偏移1~3）
-typedef struct {
-    uint16_t length;    // 总长度 = 2 * key_count + 1
-    uint8_t  key_count; // 映射条目数量
-    // 后面紧跟 key_count 个 key_map_entry_t
-} key_map_header_t;
-
-/* 功能函数类型：无参数、无返回值（可根据需要扩展） */
-typedef void (*function_handler_t)(void);
-
-/*==============================================================================
- * 2. 保存映射值的全局表（可修改，支持运行时保存/更新）
- *----------------------------------------------------------------------------*/
-#define MAX_KEY_MAP_ENTRIES  21
-static key_map_entry_t s_key_map[MAX_KEY_MAP_ENTRIES];
-static uint8_t s_key_map_count = 0;
-
-// 1003 1104 1205 1307 1408 2003 2104 2205 2306 2408 
-// 5001 5102 5200 5300 5400 6001 6102 6200 6300 6400
-
-const key_map_entry_t s_key_default_map[21]{
-	{0x10,0x03},{0x11,0x04},{0x12,0x05},{0x13,0x07},{0x14,0x08},{0x20,0x03},{0x21,0x04},{0x22,0x05},{0x23,0x06},{0x24,0x08},
-	{0x50,0x01},{0x51,0x02},{0x52,0x00},{0x53,0x00},{0x54,0x00},{0x60,0x01},{0x61,0x02},{0x62,0x00},{0x63,0x00},{0x64,0x00},
-};
-#endif
 // 初始化默认映射
 static void keymap_init_default(void)
 {
@@ -2862,7 +2796,8 @@ static void on_voice_assist(void)   {
 }
 
 /* Function 0x09: select the next EQ preset and wrap after preset 5. */
-static void on_eq_next(void)
+void on_eq_next(void);
+void on_eq_next(void)
 {
     uint8_t current_preset = 0;
 
@@ -2933,8 +2868,7 @@ void key_function_execute(function_t func)
             break;
 
         case FUNC_EQ_NEXT:
-            TRACE(0, "[ACTION] EQ_NEXT");
-            on_eq_next();
+            TRACE(0, "[ACTION] EQ_NEXT disabled");
             break;
 
         case FUNC_EQ_CLEAR_VOICE:
