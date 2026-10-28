@@ -2131,11 +2131,9 @@ static void ntt_key_master_start_reconnect(void)
         conn_devices,
         g_ntt_key_reconnect_running);
 
-    if (role != TWS_UI_MASTER)
+    if (role != TWS_UI_MASTER && role != TWS_UI_UNKNOWN)
     {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_KEY_RECONNECT] reject: not MASTER");
+        EARBUDS_TRACE(2,"[NTT_KEY_RECONNECT] reject role=%d",role);
 
         return;
     }
@@ -2164,7 +2162,7 @@ static void ntt_key_master_start_reconnect(void)
 
     EARBUDS_TRACE(
         0,
-        "[NTT_KEY_RECONNECT] MASTER opening reconnect");
+        "[[NTT_KEY_RECONNECT] LOCAL opening reconnect");
 
     app_bt_profile_connect_manager_opening_reconnect();
 }
@@ -2265,9 +2263,18 @@ void ntt_key_request_mobile_reconnect(void)
      * Slave 且沒有 TWS：
      * 目前不允許直接連手機，避免雙耳競爭。
      */
-    EARBUDS_TRACE(
-        0,
-        "[NTT_KEY_RECONNECT] SLAVE no TWS, request ignored");
+
+    if (role == TWS_UI_UNKNOWN)
+    {
+        /*
+        * NTT: Single-ear reconnect
+        *
+        * TWS disconnected:
+        * Allow standalone earbud to reconnect mobile.
+        */
+        EARBUDS_TRACE(1,"[NTT_KEY_RECONNECT] SINGLE EAR reconnect role=%d",role);
+        ntt_key_master_start_reconnect();
+    }
 }
 
 static void app_ibrt_customif_get_peer_fw_version_cmd_send(uint8_t *p_buff,uint16_t length)

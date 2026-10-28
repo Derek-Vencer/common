@@ -55,6 +55,7 @@
 #include "bts_ibrt_if.h"
 #include "audio_trigger_a2dp.h"
 #include "nvrecord_extension.h"
+#include "pmu.h"
 #ifdef BLE_HOST_SUPPORT
 #include "ecc_p256.h"
 #endif
@@ -1501,6 +1502,10 @@ static void app_bt_disconnected_keepAlinve_timeouthandler(void const *param)
 
     if(active_cons_phone == 0 && activeSourceCons == 0 && state != 1) {
     	DEBUG_INFO(0,"!!!bt_disconnected_keep_alive_timer CloseEarphone state = %d \n",state);
+        DEBUG_INFO(0,"[NTT_AUTO_OFF] 5min timeout, no mobile, shutdown");
+        // NTT: Set PMU latch=1 before automatic shutdown.
+        pmu_ntt_case_closed_latch_set(true);
+        DEBUG_INFO(0,"[NTT_AUTO_OFF] PMU latch=1");
 #ifdef IBRT
 		if (bts_tws_if_is_tws_link_connected())
 		{
