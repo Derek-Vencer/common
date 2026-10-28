@@ -197,12 +197,21 @@ extern void app_ibrt_start_power_on_tws_pairing(void);
 extern bool ntt_manual_pairing_mode;
 extern bool ntt_first_no_mobile_pair_mode;
 extern bool ntt_manual_pairing_mode;
+/*
+ * NTT: Prevent automatic SSP after mobile Link Key missing.
+ *
+ * This is a runtime protection for the first validation.
+ */
+static bool ntt_mobile_key_missing_lock = false;
+
+static bt_bdaddr_t ntt_mobile_key_missing_addr = {0};
 extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
 extern void wired_uart_enter_pairmode(void);
 static void ntt_bt_user_confirmation_callback(
     struct bdaddr_t *bdaddr,
     uint32 numeric_value);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
+extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
 
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
 
@@ -1953,43 +1962,70 @@ extern "C" bool ntt_bt_has_mobile_paired_record(void)
     }
 
     DEBUG_INFO(0,"[NTT_PAIR][RECORD_SCAN] no mobile paired record");
-    wired_uart_enter_pairmode();
+
+    if (!ntt_mobile_key_missing_lock)
+    {
+        wired_uart_enter_pairmode();
+    }
+    else
+    {
+        DEBUG_INFO(0,"[NTT_KEY_MISSING] skip auto pairing mode");
+    }
 
     return false;
 }
 
-static void ntt_bt_user_confirmation_callback(
-    struct bdaddr_t *bdaddr,
-    uint32 numeric_value)
+/*
+ * NTT: Set mobile Key Missing / unauthorized SSP lock.
+ *
+ * Shared by APP_BT and GFPS.
+ */
+extern "C" void ntt_mobile_key_missing_set(const struct bdaddr_t *bdaddr)
+{
+    if (bdaddr == NULL)
+    {
+        return;
+    }
+
+    ntt_mobile_key_missing_lock = true;
+    memcpy(ntt_mobile_key_missing_addr.address,bdaddr->address,BTIF_BD_ADDR_SIZE);
+    DEBUG_INFO(0,"[NTT_KEY_MISSING] lock enabled");
+    DUMP8("%02x ",ntt_mobile_key_missing_addr.address,BTIF_BD_ADDR_SIZE);
+}
+
+extern "C" bool ntt_mobile_key_missing_is_locked(const struct bdaddr_t *bdaddr)
+{
+    if (!ntt_mobile_key_missing_lock || bdaddr == NULL)
+    {
+        return false;
+    }
+
+    return (memcmp(ntt_mobile_key_missing_addr.address,bdaddr->address,BTIF_BD_ADDR_SIZE) == 0);
+}
+
+extern "C" void ntt_mobile_key_missing_clear(void)
+{
+    ntt_mobile_key_missing_lock = false;
+    memset(&ntt_mobile_key_missing_addr,0,sizeof(ntt_mobile_key_missing_addr));
+    DEBUG_INFO(0,"[NTT_KEY_MISSING] lock cleared");
+}
+
+static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 numeric_value)
 {
     bool is_tws_peer = false;
     bool has_mobile_record = false;
 
-    DEBUG_INFO(
-        0,
-        "[NTT_NO_AUTO_PAIR][APP_BT_CB] ENTER");
+    DEBUG_INFO(0,"[NTT_NO_AUTO_PAIR][APP_BT_CB] ENTER");
 
     if (bdaddr == NULL)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR][APP_BT_CB] addr NULL");
-
+        DEBUG_INFO(0,"[NTT_NO_AUTO_PAIR][APP_BT_CB] addr NULL");
         return;
     }
 
-    is_tws_peer =
-        ntt_bt_addr_is_tws_peer(bdaddr);
-
-    has_mobile_record =
-        ntt_bt_has_mobile_paired_record();
-
-    DEBUG_INFO(
-        10,
-        "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
-        "manual=%d mobile_record=%d tws_peer=%d "
-        "value=%u "
-        "addr=%02x:%02x:%02x:%02x:%02x:%02x",
+    is_tws_peer = ntt_bt_addr_is_tws_peer(bdaddr);
+    has_mobile_record = ntt_bt_has_mobile_paired_record();
+    DEBUG_INFO(10,"[NTT_NO_AUTO_PAIR][APP_BT_CB] manual=%d mobile_record=%d tws_peer=%d value=%u addr=%02x:%02x:%02x:%02x:%02x:%02x",
         ntt_manual_pairing_mode,
         has_mobile_record,
         is_tws_peer,
@@ -2006,16 +2042,28 @@ static void ntt_bt_user_confirmation_callback(
      */
     if (is_tws_peer)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
-            "accept TWS peer SSP");
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
-
+        DEBUG_INFO(0,"[NTT_NO_AUTO_PAIR][APP_BT_CB] accept TWS peer SSP");
+        bes_bt_me_confirmation_resp(bdaddr,true);
         return;
+    }
+
+    /*
+    * NTT: Reject automatic SSP after mobile Key Missing.
+    */
+    if (ntt_mobile_key_missing_is_locked(bdaddr))
+    {
+        if (!ntt_manual_pairing_mode)
+        {
+            DEBUG_INFO(0,"[NTT_KEY_MISSING] reject automatic SSP");
+            bes_bt_me_confirmation_resp(bdaddr,false);
+            return;
+        }
+
+        /*
+        * User explicitly entered manual pairing mode.
+        */
+        DEBUG_INFO(0,"[NTT_KEY_MISSING] allow manual pairing");
+        ntt_mobile_key_missing_clear();
     }
 
     /*
@@ -2026,17 +2074,9 @@ static void ntt_bt_user_confirmation_callback(
      */
     if (!has_mobile_record)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
-            "accept first mobile SSP: no mobile record");
-
+        DEBUG_INFO(0,"[NTT_NO_AUTO_PAIR][APP_BT_CB] accept first mobile SSP: no mobile record");
         ntt_manual_pairing_mode = true;
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
-
+        bes_bt_me_confirmation_resp(bdaddr,true);
         return;
     }
 
@@ -2045,15 +2085,8 @@ static void ntt_bt_user_confirmation_callback(
      */
     if (ntt_manual_pairing_mode)
     {
-        DEBUG_INFO(
-            0,
-            "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
-            "accept manual mobile SSP");
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
-
+        DEBUG_INFO(0,"[NTT_NO_AUTO_PAIR][APP_BT_CB] accept manual mobile SSP");
+        bes_bt_me_confirmation_resp(bdaddr,true);
         return;
     }
 
@@ -2061,14 +2094,20 @@ static void ntt_bt_user_confirmation_callback(
      * 有手機記錄的一般開機回連：
      * 手機若已刪除舊 Link Key，禁止自動重新配對。
      */
-    DEBUG_INFO(
-        0,
-        "[NTT_NO_AUTO_PAIR][APP_BT_CB] "
-        "reject automatic mobile SSP");
+    /*
+    * NTT:
+    * An unauthorized mobile SSP attempt was detected.
+    *
+    * Remember the remote address before rejecting SSP.
+    * This prevents a subsequent retry from being treated
+    * as first pairing if the SDK clears its NV record.
+    */
+    ntt_mobile_key_missing_lock = true;
 
-    bes_bt_me_confirmation_resp(
-        bdaddr,
-        false);
+    memcpy(ntt_mobile_key_missing_addr.address,bdaddr->address,BTIF_BD_ADDR_SIZE);
+    DEBUG_INFO(0,"[NTT_KEY_MISSING] lock enabled by automatic SSP rejection");
+    DUMP8("%02x ",ntt_mobile_key_missing_addr.address,BTIF_BD_ADDR_SIZE);
+    bes_bt_me_confirmation_resp(bdaddr,false);
 }
 
 void app_bt_reset_delay_power_off(void)
@@ -2868,12 +2907,51 @@ static void app_bt_device_report_acl_disconnected(uint8_t errcode, btif_remote_d
 #endif    
 }
 
-static void app_bt_device_report_authenticated(uint8_t errcode, btif_remote_device_t *rem_dev)
+static void app_bt_device_report_authenticated(uint8_t errcode,btif_remote_device_t *rem_dev)
 {
     uint8_t device_id = btif_me_get_device_id_from_rdev(rem_dev);
 
-    DEBUG_INFO(3, "%s errcode 0x%x device %x\n", __func__, errcode, device_id);
-    if(errcode == BTIF_BEC_NO_ERROR && device_id < BT_DEVICE_NUM)
+    bt_bdaddr_t *remote = NULL;
+
+    if (rem_dev != NULL)
+    {
+        remote = btif_me_get_remote_device_bdaddr(rem_dev);
+    }
+
+    DEBUG_INFO(3,"%s errcode 0x%x device %x",__func__,errcode,device_id);
+
+    /*
+     * NTT: Detect invalid mobile Link Key.
+     *
+     * 0x06 = PIN or Key Missing.
+     */
+    if (errcode == 0x06)
+    {
+        DEBUG_INFO(0,"[NTT_KEY_MISSING] Authentication Failure 0x06");
+
+        if (remote != NULL)
+        {
+            DEBUG_INFO(6,"[NTT_KEY_MISSING] remote=%02x:%02x:%02x:%02x:%02x:%02x",
+                remote->address[5],
+                remote->address[4],
+                remote->address[3],
+                remote->address[2],
+                remote->address[1],
+                remote->address[0]);
+        }
+
+        DEBUG_INFO(1,"[NTT_KEY_MISSING] device_id=%d",device_id);
+
+        /*
+         * First stage:
+         * Log only.
+         *
+         * Do not delete NV Record yet.
+         * Do not enter pairing mode.
+         */
+    }
+
+    if (errcode == BTIF_BEC_NO_ERROR && device_id < BT_DEVICE_NUM)
     {
         bt_audio_event_handler(device_id,APP_BT_AUDIO_EVENT_AUTHENTICATED,0);
     }
@@ -4908,6 +4986,24 @@ void app_bt_global_handle(const btif_event_t *Event)
                 //auth failed should clear nv record link key
                 bt_bdaddr_t *bd_ddr = btif_me_get_callback_event_address(Event);
                 btif_device_record_t record;
+                /*
+                * NTT: Detect mobile Key Missing.
+                */
+                if (error_code == BTIF_BEC_MISSING_KEY && bd_ddr != NULL && !ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)bd_ddr))
+                {
+                    // 1. 記錄發生 Key Missing 的手機地址
+                    ntt_mobile_key_missing_lock = true;
+                    ntt_mobile_key_missing_addr = *bd_ddr;
+
+                    DEBUG_INFO(0, "[NTT_KEY_MISSING] mobile lock enabled");
+                    DUMP8("%02x ", bd_ddr->address, BTIF_BD_ADDR_SIZE);
+
+                    // 2. 通知另一耳刪除相同手機的配對紀錄
+                    ntt_tws_delete_mobile_record_sync(bd_ddr->address);
+
+                    DEBUG_INFO(0,"[NTT_KEY_MISSING] TWS delete mobile record sync requested");
+                }
+
                 DUMP8("%02x ", bd_ddr->address, 6);
                 if (ddbif_find_record(bd_ddr, &record) == BT_STS_SUCCESS)
                 {
@@ -6094,60 +6190,54 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 #else
         if (btif_me_get_pendCons() == 0)
         {
-            if (ret >= 1 &&
-                !ntt_bt_addr_is_invalid(&record1.bdAddr))
+            if (ret >= 1 && !ntt_bt_addr_is_invalid(&record1.bdAddr))
             {
-                bool record1_connected =
-                    bts_bt_if_is_dev_link_connected(
-                        &record1.bdAddr);
-
-                if (!record1_connected)
+                // Key Missing 的手機不可再次自動回連
+                if (ntt_mobile_key_missing_is_locked((const struct bdaddr_t *)&record1.bdAddr))
                 {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_RECONNECT] append phone1");
+                    DEBUG_INFO(0,"[NTT_KEY_MISSING] skip phone1 reconnect");
 
-                    app_bt_append_to_reconnect_list(
-                        bt_profile_reconnect_openreconnecting,
-                        &record1.bdAddr,
-                        false);
-
-                    reconnect_added = true;
+                    DUMP8("%02x ",record1.bdAddr.address,BTIF_BD_ADDR_SIZE);
                 }
                 else
                 {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_RECONNECT] phone1 already connected, skip");
+                    bool record1_connected = bts_bt_if_is_dev_link_connected(&record1.bdAddr);
+
+                    if (!record1_connected)
+                    {
+                        DEBUG_INFO(0,"[NTT_RECONNECT] append phone1");
+                        app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,&record1.bdAddr,false);
+                        reconnect_added = true;
+                    }
+                    else
+                    {
+                        DEBUG_INFO(0,"[NTT_RECONNECT] phone1 already connected, skip");
+                    }
                 }
             }
 
-            if (ret >= 2 &&
-                BT_DEVICE_NUM > 1 &&
-                !ntt_bt_addr_is_invalid(&record2.bdAddr))
+            if (ret >= 2 && BT_DEVICE_NUM > 1 && !ntt_bt_addr_is_invalid(&record2.bdAddr))
             {
-                bool record2_connected =
-                    bts_bt_if_is_dev_link_connected(
-                        &record2.bdAddr);
-
-                if (!record2_connected)
+                // Key Missing 的手機不可再次自動回連
+                if (ntt_mobile_key_missing_is_locked((const struct bdaddr_t *)&record2.bdAddr))
                 {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_RECONNECT] append phone2");
-
-                    app_bt_append_to_reconnect_list(
-                        bt_profile_reconnect_openreconnecting,
-                        &record2.bdAddr,
-                        false);
-
-                    reconnect_added = true;
+                    DEBUG_INFO(0,"[NTT_KEY_MISSING] skip phone2 reconnect");
+                    DUMP8("%02x ",record2.bdAddr.address,BTIF_BD_ADDR_SIZE);
                 }
                 else
                 {
-                    DEBUG_INFO(
-                        0,
-                        "[NTT_RECONNECT] phone2 already connected, skip");
+                    bool record2_connected = bts_bt_if_is_dev_link_connected(&record2.bdAddr);
+
+                    if (!record2_connected)
+                    {
+                        DEBUG_INFO(0,"[NTT_RECONNECT] append phone2");
+                        app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,&record2.bdAddr,false);
+                        reconnect_added = true;
+                    }
+                    else
+                    {
+                        DEBUG_INFO(0,"[NTT_RECONNECT] phone2 already connected, skip");
+                    }
                 }
             }
         }

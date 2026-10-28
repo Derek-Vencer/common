@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 
-#define DuAL_EARBUDS_VERSION   "0.9.35"
+#define DuAL_EARBUDS_VERSION   "0.9.36"
 
 #define NTT_FW_VER_MAJOR  (DuAL_EARBUDS_VERSION[0] - '0')
 #define NTT_FW_VER_MINOR  (DuAL_EARBUDS_VERSION[2] - '0')
@@ -85,6 +85,7 @@ typedef enum
     APP_TWS_CMD_KEY_RECONNECT_REQUEST = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1A,
     APP_TWS_CMD_GET_PEER_FW_VERSION = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1B,
     APP_TWS_CMD_SYNC_EQ6_MODE    = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1C,
+    APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1D,
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -153,6 +154,7 @@ bool ntt_case_state_is_peer_out(void);
 bool ntt_case_state_are_both_out(void);
 
 void ntt_key_request_mobile_reconnect(void);
+void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
 
 #ifdef __cplusplus
 }

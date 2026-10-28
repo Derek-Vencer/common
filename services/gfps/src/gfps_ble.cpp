@@ -95,6 +95,10 @@ void big_little_switch(const uint8_t *in, uint8_t *out, uint8_t len)
     return;
 }
 
+extern "C" bool ntt_mobile_key_missing_is_locked(const struct bdaddr_t *bdaddr);
+extern "C" void ntt_mobile_key_missing_clear(void);
+extern "C" void ntt_mobile_key_missing_set(const struct bdaddr_t *bdaddr);
+
 void gfps_ble_set_tx_power_in_adv(char rssi)
 {
     gfps_ble_env.txPower[APP_GFPS_ADV_POWER_UUID_LEN-1] = rssi;
@@ -1746,134 +1750,147 @@ uint8_t gfps_ble_get_hashed_value(void)
 }
 
 #endif
-
 static void gfps_process_bt_user_confirmation(struct bdaddr_t *bdaddr,uint32 numeric_value)
 {
     uint8_t passkey[GFPS_PASSKEY_LEN];
     bool is_tws_peer = false;
     bool has_mobile_record = false;
+    bool key_missing_locked = false;
 
-    GFPS_TRACE(
-        0,
-        "[NTT_NO_AUTO_PAIR][GFPS_CB] ENTER");
+    GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR][GFPS_CB] ENTER");
 
     if (bdaddr == NULL)
     {
-        GFPS_TRACE(
-            0,
-            "[NTT_NO_AUTO_PAIR][GFPS_CB] addr NULL");
+        GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR][GFPS_CB] addr NULL");
+        return;
+    }
+
+    /*
+     * Preserve the original GFPS passkey processing.
+     */
+    memcpy(passkey,&numeric_value,GFPS_PASSKEY_LEN);
+    big_little_switch(passkey,gfps_ble_env.passkey,GFPS_PASSKEY_LEN);
+
+    /*
+     * Step 1:
+     * Check whether this is a TWS peer.
+     */
+    is_tws_peer = ntt_bt_addr_is_tws_peer(bdaddr);
+
+    /*
+     * TWS pairing must not be blocked by
+     * the mobile Key Missing protection.
+     */
+    if (is_tws_peer)
+    {
+        GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR][GFPS_CB] accept TWS peer SSP");
+        bes_bt_me_confirmation_resp(bdaddr,true);
 
         return;
     }
 
-    memcpy(
-        passkey,
-        &numeric_value,
-        GFPS_PASSKEY_LEN);
-
-    big_little_switch(
-        passkey,
-        gfps_ble_env.passkey,
-        GFPS_PASSKEY_LEN);
-
     /*
-     * 判斷本次 SSP 是否屬於左右耳 TWS。
-     */
-    is_tws_peer =
-        ntt_bt_addr_is_tws_peer(bdaddr);
-
-    /*
-     * 直接檢查 NV 是否真的存在手機配對紀錄。
+     * Step 2:
+     * Check Key Missing Lock BEFORE scanning
+     * mobile pairing records.
      *
-     * 不只依賴 ntt_manual_pairing_mode，
-     * 因為左右耳各自的 RAM 狀態可能不同步。
+     * The record scan may trigger pairing mode
+     * when there is no mobile record.
      */
-    has_mobile_record =
-        ntt_bt_has_mobile_paired_record();
+    key_missing_locked = ntt_mobile_key_missing_is_locked(bdaddr);
 
-    GFPS_TRACE(
-        4,
-        "[NTT_NO_AUTO_PAIR][GFPS_CB] "
-        "manual=%d mobile_record=%d "
-        "tws_peer=%d value=%u",
+    if (key_missing_locked)
+    {
+        GFPS_TRACE(1,"[NTT_KEY_MISSING][GFPS] lock detected, manual=%d",ntt_manual_pairing_mode);
+
+        /*
+         * Unauthorized automatic SSP:
+         * reject even if NV records have
+         * already been deleted.
+         */
+        if (!ntt_manual_pairing_mode)
+        {
+            GFPS_TRACE(0,"[NTT_KEY_MISSING][GFPS] reject automatic SSP");
+            bes_bt_me_confirmation_resp(bdaddr,false);
+
+            return;
+        }
+
+        /*
+         * Manual pairing is allowed.
+         *
+         * IMPORTANT:
+         * Do not clear Key Missing Lock here.
+         * Clear it only after successful
+         * mobile authentication.
+         */
+        GFPS_TRACE(0,"[NTT_KEY_MISSING][GFPS] allow manual SSP, keep lock");
+        bes_bt_me_confirmation_resp(bdaddr,true);
+
+        return;
+    }
+
+    /*
+     * Step 3:
+     * Check whether any mobile pairing
+     * record exists.
+     */
+    has_mobile_record = ntt_bt_has_mobile_paired_record();
+    GFPS_TRACE(4,"[NTT_NO_AUTO_PAIR][GFPS_CB] manual=%d mobile_record=%d tws_peer=%d value=%u",
         ntt_manual_pairing_mode,
         has_mobile_record,
         is_tws_peer,
         numeric_value);
 
     /*
-     * 左右耳 TWS SSP 永遠放行。
-     */
-    if (is_tws_peer)
-    {
-        GFPS_TRACE(
-            0,
-            "[NTT_NO_AUTO_PAIR][GFPS_CB] "
-            "accept TWS peer SSP");
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
-
-        return;
-    }
-
-    /*
-     * 完全沒有任何手機配對紀錄：
-     * 必須允許第一支手機完成配對。
+     * Step 4:
+     * No mobile pairing record.
      *
-     * 即使這一耳的 ntt_manual_pairing_mode
-     * 因為 TWS 狀態切換而變成 false，也仍然放行。
+     * Customer requirement:
+     * Automatically allow first mobile pairing.
      */
     if (!has_mobile_record)
     {
-        GFPS_TRACE(
-            0,
-            "[NTT_NO_AUTO_PAIR][GFPS_CB] "
-            "accept first mobile SSP: "
-            "no mobile record");
-
+        GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR][GFPS_CB] accept first mobile SSP: no mobile record");
         ntt_manual_pairing_mode = true;
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
+        bes_bt_me_confirmation_resp(bdaddr,true);
 
         return;
     }
 
     /*
-     * 已有手機紀錄，但使用者明確進入配對模式：
-     * 允許新增或重新配對手機。
+     * Step 5:
+     * Mobile record exists, but user
+     * explicitly entered pairing mode.
      */
     if (ntt_manual_pairing_mode)
     {
-        GFPS_TRACE(
-            0,
-            "[NTT_NO_AUTO_PAIR][GFPS_CB] "
-            "accept manual mobile SSP");
-
-        bes_bt_me_confirmation_resp(
-            bdaddr,
-            true);
+        GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR][GFPS_CB] accept manual mobile SSP");
+        bes_bt_me_confirmation_resp(bdaddr,true);
 
         return;
     }
 
     /*
-     * 已有手機紀錄的一般開機自動回連：
+     * Step 6:
+     * Mobile record exists and pairing
+     * mode was not manually enabled.
      *
-     * 若手機端已刪除 Link Key，
-     * 禁止自動轉成新的 SSP 配對。
+     * Reject automatic SSP.
+     *
+     * Save the remote address BEFORE
+     * rejecting the request.
+     *
+     * This prevents a later SSP retry
+     * from being treated as first pairing
+     * after the SDK clears NV records.
      */
-    GFPS_TRACE(
-        0,
-        "[NTT_NO_AUTO_PAIR][GFPS_CB] "
-        "reject automatic mobile SSP");
+    ntt_mobile_key_missing_set(bdaddr);
+    GFPS_TRACE(0,"[NTT_KEY_MISSING][GFPS] lock enabled by automatic SSP rejection");
+    GFPS_TRACE(0,"[NTT_NO_AUTO_PAIR][GFPS_CB] reject automatic mobile SSP");
+    bes_bt_me_confirmation_resp(bdaddr, false);
 
-    bes_bt_me_confirmation_resp(
-        bdaddr,
-        false);
+    return;
 }
 
 static void gfps_process_ble_user_confirmation(ble_event_handled_t param, ble_evnet_type_e type)

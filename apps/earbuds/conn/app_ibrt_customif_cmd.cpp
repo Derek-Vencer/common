@@ -51,7 +51,7 @@
 #include "apps.h"
 #include "besui_common.h"
 #endif
-
+#include "nvrecord_bt.h"
 #if defined(BESUI_TWS_EN)
 #include "twsui_comm.h"
 #endif
@@ -189,6 +189,43 @@ static void app_ibrt_customif_get_peer_fw_version_rsp_timeout_handler(uint16_t r
 static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length);
 static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen);
 extern "C" void ntt_fw_version_peer_ready_notify(void);
+extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
+
+static void ntt_tws_delete_mobile_record_send(uint8_t *p_buff,uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp( APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,p_buff,length);
+}
+
+static void ntt_tws_delete_mobile_record_receive(uint16_t rsp_seq,uint8_t *p_buff,uint16_t length)
+{
+    (void)rsp_seq;
+
+    if (p_buff == NULL || length != 6)
+    {
+        EARBUDS_TRACE(0,"[NTT_KEY_MISSING] invalid delete packet length=%u",(unsigned)length);
+        return;
+    }
+
+    bt_bdaddr_t mobile_addr;
+
+    memcpy(mobile_addr.address, p_buff, 6);
+    EARBUDS_TRACE(0,"[NTT_KEY_MISSING] peer delete mobile record");
+    DUMP8("%02x ", mobile_addr.address, 6);
+
+    /*
+     * Never delete the TWS peer record.
+     */
+    if (ntt_bt_addr_is_tws_peer(
+            (const struct bdaddr_t *)&mobile_addr))
+    {
+        EARBUDS_TRACE(0,"[NTT_KEY_MISSING] reject TWS peer address");
+        return;
+    }
+
+    nv_record_ddbrec_delete(&mobile_addr);
+    nv_record_execute_async_flush();
+    EARBUDS_TRACE(0,"[NTT_KEY_MISSING] peer mobile record delete requested");
+}
 
 #if 1 //def BESUI_TWS_EN
 #ifdef BESUI_APP_EN
@@ -1311,6 +1348,14 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         APP_TWS_CMD_PRIO_0
     },
     {
+        APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,                   "NTT_DELETE_MOBILE_RECORD",
+        ntt_tws_delete_mobile_record_send,
+        ntt_tws_delete_mobile_record_receive,                   0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
         APP_TWS_CMD_SYNC_BUTTON_MAP,                              "TWS_CMD_BUTTON_MAO",
         app_ibrt_customif_button_map_cmd_send,
         app_ibrt_customif_button_map_cmd_send_handler,               0,
@@ -2400,3 +2445,31 @@ void app_ibrt_customif_clear_peer_fw_version(void)
 }
 
 #endif /* IBRT */
+
+extern "C" void ntt_tws_delete_mobile_record_sync(
+    const uint8_t *mobile_addr)
+{
+    if (mobile_addr == NULL)
+    {
+        return;
+    }
+
+    if (!bts_tws_if_is_tws_link_connected())
+    {
+        EARBUDS_TRACE(
+            0,
+            "[NTT_KEY_MISSING] TWS disconnected, defer delete sync");
+        return;
+    }
+
+    EARBUDS_TRACE(
+        0,
+        "[NTT_KEY_MISSING] send delete mobile record");
+
+    DUMP8("%02x ", mobile_addr, 6);
+
+    tws_ctrl_send_cmd(
+        APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,
+        (uint8_t *)mobile_addr,
+        6);
+}
