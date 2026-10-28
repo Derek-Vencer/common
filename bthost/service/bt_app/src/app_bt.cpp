@@ -212,7 +212,8 @@ static void ntt_bt_user_confirmation_callback(
     uint32 numeric_value);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
-
+// Implemented in services/audio_bt/app_media_player.cpp
+extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
 
 //reconnect = (INTERVAL+PAGETO)*CNT = (3000ms+5000ms)*15 = 120s
@@ -228,13 +229,33 @@ extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
 #define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        10
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
+#define NTT_CONN_PROMPT_DEVICE_COUNT       2
+#define NTT_CONN_PROMPT_TICK_MS            200
+#define NTT_CONN_PROMPT_START_TIMEOUT_MS   2000
+#define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
+
+typedef struct
+{
+    bool pending;
+    bool notified;
+    uint16_t delay_ms;
+} ntt_conn_prompt_slot_t;
+
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
-static bool ntt_bt_connected_prompt_pending = false;
-static uint8_t ntt_bt_connected_prompt_device_id = 0;
+
+static ntt_conn_prompt_slot_t
+    ntt_conn_prompt_slot[NTT_CONN_PROMPT_DEVICE_COUNT] = {};
+
 static uint8_t ntt_bt_connected_prompt_retry_count = 0;
 static uint8_t ntt_bt_connected_prompt_stable_count = 0;
 static uint8_t ntt_bt_connected_prompt_last_role =
     NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
+
+// 0: idle, 1: wait stream start, 2: wait stream finish
+static uint8_t ntt_conn_prompt_play_state = 0;
+static uint8_t ntt_conn_prompt_play_device = 0xFF;
+static uint16_t ntt_conn_prompt_play_elapsed_ms = 0;
+static uint8_t ntt_conn_prompt_next_device = 0;
 
 
 #if defined(IBRT)
@@ -457,191 +478,229 @@ void ntt_afh_read_all_maps(void)
 }
 
 #endif
+
+static bool ntt_conn_prompt_has_work(void)
+{
+    if (ntt_conn_prompt_play_state != 0)
+        return true;
+
+    for (uint8_t i = 0; i < NTT_CONN_PROMPT_DEVICE_COUNT; i++)
+    {
+        if (ntt_conn_prompt_slot[i].pending)
+            return true;
+    }
+
+    return false;
+}
+
+static void ntt_conn_prompt_schedule(void)
+{
+    if (ntt_bt_connected_prompt_timer_id != NULL && ntt_conn_prompt_has_work())
+    {
+        osTimerStart(ntt_bt_connected_prompt_timer_id,NTT_CONN_PROMPT_TICK_MS);
+    }
+}
+
+static void ntt_conn_prompt_reset_ready(void)
+{
+    ntt_bt_connected_prompt_retry_count = 0;
+    ntt_bt_connected_prompt_stable_count = 0;
+    ntt_bt_connected_prompt_last_role = NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
+}
+
 static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
-    uint8_t device_id = ntt_bt_connected_prompt_device_id;
+    (void)param;
 
-    if (!ntt_bt_connected_prompt_pending)
+    // Each device keeps its own 3-second delay.
+    for (uint8_t i = 0; i < NTT_CONN_PROMPT_DEVICE_COUNT; i++)
     {
+        ntt_conn_prompt_slot_t *slot = &ntt_conn_prompt_slot[i];
+
+        if (slot->pending && slot->delay_ms > 0)
+        {
+            if (slot->delay_ms > NTT_CONN_PROMPT_TICK_MS)
+                slot->delay_ms -= NTT_CONN_PROMPT_TICK_MS;
+            else
+                slot->delay_ms = 0;
+        }
+    }
+
+    // A previous Connected prompt has been submitted.
+    if (ntt_conn_prompt_play_state != 0)
+    {
+        bool streaming = app_prompt_is_streaming_on();
+
+        if (ntt_conn_prompt_play_elapsed_ms < NTT_CONN_PROMPT_FINISH_TIMEOUT_MS)
+        {
+            ntt_conn_prompt_play_elapsed_ms += NTT_CONN_PROMPT_TICK_MS;
+        }
+
+        if (ntt_conn_prompt_play_state == 1)
+        {
+            if (streaming)
+            {
+                ntt_conn_prompt_play_state = 2;
+                ntt_conn_prompt_play_elapsed_ms = 0;
+
+                DEBUG_INFO(1,"[NTT_CONN_PROMPT] stream started dev=%u",ntt_conn_prompt_play_device);
+            }
+            else if (ntt_conn_prompt_play_elapsed_ms >= NTT_CONN_PROMPT_START_TIMEOUT_MS)
+            {
+                // Playback may have been queued by the audio framework.
+                // Do not immediately submit another Connected prompt.
+                DEBUG_INFO(1,"[NTT_CONN_PROMPT] stream start timeout dev=%u",ntt_conn_prompt_play_device);
+
+                ntt_conn_prompt_play_state = 2;
+                ntt_conn_prompt_play_elapsed_ms = 0;
+            }
+        }
+        else if (!streaming || ntt_conn_prompt_play_elapsed_ms >= NTT_CONN_PROMPT_FINISH_TIMEOUT_MS)
+        {
+            DEBUG_INFO(1,"[NTT_CONN_PROMPT] playback finished/timeout dev=%u",ntt_conn_prompt_play_device);
+
+            ntt_conn_prompt_play_state = 0;
+            ntt_conn_prompt_play_device = 0xFF;
+            ntt_conn_prompt_play_elapsed_ms = 0;
+        }
+
+        ntt_conn_prompt_schedule();
+        return;
+    }
+
+    // Select a ready device, starting after the last played one.
+    uint8_t device_id = 0xFF;
+
+    for (uint8_t n = 0; n < NTT_CONN_PROMPT_DEVICE_COUNT; n++)
+    {
+        uint8_t i = (ntt_conn_prompt_next_device + n) % NTT_CONN_PROMPT_DEVICE_COUNT;
+
+        if (ntt_conn_prompt_slot[i].pending && ntt_conn_prompt_slot[i].delay_ms == 0)
+        {
+            device_id = i;
+            break;
+        }
+    }
+
+    if (device_id == 0xFF)
+    {
+        ntt_conn_prompt_schedule();
         return;
     }
 
 #ifdef IBRT
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t ui_role = app_ibrt_if_get_ui_role();
+    bool role_valid = (ui_role == TWS_UI_MASTER || ui_role == TWS_UI_SLAVE);
 
-    bool role_valid =
-        ((ui_role == TWS_UI_MASTER) ||
-         (ui_role == TWS_UI_SLAVE));
-
-    DEBUG_INFO(5,
-               "[NTT_CONN_PROMPT] check dev=%u tws=%u role=%u retry=%u stable=%u",
-               device_id,
-               tws_connected,
-               ui_role,
-               ntt_bt_connected_prompt_retry_count,
-               ntt_bt_connected_prompt_stable_count);
-
-    /*
-     * The phone profile callback can occur on either IBRT side after a role
-     * switch.  Let whichever side receives it start the IBRT prompt flow.
-     * media_PlayAudio/audio_player_play_prompt will negotiate the common
-     * trigger with the peer according to the current TWS role.
-     */
     if (tws_connected && role_valid)
     {
-        /*
-         * TWS ACL connected does not guarantee that the IBRT/BESAUD prompt
-         * command channel is ready.  Require a stable link and role for
-         * several consecutive checks before sending the synchronized prompt.
-         */
         if (ntt_bt_connected_prompt_last_role != ui_role)
         {
-            DEBUG_INFO(2,
-                       "[NTT_CONN_PROMPT] role changed old=%u new=%u",
-                       ntt_bt_connected_prompt_last_role,
-                       ui_role);
-
             ntt_bt_connected_prompt_last_role = ui_role;
             ntt_bt_connected_prompt_stable_count = 0;
         }
 
-        if (ntt_bt_connected_prompt_stable_count <
-            NTT_BT_CONNECTED_PROMPT_STABLE_COUNT)
+        if (ntt_bt_connected_prompt_stable_count < NTT_BT_CONNECTED_PROMPT_STABLE_COUNT)
         {
             ntt_bt_connected_prompt_stable_count++;
-            osTimerStart(ntt_bt_connected_prompt_timer_id,
-                         NTT_BT_CONNECTED_PROMPT_RETRY_MS);
 
-            DEBUG_INFO(3,
-                       "[NTT_CONN_PROMPT] wait IBRT ready role=%u stable=%u/%u",
-                       ui_role,
-                       ntt_bt_connected_prompt_stable_count,
-                       NTT_BT_CONNECTED_PROMPT_STABLE_COUNT);
+            DEBUG_INFO(3,"[NTT_CONN_PROMPT] wait IBRT dev=%u role=%u stable=%u",
+                device_id, ui_role,ntt_bt_connected_prompt_stable_count);
+
+            ntt_conn_prompt_schedule();
             return;
         }
-
-        ntt_bt_connected_prompt_pending = false;
-        ntt_bt_connected_prompt_retry_count = 0;
-        ntt_bt_connected_prompt_stable_count = 0;
-        ntt_bt_connected_prompt_last_role =
-            NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
-
-        DEBUG_INFO(2,
-                   "[NTT_CONN_PROMPT] IBRT ready, play dev=%u role=%u",
-                   device_id,
-                   ui_role);
-
-        audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
-        return;
-    }
-
-    /* A link loss or role transition invalidates the accumulated stability. */
-    ntt_bt_connected_prompt_stable_count = 0;
-    ntt_bt_connected_prompt_last_role =
-        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
-
-    if (ntt_bt_connected_prompt_retry_count <
-        NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
-    {
-        ntt_bt_connected_prompt_retry_count++;
-        osTimerStart(ntt_bt_connected_prompt_timer_id,
-                     NTT_BT_CONNECTED_PROMPT_RETRY_MS);
-
-        DEBUG_INFO(3,
-                   "[NTT_CONN_PROMPT] wait tws/role role=%u retry=%u tws=%u",
-                   ui_role,
-                   ntt_bt_connected_prompt_retry_count,
-                   tws_connected);
-        return;
-    }
-
-    ntt_bt_connected_prompt_pending = false;
-    ntt_bt_connected_prompt_retry_count = 0;
-    ntt_bt_connected_prompt_stable_count = 0;
-    ntt_bt_connected_prompt_last_role =
-        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
-
-    if (!tws_connected)
-    {
-        DEBUG_INFO(1,
-                   "[NTT_CONN_PROMPT] no tws timeout, local play dev=%u",
-                   device_id);
-        audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
     }
     else
     {
-        DEBUG_INFO(1,
-                   "[NTT_CONN_PROMPT] invalid role timeout role=%u",
-                   ui_role);
+        ntt_bt_connected_prompt_stable_count = 0;
+        ntt_bt_connected_prompt_last_role = NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
+
+        if (ntt_bt_connected_prompt_retry_count < NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
+        {
+            ntt_bt_connected_prompt_retry_count++;
+            ntt_conn_prompt_schedule();
+            return;
+        }
+
+        if (tws_connected)
+        {
+            // TWS exists but the role is invalid.
+            // Do not generate a potentially unsynchronized prompt.
+            DEBUG_INFO(1,"[NTT_CONN_PROMPT] invalid role, drop dev=%u",device_id);
+
+            ntt_conn_prompt_slot[device_id].pending = false;
+            ntt_conn_prompt_reset_ready();
+            ntt_conn_prompt_schedule();
+            return;
+        }
+
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT] no TWS, local fallback dev=%u",device_id);
     }
-#else
-    ntt_bt_connected_prompt_pending = false;
-    ntt_bt_connected_prompt_retry_count = 0;
-    ntt_bt_connected_prompt_stable_count = 0;
-    audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
 #endif
+
+    // Do not submit a second prompt while another is streaming.
+    if (app_prompt_is_streaming_on())
+    {
+        ntt_conn_prompt_schedule();
+        return;
+    }
+
+    ntt_conn_prompt_slot[device_id].pending = false;
+
+    ntt_conn_prompt_play_device = device_id;
+    ntt_conn_prompt_play_state = 1;
+    ntt_conn_prompt_play_elapsed_ms = 0;
+    ntt_conn_prompt_next_device = (device_id + 1) % NTT_CONN_PROMPT_DEVICE_COUNT;
+    ntt_conn_prompt_reset_ready();
+    DEBUG_INFO(1,"[NTT_CONN_PROMPT] play dev=%u",device_id);
+    // Preserve the existing TWS synchronized prompt API.
+    audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
+    ntt_conn_prompt_schedule();
 }
 
-osTimerDef(NTT_BT_CONNECTED_PROMPT_TIMER,
-           (void (*)(void const *))ntt_bt_connected_prompt_timehandler);
+osTimerDef(NTT_BT_CONNECTED_PROMPT_TIMER,ntt_bt_connected_prompt_timehandler);
 
 static void ntt_bt_connected_prompt_request(uint8_t device_id)
 {
-    ntt_bt_connected_prompt_device_id = device_id;
+    if (device_id >= NTT_CONN_PROMPT_DEVICE_COUNT)
+        return;
+
+    ntt_conn_prompt_slot_t *slot = &ntt_conn_prompt_slot[device_id];
+
+    if (slot->notified)
+    {
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT] duplicate ignored dev=%u",device_id);
+        return;
+    }
 
     if (ntt_bt_connected_prompt_timer_id == NULL)
     {
-        ntt_bt_connected_prompt_timer_id =
-            osTimerCreate(osTimer(NTT_BT_CONNECTED_PROMPT_TIMER),
-                          osTimerOnce,
-                          NULL);
-        ASSERT(ntt_bt_connected_prompt_timer_id,
-               "[NTT_CONN_PROMPT] timer create failed");
+        ntt_bt_connected_prompt_timer_id = osTimerCreate(osTimer(NTT_BT_CONNECTED_PROMPT_TIMER),osTimerOnce,NULL);
+        ASSERT(ntt_bt_connected_prompt_timer_id,"[NTT_CONN_PROMPT] timer create failed");
     }
 
-    if (ntt_bt_connected_prompt_pending)
-    {
-        DEBUG_INFO(1,
-                   "[NTT_CONN_PROMPT] duplicate ignored dev=%u",
-                   device_id);
-        return;
-    }
-
-    ntt_bt_connected_prompt_pending = true;
-    ntt_bt_connected_prompt_retry_count = 0;
-    ntt_bt_connected_prompt_stable_count = 0;
-    ntt_bt_connected_prompt_last_role =
-        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
-    osTimerStop(ntt_bt_connected_prompt_timer_id);
-    osTimerStart(ntt_bt_connected_prompt_timer_id,
-                 NTT_BT_CONNECTED_PROMPT_DELAY_MS);
-
-    DEBUG_INFO(2,
-               "[NTT_CONN_PROMPT] defer dev=%u delay=%u ms",
-               device_id,
-               NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+    slot->notified = true;
+    slot->pending = true;
+    slot->delay_ms = NTT_BT_CONNECTED_PROMPT_DELAY_MS;
+    DEBUG_INFO(2,"[NTT_CONN_PROMPT] queued dev=%u delay=%u",device_id,NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+    ntt_conn_prompt_schedule();
 }
 
-static void ntt_bt_connected_prompt_cancel(void)
+static void ntt_bt_connected_prompt_cancel(uint8_t device_id)
 {
-    if (!ntt_bt_connected_prompt_pending)
-    {
+    if (device_id >= NTT_CONN_PROMPT_DEVICE_COUNT)
         return;
-    }
 
-    ntt_bt_connected_prompt_pending = false;
-    ntt_bt_connected_prompt_retry_count = 0;
-    ntt_bt_connected_prompt_stable_count = 0;
-    ntt_bt_connected_prompt_last_role =
-        NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
+    ntt_conn_prompt_slot[device_id].pending = false;
+    ntt_conn_prompt_slot[device_id].notified = false;
+    ntt_conn_prompt_slot[device_id].delay_ms = 0;
 
-    if (ntt_bt_connected_prompt_timer_id != NULL)
-    {
-        osTimerStop(ntt_bt_connected_prompt_timer_id);
-    }
+    DEBUG_INFO(1,"[NTT_CONN_PROMPT] cancel dev=%u",device_id);
 
-    DEBUG_INFO(0, "[NTT_CONN_PROMPT] cancel");
+    // Do not cancel another device's prompt or the active audio.
+    ntt_conn_prompt_schedule();
 }
 
 static void app_bt_profile_reconnect_timehandler(void const *param);
@@ -6737,8 +6796,8 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
     {
 
         profile_mgr->profile_connected = false;
-        DEBUG_INFO(0,"BT hfp disconnected!!!");
-        ntt_bt_connected_prompt_cancel();
+        DEBUG_INFO(0,"BT hfp disconnected!!! id = %d",id);
+        ntt_bt_connected_prompt_cancel(id);
 
 #ifdef GFPS_ENABLED
         if (gfps_is_last_response_pending())
@@ -7046,8 +7105,8 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
     {
 
         profile_mgr->profile_connected = false;
-        DEBUG_INFO(0,"BT a2dp disconnected!!!");
-        ntt_bt_connected_prompt_cancel();
+        DEBUG_INFO(0,"BT a2dp disconnected!!! id = %d",id);
+        ntt_bt_connected_prompt_cancel(id);
 
 #ifdef GFPS_ENABLED
         if (gfps_is_last_response_pending())
