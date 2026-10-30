@@ -668,6 +668,8 @@ int communication_send_buf(uint8_t * buf, uint8_t len)
     	return -1;
     }
     COMMUNICATION_TRACE(0,"[%s] %d\n", __func__, len);
+    COMMUNICATION_TRACE_IMM(0,"[NTT_1WIRE_TX] REQUEST len=%u tick=%u",len,hal_sys_timer_get());
+
     communication_command_block_alloc(&cmd_blk);
     memcpy(cmd_blk->cmd_buf, buf, len);
     cmd_blk->cmd_len = len;

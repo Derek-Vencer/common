@@ -99,6 +99,12 @@ extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
 extern "C" void ntt_case_state_sync_local_update(bool in_case);
 static bool aiWang_disconnect_second_phone_for_pairing(void);
+
+#define NTT_BOOT_CASE_CHECK_MS 100
+static osTimerId ntt_boot_case_timer = NULL;
+static void ntt_boot_case_check_cb(void const *arg);
+osTimerDef(NTT_BOOT_CASE_CHECK, ntt_boot_case_check_cb);
+
 extern bool ntt_charging_pwron_pending_shutdown;
 #define NTT_BOX_BATTERY_CASE_INTERVAL_MS 5000
 
@@ -217,6 +223,18 @@ static osThreadId pogo_monitor_thread_id = NULL;
 static bool pogo_monitor_running = false;
 
 void set_er_inbox_status(uint8_t status);
+
+static void ntt_boot_case_check_cb(void const *arg)
+{
+    uint8_t reg10 = 0xFF;
+    uint8_t sts2 = 0xFF;
+    int charging = app_battery_is_charging();
+    bool latch = pmu_ntt_case_closed_latch_get();
+    uint32_t ret = readDataFrom_ICP1205(ICP1205_COMM_CON,&reg10,1);
+    sts2 = icp1205_get_chrg_sts2();
+
+    DBGPRINT("[NTT_BOOT_CASE] charging=%d latch=%d reg10=0x%02X sts2=0x%02X ret=%u",charging,latch,reg10,sts2,(unsigned)ret);
+}
 
 /**
  * @brief 初始化 Pogo Pin 检测引脚
@@ -477,6 +495,7 @@ void wired_uart_get_battery_level(void)
     bool general_accessible = false;
     bool limit_pair_notify = false;
     bool allow_send = true;
+    bool latch = pmu_ntt_case_closed_latch_get();
 
     btif_accessible_mode_t access_mode = BTIF_BAM_NOT_ACCESSIBLE;
 
@@ -653,10 +672,10 @@ void wired_uart_get_battery_level(void)
         s_pair_status_send_count = 0;
     }
 
-    DBGPRINT("[BOX_BAT] allow_send =%d, write pair status = %d",allow_send, pair_status);
+    DBGPRINT("[BOX_BAT] allow_send =%d, write pair status = %d latch=%d",allow_send, pair_status, latch);
 
     if (allow_send)
-    {
+    {        
         /*
          * Old protocol:
          * 55 AA BAT PAIR CRC
@@ -667,7 +686,10 @@ void wired_uart_get_battery_level(void)
         buff5[3] = pair_status;
         buff5[4] = crc8(buff5, 4);
 
-        communication_send_buf(buff5,sizeof(buff5));
+        if (!latch)
+        {
+            communication_send_buf(buff5,sizeof(buff5));
+        }
 
         /*
          * Count reports only while pairing notification
@@ -1764,15 +1786,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                     (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
                     "PLUGIN" : "PLUGOUT");
 
-            /*
-            * Only allow shutdown when charger is really detected.
-            */
-            if (charger_status != APP_BATTERY_CHARGER_PLUGIN)
-            {
-                DBGPRINT("[CASE_CLOSE] skip shutdown, charger plugout");
-                break;
-            }
-
             DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
             ntt_charging_pwron_pending_shutdown = true;
             earBudsCloseOff_PogonIn_StartTimer();            
@@ -1827,15 +1840,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             DBGPRINT("[CASE_CLOSE] charger=%s",
                     (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
                     "PLUGIN" : "PLUGOUT");
-
-            /*
-            * Only allow shutdown when charger is really detected.
-            */
-            if (charger_status != APP_BATTERY_CHARGER_PLUGIN)
-            {
-                DBGPRINT("[CASE_CLOSE] skip shutdown, charger plugout");
-                break;
-            }
 
             if (app_is_stack_ready())
             {
@@ -2275,31 +2279,48 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 static void wired_uart_communication_post_msg(uint8_t *uart_data, uint8_t len)
 {
     APP_MESSAGE_BLOCK msg;
-    //DBGPRINT("%s", __func__);
+    DBGPRINT("%s", __func__);
     msg.mod_id = APP_MODUAL_AIWANG_WIRED_UART;
     msg.msg_body.message_Param2 = len;
-    app_mailbox_put(&msg);
+    DBGPRINT("[NTT_UART_FLOW] Mailbox PUT len=%u", len);
+    int ret = app_mailbox_put(&msg);
+    DBGPRINT("[NTT_UART_FLOW] Mailbox PUT ret=%d", ret);
 	//handle_key_event(ACTION_IDLE_MUSIC,CLICK_SINGLE);
 }
 
-static void wired_uart_communication_rx_data_pre(uint8_t *data_buf, uint8_t data_len)
+static void wired_uart_communication_rx_data_pre(uint8_t *data_buf,uint8_t data_len)
 {
-	if( data_buf[0] != 0x55 || data_len < 3) return;
+    DBGPRINT("[NTT_UART_FLOW] RX callback len=%u",data_len);
 
-    g_ntt_1wire_active = true;
-    g_ntt_1wire_last_rx_time = hal_sys_timer_get();
+    if (data_buf == NULL || data_len == 0)
+    {
+        DBGPRINT("[NTT_RX_DIAG] EMPTY RX len=%u", data_len);
+        return;
+    }
 
-    DBGPRINT("[NTT_1WIRE_RX] len=%u first=0x%02X cmd=0x%02X",
+    DBGPRINT("[NTT_RX_DIAG] RAW len=%u header=0x%02X cmd=0x%02X",
         data_len,
         data_buf[0],
         (data_len >= 3) ? data_buf[2] : 0xFF);
 
+    if (data_len < 3 || data_buf[0] != 0x55)
+    {
+        DBGPRINT("[NTT_RX_DIAG] DROP invalid header/length");
+        return;
+    }
+
+    g_ntt_1wire_active = true;
+    g_ntt_1wire_last_rx_time = hal_sys_timer_get();
+
+    DBGPRINT("[NTT_1WIRE_RX] len=%u first=0x%02X cmd=0x%02X",data_len,data_buf[0],data_buf[2]);
+
     REL_TRACE_NOCRLF(0, "[NTT_1WIRE_RX] DATA: ");
     DUMP8("%02X ", data_buf, data_len);
 
-	memset(wiredUartReceiveData, 0x00, MAX_RX_SIZE);
-	memcpy(wiredUartReceiveData, data_buf, (data_len>MAX_RX_SIZE?MAX_RX_SIZE:data_len));
-	wired_uart_communication_post_msg(data_buf, (data_len>MAX_RX_SIZE?MAX_RX_SIZE:data_len));
+    memset(wiredUartReceiveData, 0x00, MAX_RX_SIZE);
+    uint8_t copy_len = (data_len > MAX_RX_SIZE) ? MAX_RX_SIZE : data_len;
+    memcpy(wiredUartReceiveData, data_buf, copy_len);
+    wired_uart_communication_post_msg(data_buf, copy_len);
 }
 
 static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_body)
@@ -2307,8 +2328,9 @@ static int wired_uart_communication_msg_handle_process(APP_MESSAGE_BODY *msg_bod
     uint8_t data_len = 0;
     //DBGPRINT("%s", __func__);
     data_len = (uint8_t)msg_body->message_Param2;
-    //DBGPRINT("wired_uart_communication_rx: ");
-    //DUMP8("%02x ", wiredUartReceiveData, data_len);
+    DBGPRINT("[NTT_UART_FLOW] MSG HANDLE len=%u",data_len);
+    DBGPRINT("wired_uart_communication_rx: ");
+    DUMP8("%02x ", wiredUartReceiveData, data_len);
     wired_uart_communication_cmd_handle_process(wiredUartReceiveData, data_len);
     return 0;
 }
@@ -2347,7 +2369,7 @@ static void uart_idle_timeout_callback(void const *argument)
      * UART idle does not mean out of case.
      * If charging is still active, keep CASE CLOSED.
      */
-    if (charging)
+    if (charging || case_closed_latch)
     {
         DBGPRINT("[NTT_INBOX] UART idle but still charging -> keep CASE CLOSED");
 
@@ -2608,8 +2630,13 @@ void wired_uart_communication_modual_init(void)
 
         DBGPRINT("%s", __func__);
         app_set_threadhandle(APP_MODUAL_AIWANG_WIRED_UART, wired_uart_communication_msg_handle_process);
+
+        DBGPRINT("[NTT_UART_INIT] communication_init BEGIN tick=%u",hal_sys_timer_get());
         communication_init();
+        DBGPRINT("[NTT_UART_INIT] communication_init END tick=%u",hal_sys_timer_get());
         communication_receive_register_callback(wired_uart_communication_rx_data_pre);
+        DBGPRINT("[NTT_UART_INIT] RX callback registered tick=%u",hal_sys_timer_get());
+
         wiredUartInitFlag = true;
 		//osDelay(200);
 		//communication_stop();
@@ -2618,5 +2645,22 @@ void wired_uart_communication_modual_init(void)
     	//start_pogo_pin_monitor();
 
 		uart_idle_detection_init();
+
+        if (ntt_boot_case_timer == NULL)
+        {
+            ntt_boot_case_timer = osTimerCreate(osTimer(NTT_BOOT_CASE_CHECK),osTimerOnce,NULL);
+
+            if (ntt_boot_case_timer == NULL)
+            {
+                DBGPRINT("[NTT_BOOT_CASE] Timer create failed");
+            }
+        }
+
+        if (ntt_boot_case_timer != NULL)
+        {
+            osStatus status = osTimerStart(ntt_boot_case_timer,NTT_BOOT_CASE_CHECK_MS);
+            DBGPRINT("[NTT_BOOT_CASE] Timer start status=%d",status);
+        }
+
     }
 }

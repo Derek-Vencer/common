@@ -5614,6 +5614,13 @@ void app_bt_inquiry_remote_device_name(const bt_bdaddr_t * bdaddr)
 
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
+    DEBUG_INFO(0,"[NTT_CASE] CLOSED app_bt_device_reconnect_handler");
+    if (pmu_ntt_case_closed_latch_get())
+    {
+        DEBUG_INFO(0,"[NTT_CASE] CLOSED latch=1, block mobile reconnect");
+        return;
+    }
+
 #ifdef BT_SOURCE
     if (reconnect->for_source_device)
     {
@@ -6081,6 +6088,12 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
     uint8_t ui_role = app_ibrt_if_get_ui_role();
+
+    if (pmu_ntt_case_closed_latch_get())
+    {
+        DEBUG_INFO(0,"[NTT_CASE] CLOSED latch=1, block mobile reconnect");
+        return;
+    }
 
     /*
      * Mobile opening reconnect must only be driven
