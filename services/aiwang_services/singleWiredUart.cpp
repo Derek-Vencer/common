@@ -506,6 +506,12 @@ void wired_uart_get_battery_level(void)
     static uint8_t s_pair_status_send_count = 0;
     static bool s_last_pair_notify_limit = false;
 
+    /*
+    * NTT R5:
+    * Send pair_status=2 only once per pairing session.
+    */
+    static bool s_pair_led_2_sent = false;
+
     raw_level = app_battery_current_level();
 
     static int8_t s_last_tws_connected = -1;
@@ -688,7 +694,47 @@ void wired_uart_get_battery_level(void)
 
         if (!latch)
         {
-            communication_send_buf(buff5,sizeof(buff5));
+            bool skip_pair_led_tx = false;
+
+            /*
+            * NTT R5:
+            * Only send pair_status=2 once.
+            */
+            if (pair_status == 2)
+            {
+                if (s_pair_led_2_sent)
+                {
+                    skip_pair_led_tx = true;
+                    DBGPRINT("[PAIR_LED_R5] SKIP duplicate pair=2");
+                }
+            }
+
+            if (!skip_pair_led_tx)
+            {
+                communication_send_buf(buff5, sizeof(buff5));
+
+                if (pair_status == 2)
+                {
+                    s_pair_led_2_sent = true;
+                    DBGPRINT("[PAIR_LED_R5] SEND first pair=2");
+                }
+                else if (pair_status == 1)
+                {
+                    /*
+                    * Pairing success.
+                    */
+                    s_pair_led_2_sent = false;
+                    DBGPRINT("[PAIR_LED_R5] SEND pair=1, reset");
+                }
+                else if (pair_status == 0)
+                {
+                    /*
+                    * Pairing exit.
+                    */
+                    s_pair_led_2_sent = false;
+                    DBGPRINT("[PAIR_LED_R5] SEND pair=0, reset");
+                }
+            }
         }
 
         /*
