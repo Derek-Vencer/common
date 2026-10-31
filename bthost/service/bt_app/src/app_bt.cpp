@@ -206,6 +206,13 @@ extern bool ntt_manual_pairing_mode;
 static bool ntt_mobile_key_missing_lock = false;
 
 static bt_bdaddr_t ntt_mobile_key_missing_addr = {0};
+
+/*
+ * NTT R10:
+ * Forward declaration for Connected Prompt validation.
+ */
+extern "C" bool ntt_mobile_key_missing_is_locked(const struct bdaddr_t *bdaddr);
+
 extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
 extern void wired_uart_enter_pairmode(void);
 static void ntt_bt_user_confirmation_callback(
@@ -215,6 +222,13 @@ U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
 // Implemented in services/audio_bt/app_media_player.cpp
 extern bool app_prompt_is_streaming_on(void);
+
+/*
+ * NTT R6:
+ * Prevent duplicate next-mobile reconnect scheduling.
+ */
+static bool ntt_missing_key_next_reconnect_started = false;
+
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
 
 //reconnect = (INTERVAL+PAGETO)*CNT = (3000ms+5000ms)*15 = 120s
@@ -240,6 +254,9 @@ typedef struct
     bool pending;
     bool notified;
     uint16_t delay_ms;
+    // R10: Remember the mobile address associated with this request.
+    bt_bdaddr_t mobile_addr;
+    bool mobile_addr_valid;
 } ntt_conn_prompt_slot_t;
 
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
@@ -480,6 +497,58 @@ void ntt_afh_read_all_maps(void)
 
 #endif
 
+static bool ntt_conn_prompt_mobile_is_valid(uint8_t device_id)
+{
+    if (device_id >= NTT_CONN_PROMPT_DEVICE_COUNT)
+    {
+        return false;
+    }
+
+    ntt_conn_prompt_slot_t *slot =
+        &ntt_conn_prompt_slot[device_id];
+
+    struct BT_DEVICE_T *curr_device =
+        app_bt_get_device(device_id);
+
+    if (curr_device == NULL)
+    {
+        return false;
+    }
+
+    // R10-1: ACL must still be connected.
+    if (!app_bt_is_acl_connected(device_id))
+    {
+        return false;
+    }
+
+    // R10-2: At least one profile must be connected.
+    if (!app_bt_is_device_profile_connected(device_id))
+    {
+        return false;
+    }
+
+    // R10-3: Reject a mobile with Missing Key.
+    if (ntt_mobile_key_missing_is_locked(&curr_device->remote))
+    {
+        return false;
+    }
+
+    // R10-4: Device ID must still refer to the same mobile.
+    if (!slot->mobile_addr_valid)
+    {
+        return false;
+    }
+
+    if (memcmp(slot->mobile_addr.address,
+               curr_device->remote.address,
+               BTIF_BD_ADDR_SIZE) != 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 static bool ntt_conn_prompt_has_work(void)
 {
     if (ntt_conn_prompt_play_state != 0)
@@ -589,6 +658,21 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         return;
     }
 
+    // R10: Drop a stale or disconnected mobile request.
+    if (!ntt_conn_prompt_mobile_is_valid(device_id))
+    {
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT_R10] drop invalid dev=%u",device_id);
+
+        ntt_conn_prompt_slot[device_id].pending = false;
+        ntt_conn_prompt_slot[device_id].notified = false;
+        ntt_conn_prompt_slot[device_id].delay_ms = 0;
+        ntt_conn_prompt_slot[device_id].mobile_addr_valid = false;
+
+        ntt_conn_prompt_reset_ready();
+        ntt_conn_prompt_schedule();
+        return;
+    }
+
 #ifdef IBRT
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t ui_role = app_ibrt_if_get_ui_role();
@@ -666,7 +750,20 @@ osTimerDef(NTT_BT_CONNECTED_PROMPT_TIMER,ntt_bt_connected_prompt_timehandler);
 static void ntt_bt_connected_prompt_request(uint8_t device_id)
 {
     if (device_id >= NTT_CONN_PROMPT_DEVICE_COUNT)
+    {
         return;
+    }
+
+    struct BT_DEVICE_T *curr_device = app_bt_get_device(device_id);
+
+    if (curr_device == NULL ||
+        !app_bt_is_acl_connected(device_id) ||
+        !app_bt_is_device_profile_connected(device_id) ||
+        ntt_mobile_key_missing_is_locked(&curr_device->remote))
+    {
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT_R10] reject request dev=%u",device_id);
+        return;
+    }
 
     ntt_conn_prompt_slot_t *slot = &ntt_conn_prompt_slot[device_id];
 
@@ -679,13 +776,20 @@ static void ntt_bt_connected_prompt_request(uint8_t device_id)
     if (ntt_bt_connected_prompt_timer_id == NULL)
     {
         ntt_bt_connected_prompt_timer_id = osTimerCreate(osTimer(NTT_BT_CONNECTED_PROMPT_TIMER),osTimerOnce,NULL);
+
         ASSERT(ntt_bt_connected_prompt_timer_id,"[NTT_CONN_PROMPT] timer create failed");
     }
+
+    // R10: Bind request to this mobile address.
+    slot->mobile_addr = curr_device->remote;
+    slot->mobile_addr_valid = true;
 
     slot->notified = true;
     slot->pending = true;
     slot->delay_ms = NTT_BT_CONNECTED_PROMPT_DELAY_MS;
+
     DEBUG_INFO(2,"[NTT_CONN_PROMPT] queued dev=%u delay=%u",device_id,NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+
     ntt_conn_prompt_schedule();
 }
 
@@ -699,6 +803,8 @@ static void ntt_bt_connected_prompt_cancel(uint8_t device_id)
     ntt_conn_prompt_slot[device_id].delay_ms = 0;
 
     DEBUG_INFO(1,"[NTT_CONN_PROMPT] cancel dev=%u",device_id);
+    ntt_conn_prompt_slot[device_id].mobile_addr_valid = false;
+    memset(&ntt_conn_prompt_slot[device_id].mobile_addr,0,sizeof(bt_bdaddr_t));
 
     // Do not cancel another device's prompt or the active audio.
     ntt_conn_prompt_schedule();
@@ -2924,9 +3030,12 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
 #endif
 }
 
+static void ntt_bt_missing_key_continue_next_mobile(const bt_bdaddr_t *remote);
+
 static void app_bt_device_report_acl_disconnected(uint8_t errcode, btif_remote_device_t *rem_dev)
 {
     uint8_t device_id = btif_me_get_device_id_from_rdev(rem_dev);
+    bt_bdaddr_t *remote = btif_me_get_remote_device_bdaddr(rem_dev);
     struct BT_DEVICE_T* curr_device = NULL;
 
     DEBUG_INFO(3, "%s errcode 0x%x device %x\n", __func__, errcode, device_id);
@@ -2968,7 +3077,18 @@ static void app_bt_device_report_acl_disconnected(uint8_t errcode, btif_remote_d
     }
 
     app_ibrt_internal_link_disconnected();
-#endif    
+
+    /*
+     * NTT R6:
+     * Continue reconnecting another paired mobile
+     * after Missing Key ACL disconnection.
+     */
+    if (device_id < BT_DEVICE_NUM && remote != NULL && ntt_mobile_key_missing_is_locked((const struct bdaddr_t *)remote))
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R6] mobile ACL disconnected after Missing Key");
+        ntt_bt_missing_key_continue_next_mobile(remote);
+    }
+#endif  
 }
 
 static void app_bt_device_report_authenticated(uint8_t errcode,btif_remote_device_t *rem_dev)
@@ -3563,7 +3683,28 @@ void app_bt_response_acl_conn_req(bt_bdaddr_t *remote, bool accept)
 
 void app_bt_reconnect_hfp_profile(const bt_bdaddr_t *mobile_addr)
 {
-    app_bt_HF_CreateServiceLink(NULL, (bt_bdaddr_t *)mobile_addr);
+    if (mobile_addr == NULL)
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R4] HFP address NULL");
+        return;
+    }
+
+    /*
+     * NTT R4:
+     * Prevent automatic HFP reconnect after Missing Key.
+     *
+     * Explicit manual pairing remains allowed.
+     */
+    if (!ntt_manual_pairing_mode && ntt_mobile_key_missing_is_locked((const struct bdaddr_t *)mobile_addr))
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R4] BLOCK HFP reconnect after Missing Key");
+
+        DUMP8("%02x ",mobile_addr->address,BTIF_BD_ADDR_SIZE);
+
+        return;
+    }
+
+    app_bt_HF_CreateServiceLink(NULL,(bt_bdaddr_t *)mobile_addr);
 }
 
 void app_bt_disconnect_hfp_profile(btif_hf_channel_t *hfp)
@@ -5053,18 +5194,43 @@ void app_bt_global_handle(const btif_event_t *Event)
                 /*
                 * NTT: Detect mobile Key Missing.
                 */
+                /*
+                * NTT R10:
+                * Handle mobile Authentication Missing Key (0x06).
+                *
+                * 1. Lock the invalid mobile address.
+                * 2. Cancel its pending Connected prompt.
+                * 3. Synchronize pairing record deletion to the peer earbud.
+                */
                 if (error_code == BTIF_BEC_MISSING_KEY && bd_ddr != NULL && !ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)bd_ddr))
                 {
-                    // 1. 記錄發生 Key Missing 的手機地址
+                    // 1. Record the mobile address with Missing Key.
                     ntt_mobile_key_missing_lock = true;
                     ntt_mobile_key_missing_addr = *bd_ddr;
 
-                    DEBUG_INFO(0, "[NTT_KEY_MISSING] mobile lock enabled");
-                    DUMP8("%02x ", bd_ddr->address, BTIF_BD_ADDR_SIZE);
+                    DEBUG_INFO(0,"[NTT_KEY_MISSING] mobile lock enabled");
+                    DUMP8("%02x ",bd_ddr->address,BTIF_BD_ADDR_SIZE);
 
-                    // 2. 通知另一耳刪除相同手機的配對紀錄
+                    /*
+                    * NTT R10:
+                    * Cancel the Connected prompt belonging to this mobile.
+                    *
+                    * Do not cancel the other connected mobile's prompt.
+                    */
+                    uint8_t missing_id = app_bt_get_device_id_byaddr(bd_ddr);
+
+                    if (missing_id < NTT_CONN_PROMPT_DEVICE_COUNT)
+                    {
+                        DEBUG_INFO(1,"[NTT_CONN_PROMPT_R10] missing key cancel dev=%u",missing_id);
+                        ntt_bt_connected_prompt_cancel(missing_id);
+                    }
+                    else
+                    {
+                        DEBUG_INFO(1,"[NTT_CONN_PROMPT_R10] missing key device not found id=%u",missing_id);
+                    }
+
+                    // 3. Notify peer earbud to delete the same mobile record.
                     ntt_tws_delete_mobile_record_sync(bd_ddr->address);
-
                     DEBUG_INFO(0,"[NTT_KEY_MISSING] TWS delete mobile record sync requested");
                 }
 
@@ -5101,6 +5267,21 @@ void app_bt_global_handle(const btif_event_t *Event)
                         bt_callback_cfg_disc_acl_after_auth_key_missing())
                     {
                         delete_record_link_key_only = false;
+                    }
+
+                    /*
+                    * NTT R9:
+                    * Mobile Missing Key (0x06):
+                    * Delete the entire pairing record instead of
+                    * keeping an empty Link Key record.
+                    *
+                    * Do not apply to TWS peer.
+                    */
+                    if (error_code == BTIF_BEC_MISSING_KEY && bd_ddr != NULL && !ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)bd_ddr))
+                    {
+                        delete_record_link_key_only = false;
+
+                        DEBUG_INFO(0,"[NTT_KEY_MISSING_R9] delete full mobile record");
                     }
 
                     if (delete_record_link_key_only)
@@ -5612,12 +5793,49 @@ void app_bt_inquiry_remote_device_name(const bt_bdaddr_t * bdaddr)
     bt_defer_call_func_1((uint32_t)(uintptr_t)btif_me_get_remote_device_name, param_a);
 }
 
+/*
+ * NTT R3:
+ * Forward declaration for reconnecting next valid device.
+ */
+static void app_bt_start_reconnect_next_device(void);
+
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
     DEBUG_INFO(0,"[NTT_CASE] CLOSED app_bt_device_reconnect_handler");
+    if (reconnect == NULL)
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R3] reconnect NULL");
+        return;
+    }
+
+    DEBUG_INFO(0,"[NTT_CASE] CLOSED app_bt_device_reconnect_handler");
+
     if (pmu_ntt_case_closed_latch_get())
     {
         DEBUG_INFO(0,"[NTT_CASE] CLOSED latch=1, block mobile reconnect");
+        return;
+    }
+
+    /*
+     * NTT R3:
+     * Prevent automatic reconnect after mobile Key Missing.
+     */
+    if (!reconnect->for_source_device && ntt_mobile_key_missing_is_locked((const struct bdaddr_t *)&reconnect->rmt_addr))
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R3] BLOCK missing key reconnect");
+
+        DUMP8("%02x ",reconnect->rmt_addr.address,BTIF_BD_ADDR_SIZE);
+
+        /*
+         * Stop timer and remove this reconnect node.
+         */
+        app_bt_delete_reconnect_device(reconnect);
+
+        /*
+         * Continue reconnecting other valid devices.
+         */
+        app_bt_start_reconnect_next_device();
+
         return;
     }
 
@@ -5777,6 +5995,49 @@ static void app_bt_start_reconnect_next_device(void)
 
     DEBUG_INFO(0,"!!!start reconnect next device\n");
     app_bt_start_poweron_reconnect();
+}
+
+/*
+ * NTT R6:
+ * Continue power-on reconnect after Missing Key.
+ *
+ * The missing-key mobile must not block
+ * another paired mobile.
+ */
+static void ntt_bt_missing_key_continue_next_mobile(const bt_bdaddr_t *remote)
+{
+    struct BT_DEVICE_RECONNECT_T *reconnect = NULL;
+
+    if (remote == NULL)
+    {
+        return;
+    }
+
+    if (!ntt_mobile_key_missing_is_locked((const struct bdaddr_t *)remote))
+    {
+        return;
+    }
+
+    if (ntt_missing_key_next_reconnect_started)
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R6] next reconnect already started");
+        return;
+    }
+
+    ntt_missing_key_next_reconnect_started = true;
+
+    reconnect = app_bt_find_reconnect_device((bt_bdaddr_t *)remote);
+
+    if (reconnect != NULL)
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R6] remove missing key reconnect node");
+
+        app_bt_delete_reconnect_device(reconnect);
+    }
+
+    DEBUG_INFO(0,"[NTT_RECONNECT_R6] start next paired mobile");
+
+    app_bt_start_reconnect_next_device();
 }
 
 void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote, bool is_for_source_device)
@@ -6087,6 +6348,9 @@ static bool ntt_bt_addr_is_invalid(const bt_bdaddr_t *addr)
 
 void app_bt_profile_connect_manager_opening_reconnect(void)
 {
+    ntt_missing_key_next_reconnect_started = false;
+    DEBUG_INFO(0,"[NTT_RECONNECT_R6] reset next reconnect flag");
+
     uint8_t ui_role = app_ibrt_if_get_ui_role();
 
     if (pmu_ntt_case_closed_latch_get())
