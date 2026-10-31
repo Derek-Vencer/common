@@ -1247,7 +1247,7 @@ void aiwang_box_battery_update_enable(bool enable)
 {
     box_battery_update_enable = enable;
 }
-
+#if 0
 static uint8_t box_ear_level_to_percent(uint8_t level)
 {
     /*
@@ -1269,22 +1269,18 @@ static uint8_t box_ear_level_to_percent(uint8_t level)
 
     return (uint8_t)((level + 1) * 10);
 }
-
+#endif
 static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
 {
     uint8_t box_battery;
-    uint8_t left_level;
-    uint8_t right_level;
-    uint8_t left_percent;
-    uint8_t right_percent;
+    //uint8_t left_level;
+    //uint8_t right_level;
+    //uint8_t left_percent;
+    //uint8_t right_percent;
 
     if ((data == NULL) || (len < 3))
     {
-        DBGPRINT(
-            "[BOX_BAT][ERROR] invalid data=%p len=%u",
-            data,
-            len);
-
+        DBGPRINT("[BOX_BAT][ERROR] invalid data=%p len=%u",data,len);
         return;
     }
 
@@ -1296,33 +1292,22 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
      * data[2] = Right ear battery level, range 0~9
      */
     box_battery = data[0];
-    left_level  = data[1];
-    right_level = data[2];
+    //left_level  = data[1];
+    //right_level = data[2];
 
-    DBGPRINT(
-        "[BOX_BAT][UART_RAW] CASE=%u L_LEVEL=%u R_LEVEL=%u",
-        box_battery,
-        left_level,
-        right_level);
+    DBGPRINT("[BOX_BAT][UART_RAW] CASE=%u",box_battery);
 
     /*
      * Validate protocol ranges.
      */
-    if ((box_battery > 100) ||
-        (left_level > 9) ||
-        (right_level > 9))
+    if (box_battery > 100)
     {
-        DBGPRINT(
-            "[BOX_BAT][INVALID] CASE=%u L_LEVEL=%u R_LEVEL=%u",
-            box_battery,
-            left_level,
-            right_level);
-
+        DBGPRINT("[BOX_BAT][INVALID] CASE=%u ",box_battery);
         return;
     }
 
-    left_percent  = box_ear_level_to_percent(left_level);
-    right_percent = box_ear_level_to_percent(right_level);
+    //left_percent  = box_ear_level_to_percent(left_level);
+    //right_percent = box_ear_level_to_percent(right_level);
 
     /*
      * CMD_SEND_BOX_BATTERY_LEVEL is fresh data from the charging case.
@@ -1351,17 +1336,8 @@ static void wired_uart_get_box_battery(uint8_t *data, uint8_t len)
      */
     box_battery_nv_save(box_battery);
 
-    DBGPRINT(
-        "[BOX_BAT][CASE_REPORT][%s] "
-        "CASE=%u%% CASE_L=%u%% CASE_R=%u%% "
-        "(raw L=%u R=%u)",
-        isRightEarbuds == RIGHT_BUDS ?
-            "RIGHT_EAR_FW" : "LEFT_EAR_FW",
-        box_battery,
-        left_percent,
-        right_percent,
-        left_level,
-        right_level);
+    DBGPRINT("[BOX_BAT][CASE_REPORT][%s] CASE=%u%% ",isRightEarbuds == RIGHT_BUDS ?
+            "RIGHT_EAR_FW" : "LEFT_EAR_FW",box_battery);
 
 #if defined(IBRT)
     {

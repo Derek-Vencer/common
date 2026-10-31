@@ -1326,7 +1326,7 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 #endif
 
     app_battery_measure.voltage[app_battery_measure.index++%APP_BATTERY_STABLE_COUNT] = vbat * app_vbat_volt_div;
-    if (app_battery_measure.index > APP_BATTERY_STABLE_COUNT)
+    if (app_battery_measure.index >= APP_BATTERY_STABLE_COUNT)
     {
         for (i=0; i<APP_BATTERY_STABLE_COUNT; i++)
         {
@@ -1380,6 +1380,11 @@ void app_battery_irqhandler(uint16_t irq_val, HAL_GPADC_MV_T volt)
 #endif
     }
 
+    if (!g_battery_measure_valid)
+    {
+        BATTERY_TRACE(3,"[BAT_FIRST_ADC] index=%d mean=%d valid=%d",app_battery_measure.index,meanBattVolt,g_battery_measure_valid);
+    }
+
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
     user_bat_volt_set(app_battery_measure.currvolt);
     if (app_battery_measure.index > APP_BATTERY_STABLE_COUNT)
@@ -1404,7 +1409,24 @@ void besui_bat_timer_restart(void)
 
 static void app_battery_timer_start(enum APP_BATTERY_MEASURE_PERIODIC_T periodic)
 {
+    
     uint32_t periodic_millisec = 0;
+    /*
+    * NTT Battery Boot Fast Measurement Protection
+    *
+    * Keep 200ms ADC sampling until the first valid
+    * battery voltage has been processed.
+    */
+    if (!g_battery_measure_valid &&
+        periodic == APP_BATTERY_MEASURE_PERIODIC_NORMAL &&
+        app_battery_measure.periodic == APP_BATTERY_MEASURE_PERIODIC_FAST)
+    {
+        BATTERY_TRACE(3,"[BAT_FAST_PROTECT] keep FAST index=%d valid=%d",app_battery_measure.index,g_battery_measure_valid);
+        return;
+    }
+    
+    BATTERY_TRACE(4,"[BAT_TIMER] request=%d current=%d index=%d valid=%d",
+        periodic,app_battery_measure.periodic,app_battery_measure.index,g_battery_measure_valid);
 
     if (app_battery_measure.periodic != periodic){
         app_battery_measure.periodic = periodic;
