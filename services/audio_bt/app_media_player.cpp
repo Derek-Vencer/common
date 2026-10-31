@@ -604,6 +604,13 @@ void app_prompt_stop_wait_slave_play_req_timer(void)
     }
 }
 
+extern "C" bool ntt_case_fast_prompt_is_enabled(void);
+
+static bool ntt_is_case_poweroff_prompt(AUD_ID_ENUM id)
+{
+    return (id == AUD_ID_POWER_OFF) && ntt_case_fast_prompt_is_enabled();
+}
+
 int media_audio_init(void)
 {
 #if !defined(PROMPT_USE_AAC)
@@ -3353,6 +3360,12 @@ void app_prompt_push_request(APP_PROMPT_PLAY_REQ_TYPE_E reqType,
     AUDIO_BT_TRACE(0, "push prompt request type %d devId %d promptId 0x%x isLocal %d cache %d",
         reqType, device_id, id, isLocalPlaying, is_cache_prompt_in_processing());
 
+    if (ntt_case_fast_prompt_is_enabled() && id == AUD_ID_BT_DIS_CONNECT)
+    {
+        AUDIO_BT_TRACE(0,"[NTT_CASE_POWER_OFF] skip disconnect prompt");
+        return;
+    }
+
     if (AUDIO_ID_BT_MUTE == id)
     {
 
@@ -3466,7 +3479,7 @@ static bool app_prompt_refresh_list(void)
             return true;
         }
 
-        if ((app_prompt_wait_forward_play_id != AUD_ID_INVALID)&& pPlayReq->isLocalPlaying)
+        if ((app_prompt_wait_forward_play_id != AUD_ID_INVALID) && pPlayReq->isLocalPlaying && !ntt_is_case_poweroff_prompt((AUD_ID_ENUM)pPlayReq->promptId))
         {
             AUDIO_BT_TRACE(0, "waiting for slave play req, block loacl play");
             return true;

@@ -99,7 +99,7 @@ extern void app_ibrt_start_power_on_tws_pairing(void);
 extern void ntt_case_open_reconnect_mobile_start(void);
 extern "C" void ntt_case_state_sync_local_update(bool in_case);
 static bool aiWang_disconnect_second_phone_for_pairing(void);
-
+extern "C" void ntt_case_poweroff_start_timer(void);
 #define NTT_BOOT_CASE_CHECK_MS 100
 static osTimerId ntt_boot_case_timer = NULL;
 static void ntt_boot_case_check_cb(void const *arg);
@@ -1810,7 +1810,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
             ntt_charging_pwron_pending_shutdown = true;
-            earBudsCloseOff_PogonIn_StartTimer();            
+            ntt_case_poweroff_start_timer();          
         }
         break;
     case CMD_OPEN_CASE:
@@ -1906,7 +1906,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;

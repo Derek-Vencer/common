@@ -227,6 +227,7 @@ static uint32_t app_battery_pluginout_debounce_cnt = 0;
 extern "C" void ntt_case_close_role_switch_reset(void);
 extern "C" bool ntt_case_close_role_switch_can_shutdown(void);
 static uint8_t aiWangReportNormalLevelHandler(uint16_t current_voltage);
+static volatile bool g_ntt_case_shutdown_started = false;
 /*
  * Battery measurement valid flag.
  * False means currvolt/currlevel still contain boot default values.
@@ -280,6 +281,7 @@ extern bool ntt_charging_pwron_pending_shutdown;
 extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 
 #define POGONIN_CLOSE_CHECK_INTERVAL_MS          (3000)
+#define NTT_BOTH_IN_CASE_FAST_SHUTDOWN_MS         (300)
 #define POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT       (10)
 
 #ifdef IBRT
@@ -312,6 +314,13 @@ static void ntt_low_bat_poweroff_timer_handler(void const *argument)
 #else
     app_shutdown();
 #endif
+}
+
+static volatile bool g_ntt_case_fast_prompt_enabled = false;
+
+extern "C" bool ntt_case_fast_prompt_is_enabled(void)
+{
+    return g_ntt_case_fast_prompt_enabled;
 }
 
 osTimerDef(NTT_LOW_BAT_POWEROFF_TIMER,ntt_low_bat_poweroff_timer_handler);
@@ -824,7 +833,20 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
             BATTERY_TRACE(2,"[POWER_OFF] role switch done latch=%d -> shutdown now",final_latch);
             g_pogonin_role_switch_requested = false;
             g_pogonin_role_switch_wait_count = 0;
+
+            bool both_in_case =
+                (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+                (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE);
+
+            g_ntt_case_fast_prompt_enabled =
+                both_in_case &&
+                pmu_ntt_case_closed_latch_get() &&
+                !ota_is_in_progress();
+
             ntt_charging_pwron_pending_shutdown = false;
+            g_ntt_case_shutdown_started = true;
+            BATTERY_TRACE(0,"[POWER_OFF] shutdown started -> block timer restore");
+            BATTERY_TRACE(2, "[NTT_POWER_OFF_PROMPT] case_close=%d ota=%d",g_ntt_case_fast_prompt_enabled,ota_is_in_progress());
 
             app_shutdown();
             return;
@@ -883,7 +905,19 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         g_pogonin_role_switch_requested = false;
         g_pogonin_role_switch_wait_count = 0;
 
+        bool both_in_case =
+            (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+            (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE);
+
+        g_ntt_case_fast_prompt_enabled =
+            both_in_case &&
+            pmu_ntt_case_closed_latch_get() &&
+            !ota_is_in_progress();
+
         ntt_charging_pwron_pending_shutdown = false;
+        g_ntt_case_shutdown_started = true;
+        BATTERY_TRACE(0,"[POWER_OFF] shutdown started -> block timer restore");
+        BATTERY_TRACE(2, "[NTT_POWER_OFF_PROMPT] case_close=%d ota=%d",g_ntt_case_fast_prompt_enabled,ota_is_in_progress());
 
         app_shutdown();
         return;
@@ -952,7 +986,20 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         ntt_case_state_get_local(),
         final_latch);
 
+    bool both_in_case =
+        (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+        (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE);
+
+    g_ntt_case_fast_prompt_enabled =
+        both_in_case &&
+        pmu_ntt_case_closed_latch_get() &&
+        !ota_is_in_progress();
+
     ntt_charging_pwron_pending_shutdown = false;
+    g_ntt_case_shutdown_started = true;
+
+    BATTERY_TRACE(0,"[POWER_OFF] shutdown started -> block timer restore");
+    BATTERY_TRACE(2, "[NTT_POWER_OFF_PROMPT] case_close=%d ota=%d",g_ntt_case_fast_prompt_enabled,ota_is_in_progress());
 
     app_shutdown();
 }
@@ -993,6 +1040,36 @@ void earBudsCloseOff_PowerOff_StartTimer(void)
     osTimerStop(pogonPinCloseTimer);
     osTimerStart(pogonPinCloseTimer, 1600);
     BATTERY_TRACE(0,"[POWER_OFF] start 1.6s charger check timer");
+}
+
+extern "C" void ntt_case_poweroff_start_timer(void)
+{
+    if (NULL == pogonPinCloseTimer)
+    {
+        pogonPinCloseTimer = osTimerCreate(osTimer(POGONIN_CLOSE_TIMER),osTimerOnce,NULL);
+    }
+
+    if (NULL == pogonPinCloseTimer)
+    {
+        BATTERY_TRACE(0,"[POWER_OFF] create timer failed");
+        return;
+    }
+
+    uint32_t delay_ms = POGONIN_CLOSE_CHECK_INTERVAL_MS;
+
+#ifdef IBRT
+    if (pmu_ntt_case_closed_latch_get() &&
+        ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+        ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE)
+    {
+        delay_ms = NTT_BOTH_IN_CASE_FAST_SHUTDOWN_MS;
+
+        BATTERY_TRACE(0,"[POWER_OFF][FAST] both in case -> 300ms shutdown check");
+    }
+#endif
+
+    osTimerStop(pogonPinCloseTimer);
+    osTimerStart(pogonPinCloseTimer, delay_ms);
 }
 
 //-------------------------------------------------------------------------------------------
@@ -1424,7 +1501,7 @@ static void app_battery_timer_start(enum APP_BATTERY_MEASURE_PERIODIC_T periodic
         BATTERY_TRACE(3,"[BAT_FAST_PROTECT] keep FAST index=%d valid=%d",app_battery_measure.index,g_battery_measure_valid);
         return;
     }
-    
+
     BATTERY_TRACE(4,"[BAT_TIMER] request=%d current=%d index=%d valid=%d",
         periodic,app_battery_measure.periodic,app_battery_measure.index,g_battery_measure_valid);
 
@@ -1877,9 +1954,14 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                         ntt_case_state_get_local(),
                         ntt_charging_pwron_pending_shutdown);
 
-                    if (!ntt_charging_pwron_pending_shutdown)
+                    if (g_ntt_case_shutdown_started)
+                    {
+                        BATTERY_TRACE(0,"[POWER_OFF] CASE_CLOSED shutdown already started -> skip timer restore");
+                    }
+                    else if (!ntt_charging_pwron_pending_shutdown)
                     {
                         BATTERY_TRACE(0,"[POWER_OFF] CASE_CLOSED latch=1 but pending=0 -> restore shutdown timer");
+
                         ntt_charging_pwron_pending_shutdown = true;
                         earBudsCloseOff_PogonIn_StartTimer();
                     }
