@@ -1273,8 +1273,14 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                 "app_ibrt_customif_tws_on_acl_state_changed "
                 "IBRT_CONN_ACL_PROFILES_CONNECTED");
 
+            /*
+            * 1. 保留原本充電盒狀態同步
+            */
             ntt_case_state_sync_resend();
 
+            /*
+            * 2. 保留原本手機電量推送
+            */
             if (app_bt_ibrt_has_mobile_link_connected())
             {
                 sparrow_push_battery_level_notify(false);
@@ -1293,6 +1299,10 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
 
                 if (ui_role == TWS_UI_MASTER)
                 {
+                    /*
+                    * MASTER:
+                    * 保留原本使用者設定與 EQ6 同步
+                    */
                     ntt_user_setting_sync_delay_start();
                     ntt_eq6_resync_delay_start();
 
@@ -1302,16 +1312,44 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                         "TWS profiles ready -> "
                         "MASTER start opening reconnect");
 
+                    /*
+                    * 保留原本手機回連
+                    */
                     app_bt_profile_connect_manager_opening_reconnect();
+                }
+                else if (ui_role == TWS_UI_SLAVE)
+                {
+                    /*
+                    * SLAVE:
+                    * TWS Profiles Connected 後
+                    * 立即強制同步有效電量給 MASTER
+                    */
+
+                    if (app_battery_is_measurement_valid())
+                    {
+                        uint8_t percent = app_battery_get_precise_percent();
+
+                        if (percent <= 100)
+                        {
+                            EARBUDS_TRACE(1,"[BAT_SYNC][TWS_CONNECTED] SLAVE force percent=%d",percent);
+
+                            app_ibrt_customif_cmd_sync_battery_level_force(percent);
+                        }
+                        else
+                        {
+                            EARBUDS_TRACE(1,"[BAT_SYNC][TWS_CONNECTED] invalid percent=%d",percent);
+                        }
+                    }
+                    else
+                    {
+                        EARBUDS_TRACE(0,"[BAT_SYNC][TWS_CONNECTED] ADC not ready, wait first valid");
+                    }
+
+                    EARBUDS_TRACE(1,"[NTT_RECONNECT] TWS profiles ready -> SLAVE skip opening reconnect role=%d",ui_role);
                 }
                 else
                 {
-                    EARBUDS_TRACE(
-                        1,
-                        "[NTT_RECONNECT] "
-                        "TWS profiles ready -> "
-                        "SLAVE skip opening reconnect role=%d",
-                        ui_role);
+                    EARBUDS_TRACE(1,"[NTT_RECONNECT] unexpected UI role=%d",ui_role);
                 }
             }
         #endif
@@ -1727,21 +1765,28 @@ void app_ibrt_customif_on_ibrt_state_changed(const bt_bdaddr_t *addr, ibrt_conne
             break;
         case IBRT_CONN_IBRT_CONNECTED:
         {
-            uint8_t local_level = app_battery_current_level();
+            if (app_battery_is_measurement_valid())
+            {
+                uint8_t percent = app_battery_get_precise_percent();
 
-            EARBUDS_TRACE(1,
-                "[BAT_SYNC][IBRT_CONNECTED] local=%d role=%d",
-                local_level,
-                role);
-
-            app_ibrt_customif_cmd_sync_battery_level(local_level);
+                if (percent <= 100)
+                {
+                    EARBUDS_TRACE(2,"[BAT_SYNC][IBRT_CONNECTED] percent=%d role=%d",percent,role);
+                    app_ibrt_customif_cmd_sync_battery_level(percent);
+                }
+            }
+            else
+            {
+                EARBUDS_TRACE(0,"[BAT_SYNC][IBRT_CONNECTED] ADC not ready");
+            }
 
             if (IBRT_SLAVE == role)
             {
-            #ifdef BT_DIP_SUPPORT
+        #ifdef BT_DIP_SUPPORT
                 btif_dip_set_state(addr, DIP_CTRL_ST_IDLE);
-            #endif
+        #endif
             }
+
             break;
         }
         case IBRT_CONN_IBRT_START_FAIL:
@@ -2017,13 +2062,16 @@ void app_ibrt_customif_peer_box_state_update_callback(bud_box_state box_state)
 
     if (box_state == IBRT_IN_BOX_OPEN)
     {
-        uint8_t local_percent = app_battery_current_level();
+        if (app_battery_is_measurement_valid())
+        {
+            uint8_t local_percent = app_battery_get_precise_percent();
 
-        EARBUDS_TRACE(1,
-            "[BAT_SYNC][BOX_OPEN] local=%d",
-            local_percent);
-
-        app_ibrt_customif_cmd_sync_battery_level(local_percent);
+            if (local_percent <= 100)
+            {
+                EARBUDS_TRACE(1,"[BAT_SYNC][BOX_OPEN] percent=%d",local_percent);
+                app_ibrt_customif_cmd_sync_battery_level_force(local_percent);
+            }
+        }
     }
 
     if (ibrt_mgr_status_changed_client_cb && ibrt_mgr_status_changed_client_cb->peer_box_state_update_hook) {

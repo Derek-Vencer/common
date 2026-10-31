@@ -66,6 +66,7 @@
 #include "nvrecord_extension.h"
 #include "factory_section.h"
 #include "app_bt_stream.h"
+#include "app_battery.h"
 
 extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
@@ -77,7 +78,7 @@ static uint8_t g_tws_peer_battery_level = 0xFF;
 static bool g_tws_peer_battery_valid = false;
 static uint8_t g_tws_peer_box_battery_level = 0xFF;
 static bool g_tws_peer_box_battery_valid = false;
-extern "C" uint8_t app_battery_current_level(void);
+
 uint8_t getBoxChargerBattery(void);
 extern "C" void ntt_color_code_nv_set(uint8_t color);
 extern "C" uint8_t ntt_color_code_nv_get(void);
@@ -626,62 +627,98 @@ static void app_ibrt_customif_sync_poweroff_shutdown_send_handler(uint16_t rsp_s
     }
 }
 
-void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
+/*
+ * NTT TWS Battery Synchronization
+ *
+ * Normal:
+ *   Synchronize on battery/box changes.
+ *
+ * Force:
+ *   Synchronize after TWS reconnect.
+ *
+ * Only send valid 0~100% battery data.
+ */
+
+static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
 {
     static uint32_t s_last_sync_ms = 0;
     static uint8_t s_last_level = 0xFF;
     static uint8_t s_last_box_level = 0xFF;
 
-    bool tws_connected = bts_tws_if_is_tws_link_connected();
-
-    uint8_t role = app_ibrt_if_get_ui_role();
-
-    if (!tws_connected)
+    if (!bts_tws_if_is_tws_link_connected())
     {
+        EARBUDS_TRACE(0,"[BAT_SYNC][TX] skip: TWS disconnected");
         return;
     }
 
-    if (role == TWS_UI_MASTER)
+    if (app_ibrt_if_get_ui_role() != TWS_UI_SLAVE)
     {
         return;
     }
-
-    uint8_t calculated_percent = app_battery_get_percent();
-
-    uint8_t box_level = getBoxChargerBattery();
-
-    uint32_t now_ms = GET_CURRENT_MS();
-
-    EARBUDS_TRACE(4,
-                  "[BAT_SYNC][PREPARE] input=%u calculated=%u box=%u role=%u",
-                  current_level,
-                  calculated_percent,
-                  box_level,
-                  role);
 
     /*
-     * Always synchronize the current calculated percentage.
+     * Never send boot default battery level.
      */
-    current_level = calculated_percent;
-
-    if ((s_last_level == current_level) && (s_last_box_level == box_level) && ((uint32_t)(now_ms - s_last_sync_ms) < 3000))
+    if (!app_battery_is_measurement_valid())
     {
+        EARBUDS_TRACE(0,"[BAT_SYNC][TX] skip: ADC not ready");
         return;
     }
 
-    s_last_level = current_level;
-    s_last_box_level = box_level;
-    s_last_sync_ms = now_ms;
+    /*
+     * Battery percentage must be 0~100.
+     */
+    if (current_level > 100)
+    {
+        EARBUDS_TRACE(1,"[BAT_SYNC][TX] invalid percent=%d",current_level);
+        return;
+    }
+
+    uint8_t box_level = getBoxChargerBattery();
+    uint32_t now_ms = GET_CURRENT_MS();
+
+    /*
+     * Keep original 120-second duplicate suppression.
+     * Force synchronization bypasses this condition.
+     */
+    if (!force && s_last_level == current_level && s_last_box_level == box_level && ((now_ms - s_last_sync_ms) < 120000))
+    {
+        EARBUDS_TRACE(1,"[BAT_SYNC][TX] duplicate skip=%d",current_level);
+        return;
+    }
 
     uint8_t cmd_sync_battery_level[2];
 
     cmd_sync_battery_level[0] = current_level;
     cmd_sync_battery_level[1] = box_level;
 
-    tws_ctrl_send_cmd(
-        APP_TWS_CMD_BATTERY_LEVEL_SYNC,
-        cmd_sync_battery_level,
-        sizeof(cmd_sync_battery_level));
+    EARBUDS_TRACE(4,"[BAT_SYNC][TX] percent=%d box=%d force=%d role=%d",
+        current_level,
+        box_level,
+        force,
+        app_ibrt_if_get_ui_role());
+
+    tws_ctrl_send_cmd(APP_TWS_CMD_BATTERY_LEVEL_SYNC,cmd_sync_battery_level,sizeof(cmd_sync_battery_level));
+
+    s_last_level = current_level;
+    s_last_box_level = box_level;
+    s_last_sync_ms = now_ms;
+}
+
+/*
+ * Original API: keep all existing callers.
+ */
+void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level)
+{
+    ntt_tws_battery_sync_internal(current_level,false);
+}
+
+/*
+ * New API: force synchronization after TWS connected.
+ */
+void app_ibrt_customif_cmd_sync_battery_level_force(uint8_t current_level)
+{
+    ntt_tws_battery_sync_internal(current_level,true);
 }
 
 static void app_ibrt_customif_sync_battery_level_send(uint8_t *p_buff,uint16_t length)

@@ -162,6 +162,7 @@ void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
 
 #ifdef BESUI_TWS_EN
 void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+
 void app_ibrt_customif_cmd_sync_poweroff_shutdown(bool poweroff_flag);
 #ifdef BESUI_GAME_EN
 void app_ibrt_customif_cmd_sync_game_mode(bool switch_game_flag, uint8_t need_set_ame_mode);
@@ -173,6 +174,12 @@ void app_ibrt_customif_cmd_sync_space_audio_status(bool switch_flag, uint8_t cur
 void app_ibrt_customif_cmd_sync_set_reconnect_status(uint8_t device_id, uint8_t recon_status);
 void twsui_wear_pp_tx(bool role, uint8_t sta);
 #endif
+
+/*
+ * NTT: Force battery synchronization
+ * after TWS connection or reconnection.
+ */
+void app_ibrt_customif_cmd_sync_battery_level_force(uint8_t current_level);
 
 typedef void(*keymap_load_config_cb)(void);
 
