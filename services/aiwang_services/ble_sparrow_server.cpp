@@ -2063,6 +2063,39 @@ void handleSetDtmEnable(const uint8_t *data, uint16_t len)
 #endif
 }
 
+/*
+ * NTT Charger Box Firmware Version
+ *
+ * Read charger box version from NV Record.
+ *
+ * Maximum copied length: 11 bytes.
+ * Caller must provide at least 11 bytes.
+ */
+void aiWangGetChargerBoxVersion(uint8_t *data)
+{
+    struct nvrecord_env_t *nvrecord_env = NULL;
+
+    if (data == NULL)
+    {
+        TRACE(0, "[NTT_9C] invalid output buffer");
+        return;
+    }
+
+    memset(data, 0, 11);
+
+    nv_record_env_get(&nvrecord_env);
+
+    if (nvrecord_env == NULL)
+    {
+        TRACE(0, "[NTT_9C] NV record unavailable");
+        return;
+    }
+
+    memcpy(data,nvrecord_env->chargerBoxVersion,11);
+
+    TRACE(0,"[NTT_9C] Charger FW Version: %.11s",(const char *)data);
+}
+
 void aiWangSetBoxVersion(uint8_t *data, uint8_t len)
 {
     struct nvrecord_env_t *nvrecord_env;
@@ -2077,12 +2110,54 @@ void aiWangSetBoxVersion(uint8_t *data, uint8_t len)
     }
 }
 
-void aiWangGetChargerBoxVersion(uint8_t *data)
+/*
+ * NTT Test API Only
+ *
+ * Request:
+ *   9C 00 00
+ *
+ * Response:
+ *   9E 00 06 56 30 2E 32 2E 30
+ *
+ * ASCII:
+ *   V0.2.0
+ */
+static void handleGetChargerFwVersion(const uint8_t *data,uint16_t len)
 {
-    struct nvrecord_env_t *nvrecord_env;
-    nv_record_env_get(&nvrecord_env);
-    //memcpy(data, &nvrecord_env->chargerBoxVersion[0], 15); //16
-	memcpy(data, &nvrecord_env->chargerBoxVersion[0], 11);
+    uint8_t box_version[12] = {0};
+    uint8_t version_len = 0;
+
+    TRACE(0,"[NTT_9C][REQ] len=%u",(unsigned)len);
+
+    if ((data == NULL) ||
+        (len != 3U) ||
+        (data[0] != GET_CHARGER_FW_VERSION) ||
+        (data[1] != 0x00U) ||
+        (data[2] != 0x00U))
+    {
+        TRACE(0,"[NTT_9C][REQ] invalid packet");
+        return;
+    }
+
+    aiWangGetChargerBoxVersion(box_version);
+
+    box_version[11] = '\0';
+
+    version_len = (uint8_t)strlen((const char *)box_version);
+
+    TRACE(0,"[NTT_9C][VERSION] %s len=%u",box_version,(unsigned)version_len);
+
+#if need_send_data_by_notify
+
+    /*
+     * sparraw_tx_msg() already handles
+     * BLE / SPP transport selection.
+     */
+    sparraw_tx_msg(RSP_GET_CHARGER_FW_VERSION,box_version,version_len);
+
+    TRACE(0,"[NTT_9C][RSP] 0x9E sent");
+
+#endif
 }
 
 //MM.NN.RR.AA Earbuds version format, MM: major version, NN: minor version, RR: revision version, AA: additional info
@@ -2382,6 +2457,7 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
         {GET_EQ_MODE_STATUS,  handleGetEqModeStatus},
         {SET_EQ_MODE_STATUS,  handleSetEqModeStatus},
 		{GET_FW_VERSION,      handleGetFwVersion},
+        {GET_CHARGER_FW_VERSION, handleGetChargerFwVersion},
         {SET_DTM_ENABLE,      handleSetDtmEnable},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},
 		{FACTORY_COMMAND_AUDIO_IO,handleFactoryCmdAudio},
@@ -3802,6 +3878,12 @@ extern "C" bool sparrow_spp_api_is_cmd(const uint8_t *data, uint16_t len)
     {
         return true;
     }
+    // NTT Test API: Charger Box FW Version
+    if (data[0] == GET_CHARGER_FW_VERSION)
+    {
+        TRACE(0, "[NTT_9C][SPP] API command recognized");
+        return true;
+    }
 
     for (i = 0; i < aiWangCmdTypesCount; i++)
     {
@@ -4249,6 +4331,36 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
             DUMP8("%02X ",version,sizeof(version));
             sparraw_read_rsp_msg(RSP_GET_FW_VERSION,param->aw_connhdl,param->aw_token,version,sizeof(version));
 
+            break;
+        }
+        case GET_CHARGER_FW_VERSION:
+        {
+            uint8_t box_version[12] = {0};
+
+            // Read charger box FW version from NV Record
+            aiWangGetChargerBoxVersion(box_version);
+
+            // Ensure null termination
+            box_version[11] = '\0';
+
+            uint8_t version_len = strlen((char *)box_version);
+
+            TRACE(0, "[NTT_TEST_API] GET_CHARGER_FW_VERSION");
+            TRACE(0, "[NTT_TEST_API] Box Version=%s", box_version);
+
+            // Response format:
+            // [0] : Status (existing protocol)
+            // [1] : Data length
+            // [2...] : ASCII version
+
+            read_send_data[1] = version_len;
+
+            if (version_len > 0)
+            {
+                memcpy(&read_send_data[2],box_version,version_len);
+            }
+
+            sparraw_read_rsp_msg(RSP_GET_CHARGER_FW_VERSION,param->aw_connhdl,param->aw_token,read_send_data,version_len + 2);
             break;
         }
 		case SET_COLOR_CODE:

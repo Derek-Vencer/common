@@ -73,7 +73,8 @@ typedef enum  {
 	GET_LOCAL_BT_ADDR  = 0x60,
 	SET_PEER_BT_ADDR   = 0x70,
 	SET_COLOR_CODE     = 0x80,
-	SET_DTM_ENABLE	   = 0x90
+	SET_DTM_ENABLE	   = 0x90,
+	GET_CHARGER_FW_VERSION = 0x9C  // NTT Test API Only
 } AI_WANG_CMDS_TYPE_SETS;
 
 typedef enum  {
@@ -87,7 +88,8 @@ typedef enum  {
 	RSP_GET_FW_VERSION    = 0x4e,
 	RSP_GET_EQ_MODE_STATUS = 0x52,
 	RSP_SET_EQ_MODE_STATUS = 0x56,
-	RSP_SET_DTM_ENABLE 	  = 0x92
+	RSP_SET_DTM_ENABLE 	  = 0x92,
+	RSP_GET_CHARGER_FW_VERSION = 0x9E  // NTT Test API Only
 } AI_WANG_RSP_TYPE;
 
 typedef enum {
