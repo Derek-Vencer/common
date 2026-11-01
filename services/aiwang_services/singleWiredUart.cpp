@@ -542,6 +542,15 @@ void wired_uart_get_battery_level(void)
         report_level = (uint8_t)(raw_level / 10);
     }
 
+    /*Test Charger Enable 0x0F*/
+    //if (isRightEarbuds != RIGHT_BUDS)
+    //{
+    //    if (report_level > 0)
+    //    {
+    //        report_level--;
+    //    }
+    //}
+
     /*
      * Get current pairing states.
      */
@@ -811,6 +820,10 @@ static void ntt_poweron_reason_init(void)
     enum PMU_BOOT_CAUSE_T cause = pmu_boot_cause_get();
     g_ntt_power_key_boot = (cause == PMU_BOOT_CAUSE_POWER_KEY);
     DBGPRINT("[NTT_PWR_BOOT] cause=0x%04X power_key=%d",cause,g_ntt_power_key_boot);
+    if (g_ntt_power_key_boot == 1)
+    {
+        pmu_ntt_case_closed_latch_set(false);
+    }
 }
 
 static volatile bool g_ntt_1wire_active = false;
@@ -1630,8 +1643,22 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         uint8_t local_battery = app_battery_get_percent();
         uint8_t peer_battery = getPeerBattery();
 
-        pmu_ntt_case_closed_latch_set(false);
-        DBGPRINT("[NTT_CASE_LATCH] CMD_GET_EAR_POWER -> CASE OPEN latch=0");
+        /*
+        * Only Charger FW v0.1.0 can clear CASE_CLOSED latch.
+        * Other versions keep the current latch state.
+        */
+        const char *charger_fw = (const char *)boxChargerStatus.boxSoftVersion;
+
+        if (strcmp(charger_fw, "V0.1.0") == 0)
+        {
+            pmu_ntt_case_closed_latch_set(false);
+
+            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> latch=0",charger_fw);
+        }
+        else
+        {
+            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> keep latch",charger_fw);
+        }
 
         /*
         * NTT:
@@ -1711,49 +1738,43 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         * 因此實際 payload 長度為：
         * uart_dat_len - 5
         */
-        if (isRightEarbuds == RIGHT_BUDS)
+
+        uint8_t version_payload_len = 0;
+
+        memset(boxChargerStatus.boxSoftVersion,
+            0,
+            sizeof(boxChargerStatus.boxSoftVersion));
+
+        if (uart_dat_len > 5)
         {
-            uint8_t version_payload_len = 0;
+            version_payload_len = uart_dat_len - 5;
 
-            memset(boxChargerStatus.boxSoftVersion,
-                0,
-                sizeof(boxChargerStatus.boxSoftVersion));
-
-            if (uart_dat_len > 5)
+            /*
+            * boxSoftVersion 最多保存 16 bytes，
+            * 最後一個 byte 保留給 '\0'。
+            */
+            if (version_payload_len >
+                (sizeof(boxChargerStatus.boxSoftVersion) - 1))
             {
-                version_payload_len = uart_dat_len - 5;
-
-                /*
-                * boxSoftVersion 最多保存 16 bytes，
-                * 最後一個 byte 保留給 '\0'。
-                */
-                if (version_payload_len >
-                    (sizeof(boxChargerStatus.boxSoftVersion) - 1))
-                {
-                    version_payload_len =
-                        sizeof(boxChargerStatus.boxSoftVersion) - 1;
-                }
-
-                memcpy(boxChargerStatus.boxSoftVersion,
-                    &uart_cmd_dat[4],
-                    version_payload_len);
-
-                boxChargerStatus.boxSoftVersion[version_payload_len] = '\0';
-
-                //DBGPRINT("[EAR_POWER][BOX] version=\"%s\" payload_len=%u frame_len=%u",
-                //        boxChargerStatus.boxSoftVersion,
-                //        version_payload_len,
-                //        uart_dat_len);
-
-                aiWangSetBoxVersion(boxChargerStatus.boxSoftVersion,
-                                    version_payload_len);
+                version_payload_len =
+                    sizeof(boxChargerStatus.boxSoftVersion) - 1;
             }
-            else
-            {
-                //DBGPRINT("[EAR_POWER][BOX] no version payload frame_len=%u",
-                //        uart_dat_len);
-            }
+
+            memcpy(boxChargerStatus.boxSoftVersion,
+                &uart_cmd_dat[4],
+                version_payload_len);
+
+            boxChargerStatus.boxSoftVersion[version_payload_len] = '\0';
+
+            //DBGPRINT("[EAR_POWER][BOX] version=\"%s\" payload_len=%u frame_len=%u",
+            //        boxChargerStatus.boxSoftVersion,
+            //        version_payload_len,
+            //        uart_dat_len);
+
+            aiWangSetBoxVersion(boxChargerStatus.boxSoftVersion,
+                                version_payload_len);
         }
+
 
         /*
         * 回報本機耳機電量給充電盒。
@@ -2126,8 +2147,22 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             }
         }
 
-        pmu_ntt_case_closed_latch_set(false);
-        DBGPRINT("[NTT_CASE_LATCH] CMD_SEND_BOX_BATTERY_LEVEL -> CASE OPEN latch=0");
+        /*
+        * Only Charger FW v0.1.0 can clear CASE_CLOSED latch.
+        * Other versions keep the current latch state.
+        */
+        const char *charger_fw = (const char *)boxChargerStatus.boxSoftVersion;
+
+        if (strcmp(charger_fw, "V0.1.0") == 0)
+        {
+            pmu_ntt_case_closed_latch_set(false);
+
+            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> latch=0",charger_fw);
+        }
+        else
+        {
+            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> keep latch",charger_fw);
+        }
 
         ntt_case_state_sync_local_update(true);
         ntt_last_box_battery_case_tick = now;
@@ -2391,7 +2426,7 @@ static void uart_idle_timeout_callback(void const *argument)
      * UART idle does not mean out of case.
      * If charging is still active, keep CASE CLOSED.
      */
-    if (charging || case_closed_latch)
+    if (charging)
     {
         DBGPRINT("[NTT_INBOX] UART idle but still charging -> keep CASE CLOSED");
 
@@ -2450,6 +2485,18 @@ static void uart_idle_timeout_callback(void const *argument)
             vin_normal,
             ota_reboot,
             key_reboot);
+    }
+
+    /*
+    * ICP1205 Reg10 read failure protection.
+    *
+    * Do not clear CASE_CLOSED latch when ICP1205
+    * status cannot be confirmed.
+    */
+    if (ret != 0)
+    {
+        DBGPRINT("[NTT_CASE_CHECK] ICP1205 read failed ret=%d latch=%d -> keep current state",ret,case_closed_latch);
+        goto exit;
     }
 
     /*
@@ -2555,31 +2602,35 @@ static void uart_idle_timeout_callback(void const *argument)
         */
         goto exit;
     }
-
     /*
-    * Only when latch == 1 are we allowed to maintain CASE CLOSED.
+    * CASE CLOSED protection.
+    *
+    * Based on current measurements:
+    *
+    * Fast OUT_CASE:
+    *   Reg10 = 0x03
+    *   STS2  = 0x00
+    *
+    * Case power loss:
+    *   Reg10 = 0x03
+    *   STS2  = 0x80
     */
     if ((ret == 0) &&
         (
             ((chrg_sts2 == 0x00) &&
-            ((icp1205_reg10 == 0x13) || ((icp1205_reg10 == 0x03) &&
-            !ota_reboot &&
-            !key_reboot)))
+            (icp1205_reg10 == 0x13))
             ||
             ((chrg_sts2 == 0x80) &&
             (icp1205_reg10 == 0x03))
         ))
     {
-        DBGPRINT("[NTT_INBOX] latch=1 UART idle + charging=0 Reg10=0x%02X STS2=0x%02X ota=%d key=%d -> keep CASE CLOSED",
+        DBGPRINT(
+            "[NTT_INBOX] latch=1 "
+            "Reg10=0x%02X STS2=0x%02X "
+            "-> keep CASE CLOSED",
             icp1205_reg10,
-            chrg_sts2,
-            ota_reboot,
-            key_reboot);
+            chrg_sts2);
 
-        /*
-        * latch is already 1.
-        * No need to recreate CLOSED state from UART idle.
-        */
         set_er_inbox_status(1);
 
         app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
