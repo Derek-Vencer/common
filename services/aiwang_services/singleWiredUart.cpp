@@ -26,7 +26,7 @@
 #include "audio_cfg.h"
 #include "btapp.h"
 #include "factory_section.h"
-
+#include "ota_control.h"
 #ifdef IBRT
 #include "app_ibrt_internal.h"
 #include "earbud_ux_api.h"
@@ -235,6 +235,11 @@ static void ntt_boot_case_check_cb(void const *arg)
 
     DBGPRINT("[NTT_BOOT_CASE] charging=%d latch=%d reg10=0x%02X sts2=0x%02X ret=%u",charging,latch,reg10,sts2,(unsigned)ret);
 }
+
+#define NTT_POWER_OFF_OPEN_GUARD_MS    20U
+
+static uint32_t g_ntt_poweroff_rx_tick = 0;
+static bool g_ntt_poweroff_guard_active = false;
 
 /**
  * @brief 初始化 Pogo Pin 检测引脚
@@ -1591,18 +1596,34 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     /*
      * NTT Power-Off RX Command Filter
      *
-     * Enable filter after receiving POWER_OFF.
-     * Only POWER_OFF and OPEN_CASE are accepted.
+     * 0x06 : Start 600ms OPEN_CASE guard.
+     * 0x07 : Ignore if received within 600ms after 0x06.
+     *
+     * During shutdown, only 0x06 and 0x07 are allowed.
      */
-    if (g_ntt_uart_poweroff_rx_filter &&
-        cmd_event != CMD_POWER_OFF &&
-        cmd_event != CMD_OPEN_CASE)
+
+    if (g_ntt_uart_poweroff_rx_filter && cmd_event != CMD_POWER_OFF && cmd_event != CMD_OPEN_CASE)
     {
-        DBGPRINT("[NTT_UART_POWER_OFF] DROP cmd=0x%02X",
-                 cmd_event);
+        DBGPRINT("[NTT_UART_POWER_OFF] DROP cmd=0x%02X",cmd_event);
         return;
     }
 
+    if (cmd_event == CMD_OPEN_CASE && g_ntt_poweroff_guard_active)
+    {
+        uint32_t elapsed_ms = TICKS_TO_MS(hal_sys_timer_get() - g_ntt_poweroff_rx_tick);
+
+        if (elapsed_ms < NTT_POWER_OFF_OPEN_GUARD_MS)
+        {
+            DBGPRINT("[NTT_UART_POWER_OFF] DROP 0x07 elapsed=%dms",elapsed_ms);
+            return;
+        }
+
+        /*
+         * OPEN_CASE accepted after 600ms.
+         */
+        g_ntt_poweroff_guard_active = false;
+        DBGPRINT("[NTT_UART_POWER_OFF] ACCEPT 0x07 elapsed=%dms",elapsed_ms);
+    }
 #endif
     // 重置空闲定时器
     if (uart_idle_timer_id != NULL) {
@@ -1824,11 +1845,16 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             DBGPRINT("[POWER_OFF] received, wait 1.6s and check charger state");
 
-            if (!g_ntt_uart_poweroff_rx_filter)
+            /*
+            * Start guard only for a valid POWER_OFF command.
+            * Repeated 0x06 must not restart the 600ms timer.
+            */
+            if (!g_ntt_poweroff_guard_active)
             {
-                g_ntt_uart_poweroff_rx_filter = true;
+                g_ntt_poweroff_rx_tick = hal_sys_timer_get();
+                g_ntt_poweroff_guard_active = true;
 
-                DBGPRINT("[NTT_UART_POWER_OFF] RX filter ENABLED");
+                DBGPRINT("[NTT_UART_POWER_OFF] GUARD START 600ms");
             }
 
             /*
@@ -1897,6 +1923,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             if (g_ntt_uart_poweroff_rx_filter)
             {
                 g_ntt_uart_poweroff_rx_filter = false;
+                g_ntt_poweroff_guard_active = false;
 
                 DBGPRINT("[NTT_UART_POWER_OFF] RX filter DISABLED by OPEN_CASE");
             }
@@ -2445,7 +2472,7 @@ static void uart_idle_timeout_callback(void const *argument)
     uint8_t icp1205_reg10 = 0xFF;
     uint8_t chrg_sts2 = 0xFF;
     uint32_t ret = 0;
-    bool ota_reboot = g_ntt_ota_reboot_boot;
+    //bool ota_reboot = g_ntt_ota_reboot_boot;
     bool key_reboot = g_ntt_power_key_boot;
     bool case_closed_latch = pmu_ntt_case_closed_latch_get();
     ntt_1205_irq_debug_dump();
@@ -2457,6 +2484,24 @@ static void uart_idle_timeout_callback(void const *argument)
     bool vin_normal = false;
 
     g_ntt_1wire_active = false;
+
+    /*
+    * NTT:
+    * Clear OTA reboot protection after OTA has finished.
+    *
+    * g_ntt_ota_reboot_boot is captured at boot time.
+    * It must not remain active after OTA is no longer running.
+    */
+    if (g_ntt_ota_reboot_boot)
+    {
+        if (!app_get_bes_ota_state())
+        {
+            g_ntt_ota_reboot_boot = false;
+            DBGPRINT("[NTT_OTA_BOOT] OTA finished, clear ota_reboot=0");
+        }
+    }
+
+    bool ota_reboot = g_ntt_ota_reboot_boot;
 
     DBGPRINT("UART idle timeout detected! No data received for %dms, charging=%d ota_reboot=%d power_key=%d",
         UART_IDLE_TIMEOUT_MS,
