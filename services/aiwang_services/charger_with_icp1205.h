@@ -23,7 +23,7 @@ uint32_t readDataFrom_ICP1205(unsigned char reg, unsigned char *data, unsigned c
 uint8_t icp1205_get_chrg_sts2(void);
 uint8_t Icp1205_Reg10_get(void);
 void Icp1205_Reg10_set(uint8_t status);
-
+void ntt_1205_irq_debug_dump(void);
 #ifdef __cplusplus
 }
 #endif

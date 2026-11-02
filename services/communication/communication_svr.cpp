@@ -601,6 +601,7 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
 		#endif	
             break;
 		case COMMUNICATION_MSG_CHARGER1205:
+            COMMUNICATION_TRACE("[NTT_1205_MSG] received tick=%u",(unsigned int)osKernelSysTick());
 			handle_batter_1205();
 			break;
         default:

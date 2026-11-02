@@ -1543,7 +1543,15 @@ bool aiWangBoxIsUsed(void)
 	return boxChargerStatus.boxIsOpen;
 }
 
-
+/*
+ * NTT 1-Wire Power-Off RX Filter
+ *
+ * 0x06 POWER_OFF : Enable RX filter
+ * 0x07 OPEN_CASE : Disable RX filter
+ *
+ * During shutdown, only 0x06 and 0x07 are accepted.
+ */
+static bool g_ntt_uart_poweroff_rx_filter = false;
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
@@ -1576,12 +1584,28 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     }
     else
     {
-    	printf("%s data two short", __func__);
+        printf("%s data two short", __func__);
+        return;
+    }
+#if 1
+    /*
+     * NTT Power-Off RX Command Filter
+     *
+     * Enable filter after receiving POWER_OFF.
+     * Only POWER_OFF and OPEN_CASE are accepted.
+     */
+    if (g_ntt_uart_poweroff_rx_filter &&
+        cmd_event != CMD_POWER_OFF &&
+        cmd_event != CMD_OPEN_CASE)
+    {
+        DBGPRINT("[NTT_UART_POWER_OFF] DROP cmd=0x%02X",
+                 cmd_event);
         return;
     }
 
-	// 重置空闲定时器
-	if (uart_idle_timer_id != NULL) {
+#endif
+    // 重置空闲定时器
+    if (uart_idle_timer_id != NULL) {
 		set_er_inbox_status(1);
         ntt_audio_output_mute_refresh();
 		osTimerStop(uart_idle_timer_id);
@@ -1792,7 +1816,20 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         }
     case CMD_POWER_OFF:          // Headphones enter shipping / power off
         {
+            enum APP_BATTERY_CHARGER_T charger_status = (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+            DBGPRINT("[CASE_CLOSE] charger=%s",
+                    (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
+                    "PLUGIN" : "PLUGOUT");
+
             DBGPRINT("[POWER_OFF] received, wait 1.6s and check charger state");
+
+            if (!g_ntt_uart_poweroff_rx_filter)
+            {
+                g_ntt_uart_poweroff_rx_filter = true;
+
+                DBGPRINT("[NTT_UART_POWER_OFF] RX filter ENABLED");
+            }
 
             /*
             * Charging-case MCU explicitly confirmed CASE CLOSED.
@@ -1823,15 +1860,11 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
             wired_uart_get_battery_level();
 
-            enum APP_BATTERY_CHARGER_T charger_status = (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+            DBGPRINT("[CASE_CLOSE] POGO connected -> start shutdown timer");
 
-            DBGPRINT("[CASE_CLOSE] charger=%s",
-                    (charger_status == APP_BATTERY_CHARGER_PLUGIN) ?
-                    "PLUGIN" : "PLUGOUT");
-
-            DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
             ntt_charging_pwron_pending_shutdown = true;
-            ntt_case_poweroff_start_timer();          
+            ntt_case_poweroff_start_timer();
+       
         }
         break;
     case CMD_OPEN_CASE:
@@ -1857,6 +1890,16 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
 
 
             earBudsCloseOff_PogonIn_StopTimer();
+            /*
+             * Restore normal 1-Wire RX commands
+             * after OPEN_CASE processing.
+             */
+            if (g_ntt_uart_poweroff_rx_filter)
+            {
+                g_ntt_uart_poweroff_rx_filter = false;
+
+                DBGPRINT("[NTT_UART_POWER_OFF] RX filter DISABLED by OPEN_CASE");
+            }
 
         }
         break;
@@ -2405,6 +2448,7 @@ static void uart_idle_timeout_callback(void const *argument)
     bool ota_reboot = g_ntt_ota_reboot_boot;
     bool key_reboot = g_ntt_power_key_boot;
     bool case_closed_latch = pmu_ntt_case_closed_latch_get();
+    ntt_1205_irq_debug_dump();
 
     bool vin = false;
     bool uvlo = false;
