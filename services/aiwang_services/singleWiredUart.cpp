@@ -228,42 +228,13 @@ static void ntt_boot_case_check_cb(void const *arg)
 {
     uint8_t reg10 = 0xFF;
     uint8_t sts2 = 0xFF;
-    uint8_t chrg_con1 = 0xFF;
-
     int charging = app_battery_is_charging();
     bool latch = pmu_ntt_case_closed_latch_get();
-
-    uint32_t ret = readDataFrom_ICP1205(
-        ICP1205_COMM_CON,
-        &reg10,
-        1);
-
+    uint32_t ret = readDataFrom_ICP1205(ICP1205_COMM_CON,&reg10,1);
     sts2 = icp1205_get_chrg_sts2();
 
-    uint32_t chrg_ret = readDataFrom_ICP1205(
-        ICP1205_CHRG_CON1,
-        &chrg_con1,
-        1);
-
-    DBGPRINT(
-        "[NTT_BOOT_CASE] charging=%d latch=%d "
-        "reg10=0x%02X sts2=0x%02X ret=%u "
-        "CHRG_CON1=0x%02X chrg_ret=%u EN=%d RECHRG=%d",
-        charging,
-        latch,
-        reg10,
-        sts2,
-        (unsigned)ret,
-        chrg_con1,
-        (unsigned)chrg_ret,
-        (chrg_ret == 0) ? !!(chrg_con1 & CHRGCON1_CHRG_EN) : -1,
-        (chrg_ret == 0) ? !!(chrg_con1 & CHRGCON1_RECHRG_EN) : -1);
+    DBGPRINT("[NTT_BOOT_CASE] charging=%d latch=%d reg10=0x%02X sts2=0x%02X ret=%u",charging,latch,reg10,sts2,(unsigned)ret);
 }
-
-#define NTT_POWER_OFF_OPEN_GUARD_MS    20U
-
-static uint32_t g_ntt_poweroff_rx_tick = 0;
-static bool g_ntt_poweroff_guard_active = false;
 
 /**
  * @brief 初始化 Pogo Pin 检测引脚
@@ -1581,6 +1552,15 @@ bool aiWangBoxIsUsed(void)
  * During shutdown, only 0x06 and 0x07 are accepted.
  */
 static bool g_ntt_uart_poweroff_rx_filter = false;
+/*
+ * NTT CMD_POWER_OFF duplicate protection.
+ *
+ * false: Allow the first CMD_POWER_OFF (0x06).
+ * true : CMD_POWER_OFF has already been processed.
+ *
+ * Reset when a valid CMD_OPEN_CASE (0x07) is received.
+ */
+static bool g_ntt_poweroff_cmd_processed = false;
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
@@ -1620,34 +1600,18 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     /*
      * NTT Power-Off RX Command Filter
      *
-     * 0x06 : Start 600ms OPEN_CASE guard.
-     * 0x07 : Ignore if received within 600ms after 0x06.
-     *
-     * During shutdown, only 0x06 and 0x07 are allowed.
+     * Enable filter after receiving POWER_OFF.
+     * Only POWER_OFF and OPEN_CASE are accepted.
      */
-
-    if (g_ntt_uart_poweroff_rx_filter && cmd_event != CMD_POWER_OFF && cmd_event != CMD_OPEN_CASE)
+    if (g_ntt_uart_poweroff_rx_filter &&
+        cmd_event != CMD_POWER_OFF &&
+        cmd_event != CMD_OPEN_CASE)
     {
-        DBGPRINT("[NTT_UART_POWER_OFF] DROP cmd=0x%02X",cmd_event);
+        DBGPRINT("[NTT_UART_POWER_OFF] DROP cmd=0x%02X",
+                 cmd_event);
         return;
     }
 
-    if (cmd_event == CMD_OPEN_CASE && g_ntt_poweroff_guard_active)
-    {
-        uint32_t elapsed_ms = TICKS_TO_MS(hal_sys_timer_get() - g_ntt_poweroff_rx_tick);
-
-        if (elapsed_ms < NTT_POWER_OFF_OPEN_GUARD_MS)
-        {
-            DBGPRINT("[NTT_UART_POWER_OFF] DROP 0x07 elapsed=%dms",elapsed_ms);
-            return;
-        }
-
-        /*
-         * OPEN_CASE accepted after 600ms.
-         */
-        g_ntt_poweroff_guard_active = false;
-        DBGPRINT("[NTT_UART_POWER_OFF] ACCEPT 0x07 elapsed=%dms",elapsed_ms);
-    }
 #endif
     // 重置空闲定时器
     if (uart_idle_timer_id != NULL) {
@@ -1859,91 +1823,62 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
     	    break;
         }
-    case CMD_POWER_OFF:          // Headphones enter shipping / power off
+    case CMD_POWER_OFF:
     {
-        /*
-        * Check whether this POWER_OFF transaction is already active.
-        *
-        * IMPORTANT:
-        * Must check BEFORE calling ntt_case_poweroff_enable(),
-        * because that function sets pending_shutdown = true.
-        */
-        bool already_pending = ntt_charging_pwron_pending_shutdown;
-        enum APP_BATTERY_CHARGER_T charger_status = (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
-        DBGPRINT("[CASE_CLOSE] charger=%s",(charger_status == APP_BATTERY_CHARGER_PLUGIN) ? "PLUGIN" : "PLUGOUT");
-        DBGPRINT("[POWER_OFF] received pending=%d", already_pending);
-
-        /*
-        * Start UART guard only for the first valid POWER_OFF command.
-        * Repeated 0x06 must not restart the 600ms guard.
-        */
-        if (!g_ntt_poweroff_guard_active)
+        if (g_ntt_poweroff_cmd_processed)
         {
-            g_ntt_poweroff_rx_tick = hal_sys_timer_get();
-            g_ntt_poweroff_guard_active = true;
+            DBGPRINT("[NTT_POWER_OFF] duplicate 0x06 ignored");
 
-            DBGPRINT("[NTT_UART_POWER_OFF] GUARD START 600ms");
+            /*
+            * Do not restart the timer for every duplicate 0x06.
+            * However, retain the existing shutdown request.
+            */
+            ntt_charging_pwron_pending_shutdown = true;
+
+            break;
         }
 
         /*
-        * Charging-case MCU explicitly confirmed CASE CLOSED.
-        *
-        * Pogo HIGH/LOW, charger PLUGIN/PLUGOUT and AC_IN/AC_OUT
-        * must NOT clear this retention latch.
+        * First 0x06 in this case-close transaction.
         */
+        g_ntt_poweroff_cmd_processed = true;
+
+        g_ntt_uart_poweroff_rx_filter = true;
+
+        DBGPRINT("[NTT_POWER_OFF] first 0x06 accepted");
+
+        enum APP_BATTERY_CHARGER_T charger_status =
+            (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+        DBGPRINT("[CASE_CLOSE] charger=%s",
+            charger_status == APP_BATTERY_CHARGER_PLUGIN ?
+            "PLUGIN" : "PLUGOUT");
+
         pmu_ntt_case_closed_latch_set(true);
 
-        DBGPRINT("[NTT_CASE_LATCH] CMD_POWER_OFF -> CLOSED latch=1");
-
-        /*
-        * Update local case state.
-        */
         g_case_state = 0;
-
         boxChargerStatus.boxIsOpen = false;
         boxChargerStatus.needOpenEarbuds = false;
 
         app_ui_set_local_box_state(IBRT_IN_BOX_CLOSED);
         app_ui_sync_box_state(IBRT_IN_BOX_CLOSED);
 
-        /*
-        * Enable the case-close shutdown transaction.
-        */
         ntt_case_poweroff_enable();
 
-        /*
-        * Report battery level to charging case.
-        */
         wired_uart_get_battery_level();
 
-        /*
-        * Start shutdown timer ONLY for the first 0x06.
-        *
-        * First 0x06:
-        *   Both earbuds IN_CASE -> 300ms
-        *   Otherwise           -> 3000ms
-        *
-        * Duplicate 0x06:
-        *   Keep existing timer.
-        *
-        * This also prevents duplicate 0x06 from interrupting
-        * the PMU charger-ready polling timer (100ms).
-        */
-        if (!already_pending)
-        {
-            DBGPRINT("[POWER_OFF] FIRST 0x06 -> start shutdown timer");
+        ntt_charging_pwron_pending_shutdown = true;
+        ntt_case_poweroff_start_timer();
 
-            ntt_case_poweroff_start_timer();
-        }
-        else
-        {
-            DBGPRINT("[POWER_OFF] DUPLICATE 0x06 -> keep existing timer");
-        }
+        DBGPRINT("[NTT_POWER_OFF] shutdown timer started");
     }
     break;
     case CMD_OPEN_CASE:
         {
             DBGPRINT("[CASE] OPEN received");
+
+            g_ntt_poweroff_cmd_processed = false;
+            g_ntt_uart_poweroff_rx_filter = false;
             /*
             * NTT:
             * This is the authoritative event that releases
@@ -1971,7 +1906,6 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             if (g_ntt_uart_poweroff_rx_filter)
             {
                 g_ntt_uart_poweroff_rx_filter = false;
-                g_ntt_poweroff_guard_active = false;
 
                 DBGPRINT("[NTT_UART_POWER_OFF] RX filter DISABLED by OPEN_CASE");
             }
@@ -2036,30 +1970,16 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         #endif
             }
 
-            /*
-            * Do not restart the shutdown timer if a shutdown
-            * transaction is already active.
-            *
-            * This also protects the 100ms PMU charger polling timer.
-            */
-            if (!ntt_charging_pwron_pending_shutdown)
-            {
-                DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
-
-                ntt_case_poweroff_enable();
-                earBudsCloseOff_PogonIn_StartTimer();
-            }
-            else
-            {
-                DBGPRINT("[CASE_CLOSE] shutdown already pending -> keep timer");
-            }
+            DBGPRINT("[CASE_CLOSE] start delayed shutdown timer");
+            ntt_charging_pwron_pending_shutdown = true;
+            earBudsCloseOff_PogonIn_StartTimer();
         }
     break;
 
     case CMD_EAR_RESET:
     {
       
-        if (1)
+        if (0)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -2651,41 +2571,14 @@ static void uart_idle_timeout_callback(void const *argument)
     }
 
     /*
-     * NTT ICP1205 charging diagnostic.
-     * Keep variables inside a local scope to avoid
-     * crossing initialization with goto exit.
+     * NTT:
+     * VIN_NORMAL means ICP1205 still detects normal VIN.
+     *
+     * Even if app_battery_is_charging() == 0 and UART becomes idle,
+     * do NOT enter OUT_CASE / shutdown flow.
+     *
+     * Keep earbud powered on.
      */
-    {
-        uint8_t chrg_con1 = 0xFF;
-
-        uint32_t chrg_ret = readDataFrom_ICP1205(
-            ICP1205_CHRG_CON1,
-            &chrg_con1,
-            1);
-
-        DBGPRINT(
-            "[NTT_CASE_CHG_DIAG] latch=%d charging=%d "
-            "STS2=0x%02X REG10=0x%02X "
-            "CHRG_CON1=0x%02X ret=%u EN=%d RECHRG=%d",
-            case_closed_latch,
-            charging,
-            chrg_sts2,
-            icp1205_reg10,
-            chrg_con1,
-            (unsigned)chrg_ret,
-            (chrg_ret == 0) ?
-                !!(chrg_con1 & CHRGCON1_CHRG_EN) : -1,
-            (chrg_ret == 0) ?
-                !!(chrg_con1 & CHRGCON1_RECHRG_EN) : -1);
-    }
-    /*
-    * NTT:
-    * VIN_NORMAL alone must not cancel an active
-    * CASE CLOSE shutdown transaction.
-    *
-    * Keep the existing fast-open handling when
-    * shutdown is not pending.
-    */
     if (vin_normal || key_reboot || ota_reboot)
     {
         DBGPRINT("[NTT_POWER_KEEP] VIN_NORMAL STS2=0x%02X VIN=%d UVLO=%d OVP=%d -> KEEP POWER ON",
@@ -2697,15 +2590,6 @@ static void uart_idle_timeout_callback(void const *argument)
         /*
         * Original OUT_CASE processing continues here...
         */
-        DBGPRINT("[NTT_CASE_DIAG][VIN_BRANCH] latch=%d charger=%d Reg10=0x%02X STS2=0x%02X vin=%d key=%d ota=%d boot=0x%04X",
-            pmu_ntt_case_closed_latch_get(),
-            app_battery_is_charging(),
-            icp1205_reg10,
-            chrg_sts2,
-            vin_normal,
-            key_reboot,
-            ota_reboot,
-            pmu_boot_cause_get());
 
         pmu_ntt_case_closed_latch_set(false);
 
@@ -2830,12 +2714,6 @@ static void uart_idle_timeout_callback(void const *argument)
      * Original OUT_CASE processing continues here...
      */
 
-    DBGPRINT("[NTT_CASE_DIAG][OUTBOX_BRANCH] latch=%d charger=%d Reg10=0x%02X STS2=0x%02X boot=0x%04X",
-        pmu_ntt_case_closed_latch_get(),
-        app_battery_is_charging(),
-        icp1205_reg10,
-        chrg_sts2,
-        pmu_boot_cause_get());
     pmu_ntt_case_closed_latch_set(false);
 
     DBGPRINT(

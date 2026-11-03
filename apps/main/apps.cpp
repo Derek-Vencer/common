@@ -3160,8 +3160,6 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     app_led2_level_detect_timer_onoff(true); //putin putout detect 50ms
 #endif
 
-    MAIN_TRACE(3,"[NTT_BOOT_DIAG] boot=0x%04X latch=%d charger=%d",pmu_boot_cause_get(),case_closed_latched,app_battery_is_charging());
-
     app_application_ready_to_start_callback();
 
     case_closed_latched = pmu_ntt_case_closed_latch_get();
