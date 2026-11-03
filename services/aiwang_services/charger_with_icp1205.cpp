@@ -874,6 +874,7 @@ static void Icp1205UpdataIntSts(void)
 			readDataFrom_ICP1205(ICP1205_CHRG_STS3, &u8tmp, 1);
 			if ((u8tmp & CHRGSTS3_VIN2BAT_0P15CMP) == 0) {
 				printf("Charger error.Icp1205SetChrgFunDisable");
+				DBGPRINT("[NTT_CHG_CTRL] DISABLE reason=0P15CMP INT2=0x%02X STS3=0x%02X",u8RegTable[1],u8tmp);
 				Icp1205SetChrgFunDisable();
 			}
 		}
@@ -899,7 +900,7 @@ static void Icp1205UpdataIntSts(void)
 			DBGPRINT("[ICP1205_CHG] PlugOut -> Charge Disable");
 
 			writeDataTo_ICP1205(ICP1205_INT_STAT1,&u8dat1,1);
-
+			DBGPRINT("[NTT_CHG_CTRL] DISABLE reason=PLGOUT INT1=0x%02X",u8RegTable[0]);
 			Icp1205SetChrgFunDisable();
 		}
 		//chrg_err
@@ -1087,6 +1088,7 @@ static void Icp1205UpdataIntSts(void)
 					break;
 				case CR_REC_CMD_FRC_CHRG_FNSH:
 					//OLED_ShowString(40,2,(uint8_t*)":Chrg Fnsh",16);
+					DBGPRINT("[NTT_CHG_CTRL] DISABLE reason=FORCE_CHARGE_FINISH");
 				  	Icp1205SetChrgFunDisable();//test
 					break;
 				case CR_REC_CMD_SHIP_MOD:
