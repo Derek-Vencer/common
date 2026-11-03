@@ -1232,7 +1232,6 @@ void pmu_ntt_case_closed_latch_set(bool closed)
     uint16_t val = 0;
     pmu_read(PMU_REG_NOT_RESET_61, &val);
     uint16_t old_val = val;
-    bool old_state = pmu_ntt_case_closed_latch_get();
     PMU_INFO_TRACE(0,"[NTT_CASE_LATCH][SET] req=%d old=0x%04X caller=%p",closed,old_val,__builtin_return_address(0));
 
     if (closed)
@@ -1244,7 +1243,6 @@ void pmu_ntt_case_closed_latch_set(bool closed)
         val &= ~0x4000;
     }
 
-    PMU_INFO_TRACE(0,"[NTT_PMU_LATCH] old=%d new=%d",old_state,closed);
     pmu_write(PMU_REG_NOT_RESET_61, val);
     PMU_INFO_TRACE(0,"[NTT_CASE_LATCH][SET] req=%d old=0x%04X new=0x%04X latch=%d",closed,old_val,val,!!(val & 0x4000));
 }

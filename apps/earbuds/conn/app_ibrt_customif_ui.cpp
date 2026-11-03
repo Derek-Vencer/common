@@ -50,7 +50,6 @@
 #include "hfp_api.h"
 #include "app_ibrt_customif_cmd.h"
 #include "audio_cfg.h"
-
 #if defined(SNDP_VAD_ENABLE)
 #include "mcu_sensor_hub_app_soundplus.h"
 #endif
@@ -2817,41 +2816,29 @@ bool app_ibrt_customif_disallow_reconnect_mobile()
     return false;
 }
 
-static bool ntt_case_close_both_in_case(void)
-{
-    return (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
-           (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE);
-}
+#ifdef IBRT
 
 extern "C" bool ntt_case_close_role_switch_can_shutdown(void)
 {
-    if (ntt_case_close_both_in_case())
-    {
-        EARBUDS_TRACE(0,"[POWER_OFF][FAST] both in case -> allow shutdown");
-
-        return true;
-    }
-
+#ifdef IBRT
     if (!bts_tws_if_is_tws_link_connected())
     {
         return true;
     }
 
     return (app_ibrt_if_get_ui_role() != TWS_UI_MASTER);
+#else
+    return true;
+#endif
 }
 
 extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 {
-    if (ntt_case_close_both_in_case())
+    if (bts_tws_if_is_tws_link_connected() &&
+        app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
     {
-        EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] both in case -> skip role switch");
-
-        return false;
-    }
-
-    if (bts_tws_if_is_tws_link_connected() && app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
-    {
-        EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] master switch to slave by UI API");
+        EARBUDS_TRACE(0,
+            "[ROLE_SWITCH][CASE_CLOSE] master switch to slave by UI API");
 
         g_ntt_case_close_wait_poweroff = true;
 
@@ -2865,7 +2852,7 @@ extern "C" void ntt_case_close_role_switch_reset(void)
 {
     g_ntt_case_close_wait_poweroff = false;
 }
-
+#endif
 
 #define NTT_FIRST_OUT_ROLE_CHECK_MS          100
 #define NTT_FIRST_OUT_ROLE_CHECK_MAX_COUNT   30
