@@ -1682,16 +1682,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         */
         const char *charger_fw = (const char *)boxChargerStatus.boxSoftVersion;
 
-        if (strcmp(charger_fw, "V0.1.0") == 0)
-        {
-            pmu_ntt_case_closed_latch_set(false);
-
-            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> latch=0",charger_fw);
-        }
-        else
-        {
-            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> keep latch",charger_fw);
-        }
+        DBGPRINT("[NTT_CASE_LATCH] GET_EAR_POWER FW=%s -> keep latch",charger_fw);
 
         /*
         * NTT:
@@ -2205,16 +2196,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         */
         const char *charger_fw = (const char *)boxChargerStatus.boxSoftVersion;
 
-        if (strcmp(charger_fw, "V0.1.0") == 0)
-        {
-            pmu_ntt_case_closed_latch_set(false);
-
-            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> latch=0",charger_fw);
-        }
-        else
-        {
-            DBGPRINT("[NTT_CASE_LATCH] Charger FW=%s -> keep latch",charger_fw);
-        }
+        DBGPRINT("[NTT_CASE_LATCH] GET_EAR_POWER FW=%s -> keep latch",charger_fw);
 
         ntt_case_state_sync_local_update(true);
         ntt_last_box_battery_case_tick = now;
@@ -2707,33 +2689,31 @@ static void uart_idle_timeout_callback(void const *argument)
     }
 
     /*
-     * Original OUT_CASE processing continues here...
-     */
-    /*
-    * NTT Charger Power Fail protection.
+    * NTT Charger Power Fail / UVLO protection.
     *
-    * Fast OUT_CASE:
-    *   Reg10_cache = 0x03
-    *   Reg10_live  = 0x03
-    *   STS2        = 0x00 or 0x80
+    * CASE CLOSED latch is authoritative.
     *
-    * Charger Power Fail:
-    *   Reg10_cache = 0x13
+    * When charging case disables POGO power,
+    * ICP1205 may report:
+    *
     *   Reg10_live  = 0x03
+    *   Reg10_cache = 0x03 or 0x13
     *   STS2        = 0x80
+    *
+    * Do not interpret VIN UVLO as CASE OPEN.
     */
     reg10_cache = Icp1205_Reg10_get();
 
     if ((ret == 0) &&
         case_closed_latch &&
         (icp1205_reg10 == 0x03) &&
-        (reg10_cache == 0x13) &&
-        (chrg_sts2 == 0x80))
+        (chrg_sts2 == 0x80) &&
+        uvlo)
     {
         DBGPRINT(
             "[NTT_CHARGER_POWER_FAIL] "
-            "Live=0x%02X Cache=0x%02X STS2=0x%02X "
-            "-> KEEP CASE CLOSED",
+            "UVLO=1 Live=0x%02X Cache=0x%02X "
+            "STS2=0x%02X -> KEEP CASE CLOSED",
             icp1205_reg10,
             reg10_cache,
             chrg_sts2);
