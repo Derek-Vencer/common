@@ -162,6 +162,9 @@ static bool g_low_bat_voice_first = true;
 #if defined(IBRT)
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 extern "C" uint8_t icp1205_get_chrg_sts2(void);
+
+extern "C" void ntt_case_open_mobile_reconnect_request(void);
+
 /*
  * Implemented by the Sparrow BLE service. It sends the three-byte battery
  * payload through the proactive 0x31 Notify packet.
@@ -696,12 +699,21 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         if (!charging)
         {
             BATTERY_TRACE(3,"[POWER_OFF] charging=0 latch=0 case=%d -> cancel shutdown",case_state);
+            /*
+            * Request mobile reconnect immediately after
+            * CMD_OPEN_CASE cancels shutdown.
+            *
+            * Actual reconnect is executed by the IBRT UI
+            * connection manager.
+            */
+            ntt_case_open_mobile_reconnect_request();
             ntt_charging_pwron_pending_shutdown = false;
 
 #ifdef IBRT
             g_pogonin_role_switch_requested = false;
             g_pogonin_role_switch_wait_count = 0;
             ntt_case_close_role_switch_reset();
+
 #endif
 
             return;

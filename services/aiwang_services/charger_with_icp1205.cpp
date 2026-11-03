@@ -74,57 +74,29 @@ static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin);
  ******************************************************************************/
 void ICP1205_BES_I2c_Init(void)
 {
-    struct HAL_IOMUX_PIN_FUNCTION_MAP pinmux_iic[] = {
-        {HAL_IOMUX_PIN_P0_6, HAL_IOMUX_FUNC_MCU_I2C_M3_SCL,HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
-        {HAL_IOMUX_PIN_P0_7, HAL_IOMUX_FUNC_MCU_I2C_M3_SDA,HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
-        {ICP1205_GP0_IOMUX, HAL_IOMUX_FUNC_AS_GPIO,HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
-        {ICP1205_INT_IOMUX, HAL_IOMUX_FUNC_AS_GPIO,HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
+	struct HAL_IOMUX_PIN_FUNCTION_MAP pinmux_iic[] = {
+        {HAL_IOMUX_PIN_P0_6, HAL_IOMUX_FUNC_MCU_I2C_M3_SCL, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
+        {HAL_IOMUX_PIN_P0_7, HAL_IOMUX_FUNC_MCU_I2C_M3_SDA, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
+        {ICP1205_GP0_IOMUX, HAL_IOMUX_FUNC_AS_GPIO, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
+        {ICP1205_INT_IOMUX, HAL_IOMUX_FUNC_AS_GPIO, HAL_IOMUX_PIN_VOLTAGE_VIO, HAL_IOMUX_PIN_PULLUP_ENABLE},
     };
 
     DBGPRINT("%s", __func__);
 
-    /* Close I2C before reconfiguration */
-    hal_i2c_close(HAL_I2C_ID_3);
-
-    /* Configure IOMUX */
+	hal_i2c_close(HAL_I2C_ID_3);
     hal_iomux_init(pinmux_iic, ARRAY_SIZE(pinmux_iic));
 
-    /*
-     * ICP1205 GPIO:
-     * GP0 -> BES P0_4
-     * INT -> BES P0_5
-     *
-     * Configure INT as input.
-     */
-    hal_gpio_pin_set_dir(
-        ICP1205_INT_GPIO,
-        HAL_GPIO_DIR_IN,
-        0);
-
-    /*
-     * Debug GPIO levels before enabling IRQ.
-     */
-    DBGPRINT(
-        "[NTT_1205_IOMUX] GP0_P04=%d INT_P05=%d",
-        hal_gpio_pin_get_val(ICP1205_GP0_GPIO),
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO));
-
-    /* Initialize I2C */
-    struct HAL_I2C_CONFIG_T i2c_cfg = {};
-
-    i2c_cfg.mode = HAL_I2C_API_MODE_TASK;
-    i2c_cfg.use_dma = 0;
+	struct HAL_I2C_CONFIG_T i2c_cfg;
+	i2c_cfg.mode = HAL_I2C_API_MODE_TASK;
+    i2c_cfg.use_dma  = 0;
     i2c_cfg.use_sync = 1;
-    i2c_cfg.speed = 100 * 1000;
+	i2c_cfg.speed = 100*1000; //100k
     i2c_cfg.as_master = 1;
-    i2c_cfg.addr_as_slave = 0;
+    i2c_cfg.addr_as_slave  = 0;
     i2c_cfg.rising_time_ns = 0;
-
     uint32_t ret = hal_i2c_open(HAL_I2C_ID_3, &i2c_cfg);
-
-    DBGPRINT(
-        "[NTT_1205_I2C] OPEN RET=0x%x",
-        (unsigned int)ret);
+    printf("%s open I2C : 0x%x", __func__, ret);
+	(void)ret;
 }
 
 /*********************************************************************************
@@ -168,9 +140,6 @@ uint32_t readDataFrom_ICP1205(unsigned char reg, unsigned char *data, unsigned c
  ** \return read status 0 success ,others failed
  ******************************************************************************/
 static bool IntReqHasEnable = false;
-static volatile uint32_t ntt_1205_irq_count = 0;
-static volatile uint32_t ntt_1205_irq_low_count = 0;
-static volatile uint32_t ntt_1205_irq_high_count = 0;
 
 static void ICP1205_GPIO_INT_IRQ_Disable(enum HAL_GPIO_PIN_T pin)
 {
@@ -187,78 +156,31 @@ static void ICP1205_GPIO_INT_IRQ_Disable(enum HAL_GPIO_PIN_T pin)
 
 static void ICP1205_GPIO_INT_IRQ_Enable(enum HAL_GPIO_PIN_T pin)
 {
-    struct HAL_GPIO_IRQ_CFG_T gpio_cfg = {};
-
-    if (IntReqHasEnable)
-    {
-        DBGPRINT("[NTT_1205_IRQ] Already enabled");
-        return;
-    }
+	struct HAL_GPIO_IRQ_CFG_T gpio_cfg;
+	if (IntReqHasEnable) return;
 
     hal_gpio_pin_set_dir(pin, HAL_GPIO_DIR_IN, 0);
-
-    DBGPRINT(
-        "[NTT_1205_IRQ] BEFORE_SETUP GP0=%d INT=%d",
-        hal_gpio_pin_get_val(ICP1205_GP0_GPIO),
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO));
-
+    IntReqHasEnable = true;
     gpio_cfg.irq_enable = true;
-    gpio_cfg.irq_debounce = false;
+    gpio_cfg.irq_debounce = true;
     gpio_cfg.irq_polarity = HAL_GPIO_IRQ_POLARITY_LOW_FALLING;
     gpio_cfg.irq_handler = ICP1205_GPIO_INT_IrqHandler;
-    gpio_cfg.irq_type = HAL_GPIO_IRQ_TYPE_EDGE_SENSITIVE;
-
-	uint32_t ret = hal_gpio_setup_irq(pin, &gpio_cfg);
-
-	IntReqHasEnable = (ret == 0);
-
-	DBGPRINT(
-		"[NTT_1205_IRQ_SETUP] PIN=%d RET=%u INT_P05=%d ENABLE=%d",
-		pin,
-		(unsigned int)ret,
-		hal_gpio_pin_get_val(ICP1205_INT_GPIO),
-		IntReqHasEnable);
-
-    DBGPRINT(
-        "[NTT_1205_IRQ] AFTER_SETUP GP0=%d INT=%d ENABLE=%d",
-        hal_gpio_pin_get_val(ICP1205_GP0_GPIO),
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO),
-        IntReqHasEnable);
+    gpio_cfg.irq_type = HAL_GPIO_IRQ_TYPE_EDGE_SENSITIVE;//HAL_GPIO_IRQ_TYPE_LEVEL_SENSITIVE;//HAL_GPIO_IRQ_TYPE_EDGE_SENSITIVE;
+    hal_gpio_setup_irq(pin, &gpio_cfg);
 }
 
 static void ICP1205_GPIO_INT_IrqHandler(enum HAL_GPIO_PIN_T pin)
 {
-    ntt_1205_irq_count++;
-
-    uint8_t level = hal_gpio_pin_get_val(pin);
-
-    ICP1205_GPIO_INT_IRQ_Disable(pin);
-
-    if (level == 0)
-    {
-        ntt_1205_irq_low_count++;
-
-        communication_batter1205();
-    }
-    else
-    {
-        ntt_1205_irq_high_count++;
-
-        // IRQ 已關閉，但沒有送出處理訊息，
-        // 必須重新 Enable，避免中斷永久停用。
-        ICP1205_GPIO_INT_IRQ_Enable(pin);
-    }
-}
-
-void ntt_1205_irq_debug_dump(void)
-{
-    DBGPRINT(
-        "[NTT_1205_DEBUG] IRQ=%u LOW=%u HIGH=%u GPIO=%d ENABLE=%d",
-        (unsigned int)ntt_1205_irq_count,
-        (unsigned int)ntt_1205_irq_low_count,
-        (unsigned int)ntt_1205_irq_high_count,
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO),
-        IntReqHasEnable);
+	ICP1205_GPIO_INT_IRQ_Disable(pin);
+	//DBGPRINT("hal_gpio_pin_get_val(pin) %d",hal_gpio_pin_get_val(pin));
+	if(hal_gpio_pin_get_val(pin) == 0) {
+#if 0
+		osSignalSet(charger_manager_thread_id, 0x02);
+#else
+		communication_batter1205();
+#endif
+	}
+	//ICP1205_GPIO_INT_IRQ_Enable(pin);
 }
 
 /**
@@ -354,89 +276,12 @@ void Icp1205ClearIntFlag(void)
  ******************************************************************************/
 void Icp1205IntEnable(void)
 {
-    uint8_t u8dat = 0x01;
-    uint8_t readback = 0xFF;
+  DBGPRINT("Icp1205IntEnable");	
+  uint8_t u8dat;
+  //readDataFrom_ICP1205(ICP1205_INT_EN,&u8dat,1);
+  u8dat =0X01;
+  writeDataTo_ICP1205(ICP1205_INT_EN,&u8dat,1);
 
-    uint32_t wr_ret;
-    uint32_t rd_ret;
-
-    wr_ret = writeDataTo_ICP1205(ICP1205_INT_EN,&u8dat,1);
-
-    rd_ret = readDataFrom_ICP1205(ICP1205_INT_EN,&readback,1);
-
-    DBGPRINT("[NTT_1205_INT_EN] WR=%u RD=%u VALUE=0x%02X",(unsigned int)wr_ret,(unsigned int)rd_ret,readback);
-}
-
-static void ntt_1205_dump_irq_registers(const char *stage)
-{
-    uint8_t int_stat[3] = {0};
-    uint8_t int_mask[3] = {0};
-    uint8_t int_en = 0;
-
-    int ret_stat;
-    int ret_mask;
-    int ret_en;
-
-    /*
-     * ICP1205 Interrupt Status
-     * 0x21 / 0x22 / 0x23
-     */
-    ret_stat = readDataFrom_ICP1205(
-        ICP1205_INT_STAT1,
-        int_stat,
-        sizeof(int_stat));
-
-    /*
-     * ICP1205 Interrupt Mask
-     * 0x24 / 0x25 / 0x26
-     */
-    ret_mask = readDataFrom_ICP1205(
-        ICP1205_INT_MASK1,
-        int_mask,
-        sizeof(int_mask));
-
-    /*
-     * ICP1205 Interrupt Enable
-     * 0x20
-     */
-    ret_en = readDataFrom_ICP1205(
-        ICP1205_INT_EN,
-        &int_en,
-        1);
-
-    DBGPRINT(
-        "[NTT_1205_IRQ_REG] %s "
-        "STAT=%02X %02X %02X "
-        "MASK=%02X %02X %02X "
-        "EN=%02X GPIO=%d IRQ_ENABLE=%d "
-        "RET=%d/%d/%d",
-        stage,
-        int_stat[0],
-        int_stat[1],
-        int_stat[2],
-        int_mask[0],
-        int_mask[1],
-        int_mask[2],
-        int_en,
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO),
-        IntReqHasEnable,
-        ret_stat,
-        ret_mask,
-        ret_en);
-
-    /*
-     * Carrier RX Command interrupt flag
-     * INT_STAT3 bit 2
-     */
-    DBGPRINT(
-        "[NTT_1205_CARRIER_IRQ] %s "
-        "RX_CMD=%d RX_ERR=%d TRANSPARENT=%d "
-        "MASK3=0x%02X",
-        stage,
-        (int_stat[2] & 0x04) ? 1 : 0,
-        (int_stat[2] & 0x08) ? 1 : 0,
-        (int_stat[2] & 0x10) ? 1 : 0,
-        int_mask[2]);
 }
 
 /**
@@ -575,57 +420,6 @@ void ICP1205_Init(void)
            }
 	   }
 	   syncRetryCount++;
-    }
-
-    /*
-     * NTT DEBUG:
-     * Read ICP1205 carrier registers before initialization.
-     *
-     * 0x0B : CRCOM_CON2
-     * 0x0C : CRCOM_CHR_DAT
-     * 0x0D : CRCOM_INT_DATH
-     * 0x0E : Carrier data
-     *
-     * These registers may be reset when VIN drops.
-     */
-    {
-        uint8_t crcom_con2 = 0xFF;
-        uint8_t carrier_data[3] = {0xFF, 0xFF, 0xFF};
-        uint8_t int_status[3] = {0xFF, 0xFF, 0xFF};
-
-        uint32_t ret1 = readDataFrom_ICP1205(ICP1205_CRCOM_CON2,&crcom_con2,1);
-
-        uint32_t ret2 = readDataFrom_ICP1205(ICP1205_CRCOM_CHR_DAT,carrier_data,3);
-
-        uint32_t ret3 = readDataFrom_ICP1205(ICP1205_INT_STAT1,int_status,3);
-
-        DBGPRINT("[NTT_1205_BOOT_CARRIER] ret=%u/%u/%u CON2=0x%02X DATA=%02X %02X %02X INT=%02X %02X %02X",
-            (unsigned int)ret1,
-            (unsigned int)ret2,
-            (unsigned int)ret3,
-            crcom_con2,
-            carrier_data[0],
-            carrier_data[1],
-            carrier_data[2],
-            int_status[0],
-            int_status[1],
-            int_status[2]);
-
-        if (ret1 == 0 && ret2 == 0)
-        {
-            uint8_t carrier_cmd = carrier_data[1] & 0x0F;
-
-            DBGPRINT("[NTT_1205_BOOT_CMD] carrier_cmd=0x%02X",carrier_cmd);
-
-            if (carrier_cmd == 0x06)
-            {
-                DBGPRINT("[NTT_1205_BOOT_CMD] OPEN_CASE candidate");
-            }
-            else if (carrier_cmd == 0x05)
-            {
-                DBGPRINT("[NTT_1205_BOOT_CMD] CLOSE_CASE candidate");
-            }
-        }
     }
 
     buffer[0] = 0X03;//保留透传、载波错误与成功中断
@@ -796,7 +590,6 @@ void hds_check_cmd_at_boot(void)
 
 static void Icp1205UpdataIntSts(void)
 {
-	DBGPRINT("[NTT_ICP1205_IRQ] ENTER");
     uint8_t u8RegTable[40] = {0};
     uint8_t u8dat1;
     uint8_t u8tmp;
@@ -807,7 +600,7 @@ static void Icp1205UpdataIntSts(void)
     uint8_t chrg_sts3 = 0;
 
     uint32_t ret;
-	DBGPRINT("[NTT_ICP1205_IRQ] BEFORE I2C");
+
     // Read REG0x14 Reg0x15
     ret = readDataFrom_ICP1205(ICP1205_REV_DAT1,&u8RegTable[0],2);
 
@@ -855,7 +648,6 @@ static void Icp1205UpdataIntSts(void)
 		//ICP1205_INT_STAT1 0x21 ICP1205_INT_STAT2 0x22 ICP1205_INT_STAT3 0x23
 	   if(readDataFrom_ICP1205(ICP1205_INT_STAT1,u8RegTable,6))
 	   {
-			DBGPRINT("[NTT_1205_INT] ""INT1=0x%02X INT2=0x%02X INT3=0x%02X",u8RegTable[0],u8RegTable[1],u8RegTable[2]);
 	        //renable interrupt
 			u8tmp=0XFF;//保留插入拔出中断
 			writeDataTo_ICP1205(ICP1205_INT_STAT1,&u8tmp,1);
@@ -1256,98 +1048,20 @@ static void charger_manager_handler_thread(const void *arg)
 
 void handle_batter_1205(void)
 {
-	DBGPRINT("[NTT_1205_HANDLE] entered tick=%u",(unsigned int)osKernelSysTick());
 	Icp1205UpdataIntSts();
 	ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
 }
-
-/*
- * Diagnostic only.
- * Enable after confirming ICP1205 INT_STAT1/2/3 are W1C.
- */
-#define NTT_1205_TEST_CLEAR_PENDING_IRQ  1
-
 void charger_manager_start(void)
 {
-    DBGPRINT("%s", __func__);
-
-    aw_ntc_detect_init();
-
+	DBGPRINT("%s", __func__);
+	aw_ntc_detect_init();
 #if 0
-    charger_manager_thread_id =
-        osThreadCreate(
-            osThread(charger_manager_handler_thread),
-            NULL);
+	charger_manager_thread_id = osThreadCreate(osThread(charger_manager_handler_thread), NULL);
 #else
-
-    if (charger_manager_thread_id)
-        ;
-
-    /*
-     * Step 1: Initialize ICP1205.
-     */
-    ICP1205_Init();
-	DBGPRINT("[NTT_1205_TEST] BEFORE_IRQ_ENABLE INT_P05=%d",hal_gpio_pin_get_val(ICP1205_INT_GPIO));
-
-    /*
-     * Step 2: Read interrupt registers before clearing.
-     */
-    ntt_1205_dump_irq_registers("BEFORE_CLEAR");
-
-#if NTT_1205_TEST_CLEAR_PENDING_IRQ
-
-    /*
-     * Step 3: TEST ONLY
-     *
-     * Clear ICP1205 pending interrupt flags.
-     * Registers:
-     * 0x21 = INT_STAT1
-     * 0x22 = INT_STAT2
-     * 0x23 = INT_STAT3
-     *
-     * WARNING:
-     * Only enable if these registers are confirmed W1C.
-     */
-    uint8_t clear_flags[3] = {0xFF, 0xFF, 0xFF};
-
-    int clear_ret = writeDataTo_ICP1205(
-        ICP1205_INT_STAT1,
-        clear_flags,
-        sizeof(clear_flags));
-
-    DBGPRINT(
-        "[NTT_1205_CLEAR] ret=%d GPIO=%d",
-        clear_ret,
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO));
-
-    /*
-     * Step 4: Read interrupt registers after clearing.
-     */
-    ntt_1205_dump_irq_registers("AFTER_CLEAR");
-
+	if(charger_manager_thread_id)
+		;
+	ICP1205_Init();
+	ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
+	Icp1205IntEnable();
 #endif
-
-    /*
-     * Step 5: Enable BES1306P GPIO IRQ.
-     */
-    ICP1205_GPIO_INT_IRQ_Enable(ICP1205_INT_GPIO);
-	DBGPRINT("[NTT_1205_TEST] AFTER_IRQ_ENABLE INT_P05=%d",hal_gpio_pin_get_val(ICP1205_INT_GPIO));
-
-    /*
-     * Step 6: Enable ICP1205 interrupt output.
-     */
-    Icp1205IntEnable();
-	DBGPRINT("[NTT_1205_TEST] AFTER_CHIP_INT_ENABLE INT_P05=%d",hal_gpio_pin_get_val(ICP1205_INT_GPIO));
-
-    /*
-     * Step 7: Read interrupt registers after IRQ enable.
-     */
-    ntt_1205_dump_irq_registers("AFTER_ENABLE");
-
-#endif
-
-    DBGPRINT(
-        "[NTT_1205_INIT] FINAL GPIO=%d IRQ_ENABLE=%d",
-        hal_gpio_pin_get_val(ICP1205_INT_GPIO),
-        IntReqHasEnable);
 }

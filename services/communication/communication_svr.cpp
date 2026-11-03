@@ -601,7 +601,6 @@ static void communication_process(COMMUNICATION_MAIL* mail_p)
 		#endif	
             break;
 		case COMMUNICATION_MSG_CHARGER1205:
-            COMMUNICATION_TRACE("[NTT_1205_MSG] received tick=%u",(unsigned int)osKernelSysTick());
 			handle_batter_1205();
 			break;
         default:
@@ -669,8 +668,6 @@ int communication_send_buf(uint8_t * buf, uint8_t len)
     	return -1;
     }
     COMMUNICATION_TRACE(0,"[%s] %d\n", __func__, len);
-    COMMUNICATION_TRACE_IMM(0,"[NTT_1WIRE_TX] REQUEST len=%u tick=%u",len,hal_sys_timer_get());
-
     communication_command_block_alloc(&cmd_blk);
     memcpy(cmd_blk->cmd_buf, buf, len);
     cmd_blk->cmd_len = len;
