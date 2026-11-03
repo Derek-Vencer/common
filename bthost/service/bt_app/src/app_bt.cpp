@@ -3563,6 +3563,11 @@ void app_bt_response_acl_conn_req(bt_bdaddr_t *remote, bool accept)
 
 void app_bt_reconnect_hfp_profile(const bt_bdaddr_t *mobile_addr)
 {
+    if (mobile_addr == NULL)
+    {
+        DEBUG_INFO(0,"[NTT_RECONNECT_R4] HFP address NULL");
+        return;
+    }
     app_bt_HF_CreateServiceLink(NULL, (bt_bdaddr_t *)mobile_addr);
 }
 
@@ -5055,17 +5060,29 @@ void app_bt_global_handle(const btif_event_t *Event)
                 */
                 if (error_code == BTIF_BEC_MISSING_KEY && bd_ddr != NULL && !ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)bd_ddr))
                 {
-                    // 1. 記錄發生 Key Missing 的手機地址
+                    delete_record_link_key_only = false;
+
+                    /*
+                    * Lock the mobile that reported Missing Key.
+                    */
                     ntt_mobile_key_missing_lock = true;
                     ntt_mobile_key_missing_addr = *bd_ddr;
 
-                    DEBUG_INFO(0, "[NTT_KEY_MISSING] mobile lock enabled");
+                    /*
+                    * Prevent Missing Key from becoming
+                    * automatic first-mobile pairing.
+                    */
+                    ntt_first_no_mobile_pair_mode = false;
+
+                    DEBUG_INFO(0,
+                        "[NTT_KEY_MISSING] mobile locked, auto pairing disabled");
+
                     DUMP8("%02x ", bd_ddr->address, BTIF_BD_ADDR_SIZE);
 
-                    // 2. 通知另一耳刪除相同手機的配對紀錄
+                    /*
+                    * Synchronize mobile record deletion to peer.
+                    */
                     ntt_tws_delete_mobile_record_sync(bd_ddr->address);
-
-                    DEBUG_INFO(0,"[NTT_KEY_MISSING] TWS delete mobile record sync requested");
                 }
 
                 DUMP8("%02x ", bd_ddr->address, 6);
