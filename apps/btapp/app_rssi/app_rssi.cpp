@@ -470,6 +470,20 @@ remote_rssi_obj_t *app_rssi_find_and_new_remote_obj(bt_bdaddr_t *addr)
     return NULL;
 }
 
+bool ntt_case_fast_remove_read_tws_rssi(int8_t *rssi)
+{
+    if (rssi == NULL || !APP_RSSI_IS_TWS_CONNECT()) {
+        return false;
+    }
+    rx_agc_t agc = {0};
+    if (!bt_drv_reg_op_read_rssi_in_dbm(APP_RSSI_GET_TWS_HANDLE(), &agc) ||
+        agc.rssi >= 0 || agc.rssi < -110) {
+        return false;
+    }
+    *rssi = agc.rssi;
+    return true;
+}
+
 static void app_rssi_read_tws_rssi()
 {
     rx_agc_t agc = {0};
