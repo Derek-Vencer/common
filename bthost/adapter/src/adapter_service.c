@@ -1523,6 +1523,36 @@ static bool POSSIBLY_UNUSED besbt_cfg_dont_send_cnum_cops_cmee_at_cmd(void)
 
 extern bool app_bt_get_io_capability_for_special_devices(uint16_t connhdl, bt_iocap_requirement_t *p_iocap);
 
+extern bool ntt_bt_should_reject_missing_key_acl(const uint8_t *addr);
+
+static bool ntt_extra_acl_conn_req_callback(uint8_t *addr,uint8_t *cod)
+{
+    if (addr != NULL &&
+        ntt_bt_should_reject_missing_key_acl(addr))
+    {
+        DEBUG_INFO(0,
+            "[NTT_KEY_MISSING] reject incoming ACL before SSP");
+
+        btif_me_response_acl_conn_req(
+            (bt_bdaddr_t *)addr,
+            false,
+            BTIF_BEC_LIMITED_RESOURCE);
+
+        /*
+         * ACL request was explicitly rejected.
+         * Do not enter BES pending-request handling.
+         */
+        return false;
+    }
+
+    /*
+     * Preserve original BES IBRT connection handling.
+     */
+    return app_ui_incoming_extra_conn_req_callback(
+        addr,
+        cod);
+}
+
 void bt_adapter_callback_func_init(void)
 {
     g_hf_custom_id.hf_custom_vendor_id = 0x0000;
@@ -1619,7 +1649,7 @@ void bt_adapter_callback_func_init(void)
 
     fn.hf_sco_codec_info_sync = app_tws_ibrt_sync_sco_codec_info_v2;
     fn.spp_report_close_to_ibrt_slave = app_tws_ibrt_report_spp_close_to_slave;
-    fn.extra_acl_conn_req_update = app_ui_incoming_extra_conn_req_callback;
+    fn.extra_acl_conn_req_update  = ntt_extra_acl_conn_req_callback;
     fn.ibrt_rx_data_filter_cb = app_tws_ibrt_rx_data_filter_callback;
 #endif
 #endif /* BLE_ONLY_ENABLED */

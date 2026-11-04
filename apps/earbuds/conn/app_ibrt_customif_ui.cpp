@@ -122,7 +122,7 @@ extern bool ntt_user_manual_pairing_request;
 extern bool ntt_first_no_mobile_pair_mode;
 bool pairing_exited_on_out = false;
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
-extern bool ntt_user_manual_pairing_request;
+
 /*
  * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
  */

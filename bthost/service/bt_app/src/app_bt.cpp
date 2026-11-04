@@ -198,6 +198,7 @@ extern void app_ibrt_start_power_on_tws_pairing(void);
 extern bool ntt_manual_pairing_mode;
 extern bool ntt_first_no_mobile_pair_mode;
 extern bool ntt_manual_pairing_mode;
+extern bool ntt_user_manual_pairing_request;
 /*
  * NTT: Prevent automatic SSP after mobile Link Key missing.
  *
@@ -2074,6 +2075,45 @@ extern "C" void ntt_mobile_key_missing_clear(void)
     DEBUG_INFO(0,"[NTT_KEY_MISSING] lock cleared");
 }
 
+/*
+ * NTT:
+ * Check whether an incoming ACL should be blocked
+ * because the remote mobile previously triggered
+ * Missing Key.
+ *
+ * Return true only when the ACL must be rejected.
+ */
+extern "C" bool ntt_bt_should_reject_missing_key_acl(
+    const uint8_t *addr)
+{
+    if (addr == NULL)
+    {
+        return false;
+    }
+
+    const struct bdaddr_t *bdaddr =
+        (const struct bdaddr_t *)addr;
+
+    /*
+     * Explicit user pairing request overrides
+     * the Missing Key reconnect lock.
+     */
+    if (ntt_user_manual_pairing_request)
+    {
+        return false;
+    }
+
+    /*
+     * Never reject the TWS peer.
+     */
+    if (ntt_bt_addr_is_tws_peer(bdaddr))
+    {
+        return false;
+    }
+
+    return ntt_mobile_key_missing_is_locked(bdaddr);
+}
+
 static void ntt_bt_user_confirmation_callback(struct bdaddr_t *bdaddr,uint32 numeric_value)
 {
     bool is_tws_peer = false;
@@ -3568,6 +3608,18 @@ void app_bt_reconnect_hfp_profile(const bt_bdaddr_t *mobile_addr)
         DEBUG_INFO(0,"[NTT_RECONNECT_R4] HFP address NULL");
         return;
     }
+    /*
+    * NTT: Block automatic HFP reconnect
+    * after Mobile Missing Key.
+    */
+    if (!ntt_manual_pairing_mode &&  ntt_mobile_key_missing_is_locked(
+            (const struct bdaddr_t *)mobile_addr))
+    {
+        DEBUG_INFO(0,"[NTT_KEY_MISSING] BLOCK HFP reconnect");
+
+        return;
+    }
+
     app_bt_HF_CreateServiceLink(NULL, (bt_bdaddr_t *)mobile_addr);
 }
 
@@ -5635,6 +5687,32 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
     if (pmu_ntt_case_closed_latch_get())
     {
         DEBUG_INFO(0,"[NTT_CASE] CLOSED latch=1, block mobile reconnect");
+        return;
+    }
+
+    DEBUG_INFO(0,
+    "[NTT_RECONNECT] handler triggered");
+
+    DUMP8("%02x ",
+        reconnect->rmt_addr.address,
+        BTIF_BD_ADDR_SIZE);
+
+    /*
+    * NTT Missing Key:
+    * Block automatic mobile reconnect before A2DP/HFP.
+    */
+    if (reconnect != NULL &&
+        !ntt_manual_pairing_mode &&
+        ntt_mobile_key_missing_is_locked(
+            (const struct bdaddr_t *)&reconnect->rmt_addr))
+    {
+        DEBUG_INFO(0,
+            "[NTT_KEY_MISSING] BLOCK A2DP/HFP reconnect");
+
+        DUMP8("%02x ",
+            reconnect->rmt_addr.address,
+            BTIF_BD_ADDR_SIZE);
+
         return;
     }
 
