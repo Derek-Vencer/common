@@ -79,6 +79,9 @@ typedef struct
     remote_rssi_t remote_rssi[APP_RSSI_MAX_RECORD_NUM];
 } rssi_pkt_t;
 
+/* Instantaneous TWS RSSI for Charging Complete fast-removal guard. */
+bool ntt_case_fast_remove_read_tws_rssi(int8_t *rssi);
+
 void app_rssi_init();
 void app_rssi_update_date_pkt(rssi_pkt_t *p_pkt);
 void app_rssi_sample_task_start();
