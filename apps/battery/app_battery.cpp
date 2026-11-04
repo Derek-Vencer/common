@@ -583,6 +583,7 @@ static bool ntt_case_shutdown_charger_gate(void)
     if (!ntt_charging_pwron_pending_shutdown ||
         g_ntt_case_open_cancel)
     {
+        BATTERY_TRACE(2, "[NTT_CASE_RSSI_DIAG] SHUTDOWN_GATE latch=1 tws=%d", bts_tws_if_is_tws_link_connected());
         ntt_charger_ready_reset();
         return false;
     }
