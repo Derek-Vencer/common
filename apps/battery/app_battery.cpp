@@ -287,7 +287,7 @@ extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 #define NTT_FAST_REMOVE_MAX_WAIT_MS 5000
 #define NTT_FAST_REMOVE_SAMPLE_MS 200
 #define NTT_FAST_REMOVE_SAMPLE_COUNT 5
-#define NTT_FAST_REMOVE_WEAK_DBM (-45)
+#define NTT_FAST_REMOVE_WEAK_DBM (-45) /* Factory fallback, never overwritten */
 #define NTT_FAST_REMOVE_DROP_DB 8
 static bool s_fast_remove_boot_session = false;
 static bool s_fast_remove_active = false;
@@ -713,6 +713,7 @@ extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
  * either measurement; the next automatic sample replaces that field.
  */
 #define NTT_RSSI_CAL_MAGIC 0xA6
+#define NTT_RSSI_THRESHOLD_MAGIC 0x5D
 #define NTT_RSSI_CAL_CASE  0x01
 #define NTT_RSSI_CAL_OUT   0x02
 
@@ -761,6 +762,38 @@ extern "C" bool ntt_rssi_calibration_write(uint8_t mask, uint8_t valid,
     return true;
 }
 
+/* Threshold override is independent of measured RSSI averages. */
+extern "C" bool ntt_rssi_threshold_read(int8_t *effective, int8_t *factory,
+                                         uint8_t *overridden)
+{
+    if (!effective || !factory || !overridden) return false;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+    const NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    *factory = NTT_FAST_REMOVE_WEAK_DBM;
+    *overridden = (cal->threshold_magic == NTT_RSSI_THRESHOLD_MAGIC &&
+                   cal->threshold_dbm >= -110 && cal->threshold_dbm <= -1) ? 1 : 0;
+    *effective = *overridden ? cal->threshold_dbm : *factory;
+    return true;
+}
+
+extern "C" bool ntt_rssi_threshold_write(int8_t threshold)
+{
+    if (threshold < -110 || threshold > -1) return false;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+    uint32_t lock = nv_record_pre_write_operation();
+    NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    cal->threshold_dbm = threshold;
+    cal->threshold_magic = NTT_RSSI_THRESHOLD_MAGIC;
+    nv_record_extension_update();
+    nv_record_post_write_operation(lock);
+    nv_record_flash_flush();
+    BATTERY_TRACE(1, "[NTT_RSSI_CAL] THRESHOLD SET=%d factory=%d",
+                  threshold, NTT_FAST_REMOVE_WEAK_DBM);
+    return true;
+}
+
 static bool ntt_case_fast_remove_guard(void)
 {
     if (!s_fast_remove_active) return false;
@@ -790,7 +823,13 @@ static bool ntt_case_fast_remove_guard(void)
     }
     if (s_fast_remove_count == NTT_FAST_REMOVE_SAMPLE_COUNT) {
         int32_t avg = s_fast_remove_sum / NTT_FAST_REMOVE_SAMPLE_COUNT;
-        bool weak = avg <= NTT_FAST_REMOVE_WEAK_DBM;
+        int8_t threshold = NTT_FAST_REMOVE_WEAK_DBM;
+        int8_t factory = NTT_FAST_REMOVE_WEAK_DBM;
+        uint8_t overridden = 0;
+        ntt_rssi_threshold_read(&threshold, &factory, &overridden);
+        bool weak = avg <= threshold;
+        BATTERY_TRACE(4, "[NTT_FAST_REMOVE] threshold=%d factory=%d override=%d avg=%d",
+                      threshold, factory, overridden, avg);
         /* Save the measured average in this ear only. */
         ntt_rssi_calibration_write(weak ? NTT_RSSI_CAL_OUT : NTT_RSSI_CAL_CASE,
                                    weak ? NTT_RSSI_CAL_OUT : NTT_RSSI_CAL_CASE,
