@@ -33,6 +33,7 @@
 #include "app_pwl.h"
 #include "app_audio.h"
 #include "app_overlay.h"
+extern void ntt_case_fast_remove_arm_boot(void);
 #include "app_battery.h"
 #include "app_trace_rx.h"
 #include "app_utils.h"
@@ -3164,6 +3165,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     app_application_ready_to_start_callback();
 
     case_closed_latched = pmu_ntt_case_closed_latch_get();
+    if (case_closed_latched) ntt_case_fast_remove_arm_boot();
 
     if (case_closed_latched)
     {
