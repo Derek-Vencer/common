@@ -24,6 +24,8 @@
 #include "hal_chipid.h"
 #include "app_thread.h"
 #include "app_battery.h"
+#include "nvrecord_env.h"
+#include "nvrecord_extension.h"
 #include "audio_policy.h"
 #include "app_bt.h"
 #include "apps.h"
@@ -706,6 +708,57 @@ void ntt_case_poweroff_enable(void)
 
 extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
 
+/*
+ * Per-ear RSSI calibration in NV. The application may overwrite or clear
+ * either measurement; the next automatic sample replaces that field.
+ */
+#define NTT_RSSI_CAL_MAGIC 0xA6
+#define NTT_RSSI_CAL_CASE  0x01
+#define NTT_RSSI_CAL_OUT   0x02
+
+extern "C" bool ntt_rssi_calibration_read(uint8_t *valid, int8_t *in_case,
+                                           int8_t *removed)
+{
+    struct nvrecord_env_t *env = NULL;
+    if (!valid || !in_case || !removed || nv_record_env_get(&env) != 0 || !env)
+        return false;
+    *valid = env->ntt_rssi_cal_magic == NTT_RSSI_CAL_MAGIC ?
+             (env->ntt_rssi_cal_valid & 0x03) : 0;
+    *in_case = (*valid & NTT_RSSI_CAL_CASE) ? env->ntt_rssi_case_dbm : 0;
+    *removed = (*valid & NTT_RSSI_CAL_OUT) ? env->ntt_rssi_remove_dbm : 0;
+    return true;
+}
+
+extern "C" bool ntt_rssi_calibration_write(uint8_t mask, uint8_t valid,
+                                            int8_t in_case, int8_t removed)
+{
+    if ((mask & ~0x03) || !mask || (valid & ~0x03))
+        return false;
+    if (((mask & valid & NTT_RSSI_CAL_CASE) &&
+         (in_case > -1 || in_case < -110)) ||
+        ((mask & valid & NTT_RSSI_CAL_OUT) &&
+         (removed > -1 || removed < -110)))
+        return false;
+
+    struct nvrecord_env_t *env = NULL;
+    if (nv_record_env_get(&env) != 0 || !env)
+        return false;
+    if (env->ntt_rssi_cal_magic != NTT_RSSI_CAL_MAGIC) {
+        env->ntt_rssi_cal_valid = 0;
+        env->ntt_rssi_case_dbm = 0;
+        env->ntt_rssi_remove_dbm = 0;
+    }
+    env->ntt_rssi_cal_magic = NTT_RSSI_CAL_MAGIC;
+    env->ntt_rssi_cal_valid =
+        (env->ntt_rssi_cal_valid & ~mask) | (valid & mask);
+    if (mask & NTT_RSSI_CAL_CASE) env->ntt_rssi_case_dbm = in_case;
+    if (mask & NTT_RSSI_CAL_OUT) env->ntt_rssi_remove_dbm = removed;
+    bool ok = (nv_record_env_set(env) == 0);
+    BATTERY_TRACE(4, "[NTT_RSSI_CAL] WRITE mask=%d valid=%d case=%d out=%d",
+                  mask, env->ntt_rssi_cal_valid, in_case, removed);
+    return ok;
+}
+
 static bool ntt_case_fast_remove_guard(void)
 {
     if (!s_fast_remove_active) return false;
@@ -736,6 +789,10 @@ static bool ntt_case_fast_remove_guard(void)
     if (s_fast_remove_count == NTT_FAST_REMOVE_SAMPLE_COUNT) {
         int32_t avg = s_fast_remove_sum / NTT_FAST_REMOVE_SAMPLE_COUNT;
         bool weak = avg <= NTT_FAST_REMOVE_WEAK_DBM;
+        /* Save the measured average in this ear only. */
+        ntt_rssi_calibration_write(weak ? NTT_RSSI_CAL_OUT : NTT_RSSI_CAL_CASE,
+                                   weak ? NTT_RSSI_CAL_OUT : NTT_RSSI_CAL_CASE,
+                                   (int8_t)avg, (int8_t)avg);
         s_fast_remove_active = false;
         BATTERY_TRACE(4, "[NTT_FAST_REMOVE] DECISION avg=%d first=%d weak=%d ms=%d", avg, s_fast_remove_first, weak, elapsed);
         if (weak) {
