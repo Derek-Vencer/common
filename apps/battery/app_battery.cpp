@@ -704,6 +704,8 @@ void ntt_case_poweroff_enable(void)
     BATTERY_TRACE(0,"[POWER_OFF] enabled by POWER_OFF");
 }
 
+extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
+
 static bool ntt_case_fast_remove_guard(void)
 {
     if (!s_fast_remove_active) return false;
@@ -733,8 +735,7 @@ static bool ntt_case_fast_remove_guard(void)
     }
     if (s_fast_remove_count == NTT_FAST_REMOVE_SAMPLE_COUNT) {
         int32_t avg = s_fast_remove_sum / NTT_FAST_REMOVE_SAMPLE_COUNT;
-        bool weak = avg <= NTT_FAST_REMOVE_WEAK_DBM ||
-                    ((int32_t)s_fast_remove_first - avg) >= NTT_FAST_REMOVE_DROP_DB;
+        bool weak = avg <= NTT_FAST_REMOVE_WEAK_DBM;
         s_fast_remove_active = false;
         BATTERY_TRACE(4, "[NTT_FAST_REMOVE] DECISION avg=%d first=%d weak=%d ms=%d", avg, s_fast_remove_first, weak, elapsed);
         if (weak) {
@@ -745,6 +746,7 @@ static bool ntt_case_fast_remove_guard(void)
             g_pogonin_role_switch_wait_count = 0;
 #endif
             BATTERY_TRACE(0, "[NTT_FAST_REMOVE] EXIT latch=0 shutdown canceled");
+            ntt_fast_remove_mobile_reconnect_request();
             return true;
         }
         return false;
