@@ -475,7 +475,16 @@ static void app_rssi_read_tws_rssi()
     rx_agc_t agc = {0};
 
     if (APP_RSSI_IS_TWS_CONNECT()) {
-        bt_drv_reg_op_read_rssi_in_dbm(APP_RSSI_GET_TWS_HANDLE(), &agc);
+        static uint8_t diag_samples = 0;
+        bool diag_ok = bt_drv_reg_op_read_rssi_in_dbm(APP_RSSI_GET_TWS_HANDLE(), &agc);
+        if (diag_samples < 8) {
+            BTAPP_TRACE(5, "[NTT_CASE_RSSI_DIAG] RSSI_SAMPLE n=%d ok=%d handle=0x%X rssi=%d gain=%d",
+                        diag_samples, diag_ok, APP_RSSI_GET_TWS_HANDLE(), agc.rssi, agc.rxgain);
+            diag_samples++;
+        }
+        if (!diag_ok || agc.rssi >= 0 || agc.rssi < -110) {
+            return;
+        }
 
         rssi_contrl.tws_rssi.rxgain = agc.rxgain;
         app_rssi_window_push(&rssi_contrl.tws_window, agc.rssi);
