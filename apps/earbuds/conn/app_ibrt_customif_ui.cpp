@@ -141,6 +141,12 @@ static void ntt_fast_remove_reconnect_timer_cb(void const *arg)
     }
 
     if (bts_tws_if_is_tws_link_connected() &&
+        app_ibrt_if_get_ui_role() == TWS_UI_SLAVE) {
+        EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] SLAVE skip mobile reconnect");
+        return;
+    }
+
+    if (bts_tws_if_is_tws_link_connected() &&
         app_ibrt_if_get_ui_role() == TWS_UI_MASTER) {
         EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] MASTER retry mobile");
         app_bt_profile_connect_manager_opening_reconnect();
