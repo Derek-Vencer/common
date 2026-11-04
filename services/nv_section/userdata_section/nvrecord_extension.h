@@ -362,11 +362,6 @@ struct nvrecord_env_t {
 #endif
     uint8_t chargerBoxBattery;
     uint8_t color_code;
-    /* NTT per-ear RSSI calibration; no peer synchronization. */
-    uint8_t ntt_rssi_cal_magic;
-    uint8_t ntt_rssi_cal_valid;
-    int8_t ntt_rssi_case_dbm;
-    int8_t ntt_rssi_remove_dbm;
     //fixed storage for box version
     //uint8_t chargerBoxVersion[16+1];
 //----------------------------------------------------------------------------------------------
@@ -788,10 +783,17 @@ typedef struct {
     float calib_gain[3];
 }TOTA_ADDA_TEST_T;
 
-typedef struct{
+typedef struct {
+    uint8_t magic;
+    uint8_t valid;
+    int8_t case_dbm;
+    int8_t remove_dbm;
+} NTT_RSSI_CAL_NV_T;
+
+typedef struct {
     TOTA_ADDA_TEST_T adda_test;
-    // TODO: add other items for SDK.
-}NV_SDK_INFO_T;
+    NTT_RSSI_CAL_NV_T ntt_rssi_cal;
+} NV_SDK_INFO_T;
 
 typedef union{
     NV_SDK_INFO_T info;
@@ -799,6 +801,8 @@ typedef union{
 } NV_SDK_RESERVE_SPACE_T;
 
 STATIC_ASSERT(sizeof(NV_SDK_INFO_T) < NV_SDK_RESERVED_LEN, "nv sdk info too big");
+STATIC_ASSERT(sizeof(NTT_RSSI_CAL_NV_T) == 4, "rssi nv size mismatch");
+STATIC_ASSERT(sizeof(NV_SDK_RESERVE_SPACE_T) == NV_SDK_RESERVED_LEN, "nv reserve size mismatch");
 
 typedef struct {
     NVRECORD_HEADER_T header;
