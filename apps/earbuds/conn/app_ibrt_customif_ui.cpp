@@ -122,6 +122,53 @@ extern bool ntt_user_manual_pairing_request;
 extern bool ntt_first_no_mobile_pair_mode;
 bool pairing_exited_on_out = false;
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
+/*
+ * Test4: retry mobile reconnect after fast-remove latch release.
+ * The initial TWS-profiles reconnect may have been blocked by latch=1.
+ */
+extern "C" bool pmu_ntt_case_closed_latch_get(void);
+static osTimerId s_ntt_fast_remove_reconnect_timer = NULL;
+static uint8_t s_ntt_fast_remove_reconnect_attempts = 0;
+static void ntt_fast_remove_reconnect_timer_cb(void const *arg);
+osTimerDef(NTT_FAST_REMOVE_RECONNECT, ntt_fast_remove_reconnect_timer_cb);
+
+static void ntt_fast_remove_reconnect_timer_cb(void const *arg)
+{
+    if (pmu_ntt_case_closed_latch_get() ||
+        app_bt_ibrt_has_mobile_link_connected()) {
+        EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] stop latch/mobile");
+        return;
+    }
+
+    if (bts_tws_if_is_tws_link_connected() &&
+        app_ibrt_if_get_ui_role() == TWS_UI_MASTER) {
+        EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] MASTER retry mobile");
+        app_bt_profile_connect_manager_opening_reconnect();
+        return;
+    }
+
+    if (++s_ntt_fast_remove_reconnect_attempts < 10 &&
+        s_ntt_fast_remove_reconnect_timer != NULL) {
+        osTimerStart(s_ntt_fast_remove_reconnect_timer, 300);
+    } else {
+        EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] timeout");
+    }
+}
+
+extern "C" void ntt_fast_remove_mobile_reconnect_request(void)
+{
+    if (s_ntt_fast_remove_reconnect_timer == NULL) {
+        s_ntt_fast_remove_reconnect_timer =
+            osTimerCreate(osTimer(NTT_FAST_REMOVE_RECONNECT), osTimerOnce, NULL);
+    }
+    if (s_ntt_fast_remove_reconnect_timer != NULL) {
+        s_ntt_fast_remove_reconnect_attempts = 0;
+        osTimerStop(s_ntt_fast_remove_reconnect_timer);
+        osTimerStart(s_ntt_fast_remove_reconnect_timer, 300);
+        EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] scheduled");
+    }
+}
+
 
 /*
  * Implemented in apps/btapp/bt_app/app_keyhandle.cpp
