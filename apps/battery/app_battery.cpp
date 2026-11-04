@@ -287,6 +287,7 @@ extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 #define NTT_FAST_REMOVE_SAMPLE_COUNT 5
 #define NTT_FAST_REMOVE_WEAK_DBM (-45)
 #define NTT_FAST_REMOVE_DROP_DB 8
+static bool s_fast_remove_boot_session = false;
 static bool s_fast_remove_active = false;
 static uint32_t s_fast_remove_start = 0;
 static uint32_t s_fast_remove_last = 0;
@@ -296,6 +297,7 @@ static uint8_t s_fast_remove_count = 0;
 void ntt_case_fast_remove_arm_boot(void)
 {
     if (!pmu_ntt_case_closed_latch_get()) return;
+    s_fast_remove_boot_session = true;
     s_fast_remove_active = true;
     s_fast_remove_start = hal_sys_timer_get();
     s_fast_remove_last = 0;
@@ -1121,7 +1123,25 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         return;
     }
 
-    if (!role_switch_timed_out &&
+    /*
+     * Test3: skip role switch ONLY for retained-latch boot where
+     * BOTH local and peer explicitly report IN_CASE.
+     * Unknown/OUT_CASE states keep the original role-switch guard.
+     * Normal case-close and single-ear shutdown are unchanged.
+     */
+    bool test3_skip_role_switch =
+        s_fast_remove_boot_session &&
+        before_rs_latch &&
+        (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+        (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE);
+
+    BATTERY_TRACE(5, "[NTT_TEST3_RS] boot=%d latch=%d local=%d peer=%d skip=%d",
+                  s_fast_remove_boot_session, before_rs_latch,
+                  ntt_case_state_get_local(), ntt_case_state_get_peer(),
+                  test3_skip_role_switch);
+
+    if (!test3_skip_role_switch &&
+        !role_switch_timed_out &&
         ntt_case_close_try_role_switch_before_shutdown())
     {
         BATTERY_TRACE(1,"[POWER_OFF] role switch requested latch=%d",before_rs_latch);
