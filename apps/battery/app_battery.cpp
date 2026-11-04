@@ -280,6 +280,29 @@ void earBudsCloseOff_PogonIn_StopTimer(void);
 extern bool ntt_charging_pwron_pending_shutdown;
 extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 
+#include "../btapp/app_rssi/app_rssi.h"
+#define NTT_FAST_REMOVE_OBSERVE_MS 3000
+#define NTT_FAST_REMOVE_MAX_WAIT_MS 5000
+#define NTT_FAST_REMOVE_SAMPLE_MS 200
+#define NTT_FAST_REMOVE_SAMPLE_COUNT 5
+#define NTT_FAST_REMOVE_WEAK_DBM (-45)
+#define NTT_FAST_REMOVE_DROP_DB 8
+static bool s_fast_remove_active = false;
+static uint32_t s_fast_remove_start = 0;
+static uint32_t s_fast_remove_last = 0;
+static int32_t s_fast_remove_sum = 0;
+static int8_t s_fast_remove_first = 0;
+static uint8_t s_fast_remove_count = 0;
+void ntt_case_fast_remove_arm_boot(void)
+{
+    if (!pmu_ntt_case_closed_latch_get()) return;
+    s_fast_remove_active = true;
+    s_fast_remove_start = hal_sys_timer_get();
+    s_fast_remove_last = 0;
+    s_fast_remove_sum = 0;
+    s_fast_remove_count = 0;
+    BATTERY_TRACE(0, "[NTT_FAST_REMOVE] ARM 3000/5000");
+}
 #define POGONIN_CLOSE_CHECK_INTERVAL_MS          (3000)
 #define NTT_BOTH_IN_CASE_FAST_SHUTDOWN_MS         (300)
 #define POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT       (10)
@@ -679,11 +702,65 @@ void ntt_case_poweroff_enable(void)
     BATTERY_TRACE(0,"[POWER_OFF] enabled by POWER_OFF");
 }
 
+static bool ntt_case_fast_remove_guard(void)
+{
+    if (!s_fast_remove_active) return false;
+    if (!pmu_ntt_case_closed_latch_get() || g_ntt_case_open_cancel) {
+        s_fast_remove_active = false;
+        return false;
+    }
+    uint32_t now = hal_sys_timer_get();
+    uint32_t elapsed = TICKS_TO_MS(now - s_fast_remove_start);
+    if (elapsed >= NTT_FAST_REMOVE_MAX_WAIT_MS) {
+        s_fast_remove_active = false;
+        BATTERY_TRACE(2, "[NTT_FAST_REMOVE] TIMEOUT ms=%d samples=%d", elapsed, s_fast_remove_count);
+        return false;
+    }
+    if (elapsed >= NTT_FAST_REMOVE_OBSERVE_MS &&
+        s_fast_remove_count < NTT_FAST_REMOVE_SAMPLE_COUNT &&
+        (s_fast_remove_last == 0 ||
+         TICKS_TO_MS(now - s_fast_remove_last) >= NTT_FAST_REMOVE_SAMPLE_MS)) {
+        int8_t rssi = 0;
+        s_fast_remove_last = now;
+        if (ntt_case_fast_remove_read_tws_rssi(&rssi)) {
+            if (s_fast_remove_count == 0) s_fast_remove_first = rssi;
+            s_fast_remove_sum += rssi;
+            s_fast_remove_count++;
+            BATTERY_TRACE(3, "[NTT_FAST_REMOVE] SAMPLE n=%d rssi=%d ms=%d", s_fast_remove_count, rssi, elapsed);
+        }
+    }
+    if (s_fast_remove_count == NTT_FAST_REMOVE_SAMPLE_COUNT) {
+        int32_t avg = s_fast_remove_sum / NTT_FAST_REMOVE_SAMPLE_COUNT;
+        bool weak = avg <= NTT_FAST_REMOVE_WEAK_DBM ||
+                    ((int32_t)s_fast_remove_first - avg) >= NTT_FAST_REMOVE_DROP_DB;
+        s_fast_remove_active = false;
+        BATTERY_TRACE(4, "[NTT_FAST_REMOVE] DECISION avg=%d first=%d weak=%d ms=%d", avg, s_fast_remove_first, weak, elapsed);
+        if (weak) {
+            pmu_ntt_case_closed_latch_set(false);
+            ntt_charging_pwron_pending_shutdown = false;
+#ifdef IBRT
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+#endif
+            BATTERY_TRACE(0, "[NTT_FAST_REMOVE] EXIT latch=0 shutdown canceled");
+            return true;
+        }
+        return false;
+    }
+    if (pogonPinCloseTimer != NULL) {
+        osTimerStop(pogonPinCloseTimer);
+        osTimerStart(pogonPinCloseTimer, 100);
+    }
+    BATTERY_TRACE(3, "[NTT_FAST_REMOVE] WAIT ms=%d tws=%d samples=%d", elapsed, bts_tws_if_is_tws_link_connected(), s_fast_remove_count);
+    return true;
+}
+
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
 #ifdef IBRT
     bool role_switch_timed_out = false;
 #endif
+    if (ntt_case_fast_remove_guard()) return;
     int8_t charging = app_battery_is_charging();
     uint8_t case_state = ntt_case_state_get_local();
 
