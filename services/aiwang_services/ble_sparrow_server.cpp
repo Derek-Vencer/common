@@ -2456,6 +2456,13 @@ typedef struct {
 extern "C" bool ntt_rssi_calibration_read(uint8_t *, int8_t *, int8_t *);
 extern "C" bool ntt_rssi_calibration_write(uint8_t, uint8_t, int8_t, int8_t);
 
+/* 0x91 returns measured averages and effective/factory threshold.
+ * Legacy 0x93 (4-byte payload) still writes measured slots.
+ * New 0x93 (1-byte payload) writes only the threshold override.
+ */
+extern "C" bool ntt_rssi_threshold_read(int8_t *, int8_t *, uint8_t *);
+extern "C" bool ntt_rssi_threshold_write(int8_t);
+
 static void ntt_rssi_cal_get(const uint8_t *data, uint16_t len)
 {
     if (!data || len != 3 || data[0] != 0x91 ||
@@ -2463,22 +2470,27 @@ static void ntt_rssi_cal_get(const uint8_t *data, uint16_t len)
         ntt_api_send_error_notify(0x91, API_ERR_INVALID_PARAM);
         return;
     }
-    uint8_t valid = 0;
-    int8_t in_case = 0, removed = 0;
-    if (!ntt_rssi_calibration_read(&valid, &in_case, &removed)) {
+    uint8_t valid = 0, overridden = 0;
+    int8_t in_case = 0, removed = 0, threshold = -45, factory = -45;
+    if (!ntt_rssi_calibration_read(&valid, &in_case, &removed) ||
+        !ntt_rssi_threshold_read(&threshold, &factory, &overridden)) {
         ntt_api_send_error_notify(0x91, API_ERR_STORAGE_ERROR);
         return;
     }
-    uint8_t payload[3] = {valid, (uint8_t)in_case, (uint8_t)removed};
-    TRACE(3, "[NTT_RSSI_CAL][GET] valid=%d case=%d out=%d",
-          valid, in_case, removed);
+    uint8_t payload[6] = {valid, (uint8_t)in_case, (uint8_t)removed,
+                          (uint8_t)threshold, (uint8_t)factory, overridden};
+    TRACE(6, "[NTT_RSSI_CAL][GET] valid=%d case=%d out=%d threshold=%d factory=%d override=%d",
+          valid, in_case, removed, threshold, factory, overridden);
     sparraw_tx_msg(0x91, payload, sizeof(payload));
 }
 
 static void ntt_rssi_cal_set(const uint8_t *data, uint16_t len)
 {
     uint8_t status = 1;
-    if (data && len == 7 && data[0] == 0x93 &&
+    if (data && len == 4 && data[0] == 0x93 &&
+        data[1] == 0 && data[2] == 1) {
+        status = ntt_rssi_threshold_write((int8_t)data[3]) ? 0 : 2;
+    } else if (data && len == 7 && data[0] == 0x93 &&
         data[1] == 0 && data[2] == 4 &&
         data[3] != 0 && (data[3] & ~0x03) == 0 &&
         (data[4] & ~0x03) == 0) {
