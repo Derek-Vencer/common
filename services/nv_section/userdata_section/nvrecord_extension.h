@@ -362,6 +362,11 @@ struct nvrecord_env_t {
 #endif
     uint8_t chargerBoxBattery;
     uint8_t color_code;
+    /* NTT per-ear RSSI calibration; no peer synchronization. */
+    uint8_t ntt_rssi_cal_magic;
+    uint8_t ntt_rssi_cal_valid;
+    int8_t ntt_rssi_case_dbm;
+    int8_t ntt_rssi_remove_dbm;
     //fixed storage for box version
     //uint8_t chargerBoxVersion[16+1];
 //----------------------------------------------------------------------------------------------
