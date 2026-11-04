@@ -272,6 +272,15 @@ static int tota_spp_handle_data_event_func(const bt_bdaddr_t *remote,bt_spp_even
      * 0x50 Color Code
      * ...
      */
+    /* RSSI calibration GET/SET must bypass the legacy TOTA parser. */
+    if (dataLen >= 3 && (pData[0] == 0x91 || pData[0] == 0x93))
+    {
+        TOTA_V2_TRACE(2, "[NTT_RSSI_CAL][SPP_RX] cmd=0x%02X len=%u",
+                      pData[0], (unsigned int)dataLen);
+        sparrow_spp_api_rx_handler(pData, dataLen);
+        return 0;
+    }
+
     if (sparrow_spp_api_is_cmd(pData,dataLen))
     {
         TOTA_V2_TRACE(1,"[SPARROW_API] cmd=0x%02X len=%u",(unsigned int)pData[0],(unsigned int)dataLen);
