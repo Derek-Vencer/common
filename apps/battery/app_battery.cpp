@@ -719,44 +719,46 @@ extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
 extern "C" bool ntt_rssi_calibration_read(uint8_t *valid, int8_t *in_case,
                                            int8_t *removed)
 {
-    struct nvrecord_env_t *env = NULL;
-    if (!valid || !in_case || !removed || nv_record_env_get(&env) != 0 || !env)
-        return false;
-    *valid = env->ntt_rssi_cal_magic == NTT_RSSI_CAL_MAGIC ?
-             (env->ntt_rssi_cal_valid & 0x03) : 0;
-    *in_case = (*valid & NTT_RSSI_CAL_CASE) ? env->ntt_rssi_case_dbm : 0;
-    *removed = (*valid & NTT_RSSI_CAL_OUT) ? env->ntt_rssi_remove_dbm : 0;
+    if (!valid || !in_case || !removed) return false;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+    const NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    uint8_t flags = (cal->magic == NTT_RSSI_CAL_MAGIC) ? (cal->valid & 0x03) : 0;
+    *valid = flags;
+    *in_case = (flags & NTT_RSSI_CAL_CASE) ? cal->case_dbm : 0;
+    *removed = (flags & NTT_RSSI_CAL_OUT) ? cal->remove_dbm : 0;
     return true;
 }
 
 extern "C" bool ntt_rssi_calibration_write(uint8_t mask, uint8_t valid,
                                             int8_t in_case, int8_t removed)
 {
-    if ((mask & ~0x03) || !mask || (valid & ~0x03))
-        return false;
-    if (((mask & valid & NTT_RSSI_CAL_CASE) &&
-         (in_case > -1 || in_case < -110)) ||
-        ((mask & valid & NTT_RSSI_CAL_OUT) &&
-         (removed > -1 || removed < -110)))
+    if ((mask & ~0x03) || !mask || (valid & ~0x03)) return false;
+    if (((mask & valid & NTT_RSSI_CAL_CASE) && (in_case > -1 || in_case < -110)) ||
+        ((mask & valid & NTT_RSSI_CAL_OUT) && (removed > -1 || removed < -110)))
         return false;
 
-    struct nvrecord_env_t *env = NULL;
-    if (nv_record_env_get(&env) != 0 || !env)
-        return false;
-    if (env->ntt_rssi_cal_magic != NTT_RSSI_CAL_MAGIC) {
-        env->ntt_rssi_cal_valid = 0;
-        env->ntt_rssi_case_dbm = 0;
-        env->ntt_rssi_remove_dbm = 0;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+
+    uint32_t lock = nv_record_pre_write_operation();
+    NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    if (cal->magic != NTT_RSSI_CAL_MAGIC) {
+        cal->valid = 0;
+        cal->case_dbm = 0;
+        cal->remove_dbm = 0;
     }
-    env->ntt_rssi_cal_magic = NTT_RSSI_CAL_MAGIC;
-    env->ntt_rssi_cal_valid =
-        (env->ntt_rssi_cal_valid & ~mask) | (valid & mask);
-    if (mask & NTT_RSSI_CAL_CASE) env->ntt_rssi_case_dbm = in_case;
-    if (mask & NTT_RSSI_CAL_OUT) env->ntt_rssi_remove_dbm = removed;
-    bool ok = (nv_record_env_set(env) == 0);
+    cal->magic = NTT_RSSI_CAL_MAGIC;
+    cal->valid = (cal->valid & ~mask) | (valid & mask);
+    if (mask & NTT_RSSI_CAL_CASE) cal->case_dbm = in_case;
+    if (mask & NTT_RSSI_CAL_OUT) cal->remove_dbm = removed;
+    uint8_t saved_valid = cal->valid;
+    nv_record_extension_update();
+    nv_record_post_write_operation(lock);
+    nv_record_flash_flush();
     BATTERY_TRACE(4, "[NTT_RSSI_CAL] WRITE mask=%d valid=%d case=%d out=%d",
-                  mask, env->ntt_rssi_cal_valid, in_case, removed);
-    return ok;
+                  mask, saved_valid, in_case, removed);
+    return true;
 }
 
 static bool ntt_case_fast_remove_guard(void)
