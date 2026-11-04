@@ -2181,6 +2181,7 @@ void app_ibrt_init(void)
                 config.peer_addr.address[4],
                 config.peer_addr.address[5]);
 
+            MAIN_TRACE(1, "[NTT_CASE_RSSI_DIAG] TWS_RECONNECT_REQUEST latch=%d", pmu_ntt_case_closed_latch_get());
             app_ibrt_start_power_on_tws_pairing();
         }
         else
