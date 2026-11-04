@@ -587,6 +587,17 @@ static bool ntt_case_shutdown_charger_gate(void)
         return false;
     }
 
+    if (pmu_ntt_case_closed_latch_get())
+    {
+        BATTERY_TRACE(0,
+            "[NTT_POWER_OFF] CASE_CLOSED latch=1 "
+            "-> bypass PMU charger gate");
+
+        ntt_charger_ready_reset();
+
+        return true;
+    }
+
     if (!ntt_charger_ready_check())
     {
         BATTERY_TRACE(0,
