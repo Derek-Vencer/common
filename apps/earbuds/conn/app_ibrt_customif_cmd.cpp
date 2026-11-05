@@ -67,12 +67,13 @@
 #include "factory_section.h"
 #include "app_bt_stream.h"
 #include "app_battery.h"
-#include "pmu.h"
 
 extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 extern "C" uint8_t app_battery_get_percent(void);
+/* PMU retention latch; declaration kept local because this target does not export pmu.h to earbuds. */
+extern "C" void pmu_ntt_case_closed_latch_set(bool closed);
 extern "C" void ntt_battery_notify_0x31(void);
 
 static uint8_t g_tws_peer_battery_level = 0xFF;
