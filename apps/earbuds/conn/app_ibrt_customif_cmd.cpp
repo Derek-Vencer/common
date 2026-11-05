@@ -67,6 +67,7 @@
 #include "factory_section.h"
 #include "app_bt_stream.h"
 #include "app_battery.h"
+#include "pmu.h"
 
 extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
@@ -617,10 +618,35 @@ static void app_ibrt_customif_sync_poweroff_shutdown_send_handler(uint16_t rsp_s
 	EARBUDS_TRACE(2, "[UITWS]rsp_seq = %d length = %d", rsp_seq, length);
 	DUMP8("%02x ",p_buff,length);
 
-    if(p_buff[0])
+    if (length == 0 || p_buff == NULL)
     {
+        EARBUDS_TRACE(0, "[NTT_AUTO_POWEROFF][PEER] invalid shutdown sync");
+        return;
+    }
 
-#ifdef  BESUI_TWS_EN
+    if (p_buff[0])
+    {
+        /*
+         * The peer may receive the 5-minute auto-poweroff sync without
+         * receiving CMD_POWER_OFF (0x06) from the charging case.
+         * Preserve the case-closed shutdown latch only when the local
+         * charger still confirms POGO contact. Otherwise leave the
+         * case-open reset protection unchanged.
+         */
+        const enum APP_BATTERY_CHARGER_T charger =
+            (enum APP_BATTERY_CHARGER_T)app_battery_charger_indication_open();
+
+        if (charger == APP_BATTERY_CHARGER_PLUGIN)
+        {
+            pmu_ntt_case_closed_latch_set(true);
+            EARBUDS_TRACE(0, "[NTT_AUTO_POWEROFF][PEER] charger=PLUGIN latch=1");
+        }
+        else
+        {
+            EARBUDS_TRACE(0, "[NTT_AUTO_POWEROFF][PEER] charger=PLUGOUT latch unchanged");
+        }
+
+#ifdef BESUI_TWS_EN
         uictl.shutdown_type = SHUTDOWN_SYNC_PEER;
 #endif
         app_shutdown();
