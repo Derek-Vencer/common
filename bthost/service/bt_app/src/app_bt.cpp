@@ -225,10 +225,10 @@ extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
-#define NTT_BT_CONNECTED_PROMPT_DELAY_MS          3000
+#define NTT_BT_CONNECTED_PROMPT_DELAY_MS          1000
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
 #define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           30
-#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        10
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT         3
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
@@ -514,7 +514,7 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
     (void)param;
 
-    // Each device keeps its own 3-second delay.
+    // Each device keeps its own 1-second delay.
     for (uint8_t i = 0; i < NTT_CONN_PROMPT_DEVICE_COUNT; i++)
     {
         ntt_conn_prompt_slot_t *slot = &ntt_conn_prompt_slot[i];

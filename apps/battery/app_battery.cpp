@@ -24,6 +24,8 @@
 #include "hal_chipid.h"
 #include "app_thread.h"
 #include "app_battery.h"
+#include "nvrecord_env.h"
+#include "nvrecord_extension.h"
 #include "audio_policy.h"
 #include "app_bt.h"
 #include "apps.h"
@@ -280,6 +282,31 @@ void earBudsCloseOff_PogonIn_StopTimer(void);
 extern bool ntt_charging_pwron_pending_shutdown;
 extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 
+#include "../btapp/app_rssi/app_rssi.h"
+#define NTT_FAST_REMOVE_OBSERVE_MS 3000
+#define NTT_FAST_REMOVE_MAX_WAIT_MS 5000
+#define NTT_FAST_REMOVE_SAMPLE_MS 200
+#define NTT_FAST_REMOVE_SAMPLE_COUNT 5
+#define NTT_FAST_REMOVE_WEAK_DBM (-45) /* Factory fallback, never overwritten */
+#define NTT_FAST_REMOVE_DROP_DB 8
+static bool s_fast_remove_boot_session = false;
+static bool s_fast_remove_active = false;
+static uint32_t s_fast_remove_start = 0;
+static uint32_t s_fast_remove_last = 0;
+static int32_t s_fast_remove_sum = 0;
+static int8_t s_fast_remove_first = 0;
+static uint8_t s_fast_remove_count = 0;
+void ntt_case_fast_remove_arm_boot(void)
+{
+    if (!pmu_ntt_case_closed_latch_get()) return;
+    s_fast_remove_boot_session = true;
+    s_fast_remove_active = true;
+    s_fast_remove_start = hal_sys_timer_get();
+    s_fast_remove_last = 0;
+    s_fast_remove_sum = 0;
+    s_fast_remove_count = 0;
+    BATTERY_TRACE(0, "[NTT_FAST_REMOVE] ARM 3000/5000");
+}
 #define POGONIN_CLOSE_CHECK_INTERVAL_MS          (3000)
 #define NTT_BOTH_IN_CASE_FAST_SHUTDOWN_MS         (300)
 #define POGONIN_ROLE_SWITCH_WAIT_MAX_COUNT       (10)
@@ -593,6 +620,7 @@ static bool ntt_case_shutdown_charger_gate(void)
             "[NTT_POWER_OFF] CASE_CLOSED latch=1 "
             "-> bypass PMU charger gate");
 
+        BATTERY_TRACE(2, "[NTT_CASE_RSSI_DIAG] SHUTDOWN_GATE latch=1 tws=%d", bts_tws_if_is_tws_link_connected());
         ntt_charger_ready_reset();
 
         return true;
@@ -678,11 +706,163 @@ void ntt_case_poweroff_enable(void)
     BATTERY_TRACE(0,"[POWER_OFF] enabled by POWER_OFF");
 }
 
+extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
+
+/*
+ * Per-ear RSSI calibration in NV. The application may overwrite or clear
+ * either measurement; the next automatic sample replaces that field.
+ */
+#define NTT_RSSI_CAL_MAGIC 0xA6
+#define NTT_RSSI_THRESHOLD_MAGIC 0x5D
+#define NTT_RSSI_CAL_CASE  0x01
+#define NTT_RSSI_CAL_OUT   0x02
+
+extern "C" bool ntt_rssi_calibration_read(uint8_t *valid, int8_t *in_case,
+                                           int8_t *removed)
+{
+    if (!valid || !in_case || !removed) return false;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+    const NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    uint8_t flags = (cal->magic == NTT_RSSI_CAL_MAGIC) ? (cal->valid & 0x03) : 0;
+    *valid = flags;
+    *in_case = (flags & NTT_RSSI_CAL_CASE) ? cal->case_dbm : 0;
+    *removed = (flags & NTT_RSSI_CAL_OUT) ? cal->remove_dbm : 0;
+    return true;
+}
+
+extern "C" bool ntt_rssi_calibration_write(uint8_t mask, uint8_t valid,
+                                            int8_t in_case, int8_t removed)
+{
+    if ((mask & ~0x03) || !mask || (valid & ~0x03)) return false;
+    if (((mask & valid & NTT_RSSI_CAL_CASE) && (in_case > -1 || in_case < -110)) ||
+        ((mask & valid & NTT_RSSI_CAL_OUT) && (removed > -1 || removed < -110)))
+        return false;
+
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+
+    uint32_t lock = nv_record_pre_write_operation();
+    NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    if (cal->magic != NTT_RSSI_CAL_MAGIC) {
+        cal->valid = 0;
+        cal->case_dbm = 0;
+        cal->remove_dbm = 0;
+    }
+    cal->magic = NTT_RSSI_CAL_MAGIC;
+    cal->valid = (cal->valid & ~mask) | (valid & mask);
+    if (mask & NTT_RSSI_CAL_CASE) cal->case_dbm = in_case;
+    if (mask & NTT_RSSI_CAL_OUT) cal->remove_dbm = removed;
+    uint8_t saved_valid = cal->valid;
+    nv_record_extension_update();
+    nv_record_post_write_operation(lock);
+    nv_record_flash_flush();
+    BATTERY_TRACE(4, "[NTT_RSSI_CAL] WRITE mask=%d valid=%d case=%d out=%d",
+                  mask, saved_valid, in_case, removed);
+    return true;
+}
+
+/* Threshold override is independent of measured RSSI averages. */
+extern "C" bool ntt_rssi_threshold_read(int8_t *effective, int8_t *factory,
+                                         uint8_t *overridden)
+{
+    if (!effective || !factory || !overridden) return false;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+    const NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    *factory = NTT_FAST_REMOVE_WEAK_DBM;
+    *overridden = (cal->threshold_magic == NTT_RSSI_THRESHOLD_MAGIC &&
+                   cal->threshold_dbm >= -110 && cal->threshold_dbm <= -1) ? 1 : 0;
+    *effective = *overridden ? cal->threshold_dbm : *factory;
+    return true;
+}
+
+extern "C" bool ntt_rssi_threshold_write(int8_t threshold)
+{
+    if (threshold < -110 || threshold > -1) return false;
+    NV_EXTENSION_RECORD_T *nv = nv_record_get_extension_entry_ptr();
+    if (!nv) return false;
+    uint32_t lock = nv_record_pre_write_operation();
+    NTT_RSSI_CAL_NV_T *cal = &nv->sdk_reserve.info.ntt_rssi_cal;
+    cal->threshold_dbm = threshold;
+    cal->threshold_magic = NTT_RSSI_THRESHOLD_MAGIC;
+    nv_record_extension_update();
+    nv_record_post_write_operation(lock);
+    nv_record_flash_flush();
+    BATTERY_TRACE(1, "[NTT_RSSI_CAL] THRESHOLD SET=%d factory=%d",
+                  threshold, NTT_FAST_REMOVE_WEAK_DBM);
+    return true;
+}
+
+static bool ntt_case_fast_remove_guard(void)
+{
+    if (!s_fast_remove_active) return false;
+    if (!pmu_ntt_case_closed_latch_get() || g_ntt_case_open_cancel) {
+        s_fast_remove_active = false;
+        return false;
+    }
+    uint32_t now = hal_sys_timer_get();
+    uint32_t elapsed = TICKS_TO_MS(now - s_fast_remove_start);
+    if (elapsed >= NTT_FAST_REMOVE_MAX_WAIT_MS) {
+        s_fast_remove_active = false;
+        BATTERY_TRACE(2, "[NTT_FAST_REMOVE] TIMEOUT ms=%d samples=%d", elapsed, s_fast_remove_count);
+        return false;
+    }
+    if (elapsed >= NTT_FAST_REMOVE_OBSERVE_MS &&
+        s_fast_remove_count < NTT_FAST_REMOVE_SAMPLE_COUNT &&
+        (s_fast_remove_last == 0 ||
+         TICKS_TO_MS(now - s_fast_remove_last) >= NTT_FAST_REMOVE_SAMPLE_MS)) {
+        int8_t rssi = 0;
+        s_fast_remove_last = now;
+        if (ntt_case_fast_remove_read_tws_rssi(&rssi)) {
+            if (s_fast_remove_count == 0) s_fast_remove_first = rssi;
+            s_fast_remove_sum += rssi;
+            s_fast_remove_count++;
+            BATTERY_TRACE(3, "[NTT_FAST_REMOVE] SAMPLE n=%d rssi=%d ms=%d", s_fast_remove_count, rssi, elapsed);
+        }
+    }
+    if (s_fast_remove_count == NTT_FAST_REMOVE_SAMPLE_COUNT) {
+        int32_t avg = s_fast_remove_sum / NTT_FAST_REMOVE_SAMPLE_COUNT;
+        int8_t threshold = NTT_FAST_REMOVE_WEAK_DBM;
+        int8_t factory = NTT_FAST_REMOVE_WEAK_DBM;
+        uint8_t overridden = 0;
+        ntt_rssi_threshold_read(&threshold, &factory, &overridden);
+        bool weak = avg <= threshold;
+        BATTERY_TRACE(4, "[NTT_FAST_REMOVE] threshold=%d factory=%d override=%d avg=%d",
+                      threshold, factory, overridden, avg);
+        /* Save the measured average in this ear only. */
+        ntt_rssi_calibration_write(weak ? NTT_RSSI_CAL_OUT : NTT_RSSI_CAL_CASE,
+                                   weak ? NTT_RSSI_CAL_OUT : NTT_RSSI_CAL_CASE,
+                                   (int8_t)avg, (int8_t)avg);
+        s_fast_remove_active = false;
+        BATTERY_TRACE(4, "[NTT_FAST_REMOVE] DECISION avg=%d first=%d weak=%d ms=%d", avg, s_fast_remove_first, weak, elapsed);
+        if (weak) {
+            pmu_ntt_case_closed_latch_set(false);
+            ntt_charging_pwron_pending_shutdown = false;
+#ifdef IBRT
+            g_pogonin_role_switch_requested = false;
+            g_pogonin_role_switch_wait_count = 0;
+#endif
+            BATTERY_TRACE(0, "[NTT_FAST_REMOVE] EXIT latch=0 shutdown canceled");
+            ntt_fast_remove_mobile_reconnect_request();
+            return true;
+        }
+        return false;
+    }
+    if (pogonPinCloseTimer != NULL) {
+        osTimerStop(pogonPinCloseTimer);
+        osTimerStart(pogonPinCloseTimer, 100);
+    }
+    BATTERY_TRACE(3, "[NTT_FAST_REMOVE] WAIT ms=%d tws=%d samples=%d", elapsed, bts_tws_if_is_tws_link_connected(), s_fast_remove_count);
+    return true;
+}
+
 static void earBudsCloseOff_PogonIn_handler(void const *param)
 {
 #ifdef IBRT
     bool role_switch_timed_out = false;
 #endif
+    if (ntt_case_fast_remove_guard()) return;
     int8_t charging = app_battery_is_charging();
     uint8_t case_state = ntt_case_state_get_local();
 
@@ -1043,7 +1223,25 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         return;
     }
 
-    if (!role_switch_timed_out &&
+    /*
+     * Test3: skip role switch ONLY for retained-latch boot where
+     * BOTH local and peer explicitly report IN_CASE.
+     * Unknown/OUT_CASE states keep the original role-switch guard.
+     * Normal case-close and single-ear shutdown are unchanged.
+     */
+    bool test3_skip_role_switch =
+        s_fast_remove_boot_session &&
+        before_rs_latch &&
+        (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
+        (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE);
+
+    BATTERY_TRACE(5, "[NTT_TEST3_RS] boot=%d latch=%d local=%d peer=%d skip=%d",
+                  s_fast_remove_boot_session, before_rs_latch,
+                  ntt_case_state_get_local(), ntt_case_state_get_peer(),
+                  test3_skip_role_switch);
+
+    if (!test3_skip_role_switch &&
+        !role_switch_timed_out &&
         ntt_case_close_try_role_switch_before_shutdown())
     {
         BATTERY_TRACE(1,"[POWER_OFF] role switch requested latch=%d",before_rs_latch);

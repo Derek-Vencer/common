@@ -33,6 +33,7 @@
 #include "app_pwl.h"
 #include "app_audio.h"
 #include "app_overlay.h"
+extern void ntt_case_fast_remove_arm_boot(void);
 #include "app_battery.h"
 #include "app_trace_rx.h"
 #include "app_utils.h"
@@ -2181,6 +2182,7 @@ void app_ibrt_init(void)
                 config.peer_addr.address[4],
                 config.peer_addr.address[5]);
 
+            MAIN_TRACE(1, "[NTT_CASE_RSSI_DIAG] TWS_RECONNECT_REQUEST latch=%d", pmu_ntt_case_closed_latch_get());
             app_ibrt_start_power_on_tws_pairing();
         }
         else
@@ -3163,6 +3165,7 @@ osPriority formerPriority = osThreadGetPriority(app_thread_id);
     app_application_ready_to_start_callback();
 
     case_closed_latched = pmu_ntt_case_closed_latch_get();
+    if (case_closed_latched) ntt_case_fast_remove_arm_boot();
 
     if (case_closed_latched)
     {

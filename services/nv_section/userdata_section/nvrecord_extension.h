@@ -783,10 +783,19 @@ typedef struct {
     float calib_gain[3];
 }TOTA_ADDA_TEST_T;
 
-typedef struct{
+typedef struct {
+    uint8_t magic;
+    uint8_t valid;
+    int8_t case_dbm;
+    int8_t remove_dbm;
+    uint8_t threshold_magic;
+    int8_t threshold_dbm;
+} NTT_RSSI_CAL_NV_T;
+
+typedef struct {
     TOTA_ADDA_TEST_T adda_test;
-    // TODO: add other items for SDK.
-}NV_SDK_INFO_T;
+    NTT_RSSI_CAL_NV_T ntt_rssi_cal;
+} NV_SDK_INFO_T;
 
 typedef union{
     NV_SDK_INFO_T info;
@@ -794,6 +803,9 @@ typedef union{
 } NV_SDK_RESERVE_SPACE_T;
 
 STATIC_ASSERT(sizeof(NV_SDK_INFO_T) < NV_SDK_RESERVED_LEN, "nv sdk info too big");
+STATIC_ASSERT(sizeof(NTT_RSSI_CAL_NV_T) == 6, "rssi nv size mismatch");
+/* The union is 4-byte aligned: BT_DIP_SUPPORT reserves 262 bytes, rounded to 264. */
+STATIC_ASSERT(sizeof(NV_SDK_RESERVE_SPACE_T) == ((NV_SDK_RESERVED_LEN + 3) & ~3), "nv reserve size mismatch");
 
 typedef struct {
     NVRECORD_HEADER_T header;
