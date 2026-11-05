@@ -225,7 +225,8 @@ extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
-#define NTT_BT_CONNECTED_PROMPT_DELAY_MS          1000
+#define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       3000
+#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  1000
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
 #define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           30
 #define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT         3
@@ -241,6 +242,7 @@ typedef struct
     bool pending;
     bool notified;
     uint16_t delay_ms;
+    bool boot_mode;
 } ntt_conn_prompt_slot_t;
 
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
@@ -258,6 +260,8 @@ static uint8_t ntt_conn_prompt_play_state = 0;
 static uint8_t ntt_conn_prompt_play_device = 0xFF;
 static uint16_t ntt_conn_prompt_play_elapsed_ms = 0;
 static uint8_t ntt_conn_prompt_next_device = 0;
+// Both phones queued before the first prompt starts retain BOOT mode.
+static bool ntt_conn_prompt_boot_phase = true;
 
 
 #if defined(IBRT)
@@ -514,7 +518,7 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
     (void)param;
 
-    // Each device keeps its own 1-second delay.
+    // Each device keeps its own BOOT or RECONNECT delay.
     for (uint8_t i = 0; i < NTT_CONN_PROMPT_DEVICE_COUNT; i++)
     {
         ntt_conn_prompt_slot_t *slot = &ntt_conn_prompt_slot[i];
@@ -656,7 +660,9 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     ntt_conn_prompt_play_elapsed_ms = 0;
     ntt_conn_prompt_next_device = (device_id + 1) % NTT_CONN_PROMPT_DEVICE_COUNT;
     ntt_conn_prompt_reset_ready();
-    DEBUG_INFO(1,"[NTT_CONN_PROMPT] play dev=%u",device_id);
+    DEBUG_INFO(2,"[NTT_CONN_PROMPT] play dev=%u mode=%s",
+        device_id, ntt_conn_prompt_slot[device_id].boot_mode ? "BOOT" : "RECONNECT");
+    ntt_conn_prompt_boot_phase = false;
     // Preserve the existing TWS synchronized prompt API.
     audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
     ntt_conn_prompt_schedule();
@@ -685,8 +691,11 @@ static void ntt_bt_connected_prompt_request(uint8_t device_id)
 
     slot->notified = true;
     slot->pending = true;
-    slot->delay_ms = NTT_BT_CONNECTED_PROMPT_DELAY_MS;
-    DEBUG_INFO(2,"[NTT_CONN_PROMPT] queued dev=%u delay=%u",device_id,NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+    slot->boot_mode = ntt_conn_prompt_boot_phase;
+    slot->delay_ms = slot->boot_mode ? NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS
+                                     : NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS;
+    DEBUG_INFO(3,"[NTT_CONN_PROMPT] queued dev=%u mode=%s delay=%u",
+        device_id, slot->boot_mode ? "BOOT" : "RECONNECT", slot->delay_ms);
     ntt_conn_prompt_schedule();
 }
 
