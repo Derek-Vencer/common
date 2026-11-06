@@ -3368,6 +3368,30 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 
     key_side = ntt_get_key_side_snapshot();
 
+    /*
+     * Test7: key_event_is_left identifies a peer-originated key,
+     * not the physical left ear. Lock only the originating earbud.
+     * Case state is authoritative; er_inbox is retained as a local
+     * fallback for older 1-Wire case-state updates.
+     */
+    const bool peer_key = (key_event_is_left == 1);
+    const NTT_CASE_STATE_E source_case_state = peer_key ?
+        ntt_case_state_get_peer() : ntt_case_state_get_local();
+    const bool source_in_case =
+        (source_case_state == NTT_CASE_STATE_IN_CASE) ||
+        (!peer_key && er_inbox == 1);
+
+    if (source_in_case)
+    {
+        TRACE(0,
+              "[NTT_KEY_LOCK] BLOCK kick=%u source=%s case=%d inbox=%u",
+              (unsigned)kick_type,
+              peer_key ? "PEER" : "LOCAL",
+              source_case_state,
+              (unsigned)er_inbox);
+        return;
+    }
+
     TRACE(0,
           "[KEY] kick=%d test=%d left_flag=%d inbox=%d side=%s",
           kick_type,
@@ -3379,12 +3403,6 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
     if (enterKeyClickTestMode && app_sparraw_env.notifyEnable)
     {
         ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
-    }
-
-    if ((er_inbox == 1) && (key_event_is_left == 0))
-    {
-        TRACE(0, "[KEY] ignore key event, earbud in charging case");
-        return;
     }
 
     switch (kick_type)
