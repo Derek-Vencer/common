@@ -1367,9 +1367,18 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                         "MASTER start opening reconnect");
 
                     /*
-                    * 保留原本手機回連
-                    */
-                    app_bt_profile_connect_manager_opening_reconnect();
+                     * CMD 0x11 IN_CASE must preserve the mobile state.
+                     * Do not start reconnect on a TWS profiles event.
+                     */
+                    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE)
+                    {
+                        EARBUDS_TRACE(0,
+                            "[NTT_INBOX] TWS profiles: skip mobile reconnect (IN_CASE)");
+                    }
+                    else
+                    {
+                        app_bt_profile_connect_manager_opening_reconnect();
+                    }
                 }
                 else if (ui_role == TWS_UI_SLAVE)
                 {
