@@ -666,6 +666,8 @@ typedef enum {
     AUD_ID_WT_FIND_DIVICE = 0x32,//walkie build process find divce
     AUD_ID_WT_ERROR = 0x3f,//walkie build process error
 	AUD_ID_OPENEAR_PROMPT = 0x40,
+    AUD_ID_SOUND_Normal_EQ = 0x41,
+    AUD_ID_SOUND_Voice_Boost_EQ = 0x42,
 
     AUD_ID_ENUM_BOTTOM = 0x10000000,    // AUD_ID_ENUM is uint32_t
 } AUD_ID_ENUM;
