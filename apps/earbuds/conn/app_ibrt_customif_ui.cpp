@@ -3087,12 +3087,14 @@ static void ntt_first_out_start_mobile_reconnect(void)
     }
 
     /*
-     * Test5: Peer entering the case is not a First-Out event.
-     * Do not start a new mobile reconnect from this transition.
+     * Test6: A genuine local OUT_CASE event may reconnect even when
+     * the peer remains IN_CASE. Test5 still prevents the peer IN_CASE
+     * callback itself from starting a reconnect.
      */
-    if (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE)
+    if (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE &&
+        !g_ntt_local_was_first_out)
     {
-        EARBUDS_TRACE(0,"[NTT_INBOX] BLOCK first-out reconnect: peer IN_CASE");
+        EARBUDS_TRACE(0,"[NTT_INBOX] BLOCK reconnect: peer IN_CASE without local put-out owner");
         return;
     }
 
@@ -3942,12 +3944,27 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     }
 
     /*
-     * Local OUT + Peer OUT。
-     *
-     * 關鍵：
-     * 不能再單純依照目前 Master / Slave 判斷誰回連。
-     *
-     * 必須先看本機是否為真正 First-Out。
+     * Test6: A local put-out is a new reconnect trigger even if
+     * the peer is already OUT_CASE. Claim reconnect ownership
+     * for this event; the existing owner flow performs Slave->
+     * Master role switch and waits for completion before reconnect.
+     * Peer-only callbacks must not claim this ownership.
+     */
+    if (peer_state == NTT_CASE_STATE_OUT_CASE &&
+        !g_ntt_local_was_first_out)
+    {
+        EARBUDS_TRACE(2,
+            "[NTT_PUTOUT] local OUT, peer OUT, mobile disconnected: claim reconnect role=%d",
+            ui_role);
+
+        g_ntt_local_was_first_out = true;
+        ntt_first_out_take_master_and_reconnect();
+        return;
+    }
+
+    /*
+     * Local OUT + Peer OUT: continue an existing local
+     * reconnect owner flow without duplicating the request.
      */
     if (peer_state == NTT_CASE_STATE_OUT_CASE)
     {
