@@ -97,6 +97,8 @@
 #endif
 
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+/* Explicit UART 0x07 open-case authorization; never inferred from IN_CASE. */
+extern "C" bool ntt_case_open_reconnect_authorized(void);
 
 /* Implemented by the Sparrow BLE service: proactive battery 0x31 Notify. */
 extern void sparrow_push_battery_level_notify(bool slave_disconnected);
@@ -1370,13 +1372,19 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                      * CMD 0x11 IN_CASE must preserve the mobile state.
                      * Do not start reconnect on a TWS profiles event.
                      */
-                    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE)
+                    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+                        !ntt_case_open_reconnect_authorized())
                     {
                         EARBUDS_TRACE(0,
-                            "[NTT_INBOX] TWS profiles: skip mobile reconnect (IN_CASE)");
+                            "[NTT_INBOX] TWS profiles: skip mobile reconnect (IN_CASE, no UART 0x07)");
                     }
-                    else
+                    else if (!app_bt_ibrt_has_mobile_link_connected() &&
+                             !ntt_first_no_mobile_pair_mode &&
+                             !ntt_manual_pairing_mode)
                     {
+                        EARBUDS_TRACE(0,
+                            "[NTT_CASE_OPEN] TWS MASTER opening reconnect, UART07=%d",
+                            ntt_case_open_reconnect_authorized());
                         app_bt_profile_connect_manager_opening_reconnect();
                     }
                 }
