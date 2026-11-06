@@ -1536,6 +1536,14 @@ bool aiWangBoxIsUsed(void)
 
 static bool g_ntt_case_poweroff_received = false;
 
+/* Only an explicit, valid UART 0x07 authorizes in-case opening reconnect. */
+static bool g_ntt_case_open_reconnect_authorized = false;
+
+extern "C" bool ntt_case_open_reconnect_authorized(void)
+{
+    return g_ntt_case_open_reconnect_authorized;
+}
+
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
@@ -1812,6 +1820,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         */
         g_case_state = 0;
 
+        g_ntt_case_open_reconnect_authorized = false;
         boxChargerStatus.boxIsOpen = false;
         boxChargerStatus.needOpenEarbuds = false;
 
@@ -1873,6 +1882,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
+            g_ntt_case_open_reconnect_authorized = true;
             ntt_case_open_pending = true;
             app_ui_set_local_box_state(IBRT_IN_BOX_OPEN);
             app_ui_sync_box_state(IBRT_IN_BOX_OPEN);
