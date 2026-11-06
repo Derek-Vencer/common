@@ -5690,6 +5690,8 @@ void app_bt_inquiry_remote_device_name(const bt_bdaddr_t * bdaddr)
     bt_defer_call_func_1((uint32_t)(uintptr_t)btif_me_get_remote_device_name, param_a);
 }
 
+extern "C" bool ntt_case_open_reconnect_authorized(void);
+
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
     DEBUG_INFO(0,"[NTT_CASE] CLOSED app_bt_device_reconnect_handler");
@@ -5700,14 +5702,20 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
     }
 
     /*
-     * CMD_SEND_EAR_PUTIN (0x11) updates the local case state.
-     * Entering the case must never initiate a mobile reconnect.
-     * Existing ACL/profile links are intentionally left untouched.
+     * Test10: IN_CASE normally blocks mobile reconnect (Test5).
+     * Explicit UART 0x07 may authorize opening reconnect while still
+     * physically IN_CASE. The PMU case-closed latch is checked above.
+     * Preserve the existing missing-mobile-key guard below.
      */
     if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE)
     {
-        DEBUG_INFO(0,"[NTT_INBOX] BLOCK opening mobile reconnect: local IN_CASE");
-        return;
+        if (!ntt_case_open_reconnect_authorized())
+        {
+            DEBUG_INFO(0, "[NTT_INBOX] BLOCK opening mobile reconnect: IN_CASE, UART07=0");
+            return;
+        }
+
+        DEBUG_INFO(0, "[NTT_CASE_OPEN] Allow mobile reconnect: IN_CASE, UART07=1");
     }
 
     DEBUG_INFO(0,
