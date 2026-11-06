@@ -74,6 +74,8 @@ typedef enum  {
 	SET_PEER_BT_ADDR   = 0x70,
 	SET_COLOR_CODE     = 0x80,
 	SET_DTM_ENABLE	   = 0x90,
+	GET_RSSI_CAL	   = 0x91,
+	SET_RSSI_CAL	   = 0x93,	
 	GET_CHARGER_FW_VERSION = 0x9C  // NTT Test API Only
 } AI_WANG_CMDS_TYPE_SETS;
 
