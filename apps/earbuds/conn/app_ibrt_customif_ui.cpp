@@ -1378,9 +1378,10 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                         EARBUDS_TRACE(0,
                             "[NTT_INBOX] TWS profiles: skip mobile reconnect (IN_CASE, no UART 0x07)");
                     }
-                    else if (!app_bt_ibrt_has_mobile_link_connected() &&
-                             !ntt_first_no_mobile_pair_mode &&
-                             !ntt_manual_pairing_mode)
+                    else if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
+                             (!app_bt_ibrt_has_mobile_link_connected() &&
+                              !ntt_first_no_mobile_pair_mode &&
+                              !ntt_manual_pairing_mode))
                     {
                         EARBUDS_TRACE(0,
                             "[NTT_CASE_OPEN] TWS MASTER opening reconnect, UART07=%d",
