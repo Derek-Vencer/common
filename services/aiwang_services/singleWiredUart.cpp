@@ -2332,6 +2332,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         * 同時會把 IN_CASE 狀態同步給另一耳。
         */
         ntt_case_state_sync_local_update(NTT_CASE_STATE_IN_CASE);
+        DBGPRINT("[NTT_INBOX] CMD=0x11 -> IN_CASE; preserve mobile link, block new opening reconnect");
         DBGPRINT("[CASE] EAR_PUTIN -> notify IN_CASE");
         wired_uart_send_cmd_ack_ok();
     }
