@@ -49,6 +49,9 @@
 #include "bes_gap_api.h"
 #include "hfp_api.h"
 #include "app_ibrt_customif_cmd.h"
+#if defined(BES_OTA)
+#include "ota_control.h"
+#endif
 #include "audio_cfg.h"
 
 #if defined(SNDP_VAD_ENABLE)
@@ -2879,6 +2882,20 @@ bool app_ibrt_customif_disallow_reconnect_mobile()
     return false;
 }
 
+static bool ntt_case_role_switch_blocked_by_ota(const char *source)
+{
+#if defined(BES_OTA)
+    if (ota_is_in_progress())
+    {
+        EARBUDS_TRACE(1, "[NTT_OTA_ROLE_LOCK] BLOCK source=%s", source);
+        return true;
+    }
+#else
+    (void)source;
+#endif
+    return false;
+}
+
 static bool ntt_case_close_both_in_case(void)
 {
     return (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE) &&
@@ -2904,6 +2921,11 @@ extern "C" bool ntt_case_close_role_switch_can_shutdown(void)
 
 extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 {
+    if (ntt_case_role_switch_blocked_by_ota("CASE_CLOSE"))
+    {
+        return false;
+    }
+
     if (ntt_case_close_both_in_case())
     {
         EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] both in case -> skip role switch");
@@ -3281,6 +3303,13 @@ static void ntt_first_out_role_check_handler(
 {
     (void)param;
 
+    if (ntt_case_role_switch_blocked_by_ota("FIRST_OUT_TIMER"))
+    {
+        g_ntt_first_out_role_switch_requested = false;
+        ntt_first_out_role_check_stop();
+        return;
+    }
+
     EARBUDS_TRACE(
         5,
         "[NTT_FIRST_OUT] role check owner=%d role=%d "
@@ -3385,6 +3414,11 @@ static void ntt_first_out_role_check_handler(
  */
 void ntt_first_out_take_master_and_reconnect(void)
 {
+    if (ntt_case_role_switch_blocked_by_ota("FIRST_OUT"))
+    {
+        return;
+    }
+
     /*
      * 呼叫到這裡代表本機已被確認為 First-Out。
      *
