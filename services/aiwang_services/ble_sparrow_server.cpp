@@ -1541,13 +1541,13 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
 {
     static const AUD_ID_ENUM eq_prompt_map[7] =
     {
-        AUD_ID_NUM_1,  /* EQ mode 0 */
-        AUD_ID_NUM_2,  /* EQ mode 1 */
-        AUD_ID_NUM_3,  /* EQ mode 2 */
-        AUD_ID_NUM_4,  /* EQ mode 3 / Clear Voice */
-        AUD_ID_NUM_5,  /* EQ mode 4 */
-        AUD_ID_NUM_6,  /* EQ mode 5 / Type01 */
-        AUD_ID_NUM_7,  /* EQ mode 6 / Type02 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 0 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 1 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 2 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 3 / Clear Voice */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 4 */
+        AUD_ID_SOUND_Voice_Boost_EQ,  /* EQ mode 5 / Type01 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 6 / Type02 */
     };
 
     if (eq_preset >= ARRAY_SIZE(eq_prompt_map))
