@@ -3426,31 +3426,29 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_DOUBLE_CLICK:
         {
             ntt_cancel_double_hold_state("double click");
-            CALL_STATE_E call_state = app_bt_get_call_state();
 
+#ifdef SUPPORT_SIRI
             /*
-            * Priority 1: Call
-            */
+             * Test12: An active Voice Assistant always owns double-click.
+             * Check BEFORE call/music key mapping so this event can only
+             * stop VA, never switch the player or send an AVRCP command.
+             */
+            if (ntt_voice_assist_is_active())
+            {
+                TRACE(0, "[NTT_VA][TEST12] DOUBLE_CLICK -> CLOSE VA ONLY");
+                ntt_voice_assist_close();
+                break;
+            }
+#endif
+
+            CALL_STATE_E call_state = app_bt_get_call_state();
             if (call_state != CALL_STATE_IDLE)
             {
                 TRACE(0, "[NTT_CALL] DOUBLE_CLICK state=%d", call_state);
                 handle_key_event(CLICK_DOUBLE, key_side);
                 break;
             }
-        #ifdef SUPPORT_SIRI
-            /*
-            * Priority 2: Voice Assistant
-            */
-            if (ntt_voice_assist_is_active())
-            {
-                TRACE(0, "[NTT_VA] DOUBLE_CLICK -> CLOSE VA");
-                ntt_voice_assist_close();
-                break;
-            }
-        #endif
-            /*
-            * Priority 3: Idle / Music Keymap
-            */
+
             TRACE(0, "[KEYMAP] CLICK_DOUBLE");
             handle_key_event(CLICK_DOUBLE, key_side);
         }
