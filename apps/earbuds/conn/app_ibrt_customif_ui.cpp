@@ -3086,6 +3086,16 @@ static void ntt_first_out_start_mobile_reconnect(void)
         return;
     }
 
+    /*
+     * Test5: Peer entering the case is not a First-Out event.
+     * Do not start a new mobile reconnect from this transition.
+     */
+    if (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE)
+    {
+        EARBUDS_TRACE(0,"[NTT_INBOX] BLOCK first-out reconnect: peer IN_CASE");
+        return;
+    }
+
     if (!bts_tws_if_is_tws_link_connected())
     {
         EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: TWS disconnected");
@@ -4062,21 +4072,15 @@ void ntt_case_state_peer_changed_callback(
             "[NTT_CASE_CB][PEER] peer IN_CASE");
 
         /*
-         * Local 已 OUT、Peer 明確 IN：
-         * Local 是 First-Out。
+         * Test5: Peer OUT->IN is an earbud put-in event, NOT
+         * a local first-out event. Preserve the current mobile
+         * state; never initiate reconnect from peer IN_CASE.
+         * Existing mobile links are intentionally untouched.
          */
-        if (local_state == NTT_CASE_STATE_OUT_CASE &&
-            !mobile_connected)
+        if (local_state == NTT_CASE_STATE_OUT_CASE && !mobile_connected)
         {
-            EARBUDS_TRACE(
-                2,
-                "[NTT_FIRST_OUT] local OUT + peer IN "
-                "-> confirm first-out owner=%d",
-                g_ntt_first_out_owner);
-
-            g_ntt_local_was_first_out = true;
-
-            ntt_first_out_take_master_and_reconnect();
+            EARBUDS_TRACE(0,
+                "[NTT_INBOX] peer IN_CASE, mobile disconnected: skip first-out reconnect");
         }
 
         return;
