@@ -5699,6 +5699,17 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
         return;
     }
 
+    /*
+     * CMD_SEND_EAR_PUTIN (0x11) updates the local case state.
+     * Entering the case must never initiate a mobile reconnect.
+     * Existing ACL/profile links are intentionally left untouched.
+     */
+    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE)
+    {
+        DEBUG_INFO(0,"[NTT_INBOX] BLOCK opening mobile reconnect: local IN_CASE");
+        return;
+    }
+
     DEBUG_INFO(0,
     "[NTT_RECONNECT] handler triggered");
 
