@@ -26,6 +26,14 @@ const uint8_t EN_POWER_OFF [] = {
 #include "res/en/SOUND_POWER_OFF.txt"
 };
 
+const uint8_t EN_SOUND_Normal_EQ[] = {
+#include "res/en/SOUND_Normal_EQ.txt"
+};
+
+const uint8_t EN_SOUND_Voice_Boost_EQ[] = {
+#include "res/en/SOUND_Voice_Boost_EQ.txt"
+};
+
 const uint8_t EN_SOUND_ZERO[] = {
 #include "res/en/SOUND_ZERO.txt"
 };
