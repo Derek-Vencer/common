@@ -579,17 +579,6 @@ bool audio_prompt_start_playing(uint16_t promptPram, uint32_t targetSampleRate)
             pPromptProperty->coeff_for_mix_music_for_music;
     }
 
-    /* NTT: EQ prompt ducking (-60 dB) in the A2DP mixer only.
-     * Preserve prompt gain and user/AVRCP volume. Mixer crossfade
-     * restores music automatically at prompt completion.
-     */
-    if (promptId == AUD_ID_SOUND_Normal_EQ ||
-        promptId == AUD_ID_SOUND_Voice_Boost_EQ)
-    {
-        audio_prompt_env.coeff_for_mix_music_for_music = 0.001f;
-        AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] prompt=%u music_gain=-60dB", promptId);
-    }
-
     if (KEEP_CURRENT_VOLUME_FOR_MIX_PROMPT != audio_prompt_env.volume_level_override)
     {
         // if the prompt's volume is smaller than the current volume, don't change it
