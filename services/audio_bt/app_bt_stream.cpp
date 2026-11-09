@@ -1669,8 +1669,22 @@ extern bool app_prompt_is_streaming_on(void);
  * The audio callback consumes the request without changing prompt gain.
  */
 static volatile uint32_t ntt_eq_preduck_request_seq = 0;
+static volatile uint32_t ntt_eq_preduck_target_tick = 0;
+static volatile bool ntt_eq_preduck_scheduled = false;
+extern "C" uint32_t ntt_eq_prompt_schedule_tick(void)
+{
+    /* Bluetooth native clock: 1 tick = 312.5 us, 28-bit rollover. */
+    return (btdrv_syn_get_curr_ticks() + 640U) & 0x0FFFFFFFU; /* +200 ms */
+}
+extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick)
+{
+    ntt_eq_preduck_target_tick = tick & 0x0FFFFFFFU;
+    ntt_eq_preduck_scheduled = true;
+}
 extern "C" void ntt_eq_prompt_preduck_request(void)
 {
+    /* Legacy path: immediate preduck, used when no shared schedule exists. */
+    ntt_eq_preduck_scheduled = false;
     ++ntt_eq_preduck_request_seq;
 }
 
@@ -1702,6 +1716,18 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
     const bool prompt_duck = app_prompt_is_streaming_on() &&
                              (id == AUD_ID_SOUND_Normal_EQ ||
                               id == AUD_ID_SOUND_Voice_Boost_EQ);
+    if (ntt_eq_preduck_scheduled)
+    {
+        const uint32_t now = btdrv_syn_get_curr_ticks() & 0x0FFFFFFFU;
+        const uint32_t elapsed = (now - ntt_eq_preduck_target_tick) & 0x0FFFFFFFU;
+        if (elapsed < 0x08000000U)
+        {
+            ntt_eq_preduck_scheduled = false;
+            ++ntt_eq_preduck_request_seq;
+            AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] SCHEDULE_FIRE tick=%u now=%u",
+                           (unsigned)ntt_eq_preduck_target_tick, (unsigned)now);
+        }
+    }
     if (handled_preduck_seq != ntt_eq_preduck_request_seq)
     {
         handled_preduck_seq = ntt_eq_preduck_request_seq;
