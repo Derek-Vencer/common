@@ -1792,6 +1792,7 @@ typedef struct __attribute__((packed))
     uint8_t sequence;
 } NTT_CASE_SYNC_PACKET_T;
 
+extern "C" void ntt_key_role_switch_block_cancel(void);
 static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
 static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
 static uint8_t g_ntt_case_state_sequence = 0;
@@ -1961,6 +1962,8 @@ void ntt_case_state_sync_local_update(bool in_case)
     }
 
     g_ntt_local_case_state = new_state;
+    if (new_state == NTT_CASE_STATE_IN_CASE)
+        ntt_key_role_switch_block_cancel();
 
     EARBUDS_TRACE(
         3,
@@ -2087,6 +2090,8 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
     }
 
     g_ntt_peer_case_state = new_peer_state;
+    if (new_peer_state == NTT_CASE_STATE_IN_CASE)
+        ntt_key_role_switch_block_cancel();
     ntt_case_state_peer_changed_callback(new_peer_state);
     EARBUDS_TRACE(
         4,
