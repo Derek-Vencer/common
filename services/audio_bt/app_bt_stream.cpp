@@ -1658,6 +1658,9 @@ if (stream_route_info.output_route_info)
  * Do not touch codec, AVRCP or persisted user volume. Each TWS ear
  * handles its own PCM; normal gain returns automatically on prompt end.
  */
+/* Declared in app_media_player.cpp but not exposed by its header. */
+extern bool app_prompt_is_streaming_on(void);
+
 static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
                                         const struct AF_STREAM_CONFIG_T *cfg)
 {
