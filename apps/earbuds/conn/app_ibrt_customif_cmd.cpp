@@ -166,6 +166,21 @@ static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, u
 
 static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length);
 extern "C" void ntt_eq_prompt_preduck_request(void);
+extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
+extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
+static void ntt_eq_tws_write_tick(uint8_t *p, uint32_t tick)
+{
+    p[0] = (uint8_t)tick;
+    p[1] = (uint8_t)(tick >> 8);
+    p[2] = (uint8_t)(tick >> 16);
+    p[3] = (uint8_t)(tick >> 24);
+}
+static uint32_t ntt_eq_tws_read_tick(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
 static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 
 static void app_ibrt_customif_button_map_cmd_send(uint8_t *p_buff, uint16_t length);
@@ -1101,10 +1116,13 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
         return;
     }
 
-	uint8_t cmd_sync_music_eq[2];
+    uint8_t cmd_sync_music_eq[5] = {0};
     cmd_sync_music_eq[0] = index;
+    const uint32_t tick = ntt_eq_prompt_schedule_tick();
+    ntt_eq_tws_write_tick(&cmd_sync_music_eq[1], tick);
+    ntt_eq_prompt_preduck_schedule(tick);
 	EARBUDS_TRACE(0, "[UITWS]%s index %d ",__func__, index);
-	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq, 2);
+	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq, sizeof(cmd_sync_music_eq));
 }
 
 void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_index)
@@ -1114,10 +1132,12 @@ void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_inde
         return;
     }
 
-    uint8_t payload[2];
-
+    uint8_t payload[6] = {0};
     payload[0] = enable;
     payload[1] = original_eq_index;
+    const uint32_t tick = ntt_eq_prompt_schedule_tick();
+    ntt_eq_tws_write_tick(&payload[2], tick);
+    ntt_eq_prompt_preduck_schedule(tick);
 
     EARBUDS_TRACE(0,"[EQ6][TWS][TX] enable=%u original=%u",(unsigned)enable,(unsigned)original_eq_index);
 
@@ -1549,7 +1569,8 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
     EARBUDS_TRACE(1, "%s", __func__);
     if (!p_buff || length < 1)
         return;
-    ntt_eq_prompt_preduck_request();
+    if (length >= 5)
+        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[1]));
 
 	struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
@@ -1596,7 +1617,8 @@ static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_b
         return;
     }
 
-    ntt_eq_prompt_preduck_request();
+    if (length >= 6)
+        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[2]));
     ntt_eq6_sync_from_peer(enable,original_eq);
 }
 
