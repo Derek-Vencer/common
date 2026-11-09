@@ -1539,6 +1539,16 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
 
 }
 
+extern "C" void ntt_eq_prompt_preduck_request(void);
+static osTimerId ntt_eq_prompt_delay_timer = NULL;
+static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
+static void ntt_eq_delayed_prompt_cb(void const *arg)
+{
+    (void)arg;
+    media_PlayAudio(ntt_eq_pending_prompt, 0);
+}
+osTimerDef(NTT_EQ_DELAYED_PROMPT, ntt_eq_delayed_prompt_cb);
+
 static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
 {
     static const AUD_ID_ENUM eq_prompt_map[7] =
@@ -1563,7 +1573,19 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
           (unsigned)eq_preset,
           (unsigned)eq_prompt_map[eq_preset]);
 
-    media_PlayAudio(eq_prompt_map[eq_preset], 0);
+    ntt_eq_prompt_preduck_request();
+    ntt_eq_pending_prompt = eq_prompt_map[eq_preset];
+    if (!ntt_eq_prompt_delay_timer)
+        ntt_eq_prompt_delay_timer = osTimerCreate(osTimer(NTT_EQ_DELAYED_PROMPT),
+                                                  osTimerOnce, NULL);
+    if (ntt_eq_prompt_delay_timer)
+    {
+        osTimerStop(ntt_eq_prompt_delay_timer);
+        osTimerStart(ntt_eq_prompt_delay_timer, 120);
+        TRACE(0, "[NTT_EQ_DUCK] PROMPT_DELAY 120ms");
+    }
+    else
+        media_PlayAudio(ntt_eq_pending_prompt, 0);
 }
 
 
