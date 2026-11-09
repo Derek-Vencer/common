@@ -165,6 +165,7 @@ static void app_ibrt_customif_test2_cmd_send_rsp_handler(uint16_t rsp_seq, uint8
 static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, uint16_t rsp_seq, uint8_t *ptrParam, uint16_t paramLen);
 
 static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length);
+extern "C" void ntt_eq_prompt_preduck_request(void);
 static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 
 static void app_ibrt_customif_button_map_cmd_send(uint8_t *p_buff, uint16_t length);
@@ -1546,6 +1547,9 @@ static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length
 static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
 {
     EARBUDS_TRACE(1, "%s", __func__);
+    if (!p_buff || length < 1)
+        return;
+    ntt_eq_prompt_preduck_request();
 
 	struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
@@ -1592,6 +1596,7 @@ static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_b
         return;
     }
 
+    ntt_eq_prompt_preduck_request();
     ntt_eq6_sync_from_peer(enable,original_eq);
 }
 
