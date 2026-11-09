@@ -238,6 +238,8 @@ static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
     int16_t diff;
     if (ntt_key_role_switch_is_blocked())
     {
+        BTAPP_TRACE(1, "[NTT_KEY_ROLE] RSSI_SWITCH_BLOCKED remaining_ms=%u",
+                    (unsigned)TICKS_TO_MS(ntt_key_role_block_until - hal_sys_timer_get()));
         ntt_rssi_switch_confirm_count = 0;
         return;
     }
