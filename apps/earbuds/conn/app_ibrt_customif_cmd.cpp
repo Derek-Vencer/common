@@ -1570,9 +1570,11 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
     if (!p_buff || length < 1)
         return;
     if (length >= 5)
+    {
         ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[1]));
+    }
 
-	struct nvrecord_env_t *nvrecord_env;
+    struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
 	uint8_t eq_index = p_buff[0];
 	if((eq_index >=0) && (eq_index <= 6))
