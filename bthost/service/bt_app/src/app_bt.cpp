@@ -5691,32 +5691,31 @@ void app_bt_inquiry_remote_device_name(const bt_bdaddr_t * bdaddr)
 }
 
 extern "C" bool ntt_case_open_reconnect_authorized(void);
+extern "C" bool ntt_ota_mobile_reconnect_authorized(void);
 
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
-    DEBUG_INFO(0,"[NTT_CASE] CLOSED app_bt_device_reconnect_handler");
-    if (pmu_ntt_case_closed_latch_get())
+    const bool ota_recovery = ntt_ota_mobile_reconnect_authorized();
+    const bool uart07 = ntt_case_open_reconnect_authorized();
+    const bool latch_closed = pmu_ntt_case_closed_latch_get();
+
+    /* Test13: OTA recovery overrides the case-closed gate for 30 seconds. */
+    if (latch_closed && !ota_recovery)
     {
-        DEBUG_INFO(0,"[NTT_CASE] CLOSED latch=1, block mobile reconnect");
+        DEBUG_INFO(0, "[NTT_CASE] CLOSED latch=1, block mobile reconnect");
         return;
     }
 
-    /*
-     * Test10: IN_CASE normally blocks mobile reconnect (Test5).
-     * Explicit UART 0x07 may authorize opening reconnect while still
-     * physically IN_CASE. The PMU case-closed latch is checked above.
-     * Preserve the existing missing-mobile-key guard below.
-     */
-    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE)
+    /* IN_CASE is permitted only after explicit opening or OTA reboot. */
+    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+        !uart07 && latch_closed && !ota_recovery)
     {
-        if (!ntt_case_open_reconnect_authorized())
-        {
-            DEBUG_INFO(0, "[NTT_INBOX] BLOCK opening mobile reconnect: IN_CASE, UART07=0");
-            return;
-        }
-
-        DEBUG_INFO(0, "[NTT_CASE_OPEN] Allow mobile reconnect: IN_CASE, UART07=1");
+        DEBUG_INFO(0, "[NTT_INBOX] BLOCK opening mobile reconnect: IN_CASE");
+        return;
     }
+
+    DEBUG_INFO(0, "[NTT_RECONNECT][TEST13] latch=%d UART07=%d ota=%d",
+               latch_closed, uart07, ota_recovery);
 
     DEBUG_INFO(0,
     "[NTT_RECONNECT] handler triggered");
