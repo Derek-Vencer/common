@@ -1540,6 +1540,8 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
 }
 
 extern "C" void ntt_eq_prompt_preduck_request(void);
+extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
+extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
 static osTimerId ntt_eq_prompt_delay_timer = NULL;
 static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
 static void ntt_eq_delayed_prompt_cb(void const *arg)
@@ -1573,7 +1575,11 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
           (unsigned)eq_preset,
           (unsigned)eq_prompt_map[eq_preset]);
 
-    ntt_eq_prompt_preduck_request();
+    /* The TWS EQ sender already scheduled both buds at the same BT tick.
+     * For standalone operation schedule the local ear only.
+     */
+    if (!bts_tws_if_is_tws_link_connected())
+        ntt_eq_prompt_preduck_schedule(ntt_eq_prompt_schedule_tick());
     ntt_eq_pending_prompt = eq_prompt_map[eq_preset];
     if (!ntt_eq_prompt_delay_timer)
         ntt_eq_prompt_delay_timer = osTimerCreate(osTimer(NTT_EQ_DELAYED_PROMPT),
@@ -1581,8 +1587,8 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
     if (ntt_eq_prompt_delay_timer)
     {
         osTimerStop(ntt_eq_prompt_delay_timer);
-        osTimerStart(ntt_eq_prompt_delay_timer, 120);
-        TRACE(0, "[NTT_EQ_DUCK] PROMPT_DELAY 120ms");
+        osTimerStart(ntt_eq_prompt_delay_timer, 320);
+        TRACE(0, "[NTT_EQ_DUCK] PROMPT_DELAY 320ms");
     }
     else
         media_PlayAudio(ntt_eq_pending_prompt, 0);
