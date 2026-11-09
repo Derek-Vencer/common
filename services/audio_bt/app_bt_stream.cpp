@@ -1699,7 +1699,7 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
         ramp_left = (cfg->sample_rate * ms + 999U) / 1000U;
         if (!ramp_left) ramp_left = 1;
         gain_acc_q24 = (int64_t)gain_q16 << 8;
-        gain_step_q24 = (int32_t)((((int64_t)ramp_target - gain_q16) << 8) /
+        gain_step_q24 = (int32_t)((((int64_t)ramp_target - gain_q16) * 256) /
                                    (int32_t)ramp_left);
         AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] %s ramp=%ums prompt=%u",
                        duck ? "DOWN -18dB" : "UP 0dB", ms, (unsigned)id);
