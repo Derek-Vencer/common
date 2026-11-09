@@ -1669,64 +1669,67 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
                                         const struct AF_STREAM_CONFIG_T *cfg)
 {
 #ifdef MEDIA_PLAYER_SUPPORT
+    /* Q16 gain, with one division per transition (never per PCM frame).
+     * Keep the audio callback bounded to avoid audio-thread watchdog stalls.
+     */
     static int32_t gain_q16 = 65536;
+    static int32_t gain_step_q24 = 0;
+    static int64_t gain_acc_q24 = ((int64_t)65536 << 8);
     static uint32_t ramp_left = 0;
     static int32_t ramp_target = 65536;
-    static int32_t ramp_start = 65536;
-    static uint32_t ramp_total = 0;
     static bool was_ducking = false;
+    if (!cfg || !buf || !len)
+        return;
+    const uint32_t sample_bytes = (cfg->bits == AUD_BITS_16) ? 2U :
+        ((cfg->bits == AUD_BITS_24 || cfg->bits == AUD_BITS_32) ? 4U : 0U);
+    const uint32_t channels = cfg->channel_num;
+    if (!sample_bytes || !channels || channels > 2 || !cfg->sample_rate ||
+        cfg->sample_rate > 192000 || len % (sample_bytes * channels))
+        return;
+
     const AUD_ID_ENUM id = app_prompt_get_current_prompt_id();
     const bool duck = app_prompt_is_streaming_on() &&
                       (id == AUD_ID_SOUND_Normal_EQ ||
                        id == AUD_ID_SOUND_Voice_Boost_EQ);
-    if (!cfg || !buf || !len)
-        return;
-
-    const uint32_t bytes_per_sample =
-        (cfg->bits == AUD_BITS_16) ? 2U :
-        ((cfg->bits == AUD_BITS_24 || cfg->bits == AUD_BITS_32) ? 4U : 0U);
-    if (!bytes_per_sample || !cfg->sample_rate || !cfg->channel_num)
-        return;
-
     if (duck != was_ducking)
     {
         was_ducking = duck;
-        ramp_start = gain_q16;
-        ramp_target = duck ? 8250 : 65536; // -18 dB / unity in Q16
+        ramp_target = duck ? 8250 : 65536;
         const uint32_t ms = duck ? 30U : 100U;
-        ramp_total = (uint32_t)(((uint64_t)cfg->sample_rate * ms + 999U) / 1000U);
-        if (!ramp_total)
-            ramp_total = 1;
-        ramp_left = ramp_total;
+        ramp_left = (cfg->sample_rate * ms + 999U) / 1000U;
+        if (!ramp_left) ramp_left = 1;
+        gain_acc_q24 = (int64_t)gain_q16 << 8;
+        gain_step_q24 = (int32_t)((((int64_t)ramp_target - gain_q16) << 8) /
+                                   (int32_t)ramp_left);
         AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] %s ramp=%ums prompt=%u",
                        duck ? "DOWN -18dB" : "UP 0dB", ms, (unsigned)id);
     }
 
-    const uint32_t channels = cfg->channel_num;
-    const uint32_t frames = len / (bytes_per_sample * channels);
+    const uint32_t frames = len / (sample_bytes * channels);
     for (uint32_t frame = 0; frame < frames; ++frame)
     {
         if (ramp_left)
         {
-            const uint32_t done = ramp_total - ramp_left + 1;
-            gain_q16 = ramp_start +
-                (int32_t)(((int64_t)(ramp_target - ramp_start) * done) / ramp_total);
-            --ramp_left;
-            if (!ramp_left)
+            gain_acc_q24 += gain_step_q24;
+            gain_q16 = (int32_t)(gain_acc_q24 >> 8);
+            if (--ramp_left == 0)
+            {
                 gain_q16 = ramp_target;
+                gain_acc_q24 = (int64_t)gain_q16 << 8;
+            }
         }
         for (uint32_t ch = 0; ch < channels; ++ch)
         {
             const uint32_t i = frame * channels + ch;
-            if (bytes_per_sample == 2U)
+            if (sample_bytes == 2U)
             {
                 int16_t *pcm = (int16_t *)buf;
-                pcm[i] = (int16_t)(((int32_t)pcm[i] * gain_q16) / 65536);
+                pcm[i] = (int16_t)(((int32_t)pcm[i] * gain_q16) >> 16);
             }
             else
             {
                 int32_t *pcm = (int32_t *)buf;
-                pcm[i] = (int32_t)(((int64_t)pcm[i] * gain_q16) / 65536);
+                pcm[i] = (int32_t)(((int64_t)pcm[i] * gain_q16) >> 16);
             }
         }
     }
