@@ -1671,19 +1671,60 @@ extern bool app_prompt_is_streaming_on(void);
 static volatile uint32_t ntt_eq_preduck_request_seq = 0;
 static volatile uint32_t ntt_eq_preduck_target_tick = 0;
 static volatile bool ntt_eq_preduck_scheduled = false;
+#define NTT_EQ_INVALID_TICK 0xFFFFFFFFU
+#define NTT_EQ_BT_TICK_MASK 0x0FFFFFFFU
+
+/* Use the MOBILE ACL clock on both buds, as in BES A2DP trigger code.
+ * Master uses its mobile ACL handle; slave uses its IBRT shadow handle.
+ * Local controller clocks are NOT mutually interchangeable.
+ */
+static bool ntt_eq_get_shared_bt_tick(uint32_t *tick)
+{
+    if (!tick)
+        return false;
+#if defined(IBRT)
+    const uint8_t device_id = app_bt_audio_get_curr_a2dp_device();
+    struct BT_DEVICE_T *dev = app_bt_get_device(device_id);
+    if (!dev)
+        return false;
+    if (bts_bt_if_is_dev_link_connected(&dev->remote))
+    {
+        *tick = bt_syn_get_curr_ticks(bts_bt_if_get_dev_acl_handle(&dev->remote));
+        return true;
+    }
+    if (bts_ibrt_if_is_ibrt_link_connected(&dev->remote))
+    {
+        *tick = bt_syn_get_curr_ticks(bts_ibrt_if_get_dev_ibrt_handle(&dev->remote));
+        return true;
+    }
+    return false;
+#else
+    *tick = btdrv_syn_get_curr_ticks();
+    return true;
+#endif
+}
 extern "C" uint32_t ntt_eq_prompt_schedule_tick(void)
 {
-    /* Bluetooth native clock: 1 tick = 312.5 us, 28-bit rollover. */
-    return (btdrv_syn_get_curr_ticks() + 640U) & 0x0FFFFFFFU; /* +200 ms */
+    uint32_t tick = 0;
+    if (!ntt_eq_get_shared_bt_tick(&tick))
+    {
+        AUDIO_BT_TRACE(0, "[NTT_EQ_SYNC] no mobile clock; skip schedule");
+        return NTT_EQ_INVALID_TICK;
+    }
+    const uint32_t target = (tick + 640U) & NTT_EQ_BT_TICK_MASK;
+    AUDIO_BT_TRACE(2, "[NTT_EQ_SYNC] SCHEDULE current=%u target=%u",
+                   (unsigned)tick, (unsigned)target);
+    return target;
 }
 extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick)
 {
-    ntt_eq_preduck_target_tick = tick & 0x0FFFFFFFU;
+    if (tick == NTT_EQ_INVALID_TICK)
+        return;
+    ntt_eq_preduck_target_tick = tick & NTT_EQ_BT_TICK_MASK;
     ntt_eq_preduck_scheduled = true;
 }
 extern "C" void ntt_eq_prompt_preduck_request(void)
 {
-    /* Legacy path: immediate preduck, used when no shared schedule exists. */
     ntt_eq_preduck_scheduled = false;
     ++ntt_eq_preduck_request_seq;
 }
@@ -1718,14 +1759,22 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
                               id == AUD_ID_SOUND_Voice_Boost_EQ);
     if (ntt_eq_preduck_scheduled)
     {
-        const uint32_t now = btdrv_syn_get_curr_ticks() & 0x0FFFFFFFU;
-        const uint32_t elapsed = (now - ntt_eq_preduck_target_tick) & 0x0FFFFFFFU;
-        if (elapsed < 0x08000000U)
+        uint32_t now = 0;
+        if (ntt_eq_get_shared_bt_tick(&now))
+        {
+            const uint32_t elapsed = (now - ntt_eq_preduck_target_tick) & NTT_EQ_BT_TICK_MASK;
+            if (elapsed < 0x08000000U)
         {
             ntt_eq_preduck_scheduled = false;
             ++ntt_eq_preduck_request_seq;
             AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] SCHEDULE_FIRE tick=%u now=%u",
                            (unsigned)ntt_eq_preduck_target_tick, (unsigned)now);
+            }
+        }
+        else
+        {
+            ntt_eq_preduck_scheduled = false;
+            AUDIO_BT_TRACE(0, "[NTT_EQ_SYNC] clock lost; cancel fade schedule");
         }
     }
     if (handled_preduck_seq != ntt_eq_preduck_request_seq)
