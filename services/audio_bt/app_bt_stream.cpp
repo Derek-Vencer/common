@@ -1661,34 +1661,74 @@ if (stream_route_info.output_route_info)
 /* Declared in app_media_player.cpp but not exposed by its header. */
 extern bool app_prompt_is_streaming_on(void);
 
+/*
+ * Test18: sample-continuous local A2DP gain ramp. Prompt is mixed after
+ * this handler, so its volume and AVRCP/user volume are untouched.
+ */
 static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
                                         const struct AF_STREAM_CONFIG_T *cfg)
 {
 #ifdef MEDIA_PLAYER_SUPPORT
+    static int32_t gain_q16 = 65536;
+    static uint32_t ramp_left = 0;
+    static int32_t ramp_target = 65536;
+    static int32_t ramp_start = 65536;
+    static uint32_t ramp_total = 0;
     static bool was_ducking = false;
     const AUD_ID_ENUM id = app_prompt_get_current_prompt_id();
     const bool duck = app_prompt_is_streaming_on() &&
                       (id == AUD_ID_SOUND_Normal_EQ ||
                        id == AUD_ID_SOUND_Voice_Boost_EQ);
+    if (!cfg || !buf || !len)
+        return;
+
+    const uint32_t bytes_per_sample =
+        (cfg->bits == AUD_BITS_16) ? 2U :
+        ((cfg->bits == AUD_BITS_24 || cfg->bits == AUD_BITS_32) ? 4U : 0U);
+    if (!bytes_per_sample || !cfg->sample_rate || !cfg->channel_num)
+        return;
+
     if (duck != was_ducking)
     {
-        AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] %s prompt=%u",
-                       duck ? "START gain=-18dB" : "RESTORE gain=0dB", (unsigned)id);
         was_ducking = duck;
+        ramp_start = gain_q16;
+        ramp_target = duck ? 8250 : 65536; // -18 dB / unity in Q16
+        const uint32_t ms = duck ? 30U : 100U;
+        ramp_total = (uint32_t)(((uint64_t)cfg->sample_rate * ms + 999U) / 1000U);
+        if (!ramp_total)
+            ramp_total = 1;
+        ramp_left = ramp_total;
+        AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] %s ramp=%ums prompt=%u",
+                       duck ? "DOWN -18dB" : "UP 0dB", ms, (unsigned)id);
     }
-    if (!duck || !cfg || !buf)
-        return;
-    if (cfg->bits == AUD_BITS_16)
+
+    const uint32_t channels = cfg->channel_num;
+    const uint32_t frames = len / (bytes_per_sample * channels);
+    for (uint32_t frame = 0; frame < frames; ++frame)
     {
-        int16_t *pcm = (int16_t *)buf;
-        for (uint32_t i = 0; i < len / sizeof(int16_t); ++i)
-            pcm[i] = (int16_t)(((int32_t)pcm[i] * 126) / 1000);
-    }
-    else if (cfg->bits == AUD_BITS_24 || cfg->bits == AUD_BITS_32)
-    {
-        int32_t *pcm = (int32_t *)buf;
-        for (uint32_t i = 0; i < len / sizeof(int32_t); ++i)
-            pcm[i] = (int32_t)(((int64_t)pcm[i] * 126) / 1000);
+        if (ramp_left)
+        {
+            const uint32_t done = ramp_total - ramp_left + 1;
+            gain_q16 = ramp_start +
+                (int32_t)(((int64_t)(ramp_target - ramp_start) * done) / ramp_total);
+            --ramp_left;
+            if (!ramp_left)
+                gain_q16 = ramp_target;
+        }
+        for (uint32_t ch = 0; ch < channels; ++ch)
+        {
+            const uint32_t i = frame * channels + ch;
+            if (bytes_per_sample == 2U)
+            {
+                int16_t *pcm = (int16_t *)buf;
+                pcm[i] = (int16_t)(((int32_t)pcm[i] * gain_q16) / 65536);
+            }
+            else
+            {
+                int32_t *pcm = (int32_t *)buf;
+                pcm[i] = (int32_t)(((int64_t)pcm[i] * gain_q16) / 65536);
+            }
+        }
     }
 #endif
 }
