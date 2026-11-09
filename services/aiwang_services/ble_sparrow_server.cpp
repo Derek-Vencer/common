@@ -74,6 +74,8 @@ extern "C" void ntt_color_code_nv_set(uint8_t color);
 extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
 extern bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+extern "C" void ntt_key_role_switch_block_start(void);
+extern "C" void ntt_key_role_switch_block_cancel(void);
 extern "C" void dtm_enter_pairing_mode(void);
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 
@@ -3391,6 +3393,8 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
               (unsigned)er_inbox);
         return;
     }
+    ntt_key_role_switch_block_start();
+
 
     TRACE(0,
           "[KEY] kick=%d test=%d left_flag=%d inbox=%d side=%s",
@@ -4498,7 +4502,9 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 
 void set_er_inbox_status(uint8_t status)
 {
-	er_inbox = status;
+    er_inbox = status;
+    if (status == 1)
+        ntt_key_role_switch_block_cancel();
 }
 
 extern "C" uint8_t get_er_inbox_status(void)
