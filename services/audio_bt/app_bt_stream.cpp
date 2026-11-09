@@ -1757,18 +1757,39 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
     const bool prompt_duck = app_prompt_is_streaming_on() &&
                              (id == AUD_ID_SOUND_Normal_EQ ||
                               id == AUD_ID_SOUND_Voice_Boost_EQ);
+    const uint32_t frames = len / (sample_bytes * channels);
+    uint32_t fade_start_frame = 0;
+    bool fade_due_in_buffer = false;
+    uint32_t fade_late_frames = 0;
     if (ntt_eq_preduck_scheduled)
     {
         uint32_t now = 0;
         if (ntt_eq_get_shared_bt_tick(&now))
         {
-            const uint32_t elapsed = (now - ntt_eq_preduck_target_tick) & NTT_EQ_BT_TICK_MASK;
-            if (elapsed < 0x08000000U)
-        {
-            ntt_eq_preduck_scheduled = false;
-            ++ntt_eq_preduck_request_seq;
-            AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] SCHEDULE_FIRE tick=%u now=%u",
-                           (unsigned)ntt_eq_preduck_target_tick, (unsigned)now);
+            const uint32_t target = ntt_eq_preduck_target_tick;
+            /* Signed 28-bit difference, safe within +/- 11.6 hours.
+             * Clock is sampled at callback entry. Convert target offset to
+             * sample frames, so the fade may start inside this PCM block.
+             */
+            const int32_t diff_ticks =
+                (int32_t)(((target - now + 0x08000000U) &
+                           NTT_EQ_BT_TICK_MASK) - 0x08000000U);
+            const int64_t diff_frames =
+                ((int64_t)diff_ticks * (int64_t)cfg->sample_rate * 5) / 16000;
+            if (diff_frames < (int64_t)frames)
+            {
+                fade_due_in_buffer = true;
+                if (diff_frames > 0)
+                    fade_start_frame = (uint32_t)diff_frames;
+                else
+                    fade_late_frames = (uint32_t)((-diff_frames > 192000) ?
+                                                  192000 : -diff_frames);
+                ntt_eq_preduck_scheduled = false;
+                ++ntt_eq_preduck_request_seq;
+                AUDIO_BT_TRACE(4,
+                    "[NTT_EQ_DUCK] SAMPLE_FIRE target=%u now=%u start=%u late=%u",
+                    (unsigned)target, (unsigned)now,
+                    (unsigned)fade_start_frame, (unsigned)fade_late_frames);
             }
         }
         else
@@ -1785,8 +1806,13 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
         AUDIO_BT_TRACE(0, "[NTT_EQ_DUCK] PRE_DUCK seq=%u",
                        (unsigned)handled_preduck_seq);
     }
+    /* Do not start fading at the beginning of a buffer if its BT target
+     * lies in the middle. Keep the previous gain until the target frame.
+     */
     const bool duck = prompt_duck || (preduck_hold_frames != 0);
-    if (duck != was_ducking)
+    const bool defer_down = fade_due_in_buffer && fade_start_frame > 0 &&
+                            duck && !was_ducking;
+    if (duck != was_ducking && !defer_down)
     {
         was_ducking = duck;
         ramp_target = duck ? 8250 : 65536;
@@ -1800,7 +1826,6 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
                        duck ? "DOWN -18dB" : "UP 0dB", ms, (unsigned)id);
     }
 
-    const uint32_t frames = len / (sample_bytes * channels);
     if (prompt_duck)
         preduck_hold_frames = 0;
     else if (preduck_hold_frames > frames)
@@ -1809,6 +1834,19 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
         preduck_hold_frames = 0;
     for (uint32_t frame = 0; frame < frames; ++frame)
     {
+        if (defer_down && frame == fade_start_frame)
+        {
+            was_ducking = true;
+            ramp_target = 8250;
+            ramp_left = (cfg->sample_rate * 30U + 999U) / 1000U;
+            if (!ramp_left)
+                ramp_left = 1;
+            gain_acc_q24 = (int64_t)gain_q16 << 8;
+            gain_step_q24 = (int32_t)((((int64_t)ramp_target - gain_q16) * 256) /
+                                       (int32_t)ramp_left);
+            AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] DOWN -18dB ramp=30ms frame=%u",
+                           (unsigned)frame);
+        }
         if (ramp_left)
         {
             gain_acc_q24 += gain_step_q24;
