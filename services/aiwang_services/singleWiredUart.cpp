@@ -138,6 +138,25 @@ extern bool ntt_user_manual_pairing_request;
 
 static bool g_ntt_ota_reboot_boot = false;
 static bool g_ntt_ota_reboot_checked = false;
+/* Test13: independent, time-limited OTA mobile reconnect authorization. */
+static bool g_ntt_ota_mobile_reconnect_pending = false;
+static uint32_t g_ntt_ota_mobile_reconnect_start_tick = 0;
+
+extern "C" bool ntt_ota_mobile_reconnect_authorized(void)
+{
+    if (!g_ntt_ota_mobile_reconnect_pending)
+        return false;
+
+    if (app_bt_ibrt_has_mobile_link_connected() ||
+        TICKS_TO_MS(hal_sys_timer_get() - g_ntt_ota_mobile_reconnect_start_tick) > 30000)
+    {
+        g_ntt_ota_mobile_reconnect_pending = false;
+        return false;
+    }
+
+    return true;
+}
+
 
 //format
 // 55 aa  cmd  chanl_index  00 data
@@ -801,6 +820,8 @@ static void ntt_ota_reboot_flag_init(void)
     uint32_t bootmode = hal_sw_bootmode_get();
     g_ntt_ota_reboot_boot = ((bootmode & HAL_SW_BOOTMODE_ENTER_HIDE_BOOT) != 0);
     g_ntt_ota_reboot_checked = true;
+    g_ntt_ota_mobile_reconnect_pending = g_ntt_ota_reboot_boot;
+    g_ntt_ota_mobile_reconnect_start_tick = hal_sys_timer_get();
     DBGPRINT("[NTT_OTA_BOOT] bootmode=0x%08X ota_reboot=%d",bootmode,g_ntt_ota_reboot_boot);
 }
 
