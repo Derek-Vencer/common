@@ -1653,9 +1653,48 @@ if (stream_route_info.output_route_info)
     return len;
 }
 
+/*
+ * NTT Test16: attenuate only A2DP PCM while an EQ prompt is playing.
+ * Do not touch codec, AVRCP or persisted user volume. Each TWS ear
+ * handles its own PCM; normal gain returns automatically on prompt end.
+ */
+static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
+                                        const struct AF_STREAM_CONFIG_T *cfg)
+{
+#ifdef MEDIA_PLAYER_SUPPORT
+    static bool was_ducking = false;
+    const AUD_ID_ENUM id = app_prompt_get_current_prompt_id();
+    const bool duck = app_prompt_is_streaming_on() &&
+                      (id == AUD_ID_SOUND_Normal_EQ ||
+                       id == AUD_ID_SOUND_Voice_Boost_EQ);
+    if (duck != was_ducking)
+    {
+        AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] %s prompt=%u",
+                       duck ? "START gain=-60dB" : "RESTORE gain=0dB", (unsigned)id);
+        was_ducking = duck;
+    }
+    if (!duck || !cfg || !buf)
+        return;
+    if (cfg->bits == AUD_BITS_16)
+    {
+        int16_t *pcm = (int16_t *)buf;
+        for (uint32_t i = 0; i < len / sizeof(int16_t); ++i)
+            pcm[i] = (int16_t)((int32_t)pcm[i] / 1000);
+    }
+    else if (cfg->bits == AUD_BITS_24 || cfg->bits == AUD_BITS_32)
+    {
+        int32_t *pcm = (int32_t *)buf;
+        for (uint32_t i = 0; i < len / sizeof(int32_t); ++i)
+            pcm[i] /= 1000;
+    }
+#endif
+}
+
 FRAM_TEXT_LOC void bt_a2dp_player_playback_post_handler(uint8_t *buf, uint32_t len, void *cfg)
 {
     POSSIBLY_UNUSED struct AF_STREAM_CONFIG_T *config = (struct AF_STREAM_CONFIG_T *)cfg;
+
+    ntt_eq_prompt_a2dp_pcm_duck(buf, len, config);
 
 #ifdef MIX_AUDIO_PROMPT_WITH_A2DP_MEDIA_ENABLED
     uint8_t device_id = bes_aud_bt->aud_get_curr_a2dp_device();
