@@ -1665,6 +1665,15 @@ extern bool app_prompt_is_streaming_on(void);
  * Test18: sample-continuous local A2DP gain ramp. Prompt is mixed after
  * this handler, so its volume and AVRCP/user volume are untouched.
  */
+/* Test18 Fix2: pre-duck is requested from the key/EQ sync path.
+ * The audio callback consumes the request without changing prompt gain.
+ */
+static volatile uint32_t ntt_eq_preduck_request_seq = 0;
+extern "C" void ntt_eq_prompt_preduck_request(void)
+{
+    ++ntt_eq_preduck_request_seq;
+}
+
 static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
                                         const struct AF_STREAM_CONFIG_T *cfg)
 {
@@ -1678,6 +1687,8 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
     static uint32_t ramp_left = 0;
     static int32_t ramp_target = 65536;
     static bool was_ducking = false;
+    static uint32_t handled_preduck_seq = 0;
+    static uint32_t preduck_hold_frames = 0;
     if (!cfg || !buf || !len)
         return;
     const uint32_t sample_bytes = (cfg->bits == AUD_BITS_16) ? 2U :
@@ -1688,9 +1699,18 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
         return;
 
     const AUD_ID_ENUM id = app_prompt_get_current_prompt_id();
-    const bool duck = app_prompt_is_streaming_on() &&
-                      (id == AUD_ID_SOUND_Normal_EQ ||
-                       id == AUD_ID_SOUND_Voice_Boost_EQ);
+    const bool prompt_duck = app_prompt_is_streaming_on() &&
+                             (id == AUD_ID_SOUND_Normal_EQ ||
+                              id == AUD_ID_SOUND_Voice_Boost_EQ);
+    if (handled_preduck_seq != ntt_eq_preduck_request_seq)
+    {
+        handled_preduck_seq = ntt_eq_preduck_request_seq;
+        /* Cover EQ sync latency plus delayed prompt startup. */
+        preduck_hold_frames = cfg->sample_rate / 2U;
+        AUDIO_BT_TRACE(0, "[NTT_EQ_DUCK] PRE_DUCK seq=%u",
+                       (unsigned)handled_preduck_seq);
+    }
+    const bool duck = prompt_duck || (preduck_hold_frames != 0);
     if (duck != was_ducking)
     {
         was_ducking = duck;
@@ -1706,6 +1726,12 @@ static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
     }
 
     const uint32_t frames = len / (sample_bytes * channels);
+    if (prompt_duck)
+        preduck_hold_frames = 0;
+    else if (preduck_hold_frames > frames)
+        preduck_hold_frames -= frames;
+    else
+        preduck_hold_frames = 0;
     for (uint32_t frame = 0; frame < frames; ++frame)
     {
         if (ramp_left)
