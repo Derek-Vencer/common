@@ -99,6 +99,7 @@
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
 /* Explicit UART 0x07 open-case authorization; never inferred from IN_CASE. */
 extern "C" bool ntt_case_open_reconnect_authorized(void);
+extern "C" bool ntt_ota_mobile_reconnect_authorized(void);
 
 /* Implemented by the Sparrow BLE service: proactive battery 0x31 Notify. */
 extern void sparrow_push_battery_level_notify(bool slave_disconnected);
@@ -1369,23 +1370,28 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                         "MASTER start opening reconnect");
 
                     /*
-                     * CMD 0x11 IN_CASE must preserve the mobile state.
-                     * Do not start reconnect on a TWS profiles event.
+                     * Test13: allow OTA boot recovery, UART 0x07, or
+                     * a released case-close latch. Otherwise IN_CASE
+                     * keeps the existing no-reconnect protection.
                      */
-                    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
-                        !ntt_case_open_reconnect_authorized())
+                    const bool ota_recovery = ntt_ota_mobile_reconnect_authorized();
+                    const bool uart07 = ntt_case_open_reconnect_authorized();
+                    const bool latch_closed = pmu_ntt_case_closed_latch_get();
+                    const bool in_case =
+                        (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE);
+
+                    if (in_case && latch_closed && !uart07 && !ota_recovery)
                     {
                         EARBUDS_TRACE(0,
-                            "[NTT_INBOX] TWS profiles: skip mobile reconnect (IN_CASE, no UART 0x07)");
+                            "[NTT_INBOX][TEST13] TWS profiles: skip mobile reconnect");
                     }
-                    else if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
-                             (!app_bt_ibrt_has_mobile_link_connected() &&
-                              !ntt_first_no_mobile_pair_mode &&
-                              !ntt_manual_pairing_mode))
+                    else if (!app_bt_ibrt_has_mobile_link_connected() &&
+                             !ntt_first_no_mobile_pair_mode &&
+                             !ntt_manual_pairing_mode)
                     {
                         EARBUDS_TRACE(0,
-                            "[NTT_CASE_OPEN] TWS MASTER opening reconnect, UART07=%d",
-                            ntt_case_open_reconnect_authorized());
+                            "[NTT_RECONNECT][TEST13] MASTER opening reconnect latch=%d UART07=%d ota=%d",
+                            latch_closed, uart07, ota_recovery);
                         app_bt_profile_connect_manager_opening_reconnect();
                     }
                 }
