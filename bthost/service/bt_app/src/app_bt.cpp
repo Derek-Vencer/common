@@ -228,13 +228,13 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       2000
 #define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  500
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
-#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           30
-#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT         3
+#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           60
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        15
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
 #define NTT_CONN_PROMPT_TICK_MS            200
-#define NTT_CONN_PROMPT_START_TIMEOUT_MS   2000
+#define NTT_CONN_PROMPT_START_TIMEOUT_MS   4000
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 
 typedef struct
@@ -611,8 +611,9 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         {
             ntt_bt_connected_prompt_stable_count++;
 
-            DEBUG_INFO(3,"[NTT_CONN_PROMPT] wait IBRT dev=%u role=%u stable=%u",
-                device_id, ui_role,ntt_bt_connected_prompt_stable_count);
+            DEBUG_INFO(4,"[NTT_CONN_PROMPT][TEST14] wait IBRT dev=%u role=%u stable=%u/%u",
+                device_id, ui_role, ntt_bt_connected_prompt_stable_count,
+                NTT_BT_CONNECTED_PROMPT_STABLE_COUNT);
 
             ntt_conn_prompt_schedule();
             return;
