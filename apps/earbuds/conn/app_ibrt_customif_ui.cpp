@@ -3834,9 +3834,8 @@ static void ntt_case_check_pause_music_when_both_in(void)
 /*
  * 本機 Case State 改變 callback。
  */
-extern "C"
 extern "C" void ntt_tws_auth_diag_link_check(void);
-void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
+extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 {
     ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E peer_state =
@@ -3895,7 +3894,14 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         return;
     }
 
+    EARBUDS_TRACE(4,
+        "[NTT_PAIR_CASE][FIX4] LOCAL OUT before stop ui=%d discover=%d manual=%d access=%d",
+        app_ui_in_pairing_mode(), get_er_discover_connectable_status(),
+        ntt_manual_pairing_mode, app_bt_get_curr_access_mode());
     ntt_pairing_case_stop();
+    EARBUDS_TRACE(2,
+        "[NTT_PAIR_CASE][FIX4] LOCAL OUT after stop access=%d ui=%d",
+        app_bt_get_curr_access_mode(), app_ui_in_pairing_mode());
     EARBUDS_TRACE(
         0,
         "[NTT_CASE_CB][LOCAL] OUT_CASE");
@@ -4227,7 +4233,14 @@ void ntt_case_state_peer_changed_callback(
         return;
     }
 
+    EARBUDS_TRACE(4,
+        "[NTT_PAIR_CASE][FIX4] PEER OUT before stop ui=%d discover=%d manual=%d access=%d",
+        app_ui_in_pairing_mode(), get_er_discover_connectable_status(),
+        ntt_manual_pairing_mode, app_bt_get_curr_access_mode());
     ntt_pairing_case_stop();
+    EARBUDS_TRACE(2,
+        "[NTT_PAIR_CASE][FIX4] PEER OUT after stop access=%d ui=%d",
+        app_bt_get_curr_access_mode(), app_ui_in_pairing_mode());
     EARBUDS_TRACE(
         0,
         "[NTT_CASE_CB][PEER] peer OUT_CASE");
