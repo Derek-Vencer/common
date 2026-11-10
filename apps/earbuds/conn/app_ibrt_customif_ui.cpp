@@ -128,6 +128,7 @@ bool pairing_exited_on_out = false;
 static bool g_ntt_pairing_case_blocked = true;
 static bool g_ntt_pairing_open_seen = false;
 static bool g_ntt_pairing_auto_pending = false;
+extern "C" void ntt_auto_pairing_led_set(bool enabled);
 /*
  * Fix7: Missing Key may remove the last mobile record AFTER the
  * initial boot pairing decision. Preserve the current OPEN authorization
@@ -172,6 +173,7 @@ static void ntt_pairing_case_try_auto_start(void)
     enable_pair_status(1);
     set_er_discover_connectable_status(1);
     app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+    ntt_auto_pairing_led_set(true);
     app_bt_reset_delay_power_off();
     EARBUDS_TRACE(0, "[NTT_PAIR_CASE] AUTO START both IN_CASE");
 }
@@ -208,6 +210,7 @@ extern "C" void ntt_pairing_case_new_open(void)
 }
 extern "C" void ntt_pairing_case_stop(void)
 {
+    ntt_auto_pairing_led_set(false);
     g_ntt_pairing_case_blocked = true;
     g_ntt_pairing_open_seen = false;
     g_ntt_pairing_auto_pending = false;
