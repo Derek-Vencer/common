@@ -83,6 +83,8 @@ extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 extern void earBudsCloseOff_PowerOff_StartTimer(void);
 extern bool ntt_manual_pairing_mode;
+/* UART case-lid edge state; initialized CLOSED to accept first real OPEN. */
+static bool s_ntt_pair_case_open_latched = false;
 extern "C" bool ntt_pairing_case_can_start(void);
 extern "C" bool ntt_pairing_both_in_case_allowed(void);
 extern "C" void ntt_pairing_case_new_open(void);
@@ -1904,7 +1906,21 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             pmu_ntt_case_closed_latch_set(false);
             DBGPRINT("[NTT_CASE_LATCH] CMD_OPEN_CASE -> CLOSED latch=0");
 
-            ntt_pairing_case_new_open();
+            /*
+             * Fix2: Only a real CLOSED -> OPEN transition may rearm
+             * automatic pairing. Repeated UART 0x07 must not undo
+             * an OUT_CASE pairing stop.
+             */
+            if (!s_ntt_pair_case_open_latched)
+            {
+                s_ntt_pair_case_open_latched = true;
+                DBGPRINT("[NTT_PAIR_CASE] OPEN edge accepted");
+                ntt_pairing_case_new_open();
+            }
+            else
+            {
+                DBGPRINT("[NTT_PAIR_CASE] duplicate OPEN ignored for pairing");
+            }
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
@@ -1923,6 +1939,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_CLOSE_CASE:
         {
             DBGPRINT("[CASE] CLOSE received");
+            s_ntt_pair_case_open_latched = false;
+            DBGPRINT("[NTT_PAIR_CASE] CLOSE armed next OPEN edge");
 
             /*
             * Do not shutdown immediately.
