@@ -124,6 +124,111 @@ static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 extern bool ntt_user_manual_pairing_request;
 extern bool ntt_first_no_mobile_pair_mode;
 bool pairing_exited_on_out = false;
+/* Test19: require a confirmed TWS pair and both CASE states. */
+static bool g_ntt_pairing_case_blocked = true;
+static bool g_ntt_pairing_open_seen = false;
+static bool g_ntt_pairing_auto_pending = false;
+extern "C" void ntt_auto_pairing_led_set(bool enabled);
+extern "C" void ntt_pair_led_auto_report_fix9(void);
+/*
+ * Fix7: Missing Key may remove the last mobile record AFTER the
+ * initial boot pairing decision. Preserve the current OPEN authorization
+ * and retry only after both case states and the TWS link are ready.
+ */
+static void ntt_pairing_case_try_auto_start(void);
+extern "C" void ntt_pairing_case_missing_key_deleted(void)
+{
+    if (!g_ntt_pairing_open_seen || g_ntt_pairing_case_blocked)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_PAIR_CASE][FIX7] missing key deleted, no OPEN authorization");
+        return;
+    }
+
+    g_ntt_pairing_auto_pending = true;
+    EARBUDS_TRACE(0,
+        "[NTT_PAIR_CASE][FIX7] missing key deleted, auto pairing pending");
+    ntt_pairing_case_try_auto_start();
+}
+
+static void ntt_pairing_case_try_auto_start(void)
+{
+    if (!g_ntt_pairing_auto_pending || !g_ntt_pairing_open_seen ||
+        g_ntt_pairing_case_blocked ||
+        !bts_tws_if_is_tws_link_connected() ||
+        app_ibrt_if_get_ui_role() != TWS_UI_MASTER ||
+        ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
+        ntt_case_state_get_peer() != NTT_CASE_STATE_IN_CASE)
+        return;
+    EARBUDS_TRACE(5,
+        "[NTT_PAIR_CASE] AUTO allow local=%d peer=%d tws=%d role=%d open=%d",
+        ntt_case_state_get_local(), ntt_case_state_get_peer(),
+        bts_tws_if_is_tws_link_connected(),
+        app_ibrt_if_get_ui_role(), g_ntt_pairing_open_seen);
+    g_ntt_pairing_auto_pending = false;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE][FIX7] pairing ready, report pair=2");
+    ntt_first_no_mobile_pair_mode = true;
+    ntt_manual_pairing_mode = true;
+    ntt_user_manual_pairing_request = false;
+    set_pair_status(0);
+    enable_pair_status(1);
+    set_er_discover_connectable_status(1);
+    app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+    ntt_auto_pairing_led_set(true);
+    /* v0.9.41: immediately report pair=2, limited to a recent case 0x0F. */
+    ntt_pair_led_auto_report_fix9();
+    app_bt_reset_delay_power_off();
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] AUTO START both IN_CASE");
+}
+extern "C" void ntt_pairing_case_auto_request(void)
+{
+    g_ntt_pairing_auto_pending = true;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] AUTO PENDING");
+    ntt_pairing_case_try_auto_start();
+}
+
+extern "C" bool ntt_pairing_both_in_case_allowed(void)
+{
+    return bts_tws_if_is_tws_link_connected() &&
+           ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+           ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE;
+}
+extern "C" bool ntt_pairing_case_can_start(void)
+{
+    /*
+     * Manual pairing is explicitly authorized by the charging case.
+     * It does not require a preceding lid CLOSE/OPEN edge.
+     * Both buds IN_CASE and TWS linked are mandatory for either path.
+     */
+    return ntt_pairing_both_in_case_allowed() &&
+           (ntt_user_manual_pairing_request ||
+            !g_ntt_pairing_case_blocked);
+}
+extern "C" void ntt_pairing_case_new_open(void)
+{
+    g_ntt_pairing_case_blocked = false;
+    g_ntt_pairing_open_seen = true;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] new open rearmed");
+    ntt_pairing_case_try_auto_start();
+}
+extern "C" void ntt_pairing_case_stop(void)
+{
+    ntt_auto_pairing_led_set(false);
+    g_ntt_pairing_case_blocked = true;
+    g_ntt_pairing_open_seen = false;
+    g_ntt_pairing_auto_pending = false;
+    if (!app_ui_in_pairing_mode() && !get_er_discover_connectable_status() &&
+        !ntt_manual_pairing_mode &&
+        app_bt_get_curr_access_mode() != BTIF_BAM_GENERAL_ACCESSIBLE) return;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] forced stop");
+    ntt_manual_pairing_mode = false;
+    ntt_user_manual_pairing_request = false;
+    set_er_discover_connectable_status(0);
+    enable_pair_status(0);
+    if (app_ui_in_pairing_mode()) app_ui_exit_pairing_mode(false);
+    app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+}
+
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 /*
  * Test4: retry mobile reconnect after fast-remove latch release.
@@ -261,6 +366,18 @@ void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *bu
 *****************************************************************************/
 void app_ibrt_customif_pairing_mode_entry()
 {
+    if (!ntt_pairing_case_can_start())
+    {
+        EARBUDS_TRACE(5,
+            "[NTT_PAIR_CASE] reject UI entry local=%d peer=%d tws=%d open=%d blocked=%d",
+            ntt_case_state_get_local(), ntt_case_state_get_peer(),
+            bts_tws_if_is_tws_link_connected(),
+            g_ntt_pairing_open_seen, g_ntt_pairing_case_blocked);
+        set_er_discover_connectable_status(0);
+        enable_pair_status(0);
+        app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+        return;
+    }
     app_ui_config_t* p_app_ui_config = app_ui_get_config();
     uint8_t select_sco_device = app_bt_audio_get_curr_playing_sco();
     uint8_t select_a2dp_device = app_bt_audio_get_curr_playing_a2dp();
@@ -584,7 +701,8 @@ void app_ibrt_customif_pairing_mode_exit()
      *   - immediately report pair=2 to charging case
      * ---------------------------------------------------------
      */
-    if (first_no_mobile && !mobile_connected && !user_manual && !g_ntt_mobile_reconnect_after_pairing_exit)
+    if (first_no_mobile && !mobile_connected && !user_manual &&
+        !g_ntt_mobile_reconnect_after_pairing_exit && ntt_pairing_case_can_start())
     {
         EARBUDS_TRACE(0,"[NTT_PAIR] TWS flow exit only -> keep first mobile pairing active");
 
@@ -3744,9 +3862,10 @@ static void ntt_case_check_pause_music_when_both_in(void)
 /*
  * 本機 Case State 改變 callback。
  */
-extern "C"
-void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
+extern "C" void ntt_tws_auth_diag_link_check(void);
+extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 {
+    ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E peer_state =
         ntt_case_state_get_peer();
 
@@ -3781,6 +3900,7 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
             "[NTT_CASE_CB][LOCAL] IN_CASE");
 
         pairing_exited_on_out = false;
+        ntt_pairing_case_try_auto_start();
 
         ntt_case_check_pause_music_when_both_in();
 
@@ -3802,6 +3922,14 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         return;
     }
 
+    EARBUDS_TRACE(4,
+        "[NTT_PAIR_CASE][FIX4] LOCAL OUT before stop ui=%d discover=%d manual=%d access=%d",
+        app_ui_in_pairing_mode(), get_er_discover_connectable_status(),
+        ntt_manual_pairing_mode, app_bt_get_curr_access_mode());
+    ntt_pairing_case_stop();
+    EARBUDS_TRACE(2,
+        "[NTT_PAIR_CASE][FIX4] LOCAL OUT after stop access=%d ui=%d",
+        app_bt_get_curr_access_mode(), app_ui_in_pairing_mode());
     EARBUDS_TRACE(
         0,
         "[NTT_CASE_CB][LOCAL] OUT_CASE");
@@ -4059,6 +4187,7 @@ extern "C"
 void ntt_case_state_peer_changed_callback(
     NTT_CASE_STATE_E state)
 {
+    ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E local_state =
         ntt_case_state_get_local();
 
@@ -4093,6 +4222,7 @@ void ntt_case_state_peer_changed_callback(
      * Peer 狀態更新後，也要檢查雙耳入盒 Pause。
      */
     ntt_case_check_pause_music_when_both_in();
+    ntt_pairing_case_try_auto_start();
 
     /*
      * Peer IN_CASE。
@@ -4131,6 +4261,14 @@ void ntt_case_state_peer_changed_callback(
         return;
     }
 
+    EARBUDS_TRACE(4,
+        "[NTT_PAIR_CASE][FIX4] PEER OUT before stop ui=%d discover=%d manual=%d access=%d",
+        app_ui_in_pairing_mode(), get_er_discover_connectable_status(),
+        ntt_manual_pairing_mode, app_bt_get_curr_access_mode());
+    ntt_pairing_case_stop();
+    EARBUDS_TRACE(2,
+        "[NTT_PAIR_CASE][FIX4] PEER OUT after stop access=%d ui=%d",
+        app_bt_get_curr_access_mode(), app_ui_in_pairing_mode());
     EARBUDS_TRACE(
         0,
         "[NTT_CASE_CB][PEER] peer OUT_CASE");

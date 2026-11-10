@@ -214,6 +214,9 @@ static void ntt_bt_user_confirmation_callback(
     uint32 numeric_value);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
+extern "C" void ntt_pairing_case_missing_key_deleted(void);
+/* Pairing is only legal while both earbuds are IN_CASE and TWS linked. */
+extern "C" bool ntt_pairing_both_in_case_allowed(void);
 // Implemented in services/audio_bt/app_media_player.cpp
 extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
@@ -226,10 +229,10 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
 #define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       2000
-#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  100
+#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  500
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
 #define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           60
-#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        10
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        15
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
@@ -5117,6 +5120,17 @@ void app_bt_global_handle(const btif_event_t *Event)
                 //auth failed should clear nv record link key
                 bt_bdaddr_t *bd_ddr = btif_me_get_callback_event_address(Event);
                 btif_device_record_t record;
+                DEBUG_INFO(2,
+                    "[NTT_AUTH_DIAG][FIX3] failure status=0x%x tws=%d",
+                    error_code, bts_tws_if_is_tws_link_connected());
+                if (bd_ddr != NULL)
+                {
+                    DEBUG_INFO(6,
+                        "[NTT_AUTH_DIAG][FIX3] addr=%02x:%02x:%02x:%02x:%02x:%02x",
+                        bd_ddr->address[5], bd_ddr->address[4],
+                        bd_ddr->address[3], bd_ddr->address[2],
+                        bd_ddr->address[1], bd_ddr->address[0]);
+                }
                 /*
                 * NTT: Detect mobile Key Missing.
                 */
@@ -5153,6 +5167,9 @@ void app_bt_global_handle(const btif_event_t *Event)
                     DEBUG_INFO(0,"delete link key as authen fail");
                     char remote_dev_name[BTM_NAME_MAX_LEN];
                     strcpy(remote_dev_name, record.remote_dev_name);
+                    DEBUG_INFO(1,
+                        "[NTT_AUTH_DIAG][FIX3] SDK local NV delete status=0x%x",
+                        error_code);
                     bluetooth_nv_mgr_bt_record_del(BT_NV_REC_DEL_AUTHEN_FAILED, bd_ddr->address);
 
                     if (g_bt_pair_state_callback)
@@ -5195,6 +5212,21 @@ void app_bt_global_handle(const btif_event_t *Event)
                         DEBUG_INFO(0, "app_bt_global_handle: delete record");
                     }
                     nv_record_execute_async_flush();
+
+                    /*
+                     * Fix7: after the SDK removes the invalid mobile key,
+                     * re-evaluate zero-mobile pairing for this OPEN cycle.
+                     * Do not initiate pairing directly while TWS is offline.
+                     */
+                    if (error_code == BTIF_BEC_MISSING_KEY)
+                    {
+                        int remaining = nv_record_get_paired_dev_count();
+                        DEBUG_INFO(1,
+                            "[NTT_PAIR_CASE][FIX7] after Missing Key NV records=%d",
+                            remaining);
+                        if (remaining == 0)
+                            ntt_pairing_case_missing_key_deleted();
+                    }
                 }
             }
         }
@@ -6467,6 +6499,21 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     }
     else
     {
+        /*
+         * Test19 Fix6: opening reconnect may run after the first bud
+         * leaves the case with no paired mobile records. That is NOT
+         * authorization to start Classic inquiry/discoverable pairing.
+         * Fix4 has already stopped pairing on OUT_CASE; do not undo it.
+         */
+        if (!ntt_pairing_both_in_case_allowed())
+        {
+            DEBUG_INFO(0,
+                "[NTT_PAIR_CASE][FIX6] no mobile record, pairing forbidden outside both IN_CASE");
+            set_er_discover_connectable_status(0);
+            app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+            return;
+        }
+
         DEBUG_INFO(0, "!!!go to pairing");
         set_er_discover_connectable_status(1);
 

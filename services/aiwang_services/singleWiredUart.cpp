@@ -65,6 +65,7 @@
 
 #ifdef IBRT
 #include "app_ibrt_customif_cmd.h"
+extern "C" bool ntt_auto_pairing_led_active(void);
 #endif
 
 #include "hal_sleep.h"
@@ -83,6 +84,12 @@ extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 extern void earBudsCloseOff_PowerOff_StartTimer(void);
 extern bool ntt_manual_pairing_mode;
+/* UART case-lid edge state; initialized CLOSED to accept first real OPEN. */
+static bool s_ntt_pair_case_open_latched = false;
+extern "C" bool ntt_pairing_case_can_start(void);
+extern "C" bool ntt_pairing_both_in_case_allowed(void);
+extern "C" void ntt_pairing_case_new_open(void);
+
 extern "C" uint8_t icp1205_get_chrg_sts2(void);
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
@@ -112,6 +119,9 @@ extern bool ntt_charging_pwron_pending_shutdown;
 static uint32_t ntt_last_box_tws_reconnect_tick = 0;
 
 static uint32_t ntt_last_box_battery_case_tick = 0;
+static uint32_t s_ntt_pair_led_cmd_tick = 0;
+static bool s_ntt_pair_led_cmd_valid = false;
+extern "C" bool ntt_auto_pairing_led_active(void);
 extern bool ntt_user_manual_pairing_request;
 #define NTT_DEFAULT_BT_NAME     "nwm CLIPS"
 #define NTT_DEFAULT_BLE_NAME    "LE nwm CLIPS"
@@ -498,6 +508,25 @@ uint8_t get_tws_peer_battery_percent(void)
 }
 
 #define PAIR_NOTIFY_REPEAT_COUNT    10
+#define NTT_PAIR_LED_CMD_WINDOW_MS 1000
+void wired_uart_get_battery_level(void);
+
+extern "C" void ntt_pair_led_auto_report_fix9(void)
+{
+    if (!ntt_auto_pairing_led_active() || !s_ntt_pair_led_cmd_valid)
+    {
+        DBGPRINT("[PAIR_LED_FIX9] skip: auto pairing inactive or no 0x0F");
+        return;
+    }
+    uint32_t elapsed = TICKS_TO_MS(hal_sys_timer_get() - s_ntt_pair_led_cmd_tick);
+    if (elapsed >= NTT_PAIR_LED_CMD_WINDOW_MS)
+    {
+        DBGPRINT("[PAIR_LED_FIX9] skip: 0x0F age=%u ms", (unsigned)elapsed);
+        return;
+    }
+    DBGPRINT("[PAIR_LED_FIX9] auto report 0x0F age=%u ms", (unsigned)elapsed);
+    wired_uart_get_battery_level();
+}
 
 void wired_uart_get_battery_level(void)
 {
@@ -614,7 +643,7 @@ void wired_uart_get_battery_level(void)
     {
         pair_status = 1;
     }
-    else if (tws_connected && ((enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible))
+    else if (tws_connected && ((enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || ntt_auto_pairing_led_active()))
     {
         pair_status = 2;
     }
@@ -628,7 +657,7 @@ void wired_uart_get_battery_level(void)
      * manually pairing, generally accessible, or
      * reporting pairing success.
      */
-    limit_pair_notify = (enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || (pair_success_status != 0);
+    limit_pair_notify = (enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || ntt_auto_pairing_led_active() || (pair_success_status != 0);
 
     /*
     * Pairing-in-progress:
@@ -1900,6 +1929,21 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             pmu_ntt_case_closed_latch_set(false);
             DBGPRINT("[NTT_CASE_LATCH] CMD_OPEN_CASE -> CLOSED latch=0");
 
+            /*
+             * Fix2: Only a real CLOSED -> OPEN transition may rearm
+             * automatic pairing. Repeated UART 0x07 must not undo
+             * an OUT_CASE pairing stop.
+             */
+            if (!s_ntt_pair_case_open_latched)
+            {
+                s_ntt_pair_case_open_latched = true;
+                DBGPRINT("[NTT_PAIR_CASE] OPEN edge accepted");
+                ntt_pairing_case_new_open();
+            }
+            else
+            {
+                DBGPRINT("[NTT_PAIR_CASE] duplicate OPEN ignored for pairing");
+            }
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
@@ -1918,6 +1962,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_CLOSE_CASE:
         {
             DBGPRINT("[CASE] CLOSE received");
+            s_ntt_pair_case_open_latched = false;
+            DBGPRINT("[NTT_PAIR_CASE] CLOSE armed next OPEN edge");
 
             /*
             * Do not shutdown immediately.
@@ -1990,7 +2036,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_EAR_RESET:
     {
       
-        if (0)
+        if (1)
         {
             printf("CMD_EAR_RESET factory reset!!! return ");
             return;
@@ -2112,6 +2158,13 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
             bool tws_connected = bts_tws_if_is_tws_link_connected();
             uint8_t ui_role = app_ibrt_if_get_ui_role();
+            if (!ntt_pairing_both_in_case_allowed())
+            {
+                DBGPRINT("[NTT_PAIR_CASE] reject manual: local/peer not both IN_CASE");
+                break;
+            }
+            DBGPRINT("[NTT_PAIR_CASE] explicit manual pairing authorized without lid edge");
+
             DBGPRINT( "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",isRightEarbuds,tws_connected,ui_role,app_ui_in_pairing_mode());
 
             /*
@@ -2199,6 +2252,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_SEND_BOX_BATTERY_LEVEL:
     {
         uint32_t now = hal_sys_timer_get();
+        s_ntt_pair_led_cmd_tick = now;
+        s_ntt_pair_led_cmd_valid = true;
 
         if (ntt_last_box_battery_case_tick != 0)
         {

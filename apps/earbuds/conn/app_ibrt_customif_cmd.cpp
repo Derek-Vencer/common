@@ -168,6 +168,10 @@ static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length
 extern "C" void ntt_eq_prompt_preduck_request(void);
 extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
 extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
+extern "C" bool ntt_eq_key_schedule_apply(uint8_t preset, uint32_t tick);
+extern "C" void ntt_eq_key_cancel_pending(void);
+extern "C" void ntt_eq6_sync_from_peer_key(uint8_t enable,
+                                               uint8_t original, uint32_t tick);
 static void ntt_eq_tws_write_tick(uint8_t *p, uint32_t tick)
 {
     p[0] = (uint8_t)tick;
@@ -209,6 +213,7 @@ static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,u
 static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen);
 extern "C" void ntt_fw_version_peer_ready_notify(void);
 extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
+extern "C" void ntt_tws_auth_diag_link_check(void);
 
 static void ntt_tws_delete_mobile_record_send(uint8_t *p_buff,uint16_t length)
 {
@@ -241,9 +246,23 @@ static void ntt_tws_delete_mobile_record_receive(uint16_t rsp_seq,uint8_t *p_buf
         return;
     }
 
-    nv_record_ddbrec_delete(&mobile_addr);
-    nv_record_execute_async_flush();
-    EARBUDS_TRACE(0,"[NTT_KEY_MISSING] peer mobile record delete requested");
+    /*
+     * Fix5: this command is emitted only for a confirmed mobile
+     * BTIF_BEC_MISSING_KEY event. Never erase TWS pairing records.
+     */
+    btif_device_record_t existing_record;
+    if (nv_record_ddbrec_find(&mobile_addr, &existing_record) == BT_STS_SUCCESS)
+    {
+        bt_status_t result = nv_record_ddbrec_delete(&mobile_addr);
+        EARBUDS_TRACE(1,
+            "[NTT_KEY_MISSING][FIX5] PEER mobile NV delete result=%d", result);
+        nv_record_flash_flush();
+    }
+    else
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_KEY_MISSING][FIX5] PEER mobile record already absent");
+    }
 }
 
 #if 1 //def BESUI_TWS_EN
@@ -1116,19 +1135,31 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
         return;
     }
 
-    uint8_t cmd_sync_music_eq[5] = {0};
-    cmd_sync_music_eq[0] = index;
-    const uint32_t tick = ntt_eq_prompt_schedule_tick();
-    if (tick != 0xFFFFFFFFU)
-    {
-        ntt_eq_tws_write_tick(&cmd_sync_music_eq[1], tick);
-        ntt_eq_prompt_preduck_schedule(tick);
-    }
-	EARBUDS_TRACE(0, "[UITWS]%s index %d ",__func__, index);
-	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq,
-                      (tick != 0xFFFFFFFFU) ? sizeof(cmd_sync_music_eq) : 1);
+    /* Fix10: APP/boot EQ sync does not schedule fade. */
+    uint8_t cmd_sync_music_eq[1] = {index};
+    EARBUDS_TRACE(0, "[NTT_EQ_FIX10] APP_EQ_TX index=%u no_fade", (unsigned)index);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq,
+                      sizeof(cmd_sync_music_eq));
 }
 
+/* Key-only wire format: legacy payload plus common fade tick and 0xA6
+ * marker. APP and boot resync continue using legacy functions unchanged.
+ */
+extern "C" void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t index, uint32_t tick)
+{
+    if (!bts_tws_if_is_tws_link_connected()) return;
+    uint8_t payload[6] = {index, 0, 0, 0, 0, 0xA6};
+    ntt_eq_tws_write_tick(&payload[1], tick);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, payload, sizeof(payload));
+}
+extern "C" void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t enable,
+                                               uint8_t original, uint32_t tick)
+{
+    if (!bts_tws_if_is_tws_link_connected()) return;
+    uint8_t payload[7] = {enable, original, 0, 0, 0, 0, 0xA6};
+    ntt_eq_tws_write_tick(&payload[2], tick);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE, payload, sizeof(payload));
+}
 void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_index)
 {
     if (!bts_tws_if_is_tws_link_connected())
@@ -1136,20 +1167,11 @@ void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_inde
         return;
     }
 
-    uint8_t payload[6] = {0};
-    payload[0] = enable;
-    payload[1] = original_eq_index;
-    const uint32_t tick = ntt_eq_prompt_schedule_tick();
-    if (tick != 0xFFFFFFFFU)
-    {
-        ntt_eq_tws_write_tick(&payload[2], tick);
-        ntt_eq_prompt_preduck_schedule(tick);
-    }
-
-    EARBUDS_TRACE(0,"[EQ6][TWS][TX] enable=%u original=%u",(unsigned)enable,(unsigned)original_eq_index);
-
-    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE,payload,
-                      (tick != 0xFFFFFFFFU) ? sizeof(payload) : 2);
+    /* Fix10: APP EQ6 ON/OFF is immediate; key uses 0xA6 tick. */
+    uint8_t payload[2] = {enable, original_eq_index};
+    EARBUDS_TRACE(0, "[NTT_EQ_FIX10] APP_EQ6_TX enable=%u original=%u no_fade",
+                  (unsigned)enable, (unsigned)original_eq_index);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE, payload, sizeof(payload));
 }
 
 void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length)
@@ -1577,11 +1599,28 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
     EARBUDS_TRACE(1, "%s", __func__);
     if (!p_buff || length < 1)
         return;
-    if (length >= 5)
+    const bool key_cmd = (length >= 6 && p_buff[5] == 0xA6);
+    if (key_cmd)
     {
-        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[1]));
+        const uint32_t tick = ntt_eq_tws_read_tick(&p_buff[1]);
+        ntt_eq_prompt_preduck_schedule(tick);
+        if (p_buff[0] <= 6 && ntt_eq_key_schedule_apply(p_buff[0], tick))
+        {
+            struct nvrecord_env_t *env = NULL;
+            nv_record_env_get(&env);
+            if (env && env->eq_index_data != p_buff[0])
+            {
+                env->eq_index_data = p_buff[0];
+                nv_record_env_set(env);
+            }
+            EARBUDS_TRACE(2, "[NTT_EQ_FIX6] PEER_KEY_EQ preset=%u tick=%u",
+                          (unsigned)p_buff[0], (unsigned)tick);
+            return;
+        }
     }
-
+    else
+        EARBUDS_TRACE(0, "[NTT_EQ_FIX10] APP_EQ_RX index=%u no_fade", (unsigned)p_buff[0]);
+    ntt_eq_key_cancel_pending();
     struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
 	uint8_t eq_index = p_buff[0];
@@ -1627,8 +1666,15 @@ static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_b
         return;
     }
 
-    if (length >= 6)
-        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[2]));
+    if (length >= 7 && p_buff[6] == 0xA6)
+    {
+        const uint32_t tick = ntt_eq_tws_read_tick(&p_buff[2]);
+        ntt_eq_prompt_preduck_schedule(tick);
+        ntt_eq6_sync_from_peer_key(enable, original_eq, tick);
+        return;
+    }
+    EARBUDS_TRACE(0, "[NTT_EQ_FIX10] APP_EQ6_RX enable=%u no_fade", (unsigned)enable);
+    ntt_eq_key_cancel_pending();
     ntt_eq6_sync_from_peer(enable,original_eq);
 }
 
@@ -1818,7 +1864,7 @@ void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length)
 	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_BT_NAME, cmd_sync_bt_name, length);
 }
 
-#define NTT_CASE_SYNC_VERSION       1
+#define NTT_CASE_SYNC_VERSION       2
 #define NTT_CASE_SYNC_MAGIC         0xCA
 
 typedef struct __attribute__((packed))
@@ -1827,12 +1873,34 @@ typedef struct __attribute__((packed))
     uint8_t version;
     uint8_t case_state;
     uint8_t sequence;
+    uint8_t auto_pairing;
 } NTT_CASE_SYNC_PACKET_T;
 
 extern "C" void ntt_key_role_switch_block_cancel(void);
+extern "C" void ntt_pairing_case_stop(void);
 static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
 static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
 static uint8_t g_ntt_case_state_sequence = 0;
+extern "C" void ntt_pair_led_auto_report_fix9(void);
+static bool g_ntt_auto_pairing_led_local = false;
+static bool g_ntt_auto_pairing_led_peer = false;
+static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state);
+
+extern "C" bool ntt_auto_pairing_led_active(void)
+{
+    return bts_tws_if_is_tws_link_connected() &&
+           g_ntt_local_case_state == NTT_CASE_STATE_IN_CASE &&
+           g_ntt_peer_case_state == NTT_CASE_STATE_IN_CASE &&
+           (g_ntt_auto_pairing_led_local || g_ntt_auto_pairing_led_peer);
+}
+
+extern "C" void ntt_auto_pairing_led_set(bool enabled)
+{
+    g_ntt_auto_pairing_led_local = enabled;
+    EARBUDS_TRACE(1, "[NTT_PAIR_CASE][FIX8] local auto pairing LED=%d", enabled);
+    if (ntt_case_state_is_valid((uint8_t)g_ntt_local_case_state))
+        ntt_case_state_send_to_peer(g_ntt_local_case_state);
+}
 
 
 /*
@@ -1917,6 +1985,7 @@ static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state)
     packet.version = NTT_CASE_SYNC_VERSION;
     packet.case_state = (uint8_t)state;
     packet.sequence = ++g_ntt_case_state_sequence;
+    packet.auto_pairing = (g_ntt_auto_pairing_led_local && state == NTT_CASE_STATE_IN_CASE) ? 1 : 0;
 
     EARBUDS_TRACE(3,"[NTT_CASE_SYNC][TX] state=%s(%d) seq=%u",ntt_case_state_to_string(state),state,packet.sequence);
     tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_CASE_STATE,(uint8_t *)&packet,sizeof(packet));
@@ -1972,6 +2041,9 @@ void ntt_case_state_sync_local_update(bool in_case)
                 "[NTT_CASE_SYNC] duplicate OUT "
                 "-> run local recovery callback");
 
+            EARBUDS_TRACE(0,
+                "[NTT_PAIR_CASE][FIX4] duplicate LOCAL OUT -> stop pairing");
+            ntt_pairing_case_stop();
             ntt_case_state_local_changed_callback(
                 new_state);
 
@@ -1999,6 +2071,19 @@ void ntt_case_state_sync_local_update(bool in_case)
     }
 
     g_ntt_local_case_state = new_state;
+    if (new_state == NTT_CASE_STATE_OUT_CASE)
+        g_ntt_auto_pairing_led_local = false;
+    /*
+     * Test19 Fix4: enforce pairing shutdown at the case-state source,
+     * before reconnect/role-switch callbacks and peer notification.
+     * Do not wait for the 20+ second role switch to clear inquiry scan.
+     */
+    if (new_state == NTT_CASE_STATE_OUT_CASE)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_PAIR_CASE][FIX4] LOCAL OUT source -> stop pairing now");
+        ntt_pairing_case_stop();
+    }
     if (new_state == NTT_CASE_STATE_IN_CASE)
         ntt_key_role_switch_block_cancel();
 
@@ -2031,6 +2116,9 @@ void ntt_case_state_sync_local_update(bool in_case)
 extern "C"
 void ntt_case_state_sync_resend(void)
 {
+    /* TWS link restoration is the earliest reliable opportunity to
+     * forward a Missing Key event recorded while the peer was offline. */
+    ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E state = g_ntt_local_case_state;
 
     EARBUDS_TRACE(
@@ -2110,6 +2198,8 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
     }
 
     new_peer_state = (NTT_CASE_STATE_E)packet.case_state;
+    g_ntt_auto_pairing_led_peer = (packet.auto_pairing != 0 && new_peer_state == NTT_CASE_STATE_IN_CASE);
+    EARBUDS_TRACE(1, "[NTT_PAIR_CASE][FIX8] peer auto pairing LED=%d", g_ntt_auto_pairing_led_peer);
     old_peer_state = g_ntt_peer_case_state;
     EARBUDS_TRACE(
         4,
@@ -2127,6 +2217,10 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
     }
 
     g_ntt_peer_case_state = new_peer_state;
+    if (g_ntt_auto_pairing_led_peer)
+    {
+        ntt_pair_led_auto_report_fix9();
+    }
     if (new_peer_state == NTT_CASE_STATE_IN_CASE)
         ntt_key_role_switch_block_cancel();
     ntt_case_state_peer_changed_callback(new_peer_state);
@@ -2559,30 +2653,50 @@ void app_ibrt_customif_clear_peer_fw_version(void)
 
 #endif /* IBRT */
 
-extern "C" void ntt_tws_delete_mobile_record_sync(
-    const uint8_t *mobile_addr)
+/*
+ * Fix5: forward confirmed Missing Key deletion to the other ear.
+ * Keep the last pending address in RAM until a TWS link is available.
+ * This is best-effort (no response/ACK); power loss before reconnect
+ * can discard the pending notification.
+ */
+static bool s_ntt_missing_key_pending = false;
+static uint8_t s_ntt_missing_key_addr[6] = {0};
+static uint32_t s_ntt_missing_key_events = 0;
+
+extern "C" void ntt_tws_auth_diag_link_check(void)
 {
-    if (mobile_addr == NULL)
-    {
+    if (!s_ntt_missing_key_pending)
         return;
-    }
 
     if (!bts_tws_if_is_tws_link_connected())
     {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_KEY_MISSING] TWS disconnected, defer delete sync");
+        EARBUDS_TRACE(0,
+            "[NTT_KEY_MISSING][FIX5] TWS offline; peer delete deferred");
         return;
     }
 
-    EARBUDS_TRACE(
-        0,
-        "[NTT_KEY_MISSING] send delete mobile record");
+    EARBUDS_TRACE(1,
+        "[NTT_KEY_MISSING][FIX5] send peer mobile delete events=%u",
+        (unsigned)s_ntt_missing_key_events);
+    DUMP8("%02x ", s_ntt_missing_key_addr, 6);
+    tws_ctrl_send_cmd(APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,
+                      s_ntt_missing_key_addr, 6);
+    s_ntt_missing_key_pending = false;
+}
 
+extern "C" void ntt_tws_delete_mobile_record_sync(
+    const uint8_t *mobile_addr)
+{
+    if (mobile_addr == NULL ||
+        ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)mobile_addr))
+        return;
+
+    memcpy(s_ntt_missing_key_addr, mobile_addr, 6);
+    s_ntt_missing_key_pending = true;
+    ++s_ntt_missing_key_events;
+    EARBUDS_TRACE(1,
+        "[NTT_KEY_MISSING][FIX5] confirmed missing key; pending peer delete events=%u",
+        (unsigned)s_ntt_missing_key_events);
     DUMP8("%02x ", mobile_addr, 6);
-
-    tws_ctrl_send_cmd(
-        APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,
-        (uint8_t *)mobile_addr,
-        6);
+    ntt_tws_auth_diag_link_check();
 }

@@ -1542,6 +1542,62 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
 extern "C" void ntt_eq_prompt_preduck_request(void);
 extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
 extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
+
+/* Fix6: apply key EQ 50ms after shared fade tick (30ms ramp + margin). */
+#define NTT_EQ_KEY_TICK_MASK 0x0FFFFFFFU
+static osTimerId ntt_eq_key_apply_timer = NULL;
+static volatile bool ntt_eq_key_apply_pending = false;
+static uint32_t ntt_eq_key_apply_tick = 0;
+static uint8_t ntt_eq_key_apply_preset = 0;
+extern "C" uint32_t ntt_eq_shared_clock_now(void);
+static void ntt_eq_key_apply_cb(void const *arg)
+{
+    (void)arg;
+    if (!ntt_eq_key_apply_pending) return;
+    uint32_t now = ntt_eq_shared_clock_now();
+    if (now != 0xFFFFFFFFU &&
+        ((now - ntt_eq_key_apply_tick) & NTT_EQ_KEY_TICK_MASK) >= 0x08000000U)
+    {
+        osTimerStart(ntt_eq_key_apply_timer, 5);
+        return;
+    }
+    ntt_eq_key_apply_pending = false;
+    const uint8_t preset = ntt_eq_key_apply_preset;
+    audio_eq_set_cfg(NULL, audio_eq_cfg_vol_list[preset], AUDIO_EQ_TYPE_HW_DAC_IIR);
+    ntt_audio_drc_apply_by_eq_index(preset);
+#ifdef AUDIO_DYNAMIC_BOOST
+#ifdef DYNAMIC_BOOST_USE_HW_EQ
+    audio_dynamic_boost_set_new_customer_iir_eq(
+        &audio_process.hw_dac_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR);
+#endif
+#endif
+    TRACE(2, "[NTT_EQ_FIX6] DSP_APPLY preset=%u now=%u",
+          (unsigned)preset, (unsigned)now);
+}
+osTimerDef(NTT_EQ_KEY_APPLY_TIMER, ntt_eq_key_apply_cb);
+extern "C" void ntt_eq_key_cancel_pending(void)
+{
+    ntt_eq_key_apply_pending = false;
+    if (ntt_eq_key_apply_timer) osTimerStop(ntt_eq_key_apply_timer);
+}
+extern "C" bool ntt_eq_key_schedule_apply(uint8_t preset, uint32_t fade_tick)
+{
+    if (preset >= NTT_EQ_PRESET_COUNT || fade_tick == 0xFFFFFFFFU) return false;
+    if (!ntt_eq_key_apply_timer)
+        ntt_eq_key_apply_timer = osTimerCreate(osTimer(NTT_EQ_KEY_APPLY_TIMER),
+                                               osTimerOnce, NULL);
+    if (!ntt_eq_key_apply_timer) return false;
+    ntt_eq_key_cancel_pending();
+    ntt_eq_key_apply_preset = preset;
+    ntt_eq_key_apply_tick = (fade_tick + 192U) & NTT_EQ_KEY_TICK_MASK;
+    ntt_eq_key_apply_pending = true;
+    osTimerStart(ntt_eq_key_apply_timer, 5);
+    TRACE(2, "[NTT_EQ_FIX6] DSP_SCHEDULE preset=%u tick=%u",
+          (unsigned)preset, (unsigned)ntt_eq_key_apply_tick);
+    return true;
+}
+extern "C" void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t, uint32_t);
+extern "C" void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t, uint8_t, uint32_t);
 static osTimerId ntt_eq_prompt_delay_timer = NULL;
 static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
 static void ntt_eq_delayed_prompt_cb(void const *arg)
@@ -1631,6 +1687,7 @@ static void ntt_keymap_apply_eq_preset_internal(uint8_t preset,bool save_nv,bool
         return;
     }
 
+    ntt_eq_key_cancel_pending();
     audio_eq_set_cfg(NULL,audio_eq_cfg_vol_list[preset],AUDIO_EQ_TYPE_HW_DAC_IIR);
 
     ntt_audio_drc_apply_by_eq_index(preset);
@@ -1685,10 +1742,15 @@ static void ntt_keymap_apply_eq_preset_by_key(uint8_t preset)
 
     TRACE(0, "[KEYMAP][EQ][KEY] apply preset=%u",(unsigned)preset);
 
-    /*
-     * Apply EQ setting first.
-     */
-    ntt_keymap_apply_eq_preset(preset);
+    const uint32_t tick = ntt_eq_prompt_schedule_tick();
+    if (ntt_eq_key_schedule_apply(preset, tick))
+    {
+        handleSetEqIndex(preset);
+        ntt_eq_prompt_preduck_schedule(tick);
+        app_ibrt_customif_cmd_sync_music_eq_key(preset, tick);
+    }
+    else
+        ntt_keymap_apply_eq_preset(preset);
 
     /*
      * Physical key operation only:
@@ -1743,16 +1805,23 @@ static bool ntt_eq6_set_mode(bool enable, bool from_key)
     * Do not send the normal MUSIC_EQ TWS command,
     * because its receiver writes the EQ index to NV.
     */
-    ntt_keymap_apply_eq_preset_internal(target_preset,false,false);
+    uint32_t key_tick = 0xFFFFFFFFU;
+    bool deferred = false;
 
-    /*
-    * Physical key operation only:
-    * play EQ prompt.
-    */
     if (from_key)
     {
-        ntt_keymap_play_eq_mode_prompt(target_preset);
+        key_tick = ntt_eq_prompt_schedule_tick();
+        deferred = ntt_eq_key_schedule_apply(target_preset, key_tick);
+        if (deferred)
+            ntt_eq_prompt_preduck_schedule(key_tick);
     }
+
+    /* APP remains immediate; only physical keys defer the DSP update. */
+    if (!deferred)
+        ntt_keymap_apply_eq_preset_internal(target_preset,false,false);
+
+    if (from_key)
+        ntt_keymap_play_eq_mode_prompt(target_preset);
 
     ntt_eq6_mode_active = enable;
 
@@ -1764,7 +1833,15 @@ static bool ntt_eq6_set_mode(bool enable, bool from_key)
     /*
     * Synchronize EQ6 state and original EQ to Peer.
     */
-    app_ibrt_customif_cmd_sync_eq6_mode(enable ? 1 : 0,enable ? ntt_eq_preset_before_clear_voice : target_preset);
+    if (deferred)
+        app_ibrt_customif_cmd_sync_eq6_mode_key(
+            enable ? 1 : 0,
+            enable ? ntt_eq_preset_before_clear_voice : target_preset,
+            key_tick);
+    else
+        app_ibrt_customif_cmd_sync_eq6_mode(
+            enable ? 1 : 0,
+            enable ? ntt_eq_preset_before_clear_voice : target_preset);
 
     TRACE(0,"[EQ6] mode=%u preset=%u source=%s",(unsigned)enable,(unsigned)target_preset,from_key ? "KEY" : "APP");
 
@@ -1838,6 +1915,23 @@ extern "C" uint8_t ntt_eq_get_effective_index(void)
     return preset;
 }
 
+extern "C" void ntt_eq6_sync_from_peer(uint8_t enable,uint8_t original_eq_index);
+extern "C" void ntt_eq6_sync_from_peer_key(uint8_t enable,
+                                               uint8_t original_eq_index,
+                                               uint32_t tick)
+{
+    if (original_eq_index > 4) return;
+    uint8_t effective = enable ? NTT_EQ_TYPE1_PRESET : original_eq_index;
+    if (!ntt_eq_key_schedule_apply(effective, tick))
+    {
+        ntt_eq6_sync_from_peer(enable, original_eq_index);
+        return;
+    }
+    ntt_eq6_mode_active = (enable != 0);
+    ntt_eq_preset_before_clear_voice =
+        enable ? original_eq_index : NTT_EQ_PRESET_INVALID;
+    handleSetEqIndex(original_eq_index);
+}
 extern "C" void ntt_eq6_sync_from_peer(uint8_t enable,uint8_t original_eq_index)
 {
     if (original_eq_index > 4)
@@ -1862,6 +1956,7 @@ extern "C" void ntt_eq6_sync_from_peer(uint8_t enable,uint8_t original_eq_index)
      */
     handleSetEqIndex(original_eq_index);
     uint8_t effective_eq = ntt_eq6_mode_active ?NTT_EQ_TYPE1_PRESET :original_eq_index;
+    ntt_eq_key_cancel_pending();
     audio_eq_set_cfg(NULL,audio_eq_cfg_vol_list[effective_eq],AUDIO_EQ_TYPE_HW_DAC_IIR);
     ntt_audio_drc_apply_by_eq_index(effective_eq);
 

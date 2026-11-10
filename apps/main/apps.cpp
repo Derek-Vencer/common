@@ -1892,6 +1892,7 @@ int btdrv_tportopen(void);
 void app_ibrt_start_power_on_tws_pairing(void);
 void app_ibrt_start_power_on_freeman_pairing(void);
 extern bool ntt_first_no_mobile_pair_mode;
+extern "C" void ntt_pairing_case_auto_request(void);
 
 WEAK void app_ibrt_handler_before_starting_ibrt_functionality(void)
 {
@@ -2119,42 +2120,15 @@ void app_ibrt_init(void)
          */
         if (mobile_record_count == 0)
         {
-            if (!app_ibrt_middleware_is_ui_slave())
-            {
-                MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record -> "
-                    "start mobile pair mode (master)");
-
-                ntt_first_no_mobile_pair_mode = true;
-                ntt_manual_pairing_mode = true;
-
-                /* buff[3] = 0：
-                * 不是配對成功，不通知充電盒熄燈。
-                */
-                set_pair_status(0);
-
-                /*
-                * buff[4] = 1：
-                * 通知充電盒開始閃配對燈。
-                */
-                enable_pair_status(1);
-
-                /*
-                * 建議同時重設 buff[4] 的重送計數。
-                */
-                set_er_discover_connectable_status(1);
-
-                app_bt_set_access_mode(
-                    BTIF_BAM_GENERAL_ACCESSIBLE);
-
-                app_bt_reset_delay_power_off();
-            }
-            else
-            {
-                MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record, "
-                    "skip pair mode on slave");
-            }
+            MAIN_TRACE(0, "[NTT_PAIR_CASE] auto pairing pending: wait OPEN + both IN_CASE");
+            ntt_first_no_mobile_pair_mode = false;
+            ntt_manual_pairing_mode = false;
+            ntt_user_manual_pairing_request = false;
+            set_pair_status(0);
+            enable_pair_status(0);
+            set_er_discover_connectable_status(0);
+            app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+            ntt_pairing_case_auto_request();
         }
         else
         {
@@ -2206,23 +2180,13 @@ void app_ibrt_init(void)
             */
             if (mobile_record_count == 0)
             {
-                MAIN_TRACE(0,
-                    "[NTT_PAIR] no mobile record -> discoverable/connectable");
-
-                ntt_first_no_mobile_pair_mode = true;
-                ntt_manual_pairing_mode = true;
-                /*
-                * This is automatic first pairing,
-                * NOT an explicit manual pairing request.
-                */
+                MAIN_TRACE(0, "[NTT_PAIR_CASE] invalid TWS peer: mobile pairing blocked");
+                ntt_first_no_mobile_pair_mode = false;
+                ntt_manual_pairing_mode = false;
                 ntt_user_manual_pairing_request = false;
-
-                set_pair_status(0);
-                enable_pair_status(1);
-                set_er_discover_connectable_status(1);
-
-                app_bt_set_access_mode(
-                    BTIF_BAM_GENERAL_ACCESSIBLE);
+                enable_pair_status(0);
+                set_er_discover_connectable_status(0);
+                app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
             }
             else
             {
