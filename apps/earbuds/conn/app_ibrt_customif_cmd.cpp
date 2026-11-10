@@ -213,6 +213,7 @@ static void app_ibrt_customif_get_peer_fw_version_rsp_handler(uint16_t rsp_seq,u
 static void app_ibrt_customif_get_peer_fw_version_tx_done_handler(uint16_t cmdcode,uint16_t rsp_seq,uint8_t *ptrParam,uint16_t paramLen);
 extern "C" void ntt_fw_version_peer_ready_notify(void);
 extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
+extern "C" void ntt_tws_auth_diag_link_check(void);
 
 static void ntt_tws_delete_mobile_record_send(uint8_t *p_buff,uint16_t length)
 {
