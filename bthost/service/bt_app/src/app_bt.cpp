@@ -214,6 +214,7 @@ static void ntt_bt_user_confirmation_callback(
     uint32 numeric_value);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
+extern "C" void ntt_pairing_case_missing_key_deleted(void);
 /* Pairing is only legal while both earbuds are IN_CASE and TWS linked. */
 extern "C" bool ntt_pairing_both_in_case_allowed(void);
 // Implemented in services/audio_bt/app_media_player.cpp
@@ -5211,6 +5212,21 @@ void app_bt_global_handle(const btif_event_t *Event)
                         DEBUG_INFO(0, "app_bt_global_handle: delete record");
                     }
                     nv_record_execute_async_flush();
+
+                    /*
+                     * Fix7: after the SDK removes the invalid mobile key,
+                     * re-evaluate zero-mobile pairing for this OPEN cycle.
+                     * Do not initiate pairing directly while TWS is offline.
+                     */
+                    if (error_code == BTIF_BEC_MISSING_KEY)
+                    {
+                        int remaining = nv_record_get_paired_dev_count();
+                        DEBUG_INFO(1,
+                            "[NTT_PAIR_CASE][FIX7] after Missing Key NV records=%d",
+                            remaining);
+                        if (remaining == 0)
+                            ntt_pairing_case_missing_key_deleted();
+                    }
                 }
             }
         }
