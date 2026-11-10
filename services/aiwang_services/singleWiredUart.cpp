@@ -65,6 +65,7 @@
 
 #ifdef IBRT
 #include "app_ibrt_customif_cmd.h"
+extern "C" bool ntt_auto_pairing_led_active(void);
 #endif
 
 #include "hal_sleep.h"
@@ -620,7 +621,7 @@ void wired_uart_get_battery_level(void)
     {
         pair_status = 1;
     }
-    else if (tws_connected && ((enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible))
+    else if (tws_connected && ((enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || ntt_auto_pairing_led_active()))
     {
         pair_status = 2;
     }
@@ -634,7 +635,7 @@ void wired_uart_get_battery_level(void)
      * manually pairing, generally accessible, or
      * reporting pairing success.
      */
-    limit_pair_notify = (enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || (pair_success_status != 0);
+    limit_pair_notify = (enter_pair_status != 0) || ntt_manual_pairing_mode || general_accessible || ntt_auto_pairing_led_active() || (pair_success_status != 0);
 
     /*
     * Pairing-in-progress:
