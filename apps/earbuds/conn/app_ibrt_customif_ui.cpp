@@ -137,6 +137,11 @@ static void ntt_pairing_case_try_auto_start(void)
         ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
         ntt_case_state_get_peer() != NTT_CASE_STATE_IN_CASE)
         return;
+    EARBUDS_TRACE(5,
+        "[NTT_PAIR_CASE] AUTO allow local=%d peer=%d tws=%d role=%d open=%d",
+        ntt_case_state_get_local(), ntt_case_state_get_peer(),
+        bts_tws_if_is_tws_link_connected(),
+        app_ibrt_if_get_ui_role(), g_ntt_pairing_open_seen);
     g_ntt_pairing_auto_pending = false;
     ntt_first_no_mobile_pair_mode = true;
     ntt_manual_pairing_mode = true;
@@ -327,6 +332,18 @@ void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *bu
 *****************************************************************************/
 void app_ibrt_customif_pairing_mode_entry()
 {
+    if (!ntt_pairing_case_can_start())
+    {
+        EARBUDS_TRACE(5,
+            "[NTT_PAIR_CASE] reject UI entry local=%d peer=%d tws=%d open=%d blocked=%d",
+            ntt_case_state_get_local(), ntt_case_state_get_peer(),
+            bts_tws_if_is_tws_link_connected(),
+            g_ntt_pairing_open_seen, g_ntt_pairing_case_blocked);
+        set_er_discover_connectable_status(0);
+        enable_pair_status(0);
+        app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+        return;
+    }
     app_ui_config_t* p_app_ui_config = app_ui_get_config();
     uint8_t select_sco_device = app_bt_audio_get_curr_playing_sco();
     uint8_t select_a2dp_device = app_bt_audio_get_curr_playing_a2dp();
