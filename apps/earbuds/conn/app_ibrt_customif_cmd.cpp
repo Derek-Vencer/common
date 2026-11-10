@@ -246,10 +246,22 @@ static void ntt_tws_delete_mobile_record_receive(uint16_t rsp_seq,uint8_t *p_buf
     }
 
     /*
-     * Fix3 diagnostic-only mode: never delete the peer's mobile
-     * record based on an unconfirmed remote authentication failure.
+     * Fix5: this command is emitted only for a confirmed mobile
+     * BTIF_BEC_MISSING_KEY event. Never erase TWS pairing records.
      */
-    EARBUDS_TRACE(0,"[NTT_KEY_MISSING][FIX3] peer delete command suppressed (diagnostic only)");
+    btif_device_record_t existing_record;
+    if (nv_record_ddbrec_find(&mobile_addr, &existing_record) == BT_STS_SUCCESS)
+    {
+        bt_status_t result = nv_record_ddbrec_delete(&mobile_addr);
+        EARBUDS_TRACE(1,
+            "[NTT_KEY_MISSING][FIX5] PEER mobile NV delete result=%d", result);
+        nv_record_flash_flush();
+    }
+    else
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_KEY_MISSING][FIX5] PEER mobile record already absent");
+    }
 }
 
 #if 1 //def BESUI_TWS_EN
@@ -2095,6 +2107,9 @@ void ntt_case_state_sync_local_update(bool in_case)
 extern "C"
 void ntt_case_state_sync_resend(void)
 {
+    /* TWS link restoration is the earliest reliable opportunity to
+     * forward a Missing Key event recorded while the peer was offline. */
+    ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E state = g_ntt_local_case_state;
 
     EARBUDS_TRACE(
@@ -2624,55 +2639,49 @@ void app_ibrt_customif_clear_peer_fw_version(void)
 #endif /* IBRT */
 
 /*
- * Test19 Fix3: diagnostic-only deferred sync journal.
- * No peer deletion is transmitted until the root cause is confirmed.
- * RAM-only state; a reboot intentionally clears this diagnostic entry.
+ * Fix5: forward confirmed Missing Key deletion to the other ear.
+ * Keep the last pending address in RAM until a TWS link is available.
+ * This is best-effort (no response/ACK); power loss before reconnect
+ * can discard the pending notification.
  */
-static bool s_ntt_auth_diag_pending = false;
-static uint8_t s_ntt_auth_diag_addr[6] = {0};
-static uint32_t s_ntt_auth_diag_events = 0;
+static bool s_ntt_missing_key_pending = false;
+static uint8_t s_ntt_missing_key_addr[6] = {0};
+static uint32_t s_ntt_missing_key_events = 0;
 
 extern "C" void ntt_tws_auth_diag_link_check(void)
 {
-    if (!s_ntt_auth_diag_pending)
+    if (!s_ntt_missing_key_pending)
         return;
 
-    const bool linked = bts_tws_if_is_tws_link_connected();
-    EARBUDS_TRACE(2,
-        "[NTT_KEY_MISSING][FIX3] pending diagnostic linked=%d events=%u",
-        linked, (unsigned)s_ntt_auth_diag_events);
-    DUMP8("%02x ", s_ntt_auth_diag_addr, 6);
-
-    if (linked)
+    if (!bts_tws_if_is_tws_link_connected())
     {
         EARBUDS_TRACE(0,
-            "[NTT_KEY_MISSING][FIX3] TWS restored; delete NOT sent (diagnostic only)");
-        s_ntt_auth_diag_pending = false;
+            "[NTT_KEY_MISSING][FIX5] TWS offline; peer delete deferred");
+        return;
     }
+
+    EARBUDS_TRACE(1,
+        "[NTT_KEY_MISSING][FIX5] send peer mobile delete events=%u",
+        (unsigned)s_ntt_missing_key_events);
+    DUMP8("%02x ", s_ntt_missing_key_addr, 6);
+    tws_ctrl_send_cmd(APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,
+                      s_ntt_missing_key_addr, 6);
+    s_ntt_missing_key_pending = false;
 }
 
 extern "C" void ntt_tws_delete_mobile_record_sync(
     const uint8_t *mobile_addr)
 {
-    if (mobile_addr == NULL)
+    if (mobile_addr == NULL ||
+        ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)mobile_addr))
         return;
 
-    if (ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)mobile_addr))
-    {
-        EARBUDS_TRACE(0, "[NTT_KEY_MISSING][FIX3] reject TWS peer diagnostic");
-        return;
-    }
-
-    memcpy(s_ntt_auth_diag_addr, mobile_addr, 6);
-    s_ntt_auth_diag_pending = true;
-    ++s_ntt_auth_diag_events;
-
-    EARBUDS_TRACE(2,
-        "[NTT_KEY_MISSING][FIX3] auth event recorded, tws=%d events=%u",
-        bts_tws_if_is_tws_link_connected(),
-        (unsigned)s_ntt_auth_diag_events);
+    memcpy(s_ntt_missing_key_addr, mobile_addr, 6);
+    s_ntt_missing_key_pending = true;
+    ++s_ntt_missing_key_events;
+    EARBUDS_TRACE(1,
+        "[NTT_KEY_MISSING][FIX5] confirmed missing key; pending peer delete events=%u",
+        (unsigned)s_ntt_missing_key_events);
     DUMP8("%02x ", mobile_addr, 6);
-    EARBUDS_TRACE(0,
-        "[NTT_KEY_MISSING][FIX3] peer deletion DISABLED, diagnostic only");
     ntt_tws_auth_diag_link_check();
 }
