@@ -1897,6 +1897,7 @@ extern "C" void ntt_pairing_case_stop(void);
 static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
 static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
 static uint8_t g_ntt_case_state_sequence = 0;
+extern "C" void ntt_pair_led_auto_report_fix9(void);
 static bool g_ntt_auto_pairing_led_local = false;
 static bool g_ntt_auto_pairing_led_peer = false;
 static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state);
@@ -2215,6 +2216,10 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
     new_peer_state = (NTT_CASE_STATE_E)packet.case_state;
     g_ntt_auto_pairing_led_peer = (packet.auto_pairing != 0 && new_peer_state == NTT_CASE_STATE_IN_CASE);
     EARBUDS_TRACE(1, "[NTT_PAIR_CASE][FIX8] peer auto pairing LED=%d", g_ntt_auto_pairing_led_peer);
+    if (g_ntt_auto_pairing_led_peer)
+    {
+        ntt_pair_led_auto_report_fix9();
+    }
     old_peer_state = g_ntt_peer_case_state;
     EARBUDS_TRACE(
         4,
