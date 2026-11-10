@@ -470,7 +470,8 @@ void app_ibrt_keyboard_request_handler_v2(uint16_t rsp_seq, uint8_t *p_buff, uin
 #else
         app_ibrt_normal_ui_handle_key_v2(&req->remote, &req->key_status, NULL);
 #endif
-		//aparraw_set_key_event_left(0);
+		/* Fix12: peer-origin marker is scoped to this dispatched key event. */
+		aparraw_set_key_event_left(0);
     }
     else
     {
