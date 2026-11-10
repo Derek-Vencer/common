@@ -168,6 +168,10 @@ static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length
 extern "C" void ntt_eq_prompt_preduck_request(void);
 extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
 extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
+extern "C" bool ntt_eq_key_schedule_apply(uint8_t preset, uint32_t tick);
+extern "C" void ntt_eq_key_cancel_pending(void);
+extern "C" void ntt_eq6_sync_from_peer_key(uint8_t enable,
+                                               uint8_t original, uint32_t tick);
 static void ntt_eq_tws_write_tick(uint8_t *p, uint32_t tick)
 {
     p[0] = (uint8_t)tick;
@@ -1129,6 +1133,24 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
                       (tick != 0xFFFFFFFFU) ? sizeof(cmd_sync_music_eq) : 1);
 }
 
+/* Key-only wire format: legacy payload plus common fade tick and 0xA6
+ * marker. APP and boot resync continue using legacy functions unchanged.
+ */
+void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t index, uint32_t tick)
+{
+    if (!bts_tws_if_is_tws_link_connected()) return;
+    uint8_t payload[6] = {index, 0, 0, 0, 0, 0xA6};
+    ntt_eq_tws_write_tick(&payload[1], tick);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, payload, sizeof(payload));
+}
+void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t enable,
+                                               uint8_t original, uint32_t tick)
+{
+    if (!bts_tws_if_is_tws_link_connected()) return;
+    uint8_t payload[7] = {enable, original, 0, 0, 0, 0, 0xA6};
+    ntt_eq_tws_write_tick(&payload[2], tick);
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE, payload, sizeof(payload));
+}
 void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_index)
 {
     if (!bts_tws_if_is_tws_link_connected())
@@ -1577,11 +1599,28 @@ static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_
     EARBUDS_TRACE(1, "%s", __func__);
     if (!p_buff || length < 1)
         return;
-    if (length >= 5)
+    const bool key_cmd = (length >= 6 && p_buff[5] == 0xA6);
+    if (key_cmd)
     {
-        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[1]));
+        const uint32_t tick = ntt_eq_tws_read_tick(&p_buff[1]);
+        ntt_eq_prompt_preduck_schedule(tick);
+        if (p_buff[0] <= 6 && ntt_eq_key_schedule_apply(p_buff[0], tick))
+        {
+            struct nvrecord_env_t *env = NULL;
+            nv_record_env_get(&env);
+            if (env && env->eq_index_data != p_buff[0])
+            {
+                env->eq_index_data = p_buff[0];
+                nv_record_env_set(env);
+            }
+            EARBUDS_TRACE(2, "[NTT_EQ_FIX6] PEER_KEY_EQ preset=%u tick=%u",
+                          (unsigned)p_buff[0], (unsigned)tick);
+            return;
+        }
     }
-
+    else if (length >= 5)
+        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[1]));
+    ntt_eq_key_cancel_pending();
     struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
 	uint8_t eq_index = p_buff[0];
@@ -1627,8 +1666,16 @@ static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_b
         return;
     }
 
+    if (length >= 7 && p_buff[6] == 0xA6)
+    {
+        const uint32_t tick = ntt_eq_tws_read_tick(&p_buff[2]);
+        ntt_eq_prompt_preduck_schedule(tick);
+        ntt_eq6_sync_from_peer_key(enable, original_eq, tick);
+        return;
+    }
     if (length >= 6)
         ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[2]));
+    ntt_eq_key_cancel_pending();
     ntt_eq6_sync_from_peer(enable,original_eq);
 }
 
