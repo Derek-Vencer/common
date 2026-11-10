@@ -146,7 +146,8 @@ extern "C" void ntt_pairing_case_stop(void)
 {
     g_ntt_pairing_case_blocked = true;
     if (!app_ui_in_pairing_mode() && !get_er_discover_connectable_status() &&
-        !ntt_manual_pairing_mode) return;
+        !ntt_manual_pairing_mode &&
+        app_bt_get_curr_access_mode() != BTIF_BAM_GENERAL_ACCESSIBLE) return;
     EARBUDS_TRACE(0, "[NTT_PAIR_CASE] forced stop");
     ntt_manual_pairing_mode = false;
     ntt_user_manual_pairing_request = false;
