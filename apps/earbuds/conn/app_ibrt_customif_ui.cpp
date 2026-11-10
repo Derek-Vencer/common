@@ -3835,8 +3835,10 @@ static void ntt_case_check_pause_music_when_both_in(void)
  * 本機 Case State 改變 callback。
  */
 extern "C"
+extern "C" void ntt_tws_auth_diag_link_check(void);
 void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 {
+    ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E peer_state =
         ntt_case_state_get_peer();
 
@@ -4151,6 +4153,7 @@ extern "C"
 void ntt_case_state_peer_changed_callback(
     NTT_CASE_STATE_E state)
 {
+    ntt_tws_auth_diag_link_check();
     NTT_CASE_STATE_E local_state =
         ntt_case_state_get_local();
 
