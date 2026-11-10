@@ -5117,6 +5117,17 @@ void app_bt_global_handle(const btif_event_t *Event)
                 //auth failed should clear nv record link key
                 bt_bdaddr_t *bd_ddr = btif_me_get_callback_event_address(Event);
                 btif_device_record_t record;
+                DEBUG_INFO(2,
+                    "[NTT_AUTH_DIAG][FIX3] failure status=0x%x tws=%d",
+                    error_code, bts_tws_if_is_tws_link_connected());
+                if (bd_ddr != NULL)
+                {
+                    DEBUG_INFO(6,
+                        "[NTT_AUTH_DIAG][FIX3] addr=%02x:%02x:%02x:%02x:%02x:%02x",
+                        bd_ddr->address[5], bd_ddr->address[4],
+                        bd_ddr->address[3], bd_ddr->address[2],
+                        bd_ddr->address[1], bd_ddr->address[0]);
+                }
                 /*
                 * NTT: Detect mobile Key Missing.
                 */
@@ -5153,6 +5164,9 @@ void app_bt_global_handle(const btif_event_t *Event)
                     DEBUG_INFO(0,"delete link key as authen fail");
                     char remote_dev_name[BTM_NAME_MAX_LEN];
                     strcpy(remote_dev_name, record.remote_dev_name);
+                    DEBUG_INFO(1,
+                        "[NTT_AUTH_DIAG][FIX3] SDK local NV delete status=0x%x",
+                        error_code);
                     bluetooth_nv_mgr_bt_record_del(BT_NV_REC_DEL_AUTHEN_FAILED, bd_ddr->address);
 
                     if (g_bt_pair_state_callback)
