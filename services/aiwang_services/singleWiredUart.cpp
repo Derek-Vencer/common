@@ -2140,7 +2140,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
                 DBGPRINT("[NTT_PAIR_CASE] reject manual: local/peer not both IN_CASE");
                 break;
             }
-            ntt_pairing_case_new_open(); /* Explicit manual command rearms. */
+            DBGPRINT("[NTT_PAIR_CASE] explicit manual pairing authorized without lid edge");
 
             DBGPRINT( "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",isRightEarbuds,tws_connected,ui_role,app_ui_in_pairing_mode());
 
