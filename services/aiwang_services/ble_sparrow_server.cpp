@@ -1805,16 +1805,23 @@ static bool ntt_eq6_set_mode(bool enable, bool from_key)
     * Do not send the normal MUSIC_EQ TWS command,
     * because its receiver writes the EQ index to NV.
     */
-    ntt_keymap_apply_eq_preset_internal(target_preset,false,false);
+    uint32_t key_tick = 0xFFFFFFFFU;
+    bool deferred = false;
 
-    /*
-    * Physical key operation only:
-    * play EQ prompt.
-    */
     if (from_key)
     {
-        ntt_keymap_play_eq_mode_prompt(target_preset);
+        key_tick = ntt_eq_prompt_schedule_tick();
+        deferred = ntt_eq_key_schedule_apply(target_preset, key_tick);
+        if (deferred)
+            ntt_eq_prompt_preduck_schedule(key_tick);
     }
+
+    /* APP remains immediate; only physical keys defer the DSP update. */
+    if (!deferred)
+        ntt_keymap_apply_eq_preset_internal(target_preset,false,false);
+
+    if (from_key)
+        ntt_keymap_play_eq_mode_prompt(target_preset);
 
     ntt_eq6_mode_active = enable;
 
