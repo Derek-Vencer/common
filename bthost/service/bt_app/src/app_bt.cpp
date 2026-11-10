@@ -214,6 +214,8 @@ static void ntt_bt_user_confirmation_callback(
     uint32 numeric_value);
 U16 bt_accessory_feature_feature = BTIF_HF_CUSTOM_FEATURE_SUPPORT;
 extern "C" void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
+/* Pairing is only legal while both earbuds are IN_CASE and TWS linked. */
+extern "C" bool ntt_pairing_both_in_case_allowed(void);
 // Implemented in services/audio_bt/app_media_player.cpp
 extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_RECONNECT_WAIT_SCO_DISC_MS (3000)
@@ -6481,6 +6483,21 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
     }
     else
     {
+        /*
+         * Test19 Fix6: opening reconnect may run after the first bud
+         * leaves the case with no paired mobile records. That is NOT
+         * authorization to start Classic inquiry/discoverable pairing.
+         * Fix4 has already stopped pairing on OUT_CASE; do not undo it.
+         */
+        if (!ntt_pairing_both_in_case_allowed())
+        {
+            DEBUG_INFO(0,
+                "[NTT_PAIR_CASE][FIX6] no mobile record, pairing forbidden outside both IN_CASE");
+            set_er_discover_connectable_status(0);
+            app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+            return;
+        }
+
         DEBUG_INFO(0, "!!!go to pairing");
         set_er_discover_connectable_status(1);
 
