@@ -165,6 +165,22 @@ static void app_ibrt_customif_test2_cmd_send_rsp_handler(uint16_t rsp_seq, uint8
 static void app_ibrt_customif_test2_cmd_send_tx_done_handler(uint16_t cmdcode, uint16_t rsp_seq, uint8_t *ptrParam, uint16_t paramLen);
 
 static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length);
+extern "C" void ntt_eq_prompt_preduck_request(void);
+extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
+extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
+static void ntt_eq_tws_write_tick(uint8_t *p, uint32_t tick)
+{
+    p[0] = (uint8_t)tick;
+    p[1] = (uint8_t)(tick >> 8);
+    p[2] = (uint8_t)(tick >> 16);
+    p[3] = (uint8_t)(tick >> 24);
+}
+static uint32_t ntt_eq_tws_read_tick(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
 static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 
 static void app_ibrt_customif_button_map_cmd_send(uint8_t *p_buff, uint16_t length);
@@ -1100,10 +1116,17 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
         return;
     }
 
-	uint8_t cmd_sync_music_eq[2];
+    uint8_t cmd_sync_music_eq[5] = {0};
     cmd_sync_music_eq[0] = index;
+    const uint32_t tick = ntt_eq_prompt_schedule_tick();
+    if (tick != 0xFFFFFFFFU)
+    {
+        ntt_eq_tws_write_tick(&cmd_sync_music_eq[1], tick);
+        ntt_eq_prompt_preduck_schedule(tick);
+    }
 	EARBUDS_TRACE(0, "[UITWS]%s index %d ",__func__, index);
-	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq, 2);
+	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, cmd_sync_music_eq,
+                      (tick != 0xFFFFFFFFU) ? sizeof(cmd_sync_music_eq) : 1);
 }
 
 void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_index)
@@ -1113,14 +1136,20 @@ void app_ibrt_customif_cmd_sync_eq6_mode(uint8_t enable,uint8_t original_eq_inde
         return;
     }
 
-    uint8_t payload[2];
-
+    uint8_t payload[6] = {0};
     payload[0] = enable;
     payload[1] = original_eq_index;
+    const uint32_t tick = ntt_eq_prompt_schedule_tick();
+    if (tick != 0xFFFFFFFFU)
+    {
+        ntt_eq_tws_write_tick(&payload[2], tick);
+        ntt_eq_prompt_preduck_schedule(tick);
+    }
 
     EARBUDS_TRACE(0,"[EQ6][TWS][TX] enable=%u original=%u",(unsigned)enable,(unsigned)original_eq_index);
 
-    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE,payload,sizeof(payload));
+    tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_EQ6_MODE,payload,
+                      (tick != 0xFFFFFFFFU) ? sizeof(payload) : 2);
 }
 
 void app_ibrt_customif_cmd_sync_button_map(uint8_t *p_buff, uint16_t length)
@@ -1546,8 +1575,14 @@ static void app_ibrt_customif_music_eq_cmd_send(uint8_t *p_buff, uint16_t length
 static void app_ibrt_customif_music_eq_cmd_send_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length)
 {
     EARBUDS_TRACE(1, "%s", __func__);
+    if (!p_buff || length < 1)
+        return;
+    if (length >= 5)
+    {
+        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[1]));
+    }
 
-	struct nvrecord_env_t *nvrecord_env;
+    struct nvrecord_env_t *nvrecord_env;
 	nv_record_env_get(&nvrecord_env);
 	uint8_t eq_index = p_buff[0];
 	if((eq_index >=0) && (eq_index <= 6))
@@ -1592,6 +1627,8 @@ static void app_ibrt_customif_eq6_mode_cmd_receive(uint16_t rsp_seq,uint8_t *p_b
         return;
     }
 
+    if (length >= 6)
+        ntt_eq_prompt_preduck_schedule(ntt_eq_tws_read_tick(&p_buff[2]));
     ntt_eq6_sync_from_peer(enable,original_eq);
 }
 
@@ -1792,6 +1829,7 @@ typedef struct __attribute__((packed))
     uint8_t sequence;
 } NTT_CASE_SYNC_PACKET_T;
 
+extern "C" void ntt_key_role_switch_block_cancel(void);
 static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
 static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
 static uint8_t g_ntt_case_state_sequence = 0;
@@ -1961,6 +1999,8 @@ void ntt_case_state_sync_local_update(bool in_case)
     }
 
     g_ntt_local_case_state = new_state;
+    if (new_state == NTT_CASE_STATE_IN_CASE)
+        ntt_key_role_switch_block_cancel();
 
     EARBUDS_TRACE(
         3,
@@ -2087,6 +2127,8 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
     }
 
     g_ntt_peer_case_state = new_peer_state;
+    if (new_peer_state == NTT_CASE_STATE_IN_CASE)
+        ntt_key_role_switch_block_cancel();
     ntt_case_state_peer_changed_callback(new_peer_state);
     EARBUDS_TRACE(
         4,

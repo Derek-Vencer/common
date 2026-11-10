@@ -1653,9 +1653,233 @@ if (stream_route_info.output_route_info)
     return len;
 }
 
+/*
+ * NTT Test17: attenuate only A2DP PCM while an EQ prompt is playing.
+ * Do not touch codec, AVRCP or persisted user volume. Each TWS ear
+ * handles its own PCM; normal gain returns automatically on prompt end.
+ */
+/* Declared in app_media_player.cpp but not exposed by its header. */
+extern bool app_prompt_is_streaming_on(void);
+
+/*
+ * Test18: sample-continuous local A2DP gain ramp. Prompt is mixed after
+ * this handler, so its volume and AVRCP/user volume are untouched.
+ */
+/* Test18 Fix2: pre-duck is requested from the key/EQ sync path.
+ * The audio callback consumes the request without changing prompt gain.
+ */
+static volatile uint32_t ntt_eq_preduck_request_seq = 0;
+static volatile uint32_t ntt_eq_preduck_target_tick = 0;
+static volatile bool ntt_eq_preduck_scheduled = false;
+#define NTT_EQ_INVALID_TICK 0xFFFFFFFFU
+#define NTT_EQ_BT_TICK_MASK 0x0FFFFFFFU
+
+/* Use the MOBILE ACL clock on both buds, as in BES A2DP trigger code.
+ * Master uses its mobile ACL handle; slave uses its IBRT shadow handle.
+ * Local controller clocks are NOT mutually interchangeable.
+ */
+static bool ntt_eq_get_shared_bt_tick(uint32_t *tick)
+{
+    if (!tick)
+        return false;
+#if defined(IBRT)
+    const uint8_t device_id = app_bt_audio_get_curr_a2dp_device();
+    struct BT_DEVICE_T *dev = app_bt_get_device(device_id);
+    if (!dev)
+        return false;
+    if (bts_bt_if_is_dev_link_connected(&dev->remote))
+    {
+        *tick = bt_syn_get_curr_ticks(bts_bt_if_get_dev_acl_handle(&dev->remote));
+        return true;
+    }
+    if (bts_ibrt_if_is_ibrt_link_connected(&dev->remote))
+    {
+        *tick = bt_syn_get_curr_ticks(bts_ibrt_if_get_dev_ibrt_handle(&dev->remote));
+        return true;
+    }
+    return false;
+#else
+    *tick = btdrv_syn_get_curr_ticks();
+    return true;
+#endif
+}
+extern "C" uint32_t ntt_eq_prompt_schedule_tick(void)
+{
+    uint32_t tick = 0;
+    if (!ntt_eq_get_shared_bt_tick(&tick))
+    {
+        AUDIO_BT_TRACE(0, "[NTT_EQ_SYNC] no mobile clock; skip schedule");
+        return NTT_EQ_INVALID_TICK;
+    }
+    const uint32_t target = (tick + 640U) & NTT_EQ_BT_TICK_MASK;
+    AUDIO_BT_TRACE(2, "[NTT_EQ_SYNC] SCHEDULE current=%u target=%u",
+                   (unsigned)tick, (unsigned)target);
+    return target;
+}
+extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick)
+{
+    if (tick == NTT_EQ_INVALID_TICK)
+        return;
+    ntt_eq_preduck_target_tick = tick & NTT_EQ_BT_TICK_MASK;
+    ntt_eq_preduck_scheduled = true;
+}
+extern "C" void ntt_eq_prompt_preduck_request(void)
+{
+    ntt_eq_preduck_scheduled = false;
+    ++ntt_eq_preduck_request_seq;
+}
+
+static void ntt_eq_prompt_a2dp_pcm_duck(uint8_t *buf, uint32_t len,
+                                        const struct AF_STREAM_CONFIG_T *cfg)
+{
+#ifdef MEDIA_PLAYER_SUPPORT
+    /* Q16 gain, with one division per transition (never per PCM frame).
+     * Keep the audio callback bounded to avoid audio-thread watchdog stalls.
+     */
+    static int32_t gain_q16 = 65536;
+    static int32_t gain_step_q24 = 0;
+    static int64_t gain_acc_q24 = ((int64_t)65536 << 8);
+    static uint32_t ramp_left = 0;
+    static int32_t ramp_target = 65536;
+    static bool was_ducking = false;
+    static uint32_t handled_preduck_seq = 0;
+    static uint32_t preduck_hold_frames = 0;
+    if (!cfg || !buf || !len)
+        return;
+    const uint32_t sample_bytes = (cfg->bits == AUD_BITS_16) ? 2U :
+        ((cfg->bits == AUD_BITS_24 || cfg->bits == AUD_BITS_32) ? 4U : 0U);
+    const uint32_t channels = cfg->channel_num;
+    if (!sample_bytes || !channels || channels > 2 || !cfg->sample_rate ||
+        cfg->sample_rate > 192000 || len % (sample_bytes * channels))
+        return;
+
+    const AUD_ID_ENUM id = app_prompt_get_current_prompt_id();
+    const bool prompt_duck = app_prompt_is_streaming_on() &&
+                             (id == AUD_ID_SOUND_Normal_EQ ||
+                              id == AUD_ID_SOUND_Voice_Boost_EQ);
+    const uint32_t frames = len / (sample_bytes * channels);
+    uint32_t fade_start_frame = 0;
+    bool fade_due_in_buffer = false;
+    uint32_t fade_late_frames = 0;
+    if (ntt_eq_preduck_scheduled)
+    {
+        uint32_t now = 0;
+        if (ntt_eq_get_shared_bt_tick(&now))
+        {
+            const uint32_t target = ntt_eq_preduck_target_tick;
+            /* Signed 28-bit difference, safe within +/- 11.6 hours.
+             * Clock is sampled at callback entry. Convert target offset to
+             * sample frames, so the fade may start inside this PCM block.
+             */
+            const int32_t diff_ticks =
+                (int32_t)(((target - now + 0x08000000U) &
+                           NTT_EQ_BT_TICK_MASK) - 0x08000000U);
+            const int64_t diff_frames =
+                ((int64_t)diff_ticks * (int64_t)cfg->sample_rate * 5) / 16000;
+            if (diff_frames < (int64_t)frames)
+            {
+                fade_due_in_buffer = true;
+                if (diff_frames > 0)
+                    fade_start_frame = (uint32_t)diff_frames;
+                else
+                    fade_late_frames = (uint32_t)((-diff_frames > 192000) ?
+                                                  192000 : -diff_frames);
+                ntt_eq_preduck_scheduled = false;
+                ++ntt_eq_preduck_request_seq;
+                AUDIO_BT_TRACE(4,
+                    "[NTT_EQ_DUCK] SAMPLE_FIRE target=%u now=%u start=%u late=%u",
+                    (unsigned)target, (unsigned)now,
+                    (unsigned)fade_start_frame, (unsigned)fade_late_frames);
+            }
+        }
+        else
+        {
+            ntt_eq_preduck_scheduled = false;
+            AUDIO_BT_TRACE(0, "[NTT_EQ_SYNC] clock lost; cancel fade schedule");
+        }
+    }
+    if (handled_preduck_seq != ntt_eq_preduck_request_seq)
+    {
+        handled_preduck_seq = ntt_eq_preduck_request_seq;
+        /* Cover EQ sync latency plus delayed prompt startup. */
+        preduck_hold_frames = cfg->sample_rate / 2U;
+        AUDIO_BT_TRACE(0, "[NTT_EQ_DUCK] PRE_DUCK seq=%u",
+                       (unsigned)handled_preduck_seq);
+    }
+    /* Do not start fading at the beginning of a buffer if its BT target
+     * lies in the middle. Keep the previous gain until the target frame.
+     */
+    const bool duck = prompt_duck || (preduck_hold_frames != 0);
+    const bool defer_down = fade_due_in_buffer && fade_start_frame > 0 &&
+                            duck && !was_ducking;
+    if (duck != was_ducking && !defer_down)
+    {
+        was_ducking = duck;
+        ramp_target = duck ? 8250 : 65536;
+        const uint32_t ms = duck ? 30U : 100U;
+        ramp_left = (cfg->sample_rate * ms + 999U) / 1000U;
+        if (!ramp_left) ramp_left = 1;
+        gain_acc_q24 = (int64_t)gain_q16 << 8;
+        gain_step_q24 = (int32_t)((((int64_t)ramp_target - gain_q16) * 256) /
+                                   (int32_t)ramp_left);
+        AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] %s ramp=%ums prompt=%u",
+                       duck ? "DOWN -18dB" : "UP 0dB", ms, (unsigned)id);
+    }
+
+    if (prompt_duck)
+        preduck_hold_frames = 0;
+    else if (preduck_hold_frames > frames)
+        preduck_hold_frames -= frames;
+    else
+        preduck_hold_frames = 0;
+    for (uint32_t frame = 0; frame < frames; ++frame)
+    {
+        if (defer_down && frame == fade_start_frame)
+        {
+            was_ducking = true;
+            ramp_target = 8250;
+            ramp_left = (cfg->sample_rate * 30U + 999U) / 1000U;
+            if (!ramp_left)
+                ramp_left = 1;
+            gain_acc_q24 = (int64_t)gain_q16 << 8;
+            gain_step_q24 = (int32_t)((((int64_t)ramp_target - gain_q16) * 256) /
+                                       (int32_t)ramp_left);
+            AUDIO_BT_TRACE(2, "[NTT_EQ_DUCK] DOWN -18dB ramp=30ms frame=%u",
+                           (unsigned)frame);
+        }
+        if (ramp_left)
+        {
+            gain_acc_q24 += gain_step_q24;
+            gain_q16 = (int32_t)(gain_acc_q24 >> 8);
+            if (--ramp_left == 0)
+            {
+                gain_q16 = ramp_target;
+                gain_acc_q24 = (int64_t)gain_q16 << 8;
+            }
+        }
+        for (uint32_t ch = 0; ch < channels; ++ch)
+        {
+            const uint32_t i = frame * channels + ch;
+            if (sample_bytes == 2U)
+            {
+                int16_t *pcm = (int16_t *)buf;
+                pcm[i] = (int16_t)(((int32_t)pcm[i] * gain_q16) >> 16);
+            }
+            else
+            {
+                int32_t *pcm = (int32_t *)buf;
+                pcm[i] = (int32_t)(((int64_t)pcm[i] * gain_q16) >> 16);
+            }
+        }
+    }
+#endif
+}
+
 FRAM_TEXT_LOC void bt_a2dp_player_playback_post_handler(uint8_t *buf, uint32_t len, void *cfg)
 {
     POSSIBLY_UNUSED struct AF_STREAM_CONFIG_T *config = (struct AF_STREAM_CONFIG_T *)cfg;
+
+    ntt_eq_prompt_a2dp_pcm_duck(buf, len, config);
 
 #ifdef MIX_AUDIO_PROMPT_WITH_A2DP_MEDIA_ENABLED
     uint8_t device_id = bes_aud_bt->aud_get_curr_a2dp_device();

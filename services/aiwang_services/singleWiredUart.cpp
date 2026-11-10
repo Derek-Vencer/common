@@ -138,6 +138,25 @@ extern bool ntt_user_manual_pairing_request;
 
 static bool g_ntt_ota_reboot_boot = false;
 static bool g_ntt_ota_reboot_checked = false;
+/* Test13: independent, time-limited OTA mobile reconnect authorization. */
+static bool g_ntt_ota_mobile_reconnect_pending = false;
+static uint32_t g_ntt_ota_mobile_reconnect_start_tick = 0;
+
+extern "C" bool ntt_ota_mobile_reconnect_authorized(void)
+{
+    if (!g_ntt_ota_mobile_reconnect_pending)
+        return false;
+
+    if (app_bt_ibrt_has_mobile_link_connected() ||
+        TICKS_TO_MS(hal_sys_timer_get() - g_ntt_ota_mobile_reconnect_start_tick) > 30000)
+    {
+        g_ntt_ota_mobile_reconnect_pending = false;
+        return false;
+    }
+
+    return true;
+}
+
 
 //format
 // 55 aa  cmd  chanl_index  00 data
@@ -801,6 +820,8 @@ static void ntt_ota_reboot_flag_init(void)
     uint32_t bootmode = hal_sw_bootmode_get();
     g_ntt_ota_reboot_boot = ((bootmode & HAL_SW_BOOTMODE_ENTER_HIDE_BOOT) != 0);
     g_ntt_ota_reboot_checked = true;
+    g_ntt_ota_mobile_reconnect_pending = g_ntt_ota_reboot_boot;
+    g_ntt_ota_mobile_reconnect_start_tick = hal_sys_timer_get();
     DBGPRINT("[NTT_OTA_BOOT] bootmode=0x%08X ota_reboot=%d",bootmode,g_ntt_ota_reboot_boot);
 }
 
@@ -1536,6 +1557,14 @@ bool aiWangBoxIsUsed(void)
 
 static bool g_ntt_case_poweroff_received = false;
 
+/* Only an explicit, valid UART 0x07 authorizes in-case opening reconnect. */
+static bool g_ntt_case_open_reconnect_authorized = false;
+
+extern "C" bool ntt_case_open_reconnect_authorized(void)
+{
+    return g_ntt_case_open_reconnect_authorized;
+}
+
 
 static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, uint8_t uart_dat_len)
 {
@@ -1812,6 +1841,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         */
         g_case_state = 0;
 
+        g_ntt_case_open_reconnect_authorized = false;
         boxChargerStatus.boxIsOpen = false;
         boxChargerStatus.needOpenEarbuds = false;
 
@@ -1873,6 +1903,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
+            g_ntt_case_open_reconnect_authorized = true;
             ntt_case_open_pending = true;
             app_ui_set_local_box_state(IBRT_IN_BOX_OPEN);
             app_ui_sync_box_state(IBRT_IN_BOX_OPEN);
@@ -2332,6 +2363,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         * 同時會把 IN_CASE 狀態同步給另一耳。
         */
         ntt_case_state_sync_local_update(NTT_CASE_STATE_IN_CASE);
+        DBGPRINT("[NTT_INBOX] CMD=0x11 -> IN_CASE; preserve mobile link, block new opening reconnect");
         DBGPRINT("[CASE] EAR_PUTIN -> notify IN_CASE");
         wired_uart_send_cmd_ack_ok();
     }

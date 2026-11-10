@@ -291,6 +291,8 @@ enum sound_id {
     SOUND_SEVEN,
     SOUND_EIGHT,
     SOUND_NINE,
+    SOUND_Normal_EQ,
+    SOUND_Voice_Boost_EQ,
 #if defined ANC_ASSIST_ENABLED
     SOUND_PROMPT_ADAPTIVE_ANC,
     SOUND_CUSTOM_LEAK_DETECT,
@@ -435,6 +437,8 @@ static const media_sound_map_t media_sound_map_en[] =
     SOUND_ITEM_DEF(EN_, SOUND_SEVEN),
     SOUND_ITEM_DEF(EN_, SOUND_EIGHT),
     SOUND_ITEM_DEF(EN_, SOUND_NINE),
+    SOUND_ITEM_DEF(EN_, SOUND_Normal_EQ),
+    SOUND_ITEM_DEF(EN_, SOUND_Voice_Boost_EQ),
 #if defined ANC_ASSIST_ENABLED
     SOUND_ITEM_DEF(EN_, SOUND_PROMPT_ADAPTIVE_ANC),
     SOUND_ITEM_DEF(EN_, SOUND_CUSTOM_LEAK_DETECT),
@@ -1722,6 +1726,12 @@ void media_runtime_audio_prompt_update(uint16_t id, uint8_t** ptr, uint32_t* len
         break;
     case AUD_ID_NUM_9:
         get_sound_id_info(SOUND_NINE, &sound_data, &length);
+        break;
+    case AUD_ID_SOUND_Normal_EQ:
+        get_sound_id_info(SOUND_Normal_EQ, &sound_data, &length);
+        break;
+    case AUD_ID_SOUND_Voice_Boost_EQ:
+        get_sound_id_info(SOUND_Voice_Boost_EQ, &sound_data, &length);
         break;
 #if defined ANC_ASSIST_ENABLED
     case AUD_ID_ANC_PROMPT:

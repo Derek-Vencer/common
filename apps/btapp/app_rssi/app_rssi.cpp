@@ -118,6 +118,35 @@ static rssi_contrl_t rssi_contrl;
 static volatile bool ntt_rssi_ota_lock = false;
 static uint8_t ntt_rssi_switch_confirm_count = 0;
 static uint32_t ntt_rssi_switch_cooldown_count = 0;
+/* Test18: block only automatic RSSI role switching after key activity. */
+static volatile uint32_t ntt_key_role_block_until = 0;
+static volatile bool ntt_key_role_block_active = false;
+extern "C" void ntt_key_role_switch_block_start(void)
+{
+    ntt_key_role_block_until = hal_sys_timer_get() + MS_TO_TICKS(30000);
+    ntt_key_role_block_active = true;
+    ntt_rssi_switch_confirm_count = 0;
+    BTAPP_TRACE(0, "[NTT_KEY_ROLE] BLOCK 30000ms");
+}
+extern "C" void ntt_key_role_switch_block_cancel(void)
+{
+    ntt_key_role_block_active = false;
+    ntt_rssi_switch_confirm_count = 0;
+    BTAPP_TRACE(0, "[NTT_KEY_ROLE] CANCEL (IN_CASE)");
+}
+static bool ntt_key_role_switch_is_blocked(void)
+{
+    if (!ntt_key_role_block_active) return false;
+    if ((int32_t)(hal_sys_timer_get() - ntt_key_role_block_until) >= 0)
+    {
+        ntt_key_role_block_active = false;
+        ntt_rssi_switch_confirm_count = 0;
+        BTAPP_TRACE(0, "[NTT_KEY_ROLE] EXPIRED");
+        return false;
+    }
+    return true;
+}
+
 
  /*
   * ============================================================
@@ -207,6 +236,13 @@ extern "C" bool ntt_rssi_role_switch_is_ota_locked(void)
 static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
 {
     int16_t diff;
+    if (ntt_key_role_switch_is_blocked())
+    {
+        BTAPP_TRACE(1, "[NTT_KEY_ROLE] RSSI_SWITCH_BLOCKED remaining_ms=%u",
+                    (unsigned)TICKS_TO_MS(ntt_key_role_block_until - hal_sys_timer_get()));
+        ntt_rssi_switch_confirm_count = 0;
+        return;
+    }
 
     /*
      * 1. OTA must not be active.

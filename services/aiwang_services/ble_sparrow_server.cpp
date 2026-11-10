@@ -74,6 +74,8 @@ extern "C" void ntt_color_code_nv_set(uint8_t color);
 extern void app_ibrt_customif_cmd_sync_color_code(uint8_t color_code);
 extern bool app_spp_tota_send_data(uint8_t* ptrData, uint16_t length);
 extern "C" void ntt_audio_drc_apply_by_eq_index(uint8_t eq_index);
+extern "C" void ntt_key_role_switch_block_start(void);
+extern "C" void ntt_key_role_switch_block_cancel(void);
 extern "C" void dtm_enter_pairing_mode(void);
 extern const IIR_CFG_T * const POSSIBLY_UNUSED audio_eq_cfg_vol_list[VOL_CTRL_EQ_LIST_NUM];
 
@@ -1537,17 +1539,29 @@ void handleSetKeyMapActionAndFunc(uint8_t index,uint8_t action,uint8_t func)
 
 }
 
+extern "C" void ntt_eq_prompt_preduck_request(void);
+extern "C" uint32_t ntt_eq_prompt_schedule_tick(void);
+extern "C" void ntt_eq_prompt_preduck_schedule(uint32_t tick);
+static osTimerId ntt_eq_prompt_delay_timer = NULL;
+static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
+static void ntt_eq_delayed_prompt_cb(void const *arg)
+{
+    (void)arg;
+    media_PlayAudio(ntt_eq_pending_prompt, 0);
+}
+osTimerDef(NTT_EQ_DELAYED_PROMPT, ntt_eq_delayed_prompt_cb);
+
 static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
 {
     static const AUD_ID_ENUM eq_prompt_map[7] =
     {
-        AUD_ID_NUM_1,  /* EQ mode 0 */
-        AUD_ID_NUM_2,  /* EQ mode 1 */
-        AUD_ID_NUM_3,  /* EQ mode 2 */
-        AUD_ID_NUM_4,  /* EQ mode 3 / Clear Voice */
-        AUD_ID_NUM_5,  /* EQ mode 4 */
-        AUD_ID_NUM_6,  /* EQ mode 5 / Type01 */
-        AUD_ID_NUM_7,  /* EQ mode 6 / Type02 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 0 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 1 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 2 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 3 / Clear Voice */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 4 */
+        AUD_ID_SOUND_Voice_Boost_EQ,  /* EQ mode 5 / Type01 */
+        AUD_ID_SOUND_Normal_EQ,       /* EQ mode 6 / Type02 */
     };
 
     if (eq_preset >= ARRAY_SIZE(eq_prompt_map))
@@ -1561,7 +1575,23 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
           (unsigned)eq_preset,
           (unsigned)eq_prompt_map[eq_preset]);
 
-    media_PlayAudio(eq_prompt_map[eq_preset], 0);
+    /* The TWS EQ sender already scheduled both buds at the same BT tick.
+     * For standalone operation schedule the local ear only.
+     */
+    if (!bts_tws_if_is_tws_link_connected())
+        ntt_eq_prompt_preduck_schedule(ntt_eq_prompt_schedule_tick());
+    ntt_eq_pending_prompt = eq_prompt_map[eq_preset];
+    if (!ntt_eq_prompt_delay_timer)
+        ntt_eq_prompt_delay_timer = osTimerCreate(osTimer(NTT_EQ_DELAYED_PROMPT),
+                                                  osTimerOnce, NULL);
+    if (ntt_eq_prompt_delay_timer)
+    {
+        osTimerStop(ntt_eq_prompt_delay_timer);
+        osTimerStart(ntt_eq_prompt_delay_timer, 320);
+        TRACE(0, "[NTT_EQ_DUCK] PROMPT_DELAY 320ms");
+    }
+    else
+        media_PlayAudio(ntt_eq_pending_prompt, 0);
 }
 
 
@@ -2514,8 +2544,8 @@ static const CMD_HANDLE_TABLE aiWangCmdTypes[] = {
 		{GET_FW_VERSION,      handleGetFwVersion},
         {GET_CHARGER_FW_VERSION, handleGetChargerFwVersion},
         {SET_DTM_ENABLE,      handleSetDtmEnable},
-        {0x91,                ntt_rssi_cal_get},
-        {0x93,                ntt_rssi_cal_set},
+        {GET_RSSI_CAL,         ntt_rssi_cal_get},
+        {SET_RSSI_CAL,         ntt_rssi_cal_set},
 		{FACTORY_COMMAND_SYS, handleFactoryCmdSys},
 		{FACTORY_COMMAND_AUDIO_IO,handleFactoryCmdAudio},
 		{FACTORY_COMMAND_INFO,    handleFactoryCmdInfo},
@@ -3368,6 +3398,32 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 
     key_side = ntt_get_key_side_snapshot();
 
+    /*
+     * Test7: key_event_is_left identifies a peer-originated key,
+     * not the physical left ear. Lock only the originating earbud.
+     * Case state is authoritative; er_inbox is retained as a local
+     * fallback for older 1-Wire case-state updates.
+     */
+    const bool peer_key = (key_event_is_left == 1);
+    const NTT_CASE_STATE_E source_case_state = peer_key ?
+        ntt_case_state_get_peer() : ntt_case_state_get_local();
+    const bool source_in_case =
+        (source_case_state == NTT_CASE_STATE_IN_CASE) ||
+        (!peer_key && er_inbox == 1);
+
+    if (source_in_case)
+    {
+        TRACE(0,
+              "[NTT_KEY_LOCK] BLOCK kick=%u source=%s case=%d inbox=%u",
+              (unsigned)kick_type,
+              peer_key ? "PEER" : "LOCAL",
+              source_case_state,
+              (unsigned)er_inbox);
+        return;
+    }
+    ntt_key_role_switch_block_start();
+
+
     TRACE(0,
           "[KEY] kick=%d test=%d left_flag=%d inbox=%d side=%s",
           kick_type,
@@ -3379,12 +3435,6 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
     if (enterKeyClickTestMode && app_sparraw_env.notifyEnable)
     {
         ble_aiwang_srv_send_data_via_notification(keyEventNotify, 3);
-    }
-
-    if ((er_inbox == 1) && (key_event_is_left == 0))
-    {
-        TRACE(0, "[KEY] ignore key event, earbud in charging case");
-        return;
     }
 
     switch (kick_type)
@@ -3408,31 +3458,29 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_DOUBLE_CLICK:
         {
             ntt_cancel_double_hold_state("double click");
-            CALL_STATE_E call_state = app_bt_get_call_state();
 
+#ifdef SUPPORT_SIRI
             /*
-            * Priority 1: Call
-            */
+             * Test12: An active Voice Assistant always owns double-click.
+             * Check BEFORE call/music key mapping so this event can only
+             * stop VA, never switch the player or send an AVRCP command.
+             */
+            if (ntt_voice_assist_is_active())
+            {
+                TRACE(0, "[NTT_VA][TEST12] DOUBLE_CLICK -> CLOSE VA ONLY");
+                ntt_voice_assist_close();
+                break;
+            }
+#endif
+
+            CALL_STATE_E call_state = app_bt_get_call_state();
             if (call_state != CALL_STATE_IDLE)
             {
                 TRACE(0, "[NTT_CALL] DOUBLE_CLICK state=%d", call_state);
                 handle_key_event(CLICK_DOUBLE, key_side);
                 break;
             }
-        #ifdef SUPPORT_SIRI
-            /*
-            * Priority 2: Voice Assistant
-            */
-            if (ntt_voice_assist_is_active())
-            {
-                TRACE(0, "[NTT_VA] DOUBLE_CLICK -> CLOSE VA");
-                ntt_voice_assist_close();
-                break;
-            }
-        #endif
-            /*
-            * Priority 3: Idle / Music Keymap
-            */
+
             TRACE(0, "[KEYMAP] CLICK_DOUBLE");
             handle_key_event(CLICK_DOUBLE, key_side);
         }
@@ -4482,7 +4530,9 @@ void sparraw_event_read_handle(ble_aiwang_read_param_u *param)
 
 void set_er_inbox_status(uint8_t status)
 {
-	er_inbox = status;
+    er_inbox = status;
+    if (status == 1)
+        ntt_key_role_switch_block_cancel();
 }
 
 extern "C" uint8_t get_er_inbox_status(void)

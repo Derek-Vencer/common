@@ -225,15 +225,16 @@ extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
-#define NTT_BT_CONNECTED_PROMPT_DELAY_MS          1000
+#define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       2000
+#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  100
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
-#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           30
-#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT         3
+#define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           60
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        10
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
 #define NTT_CONN_PROMPT_TICK_MS            200
-#define NTT_CONN_PROMPT_START_TIMEOUT_MS   2000
+#define NTT_CONN_PROMPT_START_TIMEOUT_MS   4000
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 
 typedef struct
@@ -241,6 +242,7 @@ typedef struct
     bool pending;
     bool notified;
     uint16_t delay_ms;
+    bool boot_mode;
 } ntt_conn_prompt_slot_t;
 
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
@@ -258,6 +260,8 @@ static uint8_t ntt_conn_prompt_play_state = 0;
 static uint8_t ntt_conn_prompt_play_device = 0xFF;
 static uint16_t ntt_conn_prompt_play_elapsed_ms = 0;
 static uint8_t ntt_conn_prompt_next_device = 0;
+// Both phones queued before the first prompt starts retain BOOT mode.
+static bool ntt_conn_prompt_boot_phase = true;
 
 
 #if defined(IBRT)
@@ -514,7 +518,7 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
     (void)param;
 
-    // Each device keeps its own 1-second delay.
+    // Each device keeps its own BOOT or RECONNECT delay.
     for (uint8_t i = 0; i < NTT_CONN_PROMPT_DEVICE_COUNT; i++)
     {
         ntt_conn_prompt_slot_t *slot = &ntt_conn_prompt_slot[i];
@@ -607,8 +611,9 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         {
             ntt_bt_connected_prompt_stable_count++;
 
-            DEBUG_INFO(3,"[NTT_CONN_PROMPT] wait IBRT dev=%u role=%u stable=%u",
-                device_id, ui_role,ntt_bt_connected_prompt_stable_count);
+            DEBUG_INFO(4,"[NTT_CONN_PROMPT][TEST14] wait IBRT dev=%u role=%u stable=%u/%u",
+                device_id, ui_role, ntt_bt_connected_prompt_stable_count,
+                NTT_BT_CONNECTED_PROMPT_STABLE_COUNT);
 
             ntt_conn_prompt_schedule();
             return;
@@ -656,7 +661,9 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     ntt_conn_prompt_play_elapsed_ms = 0;
     ntt_conn_prompt_next_device = (device_id + 1) % NTT_CONN_PROMPT_DEVICE_COUNT;
     ntt_conn_prompt_reset_ready();
-    DEBUG_INFO(1,"[NTT_CONN_PROMPT] play dev=%u",device_id);
+    DEBUG_INFO(2,"[NTT_CONN_PROMPT] play dev=%u mode=%s",
+        device_id, ntt_conn_prompt_slot[device_id].boot_mode ? "BOOT" : "RECONNECT");
+    ntt_conn_prompt_boot_phase = false;
     // Preserve the existing TWS synchronized prompt API.
     audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
     ntt_conn_prompt_schedule();
@@ -685,8 +692,11 @@ static void ntt_bt_connected_prompt_request(uint8_t device_id)
 
     slot->notified = true;
     slot->pending = true;
-    slot->delay_ms = NTT_BT_CONNECTED_PROMPT_DELAY_MS;
-    DEBUG_INFO(2,"[NTT_CONN_PROMPT] queued dev=%u delay=%u",device_id,NTT_BT_CONNECTED_PROMPT_DELAY_MS);
+    slot->boot_mode = ntt_conn_prompt_boot_phase;
+    slot->delay_ms = slot->boot_mode ? NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS
+                                     : NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS;
+    DEBUG_INFO(3,"[NTT_CONN_PROMPT] queued dev=%u mode=%s delay=%u",
+        device_id, slot->boot_mode ? "BOOT" : "RECONNECT", slot->delay_ms);
     ntt_conn_prompt_schedule();
 }
 
@@ -5681,14 +5691,32 @@ void app_bt_inquiry_remote_device_name(const bt_bdaddr_t * bdaddr)
     bt_defer_call_func_1((uint32_t)(uintptr_t)btif_me_get_remote_device_name, param_a);
 }
 
+extern "C" bool ntt_case_open_reconnect_authorized(void);
+extern "C" bool ntt_ota_mobile_reconnect_authorized(void);
+
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
-    DEBUG_INFO(0,"[NTT_CASE] CLOSED app_bt_device_reconnect_handler");
-    if (pmu_ntt_case_closed_latch_get())
+    const bool ota_recovery = ntt_ota_mobile_reconnect_authorized();
+    const bool uart07 = ntt_case_open_reconnect_authorized();
+    const bool latch_closed = pmu_ntt_case_closed_latch_get();
+
+    /* Test13: OTA recovery overrides the case-closed gate for 30 seconds. */
+    if (latch_closed && !ota_recovery)
     {
-        DEBUG_INFO(0,"[NTT_CASE] CLOSED latch=1, block mobile reconnect");
+        DEBUG_INFO(0, "[NTT_CASE] CLOSED latch=1, block mobile reconnect");
         return;
     }
+
+    /* IN_CASE is permitted only after explicit opening or OTA reboot. */
+    if (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+        !uart07 && latch_closed && !ota_recovery)
+    {
+        DEBUG_INFO(0, "[NTT_INBOX] BLOCK opening mobile reconnect: IN_CASE");
+        return;
+    }
+
+    DEBUG_INFO(0, "[NTT_RECONNECT][TEST13] latch=%d UART07=%d ota=%d",
+               latch_closed, uart07, ota_recovery);
 
     DEBUG_INFO(0,
     "[NTT_RECONNECT] handler triggered");

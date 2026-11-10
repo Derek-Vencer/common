@@ -97,6 +97,9 @@
 #endif
 
 extern void app_ibrt_customif_cmd_sync_battery_level(uint8_t current_level);
+/* Explicit UART 0x07 open-case authorization; never inferred from IN_CASE. */
+extern "C" bool ntt_case_open_reconnect_authorized(void);
+extern "C" bool ntt_ota_mobile_reconnect_authorized(void);
 
 /* Implemented by the Sparrow BLE service: proactive battery 0x31 Notify. */
 extern void sparrow_push_battery_level_notify(bool slave_disconnected);
@@ -1367,9 +1370,30 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
                         "MASTER start opening reconnect");
 
                     /*
-                    * 保留原本手機回連
-                    */
-                    app_bt_profile_connect_manager_opening_reconnect();
+                     * Test13: allow OTA boot recovery, UART 0x07, or
+                     * a released case-close latch. Otherwise IN_CASE
+                     * keeps the existing no-reconnect protection.
+                     */
+                    const bool ota_recovery = ntt_ota_mobile_reconnect_authorized();
+                    const bool uart07 = ntt_case_open_reconnect_authorized();
+                    const bool latch_closed = pmu_ntt_case_closed_latch_get();
+                    const bool in_case =
+                        (ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE);
+
+                    if (in_case && latch_closed && !uart07 && !ota_recovery)
+                    {
+                        EARBUDS_TRACE(0,
+                            "[NTT_INBOX][TEST13] TWS profiles: skip mobile reconnect");
+                    }
+                    else if (!app_bt_ibrt_has_mobile_link_connected() &&
+                             !ntt_first_no_mobile_pair_mode &&
+                             !ntt_manual_pairing_mode)
+                    {
+                        EARBUDS_TRACE(0,
+                            "[NTT_RECONNECT][TEST13] MASTER opening reconnect latch=%d UART07=%d ota=%d",
+                            latch_closed, uart07, ota_recovery);
+                        app_bt_profile_connect_manager_opening_reconnect();
+                    }
                 }
                 else if (ui_role == TWS_UI_SLAVE)
                 {
@@ -3077,6 +3101,18 @@ static void ntt_first_out_start_mobile_reconnect(void)
         return;
     }
 
+    /*
+     * Test6: A genuine local OUT_CASE event may reconnect even when
+     * the peer remains IN_CASE. Test5 still prevents the peer IN_CASE
+     * callback itself from starting a reconnect.
+     */
+    if (ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE &&
+        !g_ntt_local_was_first_out)
+    {
+        EARBUDS_TRACE(0,"[NTT_INBOX] BLOCK reconnect: peer IN_CASE without local put-out owner");
+        return;
+    }
+
     if (!bts_tws_if_is_tws_link_connected())
     {
         EARBUDS_TRACE(0,"[NTT_FIRST_OUT] reconnect denied: TWS disconnected");
@@ -3923,12 +3959,27 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     }
 
     /*
-     * Local OUT + Peer OUT。
-     *
-     * 關鍵：
-     * 不能再單純依照目前 Master / Slave 判斷誰回連。
-     *
-     * 必須先看本機是否為真正 First-Out。
+     * Test6: A local put-out is a new reconnect trigger even if
+     * the peer is already OUT_CASE. Claim reconnect ownership
+     * for this event; the existing owner flow performs Slave->
+     * Master role switch and waits for completion before reconnect.
+     * Peer-only callbacks must not claim this ownership.
+     */
+    if (peer_state == NTT_CASE_STATE_OUT_CASE &&
+        !g_ntt_local_was_first_out)
+    {
+        EARBUDS_TRACE(2,
+            "[NTT_PUTOUT] local OUT, peer OUT, mobile disconnected: claim reconnect role=%d",
+            ui_role);
+
+        g_ntt_local_was_first_out = true;
+        ntt_first_out_take_master_and_reconnect();
+        return;
+    }
+
+    /*
+     * Local OUT + Peer OUT: continue an existing local
+     * reconnect owner flow without duplicating the request.
      */
     if (peer_state == NTT_CASE_STATE_OUT_CASE)
     {
@@ -4053,21 +4104,15 @@ void ntt_case_state_peer_changed_callback(
             "[NTT_CASE_CB][PEER] peer IN_CASE");
 
         /*
-         * Local 已 OUT、Peer 明確 IN：
-         * Local 是 First-Out。
+         * Test5: Peer OUT->IN is an earbud put-in event, NOT
+         * a local first-out event. Preserve the current mobile
+         * state; never initiate reconnect from peer IN_CASE.
+         * Existing mobile links are intentionally untouched.
          */
-        if (local_state == NTT_CASE_STATE_OUT_CASE &&
-            !mobile_connected)
+        if (local_state == NTT_CASE_STATE_OUT_CASE && !mobile_connected)
         {
-            EARBUDS_TRACE(
-                2,
-                "[NTT_FIRST_OUT] local OUT + peer IN "
-                "-> confirm first-out owner=%d",
-                g_ntt_first_out_owner);
-
-            g_ntt_local_was_first_out = true;
-
-            ntt_first_out_take_master_and_reconnect();
+            EARBUDS_TRACE(0,
+                "[NTT_INBOX] peer IN_CASE, mobile disconnected: skip first-out reconnect");
         }
 
         return;
