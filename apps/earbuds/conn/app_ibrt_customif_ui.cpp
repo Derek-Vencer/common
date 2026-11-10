@@ -168,8 +168,14 @@ extern "C" bool ntt_pairing_both_in_case_allowed(void)
 }
 extern "C" bool ntt_pairing_case_can_start(void)
 {
-    return !g_ntt_pairing_case_blocked &&
-           ntt_pairing_both_in_case_allowed();
+    /*
+     * Manual pairing is explicitly authorized by the charging case.
+     * It does not require a preceding lid CLOSE/OPEN edge.
+     * Both buds IN_CASE and TWS linked are mandatory for either path.
+     */
+    return ntt_pairing_both_in_case_allowed() &&
+           (ntt_user_manual_pairing_request ||
+            !g_ntt_pairing_case_blocked);
 }
 extern "C" void ntt_pairing_case_new_open(void)
 {
