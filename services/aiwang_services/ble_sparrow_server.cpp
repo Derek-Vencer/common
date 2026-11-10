@@ -199,6 +199,9 @@ bleCmdSetStatus bleCmdSet_status;
 static osTimerId double_hold_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
 #define DOUBLE_HOLD_IDLE_TIMEOUT_MS 500
+/* Fix12 safety: never repeat indefinitely if TWS KEY_UP is lost. */
+#define DOUBLE_HOLD_MAX_REPEAT_COUNT 5
+static uint8_t g_double_hold_repeat_count = 0;
 uint8_t button_hold_type = 0xff;
 
 static void double_hold_idle_timeout_callback(void const *argument);
@@ -3388,6 +3391,7 @@ static void ntt_cancel_double_hold_state(const char *reason)
      */
     button_hold_type = 0xFF;
     g_button_hold_side = NTT_KEY_SIDE_RIGHT;
+    g_double_hold_repeat_count = 0;
 
     if (double_hold_idle_timer_id != NULL)
     {
@@ -3411,6 +3415,14 @@ static void double_hold_idle_timeout_callback(void const *argument)
 
     if (hold_type == CLICK_DOUBLE_HOLD)
     {
+        if (g_double_hold_repeat_count >= DOUBLE_HOLD_MAX_REPEAT_COUNT)
+        {
+            TRACE(0, "[NTT_KEY_FIX12] hold repeat safety timeout count=%u side=%s",
+                  (unsigned)g_double_hold_repeat_count, ntt_key_side_str(hold_side));
+            ntt_cancel_double_hold_state("Fix12 missing KEY_UP safety timeout");
+            return;
+        }
+        ++g_double_hold_repeat_count;
         TRACE(0,
               "[KEYMAP] TIMER CLICK_DOUBLE_HOLD side=%s",
               ntt_key_side_str(hold_side));
@@ -3464,6 +3476,7 @@ void double_hold_idle_detection_init(void)
         {
             TRACE(0, "[KEYMAP] create DOUBLE_HOLD timer failed");
             button_hold_type = 0xFF;
+            g_double_hold_repeat_count = 0;
             return;
         }
     }
@@ -3618,6 +3631,9 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
             ntt_cancel_double_hold_state ("start new double hold");
             g_button_hold_side = key_side;
             button_hold_type = CLICK_DOUBLE_HOLD;
+            g_double_hold_repeat_count = 0;
+            TRACE(0, "[NTT_KEY_FIX12] hold start side=%s max_repeats=%u",
+                  ntt_key_side_str(key_side), (unsigned)DOUBLE_HOLD_MAX_REPEAT_COUNT);
             handle_key_event(CLICK_DOUBLE_HOLD, key_side);
             double_hold_idle_detection_init();
         }
