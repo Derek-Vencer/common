@@ -3506,7 +3506,13 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         (source_case_state == NTT_CASE_STATE_IN_CASE) ||
         (!peer_key && er_inbox == 1);
 
-    if (source_in_case)
+    /*
+     * Fix11: KEY_UP is a safety/release event, never a user action.
+     * Even if the case state changes between HOLD and UP, the release
+     * must reach the hold-state cancellation below. Otherwise a timer
+     * started before the case transition can repeat indefinitely.
+     */
+    if (source_in_case && kick_type != KEY_UP)
     {
         TRACE(0,
               "[NTT_KEY_LOCK] BLOCK kick=%u source=%s case=%d inbox=%u",
@@ -3516,7 +3522,16 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
               (unsigned)er_inbox);
         return;
     }
-    ntt_key_role_switch_block_start();
+    if (kick_type != KEY_UP)
+    {
+        ntt_key_role_switch_block_start();
+    }
+    else
+    {
+        TRACE(0, "[NTT_KEY_FIX11] RELEASE accepted source=%s side=%s case=%d",
+              peer_key ? "PEER" : "LOCAL",
+              ntt_key_side_str(key_side), source_case_state);
+    }
 
 
     TRACE(0,
@@ -3627,6 +3642,8 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
         case KEY_UP:
         {
             TRACE(0, "[KEYMAP] KEY_UP");
+            TRACE(0, "[NTT_KEY_FIX11] RELEASE cancel local hold type=0x%02X side=%s",
+                  button_hold_type, ntt_key_side_str(g_button_hold_side));
             ntt_cancel_double_hold_state("key up");
             aparraw_set_key_event_left(0);
         }
