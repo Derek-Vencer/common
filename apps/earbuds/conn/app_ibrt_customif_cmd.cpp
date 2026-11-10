@@ -1879,6 +1879,7 @@ typedef struct __attribute__((packed))
 } NTT_CASE_SYNC_PACKET_T;
 
 extern "C" void ntt_key_role_switch_block_cancel(void);
+extern "C" void ntt_pairing_case_stop(void);
 static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
 static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
 static uint8_t g_ntt_case_state_sequence = 0;
@@ -2021,6 +2022,9 @@ void ntt_case_state_sync_local_update(bool in_case)
                 "[NTT_CASE_SYNC] duplicate OUT "
                 "-> run local recovery callback");
 
+            EARBUDS_TRACE(0,
+                "[NTT_PAIR_CASE][FIX4] duplicate LOCAL OUT -> stop pairing");
+            ntt_pairing_case_stop();
             ntt_case_state_local_changed_callback(
                 new_state);
 
@@ -2048,6 +2052,17 @@ void ntt_case_state_sync_local_update(bool in_case)
     }
 
     g_ntt_local_case_state = new_state;
+    /*
+     * Test19 Fix4: enforce pairing shutdown at the case-state source,
+     * before reconnect/role-switch callbacks and peer notification.
+     * Do not wait for the 20+ second role switch to clear inquiry scan.
+     */
+    if (new_state == NTT_CASE_STATE_OUT_CASE)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_PAIR_CASE][FIX4] LOCAL OUT source -> stop pairing now");
+        ntt_pairing_case_stop();
+    }
     if (new_state == NTT_CASE_STATE_IN_CASE)
         ntt_key_role_switch_block_cancel();
 
