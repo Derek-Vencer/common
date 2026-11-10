@@ -1880,7 +1880,7 @@ void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length)
 	tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_BT_NAME, cmd_sync_bt_name, length);
 }
 
-#define NTT_CASE_SYNC_VERSION       1
+#define NTT_CASE_SYNC_VERSION       2
 #define NTT_CASE_SYNC_MAGIC         0xCA
 
 typedef struct __attribute__((packed))
@@ -1889,6 +1889,7 @@ typedef struct __attribute__((packed))
     uint8_t version;
     uint8_t case_state;
     uint8_t sequence;
+    uint8_t auto_pairing;
 } NTT_CASE_SYNC_PACKET_T;
 
 extern "C" void ntt_key_role_switch_block_cancel(void);
@@ -1896,6 +1897,25 @@ extern "C" void ntt_pairing_case_stop(void);
 static volatile NTT_CASE_STATE_E g_ntt_local_case_state = NTT_CASE_STATE_UNKNOWN;
 static volatile NTT_CASE_STATE_E g_ntt_peer_case_state = NTT_CASE_STATE_UNKNOWN;
 static uint8_t g_ntt_case_state_sequence = 0;
+static bool g_ntt_auto_pairing_led_local = false;
+static bool g_ntt_auto_pairing_led_peer = false;
+static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state);
+
+extern "C" bool ntt_auto_pairing_led_active(void)
+{
+    return bts_tws_if_is_tws_link_connected() &&
+           g_ntt_local_case_state == NTT_CASE_STATE_IN_CASE &&
+           g_ntt_peer_case_state == NTT_CASE_STATE_IN_CASE &&
+           (g_ntt_auto_pairing_led_local || g_ntt_auto_pairing_led_peer);
+}
+
+extern "C" void ntt_auto_pairing_led_set(bool enabled)
+{
+    g_ntt_auto_pairing_led_local = enabled;
+    EARBUDS_TRACE(1, "[NTT_PAIR_CASE][FIX8] local auto pairing LED=%d", enabled);
+    if (ntt_case_state_is_valid((uint8_t)g_ntt_local_case_state))
+        ntt_case_state_send_to_peer(g_ntt_local_case_state);
+}
 
 
 /*
@@ -1980,6 +2000,7 @@ static bool ntt_case_state_send_to_peer(NTT_CASE_STATE_E state)
     packet.version = NTT_CASE_SYNC_VERSION;
     packet.case_state = (uint8_t)state;
     packet.sequence = ++g_ntt_case_state_sequence;
+    packet.auto_pairing = (g_ntt_auto_pairing_led_local && state == NTT_CASE_STATE_IN_CASE) ? 1 : 0;
 
     EARBUDS_TRACE(3,"[NTT_CASE_SYNC][TX] state=%s(%d) seq=%u",ntt_case_state_to_string(state),state,packet.sequence);
     tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_CASE_STATE,(uint8_t *)&packet,sizeof(packet));
@@ -2065,6 +2086,8 @@ void ntt_case_state_sync_local_update(bool in_case)
     }
 
     g_ntt_local_case_state = new_state;
+    if (new_state == NTT_CASE_STATE_OUT_CASE)
+        g_ntt_auto_pairing_led_local = false;
     /*
      * Test19 Fix4: enforce pairing shutdown at the case-state source,
      * before reconnect/role-switch callbacks and peer notification.
@@ -2190,6 +2213,8 @@ static void ntt_case_state_sync_receive_handler(uint16_t rsp_seq,uint8_t *p_buff
     }
 
     new_peer_state = (NTT_CASE_STATE_E)packet.case_state;
+    g_ntt_auto_pairing_led_peer = (packet.auto_pairing != 0 && new_peer_state == NTT_CASE_STATE_IN_CASE);
+    EARBUDS_TRACE(1, "[NTT_PAIR_CASE][FIX8] peer auto pairing LED=%d", g_ntt_auto_pairing_led_peer);
     old_peer_state = g_ntt_peer_case_state;
     EARBUDS_TRACE(
         4,
