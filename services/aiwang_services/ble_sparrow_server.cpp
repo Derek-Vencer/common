@@ -1589,7 +1589,7 @@ extern "C" bool ntt_eq_key_schedule_apply(uint8_t preset, uint32_t fade_tick)
     if (!ntt_eq_key_apply_timer) return false;
     ntt_eq_key_cancel_pending();
     ntt_eq_key_apply_preset = preset;
-    ntt_eq_key_apply_tick = (fade_tick + 160U) & NTT_EQ_KEY_TICK_MASK;
+    ntt_eq_key_apply_tick = (fade_tick + 192U) & NTT_EQ_KEY_TICK_MASK;
     ntt_eq_key_apply_pending = true;
     osTimerStart(ntt_eq_key_apply_timer, 5);
     TRACE(2, "[NTT_EQ_FIX6] DSP_SCHEDULE preset=%u tick=%u",
