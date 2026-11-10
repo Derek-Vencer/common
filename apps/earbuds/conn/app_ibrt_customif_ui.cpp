@@ -124,6 +124,38 @@ static uint8_t g_device_id_need_resume_sco = BT_DEVICE_INVALID_ID;
 extern bool ntt_user_manual_pairing_request;
 extern bool ntt_first_no_mobile_pair_mode;
 bool pairing_exited_on_out = false;
+/* Test19: require a confirmed TWS pair and both CASE states. */
+static bool g_ntt_pairing_case_blocked = false;
+extern "C" bool ntt_pairing_both_in_case_allowed(void)
+{
+    return bts_tws_if_is_tws_link_connected() &&
+           ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+           ntt_case_state_get_peer() == NTT_CASE_STATE_IN_CASE;
+}
+extern "C" bool ntt_pairing_case_can_start(void)
+{
+    return !g_ntt_pairing_case_blocked &&
+           ntt_pairing_both_in_case_allowed();
+}
+extern "C" void ntt_pairing_case_new_open(void)
+{
+    g_ntt_pairing_case_blocked = false;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] new open rearmed");
+}
+extern "C" void ntt_pairing_case_stop(void)
+{
+    g_ntt_pairing_case_blocked = true;
+    if (!app_ui_in_pairing_mode() && !get_er_discover_connectable_status() &&
+        !ntt_manual_pairing_mode) return;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] forced stop");
+    ntt_manual_pairing_mode = false;
+    ntt_user_manual_pairing_request = false;
+    set_er_discover_connectable_status(0);
+    enable_pair_status(0);
+    if (app_ui_in_pairing_mode()) app_ui_exit_pairing_mode(false);
+    app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
+}
+
 extern "C" void app_bt_profile_connect_manager_opening_reconnect(void);
 /*
  * Test4: retry mobile reconnect after fast-remove latch release.
@@ -584,7 +616,8 @@ void app_ibrt_customif_pairing_mode_exit()
      *   - immediately report pair=2 to charging case
      * ---------------------------------------------------------
      */
-    if (first_no_mobile && !mobile_connected && !user_manual && !g_ntt_mobile_reconnect_after_pairing_exit)
+    if (first_no_mobile && !mobile_connected && !user_manual &&
+        !g_ntt_mobile_reconnect_after_pairing_exit && ntt_pairing_case_can_start())
     {
         EARBUDS_TRACE(0,"[NTT_PAIR] TWS flow exit only -> keep first mobile pairing active");
 
@@ -3802,6 +3835,7 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         return;
     }
 
+    ntt_pairing_case_stop();
     EARBUDS_TRACE(
         0,
         "[NTT_CASE_CB][LOCAL] OUT_CASE");
@@ -4131,6 +4165,7 @@ void ntt_case_state_peer_changed_callback(
         return;
     }
 
+    ntt_pairing_case_stop();
     EARBUDS_TRACE(
         0,
         "[NTT_CASE_CB][PEER] peer OUT_CASE");
