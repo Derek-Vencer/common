@@ -119,6 +119,9 @@ extern bool ntt_charging_pwron_pending_shutdown;
 static uint32_t ntt_last_box_tws_reconnect_tick = 0;
 
 static uint32_t ntt_last_box_battery_case_tick = 0;
+static uint32_t s_ntt_pair_led_cmd_tick = 0;
+static bool s_ntt_pair_led_cmd_valid = false;
+extern "C" bool ntt_auto_pairing_led_active(void);
 extern bool ntt_user_manual_pairing_request;
 #define NTT_DEFAULT_BT_NAME     "nwm CLIPS"
 #define NTT_DEFAULT_BLE_NAME    "LE nwm CLIPS"
@@ -505,6 +508,24 @@ uint8_t get_tws_peer_battery_percent(void)
 }
 
 #define PAIR_NOTIFY_REPEAT_COUNT    10
+#define NTT_PAIR_LED_CMD_WINDOW_MS 1000
+
+extern "C" void ntt_pair_led_auto_report_fix9(void)
+{
+    if (!ntt_auto_pairing_led_active() || !s_ntt_pair_led_cmd_valid)
+    {
+        DBGPRINT("[PAIR_LED_FIX9] skip: auto pairing inactive or no 0x0F");
+        return;
+    }
+    uint32_t elapsed = TICKS_TO_MS(hal_sys_timer_get() - s_ntt_pair_led_cmd_tick);
+    if (elapsed >= NTT_PAIR_LED_CMD_WINDOW_MS)
+    {
+        DBGPRINT("[PAIR_LED_FIX9] skip: 0x0F age=%u ms", (unsigned)elapsed);
+        return;
+    }
+    DBGPRINT("[PAIR_LED_FIX9] auto report 0x0F age=%u ms", (unsigned)elapsed);
+    wired_uart_get_battery_level();
+}
 
 void wired_uart_get_battery_level(void)
 {
@@ -2230,6 +2251,8 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     case CMD_SEND_BOX_BATTERY_LEVEL:
     {
         uint32_t now = hal_sys_timer_get();
+        s_ntt_pair_led_cmd_tick = now;
+        s_ntt_pair_led_cmd_valid = true;
 
         if (ntt_last_box_battery_case_tick != 0)
         {
