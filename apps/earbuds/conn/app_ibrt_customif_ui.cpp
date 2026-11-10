@@ -125,7 +125,36 @@ extern bool ntt_user_manual_pairing_request;
 extern bool ntt_first_no_mobile_pair_mode;
 bool pairing_exited_on_out = false;
 /* Test19: require a confirmed TWS pair and both CASE states. */
-static bool g_ntt_pairing_case_blocked = false;
+static bool g_ntt_pairing_case_blocked = true;
+static bool g_ntt_pairing_open_seen = false;
+static bool g_ntt_pairing_auto_pending = false;
+static void ntt_pairing_case_try_auto_start(void)
+{
+    if (!g_ntt_pairing_auto_pending || !g_ntt_pairing_open_seen ||
+        g_ntt_pairing_case_blocked ||
+        !bts_tws_if_is_tws_link_connected() ||
+        app_ibrt_if_get_ui_role() != TWS_UI_MASTER ||
+        ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
+        ntt_case_state_get_peer() != NTT_CASE_STATE_IN_CASE)
+        return;
+    g_ntt_pairing_auto_pending = false;
+    ntt_first_no_mobile_pair_mode = true;
+    ntt_manual_pairing_mode = true;
+    ntt_user_manual_pairing_request = false;
+    set_pair_status(0);
+    enable_pair_status(1);
+    set_er_discover_connectable_status(1);
+    app_bt_set_access_mode(BTIF_BAM_GENERAL_ACCESSIBLE);
+    app_bt_reset_delay_power_off();
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] AUTO START both IN_CASE");
+}
+extern "C" void ntt_pairing_case_auto_request(void)
+{
+    g_ntt_pairing_auto_pending = true;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE] AUTO PENDING");
+    ntt_pairing_case_try_auto_start();
+}
+
 extern "C" bool ntt_pairing_both_in_case_allowed(void)
 {
     return bts_tws_if_is_tws_link_connected() &&
@@ -140,11 +169,15 @@ extern "C" bool ntt_pairing_case_can_start(void)
 extern "C" void ntt_pairing_case_new_open(void)
 {
     g_ntt_pairing_case_blocked = false;
+    g_ntt_pairing_open_seen = true;
     EARBUDS_TRACE(0, "[NTT_PAIR_CASE] new open rearmed");
+    ntt_pairing_case_try_auto_start();
 }
 extern "C" void ntt_pairing_case_stop(void)
 {
     g_ntt_pairing_case_blocked = true;
+    g_ntt_pairing_open_seen = false;
+    g_ntt_pairing_auto_pending = false;
     if (!app_ui_in_pairing_mode() && !get_er_discover_connectable_status() &&
         !ntt_manual_pairing_mode &&
         app_bt_get_curr_access_mode() != BTIF_BAM_GENERAL_ACCESSIBLE) return;
@@ -3815,6 +3848,7 @@ void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
             "[NTT_CASE_CB][LOCAL] IN_CASE");
 
         pairing_exited_on_out = false;
+        ntt_pairing_case_try_auto_start();
 
         ntt_case_check_pause_music_when_both_in();
 
@@ -4128,6 +4162,7 @@ void ntt_case_state_peer_changed_callback(
      * Peer 狀態更新後，也要檢查雙耳入盒 Pause。
      */
     ntt_case_check_pause_music_when_both_in();
+    ntt_pairing_case_try_auto_start();
 
     /*
      * Peer IN_CASE。
