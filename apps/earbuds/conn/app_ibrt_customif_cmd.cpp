@@ -1136,14 +1136,14 @@ void app_ibrt_customif_cmd_sync_music_eq(uint8_t index)
 /* Key-only wire format: legacy payload plus common fade tick and 0xA6
  * marker. APP and boot resync continue using legacy functions unchanged.
  */
-void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t index, uint32_t tick)
+extern "C" void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t index, uint32_t tick)
 {
     if (!bts_tws_if_is_tws_link_connected()) return;
     uint8_t payload[6] = {index, 0, 0, 0, 0, 0xA6};
     ntt_eq_tws_write_tick(&payload[1], tick);
     tws_ctrl_send_cmd(APP_TWS_CMD_SYNC_MUSIC_EQ, payload, sizeof(payload));
 }
-void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t enable,
+extern "C" void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t enable,
                                                uint8_t original, uint32_t tick)
 {
     if (!bts_tws_if_is_tws_link_connected()) return;
