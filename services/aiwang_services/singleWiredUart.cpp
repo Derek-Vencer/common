@@ -83,6 +83,10 @@ extern uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 extern uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 extern void earBudsCloseOff_PowerOff_StartTimer(void);
 extern bool ntt_manual_pairing_mode;
+extern "C" bool ntt_pairing_case_can_start(void);
+extern "C" bool ntt_pairing_both_in_case_allowed(void);
+extern "C" void ntt_pairing_case_new_open(void);
+
 extern "C" uint8_t icp1205_get_chrg_sts2(void);
 // 定时器定义
 osTimerDef(UART_IDLE_TIMER, uart_idle_timeout_callback);
@@ -1900,6 +1904,7 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
             pmu_ntt_case_closed_latch_set(false);
             DBGPRINT("[NTT_CASE_LATCH] CMD_OPEN_CASE -> CLOSED latch=0");
 
+            ntt_pairing_case_new_open();
             g_case_state = 1;
             boxChargerStatus.boxIsOpen = true;
             boxChargerStatus.needOpenEarbuds = true;
@@ -2112,6 +2117,13 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
         {
             bool tws_connected = bts_tws_if_is_tws_link_connected();
             uint8_t ui_role = app_ibrt_if_get_ui_role();
+            if (!ntt_pairing_both_in_case_allowed())
+            {
+                DBGPRINT("[NTT_PAIR_CASE] reject manual: local/peer not both IN_CASE");
+                break;
+            }
+            ntt_pairing_case_new_open(); /* Explicit manual command rearms. */
+
             DBGPRINT( "[NTT_PAIR] enter request ear=%d tws=%d role=%d ui_pairing=%d",isRightEarbuds,tws_connected,ui_role,app_ui_in_pairing_mode());
 
             /*
