@@ -509,6 +509,7 @@ uint8_t get_tws_peer_battery_percent(void)
 
 #define PAIR_NOTIFY_REPEAT_COUNT    10
 #define NTT_PAIR_LED_CMD_WINDOW_MS 1000
+void wired_uart_get_battery_level(void);
 
 extern "C" void ntt_pair_led_auto_report_fix9(void)
 {
