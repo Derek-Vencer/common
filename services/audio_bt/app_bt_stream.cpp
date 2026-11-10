@@ -1703,6 +1703,12 @@ static bool ntt_eq_get_shared_bt_tick(uint32_t *tick)
     return true;
 #endif
 }
+/* Shared mobile/IBRT clock for EQ DSP scheduling in a timer thread. */
+extern "C" uint32_t ntt_eq_shared_clock_now(void)
+{
+    uint32_t tick = 0;
+    return ntt_eq_get_shared_bt_tick(&tick) ? tick : NTT_EQ_INVALID_TICK;
+}
 extern "C" uint32_t ntt_eq_prompt_schedule_tick(void)
 {
     uint32_t tick = 0;
