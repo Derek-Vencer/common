@@ -128,6 +128,27 @@ bool pairing_exited_on_out = false;
 static bool g_ntt_pairing_case_blocked = true;
 static bool g_ntt_pairing_open_seen = false;
 static bool g_ntt_pairing_auto_pending = false;
+/*
+ * Fix7: Missing Key may remove the last mobile record AFTER the
+ * initial boot pairing decision. Preserve the current OPEN authorization
+ * and retry only after both case states and the TWS link are ready.
+ */
+static void ntt_pairing_case_try_auto_start(void);
+extern "C" void ntt_pairing_case_missing_key_deleted(void)
+{
+    if (!g_ntt_pairing_open_seen || g_ntt_pairing_case_blocked)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_PAIR_CASE][FIX7] missing key deleted, no OPEN authorization");
+        return;
+    }
+
+    g_ntt_pairing_auto_pending = true;
+    EARBUDS_TRACE(0,
+        "[NTT_PAIR_CASE][FIX7] missing key deleted, auto pairing pending");
+    ntt_pairing_case_try_auto_start();
+}
+
 static void ntt_pairing_case_try_auto_start(void)
 {
     if (!g_ntt_pairing_auto_pending || !g_ntt_pairing_open_seen ||
@@ -143,6 +164,7 @@ static void ntt_pairing_case_try_auto_start(void)
         bts_tws_if_is_tws_link_connected(),
         app_ibrt_if_get_ui_role(), g_ntt_pairing_open_seen);
     g_ntt_pairing_auto_pending = false;
+    EARBUDS_TRACE(0, "[NTT_PAIR_CASE][FIX7] pairing ready, report pair=2");
     ntt_first_no_mobile_pair_mode = true;
     ntt_manual_pairing_mode = true;
     ntt_user_manual_pairing_request = false;
