@@ -245,9 +245,11 @@ static void ntt_tws_delete_mobile_record_receive(uint16_t rsp_seq,uint8_t *p_buf
         return;
     }
 
-    nv_record_ddbrec_delete(&mobile_addr);
-    nv_record_execute_async_flush();
-    EARBUDS_TRACE(0,"[NTT_KEY_MISSING] peer mobile record delete requested");
+    /*
+     * Fix3 diagnostic-only mode: never delete the peer's mobile
+     * record based on an unconfirmed remote authentication failure.
+     */
+    EARBUDS_TRACE(0,"[NTT_KEY_MISSING][FIX3] peer delete command suppressed (diagnostic only)");
 }
 
 #if 1 //def BESUI_TWS_EN
@@ -2606,30 +2608,56 @@ void app_ibrt_customif_clear_peer_fw_version(void)
 
 #endif /* IBRT */
 
+/*
+ * Test19 Fix3: diagnostic-only deferred sync journal.
+ * No peer deletion is transmitted until the root cause is confirmed.
+ * RAM-only state; a reboot intentionally clears this diagnostic entry.
+ */
+static bool s_ntt_auth_diag_pending = false;
+static uint8_t s_ntt_auth_diag_addr[6] = {0};
+static uint32_t s_ntt_auth_diag_events = 0;
+
+extern "C" void ntt_tws_auth_diag_link_check(void)
+{
+    if (!s_ntt_auth_diag_pending)
+        return;
+
+    const bool linked = bts_tws_if_is_tws_link_connected();
+    EARBUDS_TRACE(2,
+        "[NTT_KEY_MISSING][FIX3] pending diagnostic linked=%d events=%u",
+        linked, (unsigned)s_ntt_auth_diag_events);
+    DUMP8("%02x ", s_ntt_auth_diag_addr, 6);
+
+    if (linked)
+    {
+        EARBUDS_TRACE(0,
+            "[NTT_KEY_MISSING][FIX3] TWS restored; delete NOT sent (diagnostic only)");
+        s_ntt_auth_diag_pending = false;
+    }
+}
+
 extern "C" void ntt_tws_delete_mobile_record_sync(
     const uint8_t *mobile_addr)
 {
     if (mobile_addr == NULL)
+        return;
+
+    if (ntt_bt_addr_is_tws_peer((const struct bdaddr_t *)mobile_addr))
     {
+        EARBUDS_TRACE(0, "[NTT_KEY_MISSING][FIX3] reject TWS peer diagnostic");
         return;
     }
 
-    if (!bts_tws_if_is_tws_link_connected())
-    {
-        EARBUDS_TRACE(
-            0,
-            "[NTT_KEY_MISSING] TWS disconnected, defer delete sync");
-        return;
-    }
+    memcpy(s_ntt_auth_diag_addr, mobile_addr, 6);
+    s_ntt_auth_diag_pending = true;
+    ++s_ntt_auth_diag_events;
 
-    EARBUDS_TRACE(
-        0,
-        "[NTT_KEY_MISSING] send delete mobile record");
-
+    EARBUDS_TRACE(2,
+        "[NTT_KEY_MISSING][FIX3] auth event recorded, tws=%d events=%u",
+        bts_tws_if_is_tws_link_connected(),
+        (unsigned)s_ntt_auth_diag_events);
     DUMP8("%02x ", mobile_addr, 6);
-
-    tws_ctrl_send_cmd(
-        APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,
-        (uint8_t *)mobile_addr,
-        6);
+    EARBUDS_TRACE(0,
+        "[NTT_KEY_MISSING][FIX3] peer deletion DISABLED, diagnostic only");
+    ntt_tws_auth_diag_link_check();
 }
