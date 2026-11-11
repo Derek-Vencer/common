@@ -464,8 +464,8 @@ EARBUDS_TRACE(0,
  * Does not modify AFH assessment or IBRT role switching.
  */
 
-#define NTT_AFH_MONITOR_INTERVAL_MS     1000
-#define NTT_AFH_MONITOR_DURATION_MS     20000
+#define NTT_AFH_MONITOR_INTERVAL_MS     5000
+#define NTT_AFH_MONITOR_DURATION_MS     60000
 
 static osTimerId ntt_afh_monitor_timer = NULL;
 
@@ -562,7 +562,7 @@ void ntt_afh_monitor_start(void)
 
     ntt_afh_monitor_elapsed_ms = 0;
     ntt_afh_monitor_running = true;
-    EARBUDS_TRACE(0,"[NTT_AFH_MON] START duration=20s interval=1s");
+    EARBUDS_TRACE(2,"[NTT_AFH_MON] START duration=%u ms interval=%u ms", NTT_AFH_MONITOR_DURATION_MS, NTT_AFH_MONITOR_INTERVAL_MS);
 
     /*
      * Initial sample at t=0.
@@ -1073,7 +1073,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             * Only monitor the actual AFH Channel Map.
             */
 
-            //ntt_afh_monitor_start();
+            ntt_afh_monitor_start();
 
             break;
         case IBRT_CONN_A2DP_SUSPENED:
@@ -1081,7 +1081,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             if (app_bt_audio_count_streaming_a2dp() == 0)
             {
                 EARBUDS_TRACE(0,"[NTT_AFH_MON] A2DP suspended, stop monitor");
-                //ntt_afh_monitor_stop();
+                ntt_afh_monitor_stop();
             }
 
             break;
@@ -1091,7 +1091,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
 			{
                 bt_drv_reg_op_afh_assess_en(false);
                 EARBUDS_TRACE(0,"[NTT_AFH_MON] A2DP closed, stop monitor");
-                //ntt_afh_monitor_stop();            
+                ntt_afh_monitor_stop();            
 			}
             break;
         default:
