@@ -200,7 +200,7 @@ static osTimerId double_hold_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
 #define DOUBLE_HOLD_IDLE_TIMEOUT_MS 500
 /* Fix12 safety: never repeat indefinitely if TWS KEY_UP is lost. */
-#define DOUBLE_HOLD_MAX_REPEAT_COUNT 5
+#define DOUBLE_HOLD_MAX_REPEAT_COUNT 15
 static uint8_t g_double_hold_repeat_count = 0;
 uint8_t button_hold_type = 0xff;
 
