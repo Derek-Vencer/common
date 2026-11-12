@@ -187,6 +187,14 @@ extern "C" void ntt_pairing_case_auto_request(void)
     ntt_pairing_case_try_auto_start();
 }
 
+/* Test20: allow one boot-only UART idle recheck while an authorized
+ * automatic pairing request is waiting for both case states. */
+extern "C" bool ntt_pairing_case_boot_uart_grace_allowed(void)
+{
+    return g_ntt_pairing_auto_pending && g_ntt_pairing_open_seen &&
+           !g_ntt_pairing_case_blocked;
+}
+
 extern "C" bool ntt_pairing_both_in_case_allowed(void)
 {
     return bts_tws_if_is_tws_link_connected() &&
