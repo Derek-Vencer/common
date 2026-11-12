@@ -372,6 +372,9 @@ void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *bu
  Modification : Created function
 
 *****************************************************************************/
+extern "C" void ntt_pair_txpwr_boost_start(void);
+extern "C" void ntt_pair_txpwr_boost_stop(void);
+
 void app_ibrt_customif_pairing_mode_entry()
 {
     if (!ntt_pairing_case_can_start())
@@ -386,6 +389,7 @@ void app_ibrt_customif_pairing_mode_entry()
         app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
         return;
     }
+    ntt_pair_txpwr_boost_stop();
     app_ui_config_t* p_app_ui_config = app_ui_get_config();
     uint8_t select_sco_device = app_bt_audio_get_curr_playing_sco();
     uint8_t select_a2dp_device = app_bt_audio_get_curr_playing_a2dp();
@@ -805,6 +809,7 @@ void app_ibrt_customif_pairing_mode_exit()
      * pair=1 = pairing finished / LED OFF.
      */
     ntt_mobile_pairing_mode_exit(false);
+    ntt_pair_txpwr_boost_start();
 
 pairing_exit_common:
 
