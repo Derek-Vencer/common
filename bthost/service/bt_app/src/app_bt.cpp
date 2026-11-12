@@ -3837,7 +3837,7 @@ extern "C" int32_t bt_syn_get_clkoffset(uint16_t conhdl);
 #endif
 
 /* BES1306P controller override flag (not exported by bt_drv_reg_op.h). */
-void btdrv_regop_set_txpwr_flg(uint32_t flg);
+extern "C" void btdrv_regop_set_txpwr_flg(uint32_t flg);
 /* Test22: only peer TWS TX power, never RX gain or mobile ACL. */
 #define NTT_PAIR_TXPWR_BOOST_MS 180000U
 static osTimerId s_ntt_pair_txpwr_timer = NULL;
