@@ -4388,21 +4388,13 @@ void ntt_case_state_peer_changed_callback(
                 ntt_first_out_role_check_stop();
 
                 /*
-                 * Test23-B: first-out Master may have a stale started
-                 * flag after the mobile disconnects while peer is IN.
-                 * The peer OUT transition is the one-shot recovery point.
-                 * Never retry if a mobile/snoop ACL already exists.
+                 * Test23-C: started=1 can mean a page is still pending.
+                 * Never reset it solely because the ACL is not connected.
                  */
-                if (g_ntt_first_out_reconnect_started &&
-                    !app_bt_ibrt_has_mobile_link_connected() &&
-                    !app_bt_ibrt_has_snoop_link_connected() &&
-                    !ntt_first_no_mobile_pair_mode &&
-                    !ntt_user_manual_pairing_request &&
-                    !pairing_exited_on_out)
+                if (g_ntt_first_out_reconnect_started)
                 {
                     EARBUDS_TRACE(0,
-                        "[NTT_FIRST_OUT][TEST23B] PEER OUT stale started, MASTER retry");
-                    ntt_first_out_master_recovery("TEST23B_PEER_OUT_STALE_STARTED");
+                        "[NTT_FIRST_OUT][TEST23C] PEER OUT pending reconnect; no duplicate page");
                 }
                 else
                 {
@@ -4445,6 +4437,16 @@ void ntt_case_state_peer_changed_callback(
              * Recover only on the peer OUT transition, by the current
              * Master, and only if no reconnect has already been started.
              */
+            EARBUDS_TRACE(8,
+                "[NTT_FIRST_OUT][TEST23C] PEER gate master=%d owner=%d started=%d snoop=%d no_record=%d manual=%d exit_block=%d",
+                ntt_first_out_is_master(),
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started,
+                app_bt_ibrt_has_snoop_link_connected(),
+                ntt_first_no_mobile_pair_mode,
+                ntt_user_manual_pairing_request,
+                pairing_exited_on_out);
+
             if (ntt_first_out_is_master() &&
                 !g_ntt_first_out_owner &&
                 !g_ntt_first_out_reconnect_started &&
