@@ -4107,21 +4107,17 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     }
 
     /*
-     * Test6: A local put-out is a new reconnect trigger even if
-     * the peer is already OUT_CASE. Claim reconnect ownership
-     * for this event; the existing owner flow performs Slave->
-     * Master role switch and waits for completion before reconnect.
-     * Peer-only callbacks must not claim this ownership.
+     * Test21-B: peer already OUT means this ear is later-out.
+     * Do not claim First-Out ownership or request another role switch.
+     * A second role switch during mobile reconnect may disrupt A2DP trigger.
      */
     if (peer_state == NTT_CASE_STATE_OUT_CASE &&
         !g_ntt_local_was_first_out)
     {
-        EARBUDS_TRACE(2,
-            "[NTT_PUTOUT] local OUT, peer OUT, mobile disconnected: claim reconnect role=%d",
-            ui_role);
-
-        g_ntt_local_was_first_out = true;
-        ntt_first_out_take_master_and_reconnect();
+        EARBUDS_TRACE(3,
+            "[NTT_FIRST_OUT][TEST21B] later-out peer OUT role=%d owner=%d started=%d",
+            ui_role, g_ntt_first_out_owner, g_ntt_first_out_reconnect_started);
+        ntt_later_out_keep_slave();
         return;
     }
 
