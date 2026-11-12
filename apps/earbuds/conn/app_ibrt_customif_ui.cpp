@@ -4122,7 +4122,19 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         EARBUDS_TRACE(3,
             "[NTT_FIRST_OUT][TEST21B] later-out peer OUT role=%d owner=%d started=%d",
             ui_role, g_ntt_first_out_owner, g_ntt_first_out_reconnect_started);
-        ntt_later_out_keep_slave();
+        /* Test23-B: later-out MASTER must recover when no owner exists. */
+        if (ntt_first_out_is_master() &&
+            !g_ntt_first_out_owner &&
+            !g_ntt_first_out_reconnect_started &&
+            !app_bt_ibrt_has_snoop_link_connected())
+        {
+            EARBUDS_TRACE(0, "[NTT_FIRST_OUT][TEST23B] LOCAL later-out MASTER recovery");
+            ntt_first_out_master_recovery("TEST23B_LOCAL_LATER_OUT_MASTER");
+        }
+        else
+        {
+            ntt_later_out_keep_slave();
+        }
         return;
     }
 
@@ -4375,7 +4387,27 @@ void ntt_case_state_peer_changed_callback(
 
                 ntt_first_out_role_check_stop();
 
-                ntt_first_out_start_mobile_reconnect();
+                /*
+                 * Test23-B: first-out Master may have a stale started
+                 * flag after the mobile disconnects while peer is IN.
+                 * The peer OUT transition is the one-shot recovery point.
+                 * Never retry if a mobile/snoop ACL already exists.
+                 */
+                if (g_ntt_first_out_reconnect_started &&
+                    !app_bt_ibrt_has_mobile_link_connected() &&
+                    !app_bt_ibrt_has_snoop_link_connected() &&
+                    !ntt_first_no_mobile_pair_mode &&
+                    !ntt_user_manual_pairing_request &&
+                    !pairing_exited_on_out)
+                {
+                    EARBUDS_TRACE(0,
+                        "[NTT_FIRST_OUT][TEST23B] PEER OUT stale started, MASTER retry");
+                    ntt_first_out_master_recovery("TEST23B_PEER_OUT_STALE_STARTED");
+                }
+                else
+                {
+                    ntt_first_out_start_mobile_reconnect();
+                }
             }
             else
             {
