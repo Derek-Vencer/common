@@ -3093,6 +3093,8 @@ static bool g_ntt_first_out_role_switch_requested = false;
  * 避免重複執行 opening reconnect。
  */
 static bool g_ntt_first_out_reconnect_started = false;
+/* Set only when an actual mobile reconnect is initiated. */
+static bool g_ntt_first_out_reconnect_inflight = false;
 
 /*
  * true:
@@ -3276,6 +3278,7 @@ static void ntt_first_out_start_mobile_reconnect(void)
     }
 
     g_ntt_first_out_reconnect_started = true;
+    g_ntt_first_out_reconnect_inflight = true;
 
     EARBUDS_TRACE(3,"[NTT_FIRST_OUT] MASTER reconnect mobile local=%d peer=%d",
         ntt_case_state_get_local(),
@@ -3414,6 +3417,7 @@ static void ntt_first_out_master_recovery(const char *reason)
     g_ntt_first_out_owner = true;
     g_ntt_first_out_role_switch_requested = false;
     g_ntt_first_out_reconnect_started = false;
+    g_ntt_first_out_reconnect_inflight = false;
     g_ntt_first_out_role_check_count = 0;
 
     ntt_first_out_role_check_stop();
@@ -3651,6 +3655,7 @@ static void ntt_later_out_keep_slave(void)
     g_ntt_first_out_owner = false;
     g_ntt_first_out_role_switch_requested = false;
     g_ntt_first_out_reconnect_started = false;
+    g_ntt_first_out_reconnect_inflight = false;
     g_ntt_local_was_first_out = false;
     g_ntt_first_out_role_check_count = 0;
 
@@ -4039,6 +4044,7 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
             "mobile already connected");
 
         g_ntt_first_out_reconnect_started = true;
+        g_ntt_first_out_reconnect_inflight = false;
         return;
     }
 
@@ -4437,6 +4443,18 @@ void ntt_case_state_peer_changed_callback(
              * Recover only on the peer OUT transition, by the current
              * Master, and only if no reconnect has already been started.
              */
+            EARBUDS_TRACE(9,
+                "[NTT_FIRST_OUT][TEST23D] PEER gate master=%d owner=%d started=%d inflight=%d snoop=%d no_record=%d manual=%d exit_block=%d",
+                ntt_first_out_is_master(),
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started,
+                g_ntt_first_out_reconnect_inflight,
+                app_bt_ibrt_has_snoop_link_connected(),
+                ntt_first_no_mobile_pair_mode,
+                ntt_user_manual_pairing_request,
+                pairing_exited_on_out);
+
+            /* Original Test23-C gate retained below for comparison. */
             EARBUDS_TRACE(8,
                 "[NTT_FIRST_OUT][TEST23C] PEER gate master=%d owner=%d started=%d snoop=%d no_record=%d manual=%d exit_block=%d",
                 ntt_first_out_is_master(),
@@ -4449,7 +4467,8 @@ void ntt_case_state_peer_changed_callback(
 
             if (ntt_first_out_is_master() &&
                 !g_ntt_first_out_owner &&
-                !g_ntt_first_out_reconnect_started &&
+                (!g_ntt_first_out_reconnect_started ||
+                 !g_ntt_first_out_reconnect_inflight) &&
                 !app_bt_ibrt_has_mobile_link_connected() &&
                 !app_bt_ibrt_has_snoop_link_connected() &&
                 !ntt_first_no_mobile_pair_mode &&
@@ -4457,7 +4476,7 @@ void ntt_case_state_peer_changed_callback(
                 !pairing_exited_on_out)
             {
                 EARBUDS_TRACE(0,
-                    "[NTT_FIRST_OUT][TEST23A] both OUT owner lost, MASTER recovery");
+                    "[NTT_FIRST_OUT][TEST23D] PEER OUT MASTER recovery (no active page)");
                 ntt_first_out_master_recovery("TEST23A_BOTH_OUT_OWNER_LOST");
             }
             else
