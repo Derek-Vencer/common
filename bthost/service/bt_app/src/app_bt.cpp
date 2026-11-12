@@ -3836,6 +3836,45 @@ void app_bt_hfp_state_checker(void)
 extern "C" int32_t bt_syn_get_clkoffset(uint16_t conhdl);
 #endif
 
+/* Test22: only peer TWS TX power, never RX gain or mobile ACL. */
+#define NTT_PAIR_TXPWR_BOOST_MS 180000U
+static osTimerId s_ntt_pair_txpwr_timer = NULL;
+static bool s_ntt_pair_txpwr_boost = false;
+static void ntt_pair_txpwr_timeout(void const *argument)
+{
+    (void)argument;
+    s_ntt_pair_txpwr_boost = false;
+    btdrv_regop_set_txpwr_flg(0);
+    DEBUG_INFO(0, "[NTT_PAIR_TXPWR] BOOST_TIMEOUT RESTORE_AUTO_POWER_CONTROL");
+}
+osTimerDef(NTT_PAIR_TXPWR_TIMER, ntt_pair_txpwr_timeout);
+
+extern "C" void ntt_pair_txpwr_boost_stop(void)
+{
+    if (s_ntt_pair_txpwr_timer) osTimerStop(s_ntt_pair_txpwr_timer);
+    if (s_ntt_pair_txpwr_boost)
+    {
+        s_ntt_pair_txpwr_boost = false;
+        btdrv_regop_set_txpwr_flg(0);
+        DEBUG_INFO(0, "[NTT_PAIR_TXPWR] BOOST_CANCEL RESTORE_AUTO_POWER_CONTROL");
+    }
+}
+
+extern "C" void ntt_pair_txpwr_boost_start(void)
+{
+    ntt_pair_txpwr_boost_stop();
+    if (!s_ntt_pair_txpwr_timer)
+        s_ntt_pair_txpwr_timer = osTimerCreate(osTimer(NTT_PAIR_TXPWR_TIMER), osTimerOnce, NULL);
+    if (!s_ntt_pair_txpwr_timer ||
+        osTimerStart(s_ntt_pair_txpwr_timer, NTT_PAIR_TXPWR_BOOST_MS) != osOK)
+    {
+        DEBUG_INFO(0, "[NTT_PAIR_TXPWR] ERROR timer unavailable");
+        return;
+    }
+    s_ntt_pair_txpwr_boost = true;
+    DEBUG_INFO(0, "[NTT_PAIR_TXPWR] BOOST_START idx=3 duration=180000ms");
+}
+
 bool app_bt_checker_print_link_state(const char* tag, btif_remote_device_t *btm_conn)
 {
     btif_cmgr_handler_t *cmgr_handler = NULL;
@@ -3866,6 +3905,12 @@ bool app_bt_checker_print_link_state(const char* tag, btif_remote_device_t *btm_
         if(ret)
         {
             app_bt_get_tx_power_idx(conhdl, &tx_power_id);
+            if (s_ntt_pair_txpwr_boost && tag && strcmp(tag, "PEER TWS") == 0)
+            {
+                btdrv_regop_host_set_txpwr(conhdl, 3);
+                DEBUG_INFO(2, "[NTT_PAIR_TXPWR] BOOST_ACTIVE hdl=0x%x requested_idx=3 reported_idx=%d",
+                           conhdl, tx_power_id);
+            }
             DEBUG_INFO(3, "%s RSSI=%d,RX gain =%d,TXpwr id=%d,Piconet CLK=0x%x", tag ? tag : "",link_agc_info.rssi,
                 link_agc_info.rxgain, tx_power_id,bt_syn_get_curr_ticks(conhdl));
 
