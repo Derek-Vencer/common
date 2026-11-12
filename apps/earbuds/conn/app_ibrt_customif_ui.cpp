@@ -4407,7 +4407,29 @@ void ntt_case_state_peer_changed_callback(
                 ui_role,
                 g_ntt_first_out_owner);
 
-            ntt_later_out_keep_slave();
+            /*
+             * Test23-A: the first-out owner can be cleared after the
+             * mobile disconnects while the second bud is still IN_CASE.
+             * Recover only on the peer OUT transition, by the current
+             * Master, and only if no reconnect has already been started.
+             */
+            if (ntt_first_out_is_master() &&
+                !g_ntt_first_out_owner &&
+                !g_ntt_first_out_reconnect_started &&
+                !app_bt_ibrt_has_mobile_link_connected() &&
+                !app_bt_ibrt_has_snoop_link_connected() &&
+                !ntt_first_no_mobile_pair_mode &&
+                !ntt_user_manual_pairing_request &&
+                !pairing_exited_on_out)
+            {
+                EARBUDS_TRACE(0,
+                    "[NTT_FIRST_OUT][TEST23A] both OUT owner lost, MASTER recovery");
+                ntt_first_out_master_recovery("TEST23A_BOTH_OUT_OWNER_LOST");
+            }
+            else
+            {
+                ntt_later_out_keep_slave();
+            }
         }
 
         return;
