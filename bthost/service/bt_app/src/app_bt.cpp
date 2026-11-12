@@ -3874,6 +3874,17 @@ extern "C" void ntt_pair_txpwr_boost_start(void)
         return;
     }
     s_ntt_pair_txpwr_boost = true;
+    /* Apply immediately when the peer ACL already exists; later log checks reapply. */
+    if (app_bt_manager.tws_conn.btm_conn)
+    {
+        bt_bdaddr_t *peer = btif_me_get_remote_device_bdaddr(app_bt_manager.tws_conn.btm_conn);
+        if (peer)
+        {
+            uint16_t peer_handle = btif_me_get_acl_conn_handle(peer);
+            btdrv_regop_host_set_txpwr(peer_handle, 3);
+            DEBUG_INFO(1, "[NTT_PAIR_TXPWR] BOOST_APPLY hdl=0x%x idx=3", peer_handle);
+        }
+    }
     DEBUG_INFO(0, "[NTT_PAIR_TXPWR] BOOST_START idx=3 duration=180000ms");
 }
 
