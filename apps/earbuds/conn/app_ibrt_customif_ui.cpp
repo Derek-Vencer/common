@@ -3243,6 +3243,18 @@ static void ntt_first_out_start_mobile_reconnect(void)
         return;
     }
 
+    /*
+     * Test R8: a local IBRT snoop handle means the phone ACL is already
+     * represented by the peer. Do not page the same phone again.
+     * Keep this separate from the direct mobile ACL check below.
+     */
+    if (app_bt_ibrt_has_snoop_link_connected())
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT][R8] skip mobile reconnect: snoop already connected");
+        g_ntt_first_out_reconnect_started = true;
+        return;
+    }
+
     if (app_bt_ibrt_has_mobile_link_connected())
     {
         EARBUDS_TRACE(0,"[NTT_FIRST_OUT] mobile already connected");
