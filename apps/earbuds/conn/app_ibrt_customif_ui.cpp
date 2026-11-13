@@ -4278,10 +4278,49 @@ void ntt_case_state_peer_changed_callback(
          * state; never initiate reconnect from peer IN_CASE.
          * Existing mobile links are intentionally untouched.
          */
-        if (local_state == NTT_CASE_STATE_OUT_CASE && !mobile_connected)
+        /*
+         * Test23-E: a peer IN_CASE event ends the previous peer-out
+         * cycle. When the phone is connected, the prior reconnect
+         * has finished and its owner/inflight flags must not survive
+         * into the next peer OUT transition.
+         *
+         * When the phone is disconnected but a page is still pending,
+         * keep the flags to prevent duplicate paging on a rapid
+         * IN->OUT cycle. Never reconnect on peer IN_CASE itself.
+         */
+        if (local_state == NTT_CASE_STATE_OUT_CASE)
         {
-            EARBUDS_TRACE(0,
-                "[NTT_INBOX] peer IN_CASE, mobile disconnected: skip first-out reconnect");
+            if (mobile_connected ||
+                (!g_ntt_first_out_reconnect_inflight &&
+                 !app_bt_ibrt_has_snoop_link_connected()))
+            {
+                EARBUDS_TRACE(4,
+                    "[NTT_FIRST_OUT][TEST23E] PEER IN reset cycle mobile=%d owner=%d started=%d inflight=%d",
+                    mobile_connected,
+                    g_ntt_first_out_owner,
+                    g_ntt_first_out_reconnect_started,
+                    g_ntt_first_out_reconnect_inflight);
+                g_ntt_first_out_owner = false;
+                g_ntt_local_was_first_out = false;
+                g_ntt_first_out_reconnect_started = false;
+                g_ntt_first_out_reconnect_inflight = false;
+                g_ntt_first_out_role_switch_requested = false;
+                ntt_first_out_role_check_stop();
+            }
+            else
+            {
+                EARBUDS_TRACE(3,
+                    "[NTT_FIRST_OUT][TEST23E] PEER IN preserve active page owner=%d started=%d inflight=%d",
+                    g_ntt_first_out_owner,
+                    g_ntt_first_out_reconnect_started,
+                    g_ntt_first_out_reconnect_inflight);
+            }
+
+            if (!mobile_connected)
+            {
+                EARBUDS_TRACE(0,
+                    "[NTT_INBOX] peer IN_CASE, mobile disconnected: skip first-out reconnect");
+            }
         }
 
         return;
