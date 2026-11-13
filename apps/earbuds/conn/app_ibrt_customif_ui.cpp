@@ -339,7 +339,7 @@ static void ntt_fast_remove_reconnect_timer_cb(void const *arg)
 }
 
 extern "C" void ntt_case_state_sync_local_update(bool in_case);
-extern "C" void set_er_inbox_status(uint8_t status);
+extern void set_er_inbox_status(uint8_t status);
 
 /* Test25-B: Fast Remove is an inferred OUT_CASE event, not UART 0x07. */
 extern "C" void ntt_fast_remove_case_out_update(void)
