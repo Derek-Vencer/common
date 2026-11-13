@@ -265,7 +265,35 @@ static void ntt_fast_remove_reconnect_timer_cb(void const *arg)
     if (bts_tws_if_is_tws_link_connected() &&
         app_ibrt_if_get_ui_role() == TWS_UI_MASTER) {
         EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] MASTER retry mobile");
-        app_bt_profile_connect_manager_opening_reconnect();
+        ++g_ntt_first_out_reconnect_diag_seq;
+    EARBUDS_TRACE(9,
+        "[NTT_FIRST_OUT][TEST23G] PAGE_START seq=%u local=%d peer=%d role=%d tws=%d mobile=%d snoop=%d owner=%d started=%d",
+        g_ntt_first_out_reconnect_diag_seq,
+        ntt_case_state_get_local(),
+        ntt_case_state_get_peer(),
+        app_ibrt_if_get_ui_role(),
+        bts_tws_if_is_tws_link_connected(),
+        app_bt_ibrt_has_mobile_link_connected(),
+        app_bt_ibrt_has_snoop_link_connected(),
+        g_ntt_first_out_owner,
+        g_ntt_first_out_reconnect_started);
+
+    if (g_ntt_first_out_reconnect_diag_timer == NULL)
+    {
+        g_ntt_first_out_reconnect_diag_timer =
+            osTimerCreate(osTimer(NTT_FIRST_OUT_RECONNECT_DIAG_TIMER), osTimerOnce, NULL);
+    }
+    if (g_ntt_first_out_reconnect_diag_timer != NULL)
+    {
+        osTimerStop(g_ntt_first_out_reconnect_diag_timer);
+        osTimerStart(g_ntt_first_out_reconnect_diag_timer, NTT_FIRST_OUT_RECONNECT_DIAG_MS);
+    }
+    else
+    {
+        EARBUDS_TRACE(0, "[NTT_FIRST_OUT][TEST23G] PAGE_CHECK timer create failed");
+    }
+
+    app_bt_profile_connect_manager_opening_reconnect();
         return;
     }
 
@@ -3095,6 +3123,34 @@ static bool g_ntt_first_out_role_switch_requested = false;
 static bool g_ntt_first_out_reconnect_started = false;
 /* Set only when an actual mobile reconnect is initiated. */
 static bool g_ntt_first_out_reconnect_inflight = false;
+
+/*
+ * Test23-G diagnostic only: observe the result of an opening reconnect
+ * without starting another page or changing the reconnect policy.
+ */
+#define NTT_FIRST_OUT_RECONNECT_DIAG_MS 12000
+static void ntt_first_out_reconnect_diag_handler(void const *param);
+osTimerDef(NTT_FIRST_OUT_RECONNECT_DIAG_TIMER, ntt_first_out_reconnect_diag_handler);
+static osTimerId g_ntt_first_out_reconnect_diag_timer = NULL;
+static uint32_t g_ntt_first_out_reconnect_diag_seq = 0;
+
+static void ntt_first_out_reconnect_diag_handler(void const *param)
+{
+    (void)param;
+    EARBUDS_TRACE(9,
+        "[NTT_FIRST_OUT][TEST23G] PAGE_CHECK seq=%u local=%d peer=%d role=%d tws=%d mobile=%d snoop=%d owner=%d started=%d inflight=%d",
+        g_ntt_first_out_reconnect_diag_seq,
+        ntt_case_state_get_local(),
+        ntt_case_state_get_peer(),
+        app_ibrt_if_get_ui_role(),
+        bts_tws_if_is_tws_link_connected(),
+        app_bt_ibrt_has_mobile_link_connected(),
+        app_bt_ibrt_has_snoop_link_connected(),
+        g_ntt_first_out_owner,
+        g_ntt_first_out_reconnect_started,
+        g_ntt_first_out_reconnect_inflight);
+}
+
 
 /*
  * true:
