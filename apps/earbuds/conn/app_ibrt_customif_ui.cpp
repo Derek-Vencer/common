@@ -3074,11 +3074,21 @@ extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 
     if (tws_connected && role == TWS_UI_MASTER)
     {
-        EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24A] MASTER IN, PEER OUT -> switch to SLAVE");
+        if (g_ntt_case_close_wait_poweroff)
+        {
+            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24B] role switch already pending");
+            return true;
+        }
 
+        EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24B] MASTER IN PEER OUT -> request SLAVE");
         g_ntt_case_close_wait_poweroff = true;
-
-        return app_ui_user_role_switch(false);
+        bool requested = app_ui_user_role_switch(false);
+        if (!requested)
+        {
+            g_ntt_case_close_wait_poweroff = false;
+            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24B] role switch request rejected");
+        }
+        return requested;
     }
 
     return false;
@@ -4005,6 +4015,8 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 
         ntt_case_check_pause_music_when_both_in();
 
+        /* Test24-B: start role handover at the actual IN_CASE event. */
+        ntt_case_close_try_role_switch_before_shutdown();
         ntt_first_out_reset_local();
         return;
     }
@@ -4333,6 +4345,13 @@ void ntt_case_state_peer_changed_callback(
      */
     ntt_case_check_pause_music_when_both_in();
     ntt_pairing_case_try_auto_start();
+
+    /* Test24-B: if peer state arrives after local IN, retry eligibility. */
+    if (local_state == NTT_CASE_STATE_IN_CASE &&
+        state == NTT_CASE_STATE_OUT_CASE)
+    {
+        ntt_case_close_try_role_switch_before_shutdown();
+    }
 
     /*
      * Peer IN_CASE。
