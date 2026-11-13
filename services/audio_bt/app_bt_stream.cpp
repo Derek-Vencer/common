@@ -251,15 +251,17 @@ void app_bt_stream_set_ext_sco_data_path(void(*playback_cb)(uint8_t *buf, uint32
 
 extern "C" void ntt_audio_output_mute_refresh(void)
 {
-    if (get_er_inbox_status())
+    // TEST21-A: diagnostic only; retain existing DAC mute behavior.
+    const bool inbox = get_er_inbox_status();
+    AUDIO_BT_TRACE(2, "[NTT_AUDIO_MUTE][TEST21] inbox=%d dac_mute_cmd=%d",
+                   inbox, inbox);
+    if (inbox)
     {
         hal_codec_dac_mute(true);
-        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud in box, force speaker mute");
     }
     else
     {
         hal_codec_dac_mute(false);
-        //AUDIO_BT_TRACE(0, "[NTT_AUDIO] earbud out box, release speaker un-mute");
     }
 }
 
@@ -4652,6 +4654,8 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
         {
             af_stream_start(AUD_STREAM_ID_0, AUD_STREAM_PLAYBACK);
+            AUDIO_BT_TRACE(1, "[NTT_AUDIO_START][TEST21] A2DP playback started inbox=%d",
+                           get_er_inbox_status());
             ntt_audio_output_mute_refresh();
             osThreadSetPriority(localThread, currentPriority);
         }

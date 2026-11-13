@@ -74,6 +74,10 @@ extern "C" bool ntt_auto_pairing_led_active(void);
 static osTimerId uart_idle_timer_id = NULL;
 // 空闲超时时间（5秒）
 #define UART_IDLE_TIMEOUT_MS 2000
+/* Test20: one extra boot-only check for temporary 1-Wire silence. */
+#define NTT_BOOT_PAIR_UART_GRACE_MS 3000
+extern "C" bool ntt_pairing_case_boot_uart_grace_allowed(void);
+static bool s_ntt_boot_pair_uart_grace_used = false;
 // 空闲超时回调函数
 static void uart_idle_timeout_callback(void const *argument);
 void uart_idle_detection_init(void);
@@ -2499,6 +2503,25 @@ static void uart_idle_timeout_callback(void const *argument)
     bool ovp = false;
     bool shorted = false;
     bool vin_normal = false;
+
+    /* Test20: The case can briefly stop 1-Wire traffic during boot.
+     * A single 2s idle must not revoke an authorized auto-pair OPEN edge.
+     * This exception is one-shot; a further timeout takes the normal
+     * OUT_CASE path, preserving genuine POGO removal detection.
+     */
+    if (!s_ntt_boot_pair_uart_grace_used &&
+        ntt_pairing_case_boot_uart_grace_allowed())
+    {
+        s_ntt_boot_pair_uart_grace_used = true;
+        DBGPRINT("[NTT_PAIR_CASE][TEST20] boot UART idle: defer OUT_CASE %dms",
+                 NTT_BOOT_PAIR_UART_GRACE_MS);
+        if (uart_idle_timer_id != NULL &&
+            osTimerStart(uart_idle_timer_id, NTT_BOOT_PAIR_UART_GRACE_MS) == osOK)
+        {
+            return;
+        }
+        DBGPRINT("[NTT_PAIR_CASE][TEST20] grace timer failed, use normal OUT_CASE");
+    }
 
     g_ntt_1wire_active = false;
 

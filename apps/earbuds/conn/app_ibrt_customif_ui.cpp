@@ -117,6 +117,67 @@ extern uint8_t out_of_case_reconnect;
 extern bool ntt_manual_pairing_mode;
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
+/* Test24-C: independent in-case role handover state. */
+#define NTT_INBOX_ROLE_RETRY_MS 200
+#define NTT_INBOX_ROLE_MAX_RETRIES 10
+static bool g_ntt_inbox_role_pending = false;
+static uint8_t g_ntt_inbox_role_retry_count = 0;
+static void ntt_inbox_role_retry_cb(void const *param);
+osTimerDef(NTT_INBOX_ROLE_RETRY_TIMER, ntt_inbox_role_retry_cb);
+static osTimerId g_ntt_inbox_role_retry_timer = NULL;
+static void ntt_inbox_role_stop(void)
+{
+    if (g_ntt_inbox_role_retry_timer != NULL)
+        osTimerStop(g_ntt_inbox_role_retry_timer);
+    g_ntt_inbox_role_pending = false;
+    g_ntt_inbox_role_retry_count = 0;
+}
+static void ntt_inbox_role_schedule_retry(void)
+{
+    if (g_ntt_inbox_role_retry_count >= NTT_INBOX_ROLE_MAX_RETRIES)
+    {
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry limit reached");
+        return;
+    }
+    if (g_ntt_inbox_role_retry_timer == NULL)
+        g_ntt_inbox_role_retry_timer = osTimerCreate(osTimer(NTT_INBOX_ROLE_RETRY_TIMER), osTimerOnce, NULL);
+    if (g_ntt_inbox_role_retry_timer != NULL)
+        osTimerStart(g_ntt_inbox_role_retry_timer, NTT_INBOX_ROLE_RETRY_MS);
+    else
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry timer unavailable");
+}
+static void ntt_inbox_role_retry_cb(void const *param)
+{
+    (void)param;
+    if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
+        ntt_case_state_get_peer() != NTT_CASE_STATE_OUT_CASE ||
+        !bts_tws_if_is_tws_link_connected() ||
+        app_ibrt_if_get_ui_role() != TWS_UI_MASTER)
+    {
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry stopped: conditions changed");
+        ntt_inbox_role_stop();
+        return;
+    }
+    if (g_ntt_inbox_role_pending)
+    {
+        /* An accepted SDK request is not a rejection; never duplicate it. */
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] accepted request still pending");
+        return;
+    }
+    ++g_ntt_inbox_role_retry_count;
+    EARBUDS_TRACE(1, "[NTT_INBOX_ROLE][TEST24C] retry=%u", g_ntt_inbox_role_retry_count);
+    if (app_ui_user_role_switch(false))
+    {
+        g_ntt_inbox_role_pending = true;
+        g_ntt_case_close_wait_poweroff = true;
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry accepted");
+    }
+    else
+    {
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry rejected");
+        ntt_inbox_role_schedule_retry();
+    }
+}
 extern void earBudsCloseOff_PogonIn_StopTimer(void);
 #endif
 extern uint8_t out_of_case_reconnect;
@@ -185,6 +246,14 @@ extern "C" void ntt_pairing_case_auto_request(void)
     g_ntt_pairing_auto_pending = true;
     EARBUDS_TRACE(0, "[NTT_PAIR_CASE] AUTO PENDING");
     ntt_pairing_case_try_auto_start();
+}
+
+/* Test20: allow one boot-only UART idle recheck while an authorized
+ * automatic pairing request is waiting for both case states. */
+extern "C" bool ntt_pairing_case_boot_uart_grace_allowed(void)
+{
+    return g_ntt_pairing_auto_pending && g_ntt_pairing_open_seen &&
+           !g_ntt_pairing_case_blocked;
 }
 
 extern "C" bool ntt_pairing_both_in_case_allowed(void)
@@ -257,7 +326,7 @@ static void ntt_fast_remove_reconnect_timer_cb(void const *arg)
     if (bts_tws_if_is_tws_link_connected() &&
         app_ibrt_if_get_ui_role() == TWS_UI_MASTER) {
         EARBUDS_TRACE(0, "[NTT_FAST_REMOVE_RECON] MASTER retry mobile");
-        app_bt_profile_connect_manager_opening_reconnect();
+    app_bt_profile_connect_manager_opening_reconnect();
         return;
     }
 
@@ -364,6 +433,9 @@ void app_ibrt_customif_ui_vender_event_handler_ind(uint8_t evt_type, uint8_t *bu
  Modification : Created function
 
 *****************************************************************************/
+extern "C" void ntt_pair_txpwr_boost_start(void);
+extern "C" void ntt_pair_txpwr_boost_stop(void);
+
 void app_ibrt_customif_pairing_mode_entry()
 {
     if (!ntt_pairing_case_can_start())
@@ -378,6 +450,7 @@ void app_ibrt_customif_pairing_mode_entry()
         app_bt_set_access_mode(BTIF_BAM_CONNECTABLE_ONLY);
         return;
     }
+    ntt_pair_txpwr_boost_stop();
     app_ui_config_t* p_app_ui_config = app_ui_get_config();
     uint8_t select_sco_device = app_bt_audio_get_curr_playing_sco();
     uint8_t select_a2dp_device = app_bt_audio_get_curr_playing_a2dp();
@@ -464,8 +537,8 @@ EARBUDS_TRACE(0,
  * Does not modify AFH assessment or IBRT role switching.
  */
 
-#define NTT_AFH_MONITOR_INTERVAL_MS     5000
-#define NTT_AFH_MONITOR_DURATION_MS     60000
+#define NTT_AFH_MONITOR_INTERVAL_MS     1000
+#define NTT_AFH_MONITOR_DURATION_MS     20000
 
 static osTimerId ntt_afh_monitor_timer = NULL;
 
@@ -562,7 +635,7 @@ void ntt_afh_monitor_start(void)
 
     ntt_afh_monitor_elapsed_ms = 0;
     ntt_afh_monitor_running = true;
-    EARBUDS_TRACE(2,"[NTT_AFH_MON] START duration=%u ms interval=%u ms", NTT_AFH_MONITOR_DURATION_MS, NTT_AFH_MONITOR_INTERVAL_MS);
+    EARBUDS_TRACE(0,"[NTT_AFH_MON] START duration=20s interval=1s");
 
     /*
      * Initial sample at t=0.
@@ -797,6 +870,7 @@ void app_ibrt_customif_pairing_mode_exit()
      * pair=1 = pairing finished / LED OFF.
      */
     ntt_mobile_pairing_mode_exit(false);
+    ntt_pair_txpwr_boost_start();
 
 pairing_exit_common:
 
@@ -1073,7 +1147,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             * Only monitor the actual AFH Channel Map.
             */
 
-            ntt_afh_monitor_start();
+            //ntt_afh_monitor_start();
 
             break;
         case IBRT_CONN_A2DP_SUSPENED:
@@ -1081,7 +1155,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
             if (app_bt_audio_count_streaming_a2dp() == 0)
             {
                 EARBUDS_TRACE(0,"[NTT_AFH_MON] A2DP suspended, stop monitor");
-                ntt_afh_monitor_stop();
+                //ntt_afh_monitor_stop();
             }
 
             break;
@@ -1091,7 +1165,7 @@ void app_ibrt_customif_a2dp_callback(const bt_bdaddr_t* addr, ibrt_conn_a2dp_sta
 			{
                 bt_drv_reg_op_afh_assess_en(false);
                 EARBUDS_TRACE(0,"[NTT_AFH_MON] A2DP closed, stop monitor");
-                ntt_afh_monitor_stop();            
+                //ntt_afh_monitor_stop();            
 			}
             break;
         default:
@@ -2208,6 +2282,22 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
     }
 
 #ifdef IBRT
+    if (g_ntt_inbox_role_pending)
+    {
+        EARBUDS_TRACE(2, "[NTT_INBOX_ROLE][TEST24C] completion role=%d err=%d", current_role, errCode);
+        g_ntt_inbox_role_pending = false;
+        if (errCode &&
+            ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+            ntt_case_state_get_peer() == NTT_CASE_STATE_OUT_CASE)
+        {
+            g_ntt_case_close_wait_poweroff = false;
+            ntt_inbox_role_schedule_retry();
+        }
+        else
+        {
+            ntt_inbox_role_stop();
+        }
+    }
     if (g_ntt_case_close_wait_poweroff)
     {
         EARBUDS_TRACE(2,
@@ -3037,20 +3127,50 @@ extern "C" bool ntt_case_close_role_switch_can_shutdown(void)
 
 extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 {
-    if (ntt_case_close_both_in_case())
-    {
-        EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] both in case -> skip role switch");
+    /*
+     * Test24-A: Only hand Master to the earbud that is confirmed
+     * OUT_CASE. BOTH IN_CASE (or UNKNOWN peer) must not switch.
+     */
+    NTT_CASE_STATE_E local_state = ntt_case_state_get_local();
+    NTT_CASE_STATE_E peer_state = ntt_case_state_get_peer();
+    TWS_UI_ROLE_E role = app_ibrt_if_get_ui_role();
+    bool tws_connected = bts_tws_if_is_tws_link_connected();
 
+    EARBUDS_TRACE(4,
+        "[NTT_INBOX_ROLE][TEST24A] local=%d peer=%d role=%d tws=%d",
+        local_state, peer_state, role, tws_connected);
+
+    if (local_state != NTT_CASE_STATE_IN_CASE ||
+        peer_state != NTT_CASE_STATE_OUT_CASE)
+    {
+        EARBUDS_TRACE(2,
+            "[NTT_INBOX_ROLE][TEST24A] skip switch: local=%d peer=%d",
+            local_state, peer_state);
         return false;
     }
 
-    if (bts_tws_if_is_tws_link_connected() && app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+    if (tws_connected && role == TWS_UI_MASTER)
     {
-        EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] master switch to slave by UI API");
-
-        g_ntt_case_close_wait_poweroff = true;
-
-        return app_ui_user_role_switch(false);
+        if (g_ntt_inbox_role_pending)
+        {
+            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24C] request already pending");
+            return true;
+        }
+        /* A previous shutdown flag must never block a new IN_CASE cycle. */
+        EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24C] MASTER IN PEER OUT -> request SLAVE");
+        bool requested = app_ui_user_role_switch(false);
+        if (requested)
+        {
+            g_ntt_inbox_role_pending = true;
+            g_ntt_case_close_wait_poweroff = true;
+        }
+        else
+        {
+            g_ntt_case_close_wait_poweroff = false;
+            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24C] request rejected; schedule retry");
+            ntt_inbox_role_schedule_retry();
+        }
+        return requested;
     }
 
     return false;
@@ -3059,6 +3179,7 @@ extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 extern "C" void ntt_case_close_role_switch_reset(void)
 {
     g_ntt_case_close_wait_poweroff = false;
+    ntt_inbox_role_stop();
 }
 
 
@@ -3080,6 +3201,36 @@ static bool g_ntt_first_out_role_switch_requested = false;
  * 避免重複執行 opening reconnect。
  */
 static bool g_ntt_first_out_reconnect_started = false;
+/* Set only when an actual mobile reconnect is initiated. */
+static bool g_ntt_first_out_reconnect_inflight = false;
+
+/*
+ * Test23-G diagnostic only: observe the result of an opening reconnect
+ * without starting another page or changing the reconnect policy.
+ */
+#define NTT_FIRST_OUT_RECONNECT_DIAG_MS 12000
+static void ntt_first_out_reconnect_diag_handler(void const *param);
+osTimerDef(NTT_FIRST_OUT_RECONNECT_DIAG_TIMER, ntt_first_out_reconnect_diag_handler);
+static osTimerId g_ntt_first_out_reconnect_diag_timer = NULL;
+static uint32_t g_ntt_first_out_reconnect_diag_seq = 0;
+
+static void ntt_first_out_reconnect_diag_handler(void const *param)
+{
+    (void)param;
+    EARBUDS_TRACE(9,
+        "[NTT_FIRST_OUT][TEST23G] PAGE_CHECK seq=%u local=%d peer=%d role=%d tws=%d mobile=%d snoop=%d owner=%d started=%d inflight=%d",
+        g_ntt_first_out_reconnect_diag_seq,
+        ntt_case_state_get_local(),
+        ntt_case_state_get_peer(),
+        app_ibrt_if_get_ui_role(),
+        bts_tws_if_is_tws_link_connected(),
+        app_bt_ibrt_has_mobile_link_connected(),
+        app_bt_ibrt_has_snoop_link_connected(),
+        g_ntt_first_out_owner,
+        g_ntt_first_out_reconnect_started,
+        g_ntt_first_out_reconnect_inflight);
+}
+
 
 /*
  * true:
@@ -3243,6 +3394,18 @@ static void ntt_first_out_start_mobile_reconnect(void)
         return;
     }
 
+    /*
+     * Test R8: a local IBRT snoop handle means the phone ACL is already
+     * represented by the peer. Do not page the same phone again.
+     * Keep this separate from the direct mobile ACL check below.
+     */
+    if (app_bt_ibrt_has_snoop_link_connected())
+    {
+        EARBUDS_TRACE(0,"[NTT_FIRST_OUT][R8] skip mobile reconnect: snoop already connected");
+        g_ntt_first_out_reconnect_started = true;
+        return;
+    }
+
     if (app_bt_ibrt_has_mobile_link_connected())
     {
         EARBUDS_TRACE(0,"[NTT_FIRST_OUT] mobile already connected");
@@ -3251,10 +3414,39 @@ static void ntt_first_out_start_mobile_reconnect(void)
     }
 
     g_ntt_first_out_reconnect_started = true;
+    g_ntt_first_out_reconnect_inflight = true;
 
     EARBUDS_TRACE(3,"[NTT_FIRST_OUT] MASTER reconnect mobile local=%d peer=%d",
         ntt_case_state_get_local(),
         ntt_case_state_get_peer());
+
+    ++g_ntt_first_out_reconnect_diag_seq;
+    EARBUDS_TRACE(9,
+    "[NTT_FIRST_OUT][TEST23G] PAGE_START seq=%u local=%d peer=%d role=%d tws=%d mobile=%d snoop=%d owner=%d started=%d",
+    g_ntt_first_out_reconnect_diag_seq,
+    ntt_case_state_get_local(),
+    ntt_case_state_get_peer(),
+    app_ibrt_if_get_ui_role(),
+    bts_tws_if_is_tws_link_connected(),
+    app_bt_ibrt_has_mobile_link_connected(),
+    app_bt_ibrt_has_snoop_link_connected(),
+    g_ntt_first_out_owner,
+    g_ntt_first_out_reconnect_started);
+
+    if (g_ntt_first_out_reconnect_diag_timer == NULL)
+    {
+    g_ntt_first_out_reconnect_diag_timer =
+        osTimerCreate(osTimer(NTT_FIRST_OUT_RECONNECT_DIAG_TIMER), osTimerOnce, NULL);
+    }
+    if (g_ntt_first_out_reconnect_diag_timer != NULL)
+    {
+    osTimerStop(g_ntt_first_out_reconnect_diag_timer);
+    osTimerStart(g_ntt_first_out_reconnect_diag_timer, NTT_FIRST_OUT_RECONNECT_DIAG_MS);
+    }
+    else
+    {
+    EARBUDS_TRACE(0, "[NTT_FIRST_OUT][TEST23G] PAGE_CHECK timer create failed");
+    }
 
     app_bt_profile_connect_manager_opening_reconnect();
 }
@@ -3389,6 +3581,7 @@ static void ntt_first_out_master_recovery(const char *reason)
     g_ntt_first_out_owner = true;
     g_ntt_first_out_role_switch_requested = false;
     g_ntt_first_out_reconnect_started = false;
+    g_ntt_first_out_reconnect_inflight = false;
     g_ntt_first_out_role_check_count = 0;
 
     ntt_first_out_role_check_stop();
@@ -3626,6 +3819,7 @@ static void ntt_later_out_keep_slave(void)
     g_ntt_first_out_owner = false;
     g_ntt_first_out_role_switch_requested = false;
     g_ntt_first_out_reconnect_started = false;
+    g_ntt_first_out_reconnect_inflight = false;
     g_ntt_local_was_first_out = false;
     g_ntt_first_out_role_check_count = 0;
 
@@ -3744,6 +3938,37 @@ static void ntt_case_out_slave_push_battery(void)
  * 0: 雙耳都放入充電盒後，才暫停音樂。
  */
 #define NTT_PAUSE_ON_ANY_EAR_IN_CASE 0
+/* Test24-D: confirm both case states after 200ms. */
+#define NTT_BOTH_IN_PAUSE_CONFIRM_MS 200
+static bool g_ntt_both_in_pause_confirm_pending = false;
+static void ntt_both_in_pause_confirm_cb(void const *param);
+osTimerDef(NTT_BOTH_IN_PAUSE_CONFIRM_TIMER, ntt_both_in_pause_confirm_cb);
+static osTimerId g_ntt_both_in_pause_confirm_timer = NULL;
+static void ntt_both_in_pause_confirm_cancel(void)
+{
+    if (g_ntt_both_in_pause_confirm_timer != NULL)
+        osTimerStop(g_ntt_both_in_pause_confirm_timer);
+    g_ntt_both_in_pause_confirm_pending = false;
+}
+static void ntt_both_in_pause_confirm_cb(void const *param)
+{
+    (void)param;
+    if (!g_ntt_both_in_pause_confirm_pending)
+        return;
+    g_ntt_both_in_pause_confirm_pending = false;
+    NTT_CASE_STATE_E local = ntt_case_state_get_local();
+    NTT_CASE_STATE_E peer = ntt_case_state_get_peer();
+    bool mobile = app_bt_ibrt_has_mobile_link_connected();
+    EARBUDS_TRACE(4, "[NTT_CASE_PAUSE][TEST24D] confirm local=%d peer=%d mobile=%d sent=%d",
+                 local, peer, mobile, g_ntt_both_in_pause_sent);
+    if (local == NTT_CASE_STATE_IN_CASE &&
+        peer == NTT_CASE_STATE_IN_CASE && mobile && !g_ntt_both_in_pause_sent)
+    {
+        g_ntt_both_in_pause_sent = true;
+        EARBUDS_TRACE(0, "[NTT_CASE_PAUSE][TEST24D] confirmed both IN -> pause");
+        app_key_handle_pause_music_on_pogo_in();
+    }
+}
 
 
 /*
@@ -3795,6 +4020,7 @@ static void ntt_case_check_pause_music_when_both_in(void)
      */
     if (!pause_condition)
     {
+        ntt_both_in_pause_confirm_cancel();
         if (g_ntt_both_in_pause_sent)
         {
             EARBUDS_TRACE(
@@ -3834,9 +4060,25 @@ static void ntt_case_check_pause_music_when_both_in(void)
         return;
     }
 
-    /*
-     * 先設定旗標，避免 callback 重入而重複發送。
-     */
+    /* Test24-D: do not pause until the delayed recheck. */
+#if !NTT_PAUSE_ON_ANY_EAR_IN_CASE
+    if (!g_ntt_both_in_pause_confirm_pending)
+    {
+        if (g_ntt_both_in_pause_confirm_timer == NULL)
+            g_ntt_both_in_pause_confirm_timer =
+                osTimerCreate(osTimer(NTT_BOTH_IN_PAUSE_CONFIRM_TIMER), osTimerOnce, NULL);
+        if (g_ntt_both_in_pause_confirm_timer != NULL)
+        {
+            g_ntt_both_in_pause_confirm_pending = true;
+            osTimerStart(g_ntt_both_in_pause_confirm_timer, NTT_BOTH_IN_PAUSE_CONFIRM_MS);
+            EARBUDS_TRACE(0, "[NTT_CASE_PAUSE][TEST24D] both IN -> confirm in 200ms");
+        }
+        else
+            EARBUDS_TRACE(0, "[NTT_CASE_PAUSE][TEST24D] timer unavailable; no pause");
+    }
+    return;
+#endif
+
     g_ntt_both_in_pause_sent = true;
 
 #if NTT_PAUSE_ON_ANY_EAR_IN_CASE
@@ -3904,6 +4146,11 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 
         ntt_case_check_pause_music_when_both_in();
 
+        /* Test24-C: clear stale accepted/retry state on a new IN_CASE cycle. */
+        ntt_inbox_role_stop();
+        g_ntt_case_close_wait_poweroff = false;
+        /* Test24-B: start role handover at the actual IN_CASE event. */
+        ntt_case_close_try_role_switch_before_shutdown();
         ntt_first_out_reset_local();
         return;
     }
@@ -3922,6 +4169,8 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         return;
     }
 
+    ntt_inbox_role_stop();
+    g_ntt_case_close_wait_poweroff = false;
     EARBUDS_TRACE(4,
         "[NTT_PAIR_CASE][FIX4] LOCAL OUT before stop ui=%d discover=%d manual=%d access=%d",
         app_ui_in_pairing_mode(), get_er_discover_connectable_status(),
@@ -4014,6 +4263,7 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
             "mobile already connected");
 
         g_ntt_first_out_reconnect_started = true;
+        g_ntt_first_out_reconnect_inflight = false;
         return;
     }
 
@@ -4087,21 +4337,29 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
     }
 
     /*
-     * Test6: A local put-out is a new reconnect trigger even if
-     * the peer is already OUT_CASE. Claim reconnect ownership
-     * for this event; the existing owner flow performs Slave->
-     * Master role switch and waits for completion before reconnect.
-     * Peer-only callbacks must not claim this ownership.
+     * Test21-B: peer already OUT means this ear is later-out.
+     * Do not claim First-Out ownership or request another role switch.
+     * A second role switch during mobile reconnect may disrupt A2DP trigger.
      */
     if (peer_state == NTT_CASE_STATE_OUT_CASE &&
         !g_ntt_local_was_first_out)
     {
-        EARBUDS_TRACE(2,
-            "[NTT_PUTOUT] local OUT, peer OUT, mobile disconnected: claim reconnect role=%d",
-            ui_role);
-
-        g_ntt_local_was_first_out = true;
-        ntt_first_out_take_master_and_reconnect();
+        EARBUDS_TRACE(3,
+            "[NTT_FIRST_OUT][TEST21B] later-out peer OUT role=%d owner=%d started=%d",
+            ui_role, g_ntt_first_out_owner, g_ntt_first_out_reconnect_started);
+        /* Test23-B: later-out MASTER must recover when no owner exists. */
+        if (ntt_first_out_is_master() &&
+            !g_ntt_first_out_owner &&
+            !g_ntt_first_out_reconnect_started &&
+            !app_bt_ibrt_has_snoop_link_connected())
+        {
+            EARBUDS_TRACE(0, "[NTT_FIRST_OUT][TEST23B] LOCAL later-out MASTER recovery");
+            ntt_first_out_master_recovery("TEST23B_LOCAL_LATER_OUT_MASTER");
+        }
+        else
+        {
+            ntt_later_out_keep_slave();
+        }
         return;
     }
 
@@ -4224,11 +4482,23 @@ void ntt_case_state_peer_changed_callback(
     ntt_case_check_pause_music_when_both_in();
     ntt_pairing_case_try_auto_start();
 
+    /* Test24-B: if peer state arrives after local IN, retry eligibility. */
+    if (local_state == NTT_CASE_STATE_IN_CASE &&
+        state == NTT_CASE_STATE_OUT_CASE)
+    {
+        ntt_case_close_try_role_switch_before_shutdown();
+    }
+
     /*
      * Peer IN_CASE。
      */
     if (state == NTT_CASE_STATE_IN_CASE)
     {
+        if (local_state == NTT_CASE_STATE_IN_CASE)
+        {
+            ntt_inbox_role_stop();
+            g_ntt_case_close_wait_poweroff = false;
+        }
         EARBUDS_TRACE(
             0,
             "[NTT_CASE_CB][PEER] peer IN_CASE");
@@ -4239,10 +4509,39 @@ void ntt_case_state_peer_changed_callback(
          * state; never initiate reconnect from peer IN_CASE.
          * Existing mobile links are intentionally untouched.
          */
-        if (local_state == NTT_CASE_STATE_OUT_CASE && !mobile_connected)
+        /*
+         * Test23-F: Peer IN_CASE is a new cycle boundary while local
+         * stays OUT_CASE. The previous opening_reconnect may already
+         * have connected and disconnected without another case callback;
+         * in that case inflight remains stale (Test23-E odd/even failure).
+         *
+         * Invalidate the previous peer-out owner and reconnect flags
+         * here. Peer IN never pages the phone. Test23-C's duplicate-page
+         * guard remains in the same-cycle PEER OUT path.
+         *
+         * A very fast IN->OUT transition while a page is genuinely
+         * pending still needs separate reconnect-completion tracking.
+         */
+        if (local_state == NTT_CASE_STATE_OUT_CASE)
         {
-            EARBUDS_TRACE(0,
-                "[NTT_INBOX] peer IN_CASE, mobile disconnected: skip first-out reconnect");
+            EARBUDS_TRACE(5,
+                "[NTT_FIRST_OUT][TEST23F] PEER IN new cycle reset mobile=%d owner=%d started=%d inflight=%d",
+                mobile_connected,
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started,
+                g_ntt_first_out_reconnect_inflight);
+            g_ntt_first_out_owner = false;
+            g_ntt_local_was_first_out = false;
+            g_ntt_first_out_reconnect_started = false;
+            g_ntt_first_out_reconnect_inflight = false;
+            g_ntt_first_out_role_switch_requested = false;
+            ntt_first_out_role_check_stop();
+
+            if (!mobile_connected)
+            {
+                EARBUDS_TRACE(0,
+                    "[NTT_INBOX] peer IN_CASE, mobile disconnected: skip first-out reconnect");
+            }
         }
 
         return;
@@ -4354,7 +4653,19 @@ void ntt_case_state_peer_changed_callback(
 
                 ntt_first_out_role_check_stop();
 
-                ntt_first_out_start_mobile_reconnect();
+                /*
+                 * Test23-C: started=1 can mean a page is still pending.
+                 * Never reset it solely because the ACL is not connected.
+                 */
+                if (g_ntt_first_out_reconnect_started)
+                {
+                    EARBUDS_TRACE(0,
+                        "[NTT_FIRST_OUT][TEST23C] PEER OUT pending reconnect; no duplicate page");
+                }
+                else
+                {
+                    ntt_first_out_start_mobile_reconnect();
+                }
             }
             else
             {
@@ -4386,7 +4697,52 @@ void ntt_case_state_peer_changed_callback(
                 ui_role,
                 g_ntt_first_out_owner);
 
-            ntt_later_out_keep_slave();
+            /*
+             * Test23-A: the first-out owner can be cleared after the
+             * mobile disconnects while the second bud is still IN_CASE.
+             * Recover only on the peer OUT transition, by the current
+             * Master, and only if no reconnect has already been started.
+             */
+            EARBUDS_TRACE(9,
+                "[NTT_FIRST_OUT][TEST23D] PEER gate master=%d owner=%d started=%d inflight=%d snoop=%d no_record=%d manual=%d exit_block=%d",
+                ntt_first_out_is_master(),
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started,
+                g_ntt_first_out_reconnect_inflight,
+                app_bt_ibrt_has_snoop_link_connected(),
+                ntt_first_no_mobile_pair_mode,
+                ntt_user_manual_pairing_request,
+                pairing_exited_on_out);
+
+            /* Original Test23-C gate retained below for comparison. */
+            EARBUDS_TRACE(8,
+                "[NTT_FIRST_OUT][TEST23C] PEER gate master=%d owner=%d started=%d snoop=%d no_record=%d manual=%d exit_block=%d",
+                ntt_first_out_is_master(),
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started,
+                app_bt_ibrt_has_snoop_link_connected(),
+                ntt_first_no_mobile_pair_mode,
+                ntt_user_manual_pairing_request,
+                pairing_exited_on_out);
+
+            if (ntt_first_out_is_master() &&
+                !g_ntt_first_out_owner &&
+                (!g_ntt_first_out_reconnect_started ||
+                 !g_ntt_first_out_reconnect_inflight) &&
+                !app_bt_ibrt_has_mobile_link_connected() &&
+                !app_bt_ibrt_has_snoop_link_connected() &&
+                !ntt_first_no_mobile_pair_mode &&
+                !ntt_user_manual_pairing_request &&
+                !pairing_exited_on_out)
+            {
+                EARBUDS_TRACE(0,
+                    "[NTT_FIRST_OUT][TEST23D] PEER OUT MASTER recovery (no active page)");
+                ntt_first_out_master_recovery("TEST23A_BOTH_OUT_OWNER_LOST");
+            }
+            else
+            {
+                ntt_later_out_keep_slave();
+            }
         }
 
         return;

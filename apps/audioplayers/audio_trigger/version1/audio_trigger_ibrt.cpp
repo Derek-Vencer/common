@@ -513,6 +513,8 @@ static void ntt_profile_recovery_start(uint8_t device_id)
 */
 #define NTT_PROFILE_EXCHANGE_WAIT_MAX_PACKETS    400
 static uint16_t ntt_profile_exchange_wait_count[BT_DEVICE_NUM] = {0};
+/* Test R7: throttle packet-path diagnostic traces, not Bluetooth behavior. */
+static uint32_t ntt_trigger_diag_packet_count[BT_DEVICE_NUM] = {0};
 
 int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
     uint8_t device_id,
@@ -632,6 +634,10 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
             bts_bt_if_get_dev_link_mode(
                 &curr_device->remote);
 
+        /* Print only one out of 256 callbacks per device to avoid UART flooding. */
+        const bool ntt_trigger_diag_print =
+            ((ntt_trigger_diag_packet_count[device_id]++ & 0xFFU) == 0U);
+        if (ntt_trigger_diag_print)
         AUDIOPLAYERS_TRACE(
             0,
             "[NTT_DUAL_PHONE_TRIGGER] "
@@ -744,6 +750,7 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
                  !start_ibrt_onprocess &&
                  !sync_a2dp_onprocess)
         {
+            if (ntt_trigger_diag_print)
             AUDIOPLAYERS_TRACE(
                 0,
                 "[NTT_DUAL_PHONE_TRIGGER] "
