@@ -2969,7 +2969,7 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
         if (failed && failed->reconnect_mode == bt_profile_reconnect_openreconnecting)
         {
             DEBUG_INFO(2, "[NTT_RECONNECT][TEST25C] PAGE_TIMEOUT pend=%d, advance queued mobile",
-                       btif_me_get_pendCons(), 0);
+                       btif_me_get_pendCons());
             app_bt_delete_reconnect_device(failed);
             app_bt_start_reconnect_next_device();
         }
