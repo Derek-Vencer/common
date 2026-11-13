@@ -2980,8 +2980,7 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
                 if (pending)
                 {
                     DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] wait ACL cleanup");
-                    osStatus timer_status = osTimerStart(next->acl_reconnect_timer, 200);
-                    DEBUG_INFO(2, "[NTT_RECONNECT][TEST25E] timer start status=%d next=%p", timer_status, next);
+                    osTimerStart(next->acl_reconnect_timer, 200);
                 }
                 else
                 {
@@ -5895,8 +5894,7 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
         if (btif_me_get_pendCons() > 0)
         {
             DEBUG_INFO(1,"%s exist pending acl cons, reset the timer", __func__);
-            osStatus timer_status = osTimerStart(reconnect->acl_reconnect_timer, BTIF_BT_DEFAULT_PAGE_TIMEOUT_IN_MS);
-            DEBUG_INFO(2, "[NTT_RECONNECT][TEST25E] pending retry timer status=%d pend=%d", timer_status, btif_me_get_pendCons());
+            osTimerStart(reconnect->acl_reconnect_timer, BTIF_BT_DEFAULT_PAGE_TIMEOUT_IN_MS);
             return;
         }
 #if defined(BT_HFP_SUPPORT)
