@@ -2968,10 +2968,30 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
         struct BT_DEVICE_RECONNECT_T *failed = app_bt_find_reconnect_device(remote);
         if (failed && failed->reconnect_mode == bt_profile_reconnect_openreconnecting)
         {
-            DEBUG_INFO(2, "[NTT_RECONNECT][TEST25C] PAGE_TIMEOUT pend=%d, advance queued mobile",
-                       btif_me_get_pendCons());
+            /* Test25-D: defer the next ACL while the failed page is cleaning up.
+             * Existing reconnect handler rechecks pendCons before connecting.
+             */
+            uint8_t pending = btif_me_get_pendCons();
+            DEBUG_INFO(1, "[NTT_RECONNECT][TEST25D] PAGE_TIMEOUT pending=%d", pending);
             app_bt_delete_reconnect_device(failed);
-            app_bt_start_reconnect_next_device();
+            struct BT_DEVICE_RECONNECT_T *next = app_bt_get_poweron_reconnect_device();
+            if (next)
+            {
+                if (pending)
+                {
+                    DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] wait ACL cleanup");
+                    osTimerStart(next->acl_reconnect_timer, 200);
+                }
+                else
+                {
+                    DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] pending=0 start next reconnect");
+                    app_bt_start_reconnect_next_device();
+                }
+            }
+            else
+            {
+                DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] no queued mobile");
+            }
         }
     }
     if (device_id == BT_DEVICE_TWS_ID)
