@@ -3938,6 +3938,37 @@ static void ntt_case_out_slave_push_battery(void)
  * 0: 雙耳都放入充電盒後，才暫停音樂。
  */
 #define NTT_PAUSE_ON_ANY_EAR_IN_CASE 0
+/* Test24-D: confirm both case states after 200ms. */
+#define NTT_BOTH_IN_PAUSE_CONFIRM_MS 200
+static bool g_ntt_both_in_pause_confirm_pending = false;
+static void ntt_both_in_pause_confirm_cb(void const *param);
+osTimerDef(NTT_BOTH_IN_PAUSE_CONFIRM_TIMER, ntt_both_in_pause_confirm_cb);
+static osTimerId g_ntt_both_in_pause_confirm_timer = NULL;
+static void ntt_both_in_pause_confirm_cancel(void)
+{
+    if (g_ntt_both_in_pause_confirm_timer != NULL)
+        osTimerStop(g_ntt_both_in_pause_confirm_timer);
+    g_ntt_both_in_pause_confirm_pending = false;
+}
+static void ntt_both_in_pause_confirm_cb(void const *param)
+{
+    (void)param;
+    if (!g_ntt_both_in_pause_confirm_pending)
+        return;
+    g_ntt_both_in_pause_confirm_pending = false;
+    NTT_CASE_STATE_E local = ntt_case_state_get_local();
+    NTT_CASE_STATE_E peer = ntt_case_state_get_peer();
+    bool mobile = app_bt_ibrt_has_mobile_link_connected();
+    EARBUDS_TRACE(4, "[NTT_CASE_PAUSE][TEST24D] confirm local=%d peer=%d mobile=%d sent=%d",
+                 local, peer, mobile, g_ntt_both_in_pause_sent);
+    if (local == NTT_CASE_STATE_IN_CASE &&
+        peer == NTT_CASE_STATE_IN_CASE && mobile && !g_ntt_both_in_pause_sent)
+    {
+        g_ntt_both_in_pause_sent = true;
+        EARBUDS_TRACE(0, "[NTT_CASE_PAUSE][TEST24D] confirmed both IN -> pause");
+        app_key_handle_pause_music_on_pogo_in();
+    }
+}
 
 
 /*
@@ -3989,6 +4020,7 @@ static void ntt_case_check_pause_music_when_both_in(void)
      */
     if (!pause_condition)
     {
+        ntt_both_in_pause_confirm_cancel();
         if (g_ntt_both_in_pause_sent)
         {
             EARBUDS_TRACE(
@@ -4028,9 +4060,25 @@ static void ntt_case_check_pause_music_when_both_in(void)
         return;
     }
 
-    /*
-     * 先設定旗標，避免 callback 重入而重複發送。
-     */
+    /* Test24-D: do not pause until the delayed recheck. */
+#if !NTT_PAUSE_ON_ANY_EAR_IN_CASE
+    if (!g_ntt_both_in_pause_confirm_pending)
+    {
+        if (g_ntt_both_in_pause_confirm_timer == NULL)
+            g_ntt_both_in_pause_confirm_timer =
+                osTimerCreate(osTimer(NTT_BOTH_IN_PAUSE_CONFIRM_TIMER), osTimerOnce, NULL);
+        if (g_ntt_both_in_pause_confirm_timer != NULL)
+        {
+            g_ntt_both_in_pause_confirm_pending = true;
+            osTimerStart(g_ntt_both_in_pause_confirm_timer, NTT_BOTH_IN_PAUSE_CONFIRM_MS);
+            EARBUDS_TRACE(0, "[NTT_CASE_PAUSE][TEST24D] both IN -> confirm in 200ms");
+        }
+        else
+            EARBUDS_TRACE(0, "[NTT_CASE_PAUSE][TEST24D] timer unavailable; no pause");
+    }
+    return;
+#endif
+
     g_ntt_both_in_pause_sent = true;
 
 #if NTT_PAUSE_ON_ANY_EAR_IN_CASE
