@@ -117,6 +117,67 @@ extern uint8_t out_of_case_reconnect;
 extern bool ntt_manual_pairing_mode;
 #ifdef IBRT
 static bool g_ntt_case_close_wait_poweroff = false;
+/* Test24-C: independent in-case role handover state. */
+#define NTT_INBOX_ROLE_RETRY_MS 200
+#define NTT_INBOX_ROLE_MAX_RETRIES 10
+static bool g_ntt_inbox_role_pending = false;
+static uint8_t g_ntt_inbox_role_retry_count = 0;
+static void ntt_inbox_role_retry_cb(void const *param);
+osTimerDef(NTT_INBOX_ROLE_RETRY_TIMER, ntt_inbox_role_retry_cb);
+static osTimerId g_ntt_inbox_role_retry_timer = NULL;
+static void ntt_inbox_role_stop(void)
+{
+    if (g_ntt_inbox_role_retry_timer != NULL)
+        osTimerStop(g_ntt_inbox_role_retry_timer);
+    g_ntt_inbox_role_pending = false;
+    g_ntt_inbox_role_retry_count = 0;
+}
+static void ntt_inbox_role_schedule_retry(void)
+{
+    if (g_ntt_inbox_role_retry_count >= NTT_INBOX_ROLE_MAX_RETRIES)
+    {
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry limit reached");
+        return;
+    }
+    if (g_ntt_inbox_role_retry_timer == NULL)
+        g_ntt_inbox_role_retry_timer = osTimerCreate(osTimer(NTT_INBOX_ROLE_RETRY_TIMER), osTimerOnce, NULL);
+    if (g_ntt_inbox_role_retry_timer != NULL)
+        osTimerStart(g_ntt_inbox_role_retry_timer, NTT_INBOX_ROLE_RETRY_MS);
+    else
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry timer unavailable");
+}
+static void ntt_inbox_role_retry_cb(void const *param)
+{
+    (void)param;
+    if (ntt_case_state_get_local() != NTT_CASE_STATE_IN_CASE ||
+        ntt_case_state_get_peer() != NTT_CASE_STATE_OUT_CASE ||
+        !bts_tws_if_is_tws_link_connected() ||
+        app_ibrt_if_get_ui_role() != TWS_UI_MASTER)
+    {
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry stopped: conditions changed");
+        ntt_inbox_role_stop();
+        return;
+    }
+    if (g_ntt_inbox_role_pending)
+    {
+        /* An accepted SDK request is not a rejection; never duplicate it. */
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] accepted request still pending");
+        return;
+    }
+    ++g_ntt_inbox_role_retry_count;
+    EARBUDS_TRACE(1, "[NTT_INBOX_ROLE][TEST24C] retry=%u", g_ntt_inbox_role_retry_count);
+    if (app_ui_user_role_switch(false))
+    {
+        g_ntt_inbox_role_pending = true;
+        g_ntt_case_close_wait_poweroff = true;
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry accepted");
+    }
+    else
+    {
+        EARBUDS_TRACE(0, "[NTT_INBOX_ROLE][TEST24C] retry rejected");
+        ntt_inbox_role_schedule_retry();
+    }
+}
 extern void earBudsCloseOff_PogonIn_StopTimer(void);
 #endif
 extern uint8_t out_of_case_reconnect;
@@ -2221,6 +2282,22 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
     }
 
 #ifdef IBRT
+    if (g_ntt_inbox_role_pending)
+    {
+        EARBUDS_TRACE(2, "[NTT_INBOX_ROLE][TEST24C] completion role=%d err=%d", current_role, errCode);
+        g_ntt_inbox_role_pending = false;
+        if (errCode &&
+            ntt_case_state_get_local() == NTT_CASE_STATE_IN_CASE &&
+            ntt_case_state_get_peer() == NTT_CASE_STATE_OUT_CASE)
+        {
+            g_ntt_case_close_wait_poweroff = false;
+            ntt_inbox_role_schedule_retry();
+        }
+        else
+        {
+            ntt_inbox_role_stop();
+        }
+    }
     if (g_ntt_case_close_wait_poweroff)
     {
         EARBUDS_TRACE(2,
@@ -3074,19 +3151,24 @@ extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 
     if (tws_connected && role == TWS_UI_MASTER)
     {
-        if (g_ntt_case_close_wait_poweroff)
+        if (g_ntt_inbox_role_pending)
         {
-            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24B] role switch already pending");
+            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24C] request already pending");
             return true;
         }
-
-        EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24B] MASTER IN PEER OUT -> request SLAVE");
-        g_ntt_case_close_wait_poweroff = true;
+        /* A previous shutdown flag must never block a new IN_CASE cycle. */
+        EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24C] MASTER IN PEER OUT -> request SLAVE");
         bool requested = app_ui_user_role_switch(false);
-        if (!requested)
+        if (requested)
+        {
+            g_ntt_inbox_role_pending = true;
+            g_ntt_case_close_wait_poweroff = true;
+        }
+        else
         {
             g_ntt_case_close_wait_poweroff = false;
-            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24B] role switch request rejected");
+            EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24C] request rejected; schedule retry");
+            ntt_inbox_role_schedule_retry();
         }
         return requested;
     }
@@ -3097,6 +3179,7 @@ extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 extern "C" void ntt_case_close_role_switch_reset(void)
 {
     g_ntt_case_close_wait_poweroff = false;
+    ntt_inbox_role_stop();
 }
 
 
@@ -4015,6 +4098,9 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
 
         ntt_case_check_pause_music_when_both_in();
 
+        /* Test24-C: clear stale accepted/retry state on a new IN_CASE cycle. */
+        ntt_inbox_role_stop();
+        g_ntt_case_close_wait_poweroff = false;
         /* Test24-B: start role handover at the actual IN_CASE event. */
         ntt_case_close_try_role_switch_before_shutdown();
         ntt_first_out_reset_local();
@@ -4035,6 +4121,8 @@ extern "C" void ntt_case_state_local_changed_callback(NTT_CASE_STATE_E state)
         return;
     }
 
+    ntt_inbox_role_stop();
+    g_ntt_case_close_wait_poweroff = false;
     EARBUDS_TRACE(4,
         "[NTT_PAIR_CASE][FIX4] LOCAL OUT before stop ui=%d discover=%d manual=%d access=%d",
         app_ui_in_pairing_mode(), get_er_discover_connectable_status(),
@@ -4358,6 +4446,11 @@ void ntt_case_state_peer_changed_callback(
      */
     if (state == NTT_CASE_STATE_IN_CASE)
     {
+        if (local_state == NTT_CASE_STATE_IN_CASE)
+        {
+            ntt_inbox_role_stop();
+            g_ntt_case_close_wait_poweroff = false;
+        }
         EARBUDS_TRACE(
             0,
             "[NTT_CASE_CB][PEER] peer IN_CASE");
