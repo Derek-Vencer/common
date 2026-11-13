@@ -2899,6 +2899,7 @@ static void app_bt_delete_reconnect_device(struct BT_DEVICE_RECONNECT_T *node)
 
 void app_bt_start_connfail_reconnect(bt_bdaddr_t *remote, uint8_t errcode, bool is_for_source_device);
 void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote, bool is_for_source_device);
+static void app_bt_start_reconnect_next_device(void);
 
 static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_device_t *rem_dev)
 {
@@ -2953,6 +2954,26 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
     }
 
 #if defined IBRT && !defined(FREEMAN_ENABLED_STERO)
+    /*
+     * Test25-C: In IBRT builds the legacy connfail handler below is excluded.
+     * Advance the opening-reconnect list after a mobile PAGE_TIMEOUT (0x04).
+     * The next handler itself defers while an ACL is still pending.
+     */
+    if (errcode == 0x04 && remote != NULL &&
+        device_id != BT_DEVICE_TWS_ID &&
+        !pmu_ntt_case_closed_latch_get() &&
+        !ntt_manual_pairing_mode &&
+        app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+    {
+        struct BT_DEVICE_RECONNECT_T *failed = app_bt_find_reconnect_device(remote);
+        if (failed && failed->reconnect_mode == bt_profile_reconnect_openreconnecting)
+        {
+            DEBUG_INFO(2, "[NTT_RECONNECT][TEST25C] PAGE_TIMEOUT pend=%d, advance queued mobile",
+                       btif_me_get_pendCons(), 0);
+            app_bt_delete_reconnect_device(failed);
+            app_bt_start_reconnect_next_device();
+        }
+    }
     if (device_id == BT_DEVICE_TWS_ID)
     {
         if (errcode == BTIF_BEC_NO_ERROR)
