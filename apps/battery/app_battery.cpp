@@ -414,6 +414,13 @@ static bool ntt_battery_role_switch_is_blocked(void)
 
 static void ntt_low_battery_role_switch_check(void)
 {
+    if (!ntt_case_state_are_both_out())
+    {
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+        g_low_bat_role_battery_check_count = 0;
+        return;
+    }
     uint8_t local_percent = 0xFF;
     uint8_t peer_percent  = 0xFF;
     TWS_UI_ROLE_E current_role;
@@ -564,6 +571,12 @@ static void ntt_low_battery_role_switch_check(void)
         return;
     }
 
+    if (!ntt_case_state_are_both_out())
+    {
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+        return;
+    }
     BATTERY_TRACE(0,"[LOW_BAT_ROLE] peer higher -> role switch");
 
     /*
