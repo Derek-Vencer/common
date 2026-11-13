@@ -707,6 +707,7 @@ void ntt_case_poweroff_enable(void)
 }
 
 extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
+extern "C" void ntt_fast_remove_case_out_update(void);
 
 /*
  * Per-ear RSSI calibration in NV. The application may overwrite or clear
@@ -844,6 +845,7 @@ static bool ntt_case_fast_remove_guard(void)
             g_pogonin_role_switch_wait_count = 0;
 #endif
             BATTERY_TRACE(0, "[NTT_FAST_REMOVE] EXIT latch=0 shutdown canceled");
+            ntt_fast_remove_case_out_update();
             ntt_fast_remove_mobile_reconnect_request();
             return true;
         }
