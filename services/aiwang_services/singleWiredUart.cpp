@@ -606,18 +606,11 @@ void wired_uart_get_battery_level(void)
     general_accessible = (access_mode == BTIF_BAM_GENERAL_ACCESSIBLE);
 
     /*
-     * Restore the manual pairing flag while the device
-     * remains generally accessible.
+     * Pairing status reporting must not change manual pairing authorization.
+     * Access mode may temporarily be CONNECTABLE_ONLY while the pairing UI
+     * transitions to GENERAL_ACCESSIBLE after an explicit 0x0E request.
+     * Authorization is managed by pairing entry and actual exit/cancel paths.
      */
-    if (access_mode == BTIF_BAM_GENERAL_ACCESSIBLE)
-    {
-        DBGPRINT("[NTT_PAIR] Restore manual pairing flag, access=%u",(uint8_t)access_mode);
-        ntt_manual_pairing_mode = true;
-    }
-    else
-    {
-        ntt_manual_pairing_mode = false;
-    }
 
     tws_connected = bts_tws_if_is_tws_link_connected();
 
