@@ -6495,6 +6495,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
                     if (!record1_connected)
                     {
+                        DEBUG_INFO(1,"[NTT_RECONNECT][TEST25B] queue phone1 pending=%d", btif_me_get_pendCons());
                         DEBUG_INFO(0,"[NTT_RECONNECT] append phone1");
                         app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,&record1.bdAddr,false);
                         reconnect_added = true;
@@ -6520,6 +6521,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
                     if (!record2_connected)
                     {
+                        DEBUG_INFO(1,"[NTT_RECONNECT][TEST25B] queue phone2 pending=%d", btif_me_get_pendCons());
                         DEBUG_INFO(0,"[NTT_RECONNECT] append phone2");
                         app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,&record2.bdAddr,false);
                         reconnect_added = true;
@@ -6542,6 +6544,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
         {
             DEBUG_INFO(0,
                 "[NTT_RECONNECT] start poweron reconnect after slave disconnect");
+            DEBUG_INFO(2, "[NTT_RECONNECT][TEST25B] start queue records=%d pending=%d", ret, btif_me_get_pendCons());
 
             app_bt_start_poweron_reconnect();
             ntt_set_poweron_reconnect(false);
