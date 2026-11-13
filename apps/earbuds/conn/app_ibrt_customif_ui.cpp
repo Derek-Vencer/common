@@ -3050,16 +3050,31 @@ extern "C" bool ntt_case_close_role_switch_can_shutdown(void)
 
 extern "C" bool ntt_case_close_try_role_switch_before_shutdown(void)
 {
-    if (ntt_case_close_both_in_case())
-    {
-        EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] both in case -> skip role switch");
+    /*
+     * Test24-A: Only hand Master to the earbud that is confirmed
+     * OUT_CASE. BOTH IN_CASE (or UNKNOWN peer) must not switch.
+     */
+    NTT_CASE_STATE_E local_state = ntt_case_state_get_local();
+    NTT_CASE_STATE_E peer_state = ntt_case_state_get_peer();
+    TWS_UI_ROLE_E role = app_ibrt_if_get_ui_role();
+    bool tws_connected = bts_tws_if_is_tws_link_connected();
 
+    EARBUDS_TRACE(4,
+        "[NTT_INBOX_ROLE][TEST24A] local=%d peer=%d role=%d tws=%d",
+        local_state, peer_state, role, tws_connected);
+
+    if (local_state != NTT_CASE_STATE_IN_CASE ||
+        peer_state != NTT_CASE_STATE_OUT_CASE)
+    {
+        EARBUDS_TRACE(2,
+            "[NTT_INBOX_ROLE][TEST24A] skip switch: local=%d peer=%d",
+            local_state, peer_state);
         return false;
     }
 
-    if (bts_tws_if_is_tws_link_connected() && app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+    if (tws_connected && role == TWS_UI_MASTER)
     {
-        EARBUDS_TRACE(0,"[ROLE_SWITCH][CASE_CLOSE] master switch to slave by UI API");
+        EARBUDS_TRACE(0,"[NTT_INBOX_ROLE][TEST24A] MASTER IN, PEER OUT -> switch to SLAVE");
 
         g_ntt_case_close_wait_poweroff = true;
 
