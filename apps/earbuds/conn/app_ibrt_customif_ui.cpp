@@ -4279,42 +4279,32 @@ void ntt_case_state_peer_changed_callback(
          * Existing mobile links are intentionally untouched.
          */
         /*
-         * Test23-E: a peer IN_CASE event ends the previous peer-out
-         * cycle. When the phone is connected, the prior reconnect
-         * has finished and its owner/inflight flags must not survive
-         * into the next peer OUT transition.
+         * Test23-F: Peer IN_CASE is a new cycle boundary while local
+         * stays OUT_CASE. The previous opening_reconnect may already
+         * have connected and disconnected without another case callback;
+         * in that case inflight remains stale (Test23-E odd/even failure).
          *
-         * When the phone is disconnected but a page is still pending,
-         * keep the flags to prevent duplicate paging on a rapid
-         * IN->OUT cycle. Never reconnect on peer IN_CASE itself.
+         * Invalidate the previous peer-out owner and reconnect flags
+         * here. Peer IN never pages the phone. Test23-C's duplicate-page
+         * guard remains in the same-cycle PEER OUT path.
+         *
+         * A very fast IN->OUT transition while a page is genuinely
+         * pending still needs separate reconnect-completion tracking.
          */
         if (local_state == NTT_CASE_STATE_OUT_CASE)
         {
-            if (mobile_connected ||
-                (!g_ntt_first_out_reconnect_inflight &&
-                 !app_bt_ibrt_has_snoop_link_connected()))
-            {
-                EARBUDS_TRACE(4,
-                    "[NTT_FIRST_OUT][TEST23E] PEER IN reset cycle mobile=%d owner=%d started=%d inflight=%d",
-                    mobile_connected,
-                    g_ntt_first_out_owner,
-                    g_ntt_first_out_reconnect_started,
-                    g_ntt_first_out_reconnect_inflight);
-                g_ntt_first_out_owner = false;
-                g_ntt_local_was_first_out = false;
-                g_ntt_first_out_reconnect_started = false;
-                g_ntt_first_out_reconnect_inflight = false;
-                g_ntt_first_out_role_switch_requested = false;
-                ntt_first_out_role_check_stop();
-            }
-            else
-            {
-                EARBUDS_TRACE(3,
-                    "[NTT_FIRST_OUT][TEST23E] PEER IN preserve active page owner=%d started=%d inflight=%d",
-                    g_ntt_first_out_owner,
-                    g_ntt_first_out_reconnect_started,
-                    g_ntt_first_out_reconnect_inflight);
-            }
+            EARBUDS_TRACE(5,
+                "[NTT_FIRST_OUT][TEST23F] PEER IN new cycle reset mobile=%d owner=%d started=%d inflight=%d",
+                mobile_connected,
+                g_ntt_first_out_owner,
+                g_ntt_first_out_reconnect_started,
+                g_ntt_first_out_reconnect_inflight);
+            g_ntt_first_out_owner = false;
+            g_ntt_local_was_first_out = false;
+            g_ntt_first_out_reconnect_started = false;
+            g_ntt_first_out_reconnect_inflight = false;
+            g_ntt_first_out_role_switch_requested = false;
+            ntt_first_out_role_check_stop();
 
             if (!mobile_connected)
             {
