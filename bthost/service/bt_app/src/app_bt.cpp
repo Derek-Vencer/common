@@ -2980,7 +2980,8 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
                 if (pending)
                 {
                     DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] wait ACL cleanup");
-                    osTimerStart(next->acl_reconnect_timer, 200);
+                    osStatus timer_status = osTimerStart(next->acl_reconnect_timer, 200);
+                    DEBUG_INFO(2, "[NTT_RECONNECT][TEST25E] timer start status=%d next=%p", timer_status, next);
                 }
                 else
                 {
@@ -5827,6 +5828,7 @@ extern "C" bool ntt_ota_mobile_reconnect_authorized(void);
 
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
+    DEBUG_INFO(3, "[NTT_RECONNECT][TEST25E] handler node=%p inuse=%d pend=%d", reconnect, reconnect->inuse, btif_me_get_pendCons());
     const bool ota_recovery = ntt_ota_mobile_reconnect_authorized();
     const bool uart07 = ntt_case_open_reconnect_authorized();
     const bool latch_closed = pmu_ntt_case_closed_latch_get();
@@ -5893,7 +5895,8 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
         if (btif_me_get_pendCons() > 0)
         {
             DEBUG_INFO(1,"%s exist pending acl cons, reset the timer", __func__);
-            osTimerStart(reconnect->acl_reconnect_timer, BTIF_BT_DEFAULT_PAGE_TIMEOUT_IN_MS);
+            osStatus timer_status = osTimerStart(reconnect->acl_reconnect_timer, BTIF_BT_DEFAULT_PAGE_TIMEOUT_IN_MS);
+            DEBUG_INFO(2, "[NTT_RECONNECT][TEST25E] pending retry timer status=%d pend=%d", timer_status, btif_me_get_pendCons());
             return;
         }
 #if defined(BT_HFP_SUPPORT)
@@ -5932,6 +5935,7 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 
 void app_bt_device_reconnect_timehandler(void const *param)
 {
+    DEBUG_INFO(2, "[NTT_RECONNECT][TEST25E] timer fired node=%p pend=%d", param, btif_me_get_pendCons());
     app_bt_start_custom_function_in_bt_thread((uint32_t)param, 0,
             (uint32_t)app_bt_device_reconnect_handler);
 }
