@@ -27,6 +27,7 @@
 #include "bts_module_if.h"
 #include "bts_tws_conn.h"
 #include "app_bt.h"
+#include "../../earbuds/conn/app_ibrt_customif_cmd.h"
 
 /* Open for debug */
 // #define APP_RSSI_DEBUG
@@ -236,6 +237,14 @@ extern "C" bool ntt_rssi_role_switch_is_ota_locked(void)
 static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
 {
     int16_t diff;
+    /* Test24-D: any IN_CASE or UNKNOWN state blocks RSSI role switch. */
+    if (!ntt_case_state_are_both_out())
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        BTAPP_TRACE(0, "[NTT_RSSI][TEST24D] BLOCK CASE local=%d peer=%d",
+                    ntt_case_state_get_local(), ntt_case_state_get_peer());
+        return;
+    }
     if (ntt_key_role_switch_is_blocked())
     {
         BTAPP_TRACE(1, "[NTT_KEY_ROLE] RSSI_SWITCH_BLOCKED remaining_ms=%u",
@@ -357,6 +366,12 @@ static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
         ntt_rssi_switch_confirm_count = 0;
 
         BTAPP_TRACE(0, "[NTT_RSSI] role switch blocked by OTA");
+        return;
+    }
+    if (!ntt_case_state_are_both_out())
+    {
+        ntt_rssi_switch_confirm_count = 0;
+        BTAPP_TRACE(0, "[NTT_RSSI][TEST24D] BLOCK CASE before request");
         return;
     }
     BTAPP_TRACE(0,"[NTT_RSSI] request role switch");
