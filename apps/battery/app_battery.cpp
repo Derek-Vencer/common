@@ -425,6 +425,17 @@ static void ntt_low_battery_role_switch_check(void)
     uint8_t peer_percent  = 0xFF;
     TWS_UI_ROLE_E current_role;
 
+    /* Test24-D: automatic battery role switch requires both earbuds OUT_CASE. */
+    if (!ntt_case_state_are_both_out())
+    {
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+        g_low_bat_role_battery_check_count = 0;
+        BATTERY_TRACE(0, "[LOW_BAT_ROLE][TEST24D] BLOCK CASE local=%d peer=%d",
+                      ntt_case_state_get_local(), ntt_case_state_get_peer());
+        return;
+    }
+
     current_role = app_ibrt_if_get_ui_role();
 
     /*
@@ -585,6 +596,13 @@ static void ntt_low_battery_role_switch_check(void)
     g_low_bat_role_switch_pending = true;
     g_low_bat_role_switch_pending_count = 0;
 
+    if (!ntt_case_state_are_both_out())
+    {
+        g_low_bat_role_switch_pending = false;
+        g_low_bat_role_switch_pending_count = 0;
+        BATTERY_TRACE(0, "[LOW_BAT_ROLE][TEST24D] BLOCK CASE before request");
+        return;
+    }
     app_ui_user_role_switch(false);
 }
 
@@ -720,6 +738,7 @@ void ntt_case_poweroff_enable(void)
 }
 
 extern "C" void ntt_fast_remove_mobile_reconnect_request(void);
+extern "C" void ntt_fast_remove_case_out_update(void);
 
 /*
  * Per-ear RSSI calibration in NV. The application may overwrite or clear
@@ -857,6 +876,7 @@ static bool ntt_case_fast_remove_guard(void)
             g_pogonin_role_switch_wait_count = 0;
 #endif
             BATTERY_TRACE(0, "[NTT_FAST_REMOVE] EXIT latch=0 shutdown canceled");
+            ntt_fast_remove_case_out_update();
             ntt_fast_remove_mobile_reconnect_request();
             return true;
         }

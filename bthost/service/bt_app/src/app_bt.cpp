@@ -2899,6 +2899,7 @@ static void app_bt_delete_reconnect_device(struct BT_DEVICE_RECONNECT_T *node)
 
 void app_bt_start_connfail_reconnect(bt_bdaddr_t *remote, uint8_t errcode, bool is_for_source_device);
 void app_bt_start_linkloss_reconnect(bt_bdaddr_t *remote, bool is_for_source_device);
+static void app_bt_start_reconnect_next_device(void);
 
 static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_device_t *rem_dev)
 {
@@ -2953,6 +2954,46 @@ static void app_bt_device_report_acl_connected(uint8_t errcode, btif_remote_devi
     }
 
 #if defined IBRT && !defined(FREEMAN_ENABLED_STERO)
+    /*
+     * Test25-C: In IBRT builds the legacy connfail handler below is excluded.
+     * Advance the opening-reconnect list after a mobile PAGE_TIMEOUT (0x04).
+     * The next handler itself defers while an ACL is still pending.
+     */
+    if (errcode == 0x04 && remote != NULL &&
+        device_id != BT_DEVICE_TWS_ID &&
+        !pmu_ntt_case_closed_latch_get() &&
+        !ntt_manual_pairing_mode &&
+        app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+    {
+        struct BT_DEVICE_RECONNECT_T *failed = app_bt_find_reconnect_device(remote);
+        if (failed && failed->reconnect_mode == bt_profile_reconnect_openreconnecting)
+        {
+            /* Test25-D: defer the next ACL while the failed page is cleaning up.
+             * Existing reconnect handler rechecks pendCons before connecting.
+             */
+            uint8_t pending = btif_me_get_pendCons();
+            DEBUG_INFO(1, "[NTT_RECONNECT][TEST25D] PAGE_TIMEOUT pending=%d", pending);
+            app_bt_delete_reconnect_device(failed);
+            struct BT_DEVICE_RECONNECT_T *next = app_bt_get_poweron_reconnect_device();
+            if (next)
+            {
+                if (pending)
+                {
+                    DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] wait ACL cleanup");
+                    osTimerStart(next->acl_reconnect_timer, 200);
+                }
+                else
+                {
+                    DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] pending=0 start next reconnect");
+                    app_bt_start_reconnect_next_device();
+                }
+            }
+            else
+            {
+                DEBUG_INFO(0, "[NTT_RECONNECT][TEST25D] no queued mobile");
+            }
+        }
+    }
     if (device_id == BT_DEVICE_TWS_ID)
     {
         if (errcode == BTIF_BEC_NO_ERROR)
@@ -5786,6 +5827,7 @@ extern "C" bool ntt_ota_mobile_reconnect_authorized(void);
 
 void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 {
+    DEBUG_INFO(3, "[NTT_RECONNECT][TEST25E] handler node=%p inuse=%d pend=%d", reconnect, reconnect->inuse, btif_me_get_pendCons());
     const bool ota_recovery = ntt_ota_mobile_reconnect_authorized();
     const bool uart07 = ntt_case_open_reconnect_authorized();
     const bool latch_closed = pmu_ntt_case_closed_latch_get();
@@ -5891,6 +5933,7 @@ void app_bt_device_reconnect_handler(struct BT_DEVICE_RECONNECT_T *reconnect)
 
 void app_bt_device_reconnect_timehandler(void const *param)
 {
+    DEBUG_INFO(2, "[NTT_RECONNECT][TEST25E] timer fired node=%p pend=%d", param, btif_me_get_pendCons());
     app_bt_start_custom_function_in_bt_thread((uint32_t)param, 0,
             (uint32_t)app_bt_device_reconnect_handler);
 }
@@ -6495,6 +6538,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
                     if (!record1_connected)
                     {
+                        DEBUG_INFO(1,"[NTT_RECONNECT][TEST25B] queue phone1 pending=%d", btif_me_get_pendCons());
                         DEBUG_INFO(0,"[NTT_RECONNECT] append phone1");
                         app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,&record1.bdAddr,false);
                         reconnect_added = true;
@@ -6520,6 +6564,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
 
                     if (!record2_connected)
                     {
+                        DEBUG_INFO(1,"[NTT_RECONNECT][TEST25B] queue phone2 pending=%d", btif_me_get_pendCons());
                         DEBUG_INFO(0,"[NTT_RECONNECT] append phone2");
                         app_bt_append_to_reconnect_list(bt_profile_reconnect_openreconnecting,&record2.bdAddr,false);
                         reconnect_added = true;
@@ -6542,6 +6587,7 @@ void app_bt_profile_connect_manager_opening_reconnect(void)
         {
             DEBUG_INFO(0,
                 "[NTT_RECONNECT] start poweron reconnect after slave disconnect");
+            DEBUG_INFO(2, "[NTT_RECONNECT][TEST25B] start queue records=%d pending=%d", ret, btif_me_get_pendCons());
 
             app_bt_start_poweron_reconnect();
             ntt_set_poweron_reconnect(false);
