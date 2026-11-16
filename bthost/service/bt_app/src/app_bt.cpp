@@ -232,6 +232,7 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  1000
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
 #define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           60
+#define NTT_BT_CONNECTED_PROMPT_OTA_TWS_RETRY     200 // 10 seconds at 50 ms/tick
 #define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        1
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
@@ -650,7 +651,17 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         ntt_bt_connected_prompt_stable_count = 0;
         ntt_bt_connected_prompt_last_role = NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
-        if (ntt_bt_connected_prompt_retry_count < NTT_BT_CONNECTED_PROMPT_MAX_RETRY)
+        /*
+         * OTA boot can restore mobile ACL before the peer TWS link.
+         * Give the peer up to 10 seconds to reconnect before local
+         * fallback; other scenarios retain the tested 3-second wait.
+         */
+        uint16_t tws_retry_limit =
+            (ntt_conn_prompt_slot[device_id].scenario == 3 && !tws_connected)
+                ? NTT_BT_CONNECTED_PROMPT_OTA_TWS_RETRY
+                : NTT_BT_CONNECTED_PROMPT_MAX_RETRY;
+
+        if (ntt_bt_connected_prompt_retry_count < tws_retry_limit)
         {
             ntt_bt_connected_prompt_retry_count++;
             ntt_conn_prompt_schedule();
