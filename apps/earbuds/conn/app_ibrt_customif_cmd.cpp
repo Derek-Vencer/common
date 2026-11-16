@@ -1,3 +1,4 @@
+extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
 /***************************************************************************
  *
  * Copyright 2015-2019 BES.
@@ -2356,6 +2357,7 @@ static void ntt_key_master_start_reconnect(void)
         return;
     }
 
+    ntt_conn_prompt_set_scenario(2); // Test8 scenario tag only
     g_ntt_key_reconnect_running = true;
 
     ntt_key_reconnect_lock_start();
