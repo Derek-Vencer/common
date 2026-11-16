@@ -86,6 +86,7 @@ typedef enum
     APP_TWS_CMD_GET_PEER_FW_VERSION = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1B,
     APP_TWS_CMD_SYNC_EQ6_MODE    = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1C,
     APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1D,
+    APP_TWS_CMD_NTT_CONNECTED_PROMPT_SYNC = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1E,
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -155,6 +156,7 @@ bool ntt_case_state_are_both_out(void);
 
 void ntt_key_request_mobile_reconnect(void);
 void ntt_tws_delete_mobile_record_sync(const uint8_t *mobile_addr);
+void ntt_tws_connected_prompt_sync(const uint8_t *mobile_addr, bool connected);
 
 #ifdef __cplusplus
 }
