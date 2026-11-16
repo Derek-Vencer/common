@@ -1,6 +1,6 @@
 CHIP        ?= best1306p
 
-DEBUG       ?= 0
+DEBUG       ?= 1
 
 FPGA        ?= 0
 
