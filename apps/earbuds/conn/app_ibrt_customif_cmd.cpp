@@ -1,4 +1,3 @@
-extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
 /***************************************************************************
  *
  * Copyright 2015-2019 BES.
@@ -76,6 +75,8 @@ extern "C" uint8_t app_battery_get_percent(void);
 /* PMU retention latch; declaration kept local because this target does not export pmu.h to earbuds. */
 extern "C" void pmu_ntt_case_closed_latch_set(bool closed);
 extern "C" void ntt_battery_notify_0x31(void);
+
+extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
 
 static uint8_t g_tws_peer_battery_level = 0xFF;
 static bool g_tws_peer_battery_valid = false;
