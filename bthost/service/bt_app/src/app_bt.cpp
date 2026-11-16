@@ -228,15 +228,15 @@ extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
-#define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       2000
-#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  500
+#define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       1000
+#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  1000
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
 #define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           60
-#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        15
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        1
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
-#define NTT_CONN_PROMPT_TICK_MS            200
+#define NTT_CONN_PROMPT_TICK_MS             50
 #define NTT_CONN_PROMPT_START_TIMEOUT_MS   4000
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 
@@ -246,8 +246,28 @@ typedef struct
     bool notified;
     uint16_t delay_ms;
     bool boot_mode;
+    uint8_t scenario;
 } ntt_conn_prompt_slot_t;
 
+// Diagnostic scenario tags; never control ACL Page or FIRST_OUT.
+static volatile uint8_t ntt_conn_prompt_scenario = 0;
+extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario)
+{
+    if (scenario > 3)
+        return;
+    ntt_conn_prompt_scenario = scenario;
+    DEBUG_INFO(1,"[NTT_CONN_PROMPT][TEST8] scenario set=%u",scenario);
+}
+static const char *ntt_conn_prompt_scenario_name(uint8_t scenario)
+{
+    switch (scenario)
+    {
+        case 1: return "OUT_CASE";
+        case 2: return "KEY_RECONNECT";
+        case 3: return "OTA";
+        default: return "POWER_ON";
+    }
+}
 static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
 
 static ntt_conn_prompt_slot_t
@@ -573,7 +593,10 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
             ntt_conn_prompt_play_elapsed_ms = 0;
         }
 
-        ntt_conn_prompt_schedule();
+        if (ntt_conn_prompt_play_state == 0 && ntt_bt_connected_prompt_timer_id != NULL)
+            osTimerStart(ntt_bt_connected_prompt_timer_id, 1);
+        else
+            ntt_conn_prompt_schedule();
         return;
     }
 
@@ -650,6 +673,15 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     }
 #endif
 
+    // Master alone submits the TWS synchronized prompt.
+#ifdef IBRT
+    if (tws_connected && ui_role != TWS_UI_MASTER)
+    {
+        ntt_conn_prompt_schedule();
+        return;
+    }
+#endif
+
     // Do not submit a second prompt while another is streaming.
     if (app_prompt_is_streaming_on())
     {
@@ -664,8 +696,9 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     ntt_conn_prompt_play_elapsed_ms = 0;
     ntt_conn_prompt_next_device = (device_id + 1) % NTT_CONN_PROMPT_DEVICE_COUNT;
     ntt_conn_prompt_reset_ready();
-    DEBUG_INFO(2,"[NTT_CONN_PROMPT] play dev=%u mode=%s",
-        device_id, ntt_conn_prompt_slot[device_id].boot_mode ? "BOOT" : "RECONNECT");
+    DEBUG_INFO(3,"[NTT_CONN_PROMPT][TEST8] play dev=%u mode=%s scenario=%s",
+        device_id, ntt_conn_prompt_slot[device_id].boot_mode ? "BOOT" : "RECONNECT",
+        ntt_conn_prompt_scenario_name(ntt_conn_prompt_slot[device_id].scenario));
     ntt_conn_prompt_boot_phase = false;
     // Preserve the existing TWS synchronized prompt API.
     audio_player_play_prompt(AUD_ID_BT_CONNECTED, device_id);
@@ -696,10 +729,12 @@ static void ntt_bt_connected_prompt_request(uint8_t device_id)
     slot->notified = true;
     slot->pending = true;
     slot->boot_mode = ntt_conn_prompt_boot_phase;
+    slot->scenario = ntt_conn_prompt_scenario;
     slot->delay_ms = slot->boot_mode ? NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS
                                      : NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS;
-    DEBUG_INFO(3,"[NTT_CONN_PROMPT] queued dev=%u mode=%s delay=%u",
-        device_id, slot->boot_mode ? "BOOT" : "RECONNECT", slot->delay_ms);
+    DEBUG_INFO(4,"[NTT_CONN_PROMPT][TEST8] queued dev=%u mode=%s delay=%u scenario=%s",
+        device_id, slot->boot_mode ? "BOOT" : "RECONNECT", slot->delay_ms,
+        ntt_conn_prompt_scenario_name(slot->scenario));
     ntt_conn_prompt_schedule();
 }
 
