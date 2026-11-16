@@ -841,6 +841,8 @@ void wired_uart_get_battery_level(void)
         app_bt_get_curr_access_mode());
 }
 
+extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
+
 static void ntt_ota_reboot_flag_init(void)
 {
     uint32_t bootmode = hal_sw_bootmode_get();
@@ -2806,6 +2808,19 @@ void wired_uart_communication_modual_init(void)
          */
         ntt_ota_reboot_flag_init();
         ntt_poweron_reason_init();
+        /*
+         * Test8: classify Connected Prompt using the actual boot reasons.
+         * OTA takes precedence over power_key=1. Diagnostic only:
+         * this must not change 1-Wire, case latch, or mobile paging.
+         */
+        if (g_ntt_ota_reboot_boot)
+        {
+            ntt_conn_prompt_set_scenario(3); // OTA
+        }
+        else if (g_ntt_power_key_boot)
+        {
+            ntt_conn_prompt_set_scenario(2); // KEY_RECONNECT
+        }
 
         DBGPRINT("%s", __func__);
         app_set_threadhandle(APP_MODUAL_AIWANG_WIRED_UART, wired_uart_communication_msg_handle_process);
