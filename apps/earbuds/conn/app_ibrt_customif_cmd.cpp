@@ -217,6 +217,28 @@ extern "C" void ntt_fw_version_peer_ready_notify(void);
 extern "C" bool ntt_bt_addr_is_tws_peer(const struct bdaddr_t *bdaddr);
 extern "C" void ntt_tws_auth_diag_link_check(void);
 
+extern "C" void ntt_bt_connected_prompt_peer_event(const uint8_t *addr, bool connected);
+static void ntt_connected_prompt_sync_send(uint8_t *p, uint16_t n)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_NTT_CONNECTED_PROMPT_SYNC, p, n);
+}
+static void ntt_connected_prompt_sync_receive(uint16_t seq, uint8_t *p, uint16_t n)
+{
+    (void)seq;
+    if (!p || n != 7 || p[0] > 1) return;
+    EARBUDS_TRACE(1, "[NTT_CONN_PROMPT][TEST15] peer connected=%u", p[0]);
+    ntt_bt_connected_prompt_peer_event(p + 1, p[0] == 1);
+}
+extern "C" void ntt_tws_connected_prompt_sync(const uint8_t *addr, bool connected)
+{
+    if (!addr || !bts_tws_if_is_tws_link_connected()) return;
+    uint8_t p[7];
+    p[0] = connected ? 1 : 0;
+    memcpy(p + 1, addr, 6);
+    EARBUDS_TRACE(1, "[NTT_CONN_PROMPT][TEST15] forward connected=%u", p[0]);
+    tws_ctrl_send_cmd(APP_TWS_CMD_NTT_CONNECTED_PROMPT_SYNC, p, sizeof(p));
+}
+
 static void ntt_tws_delete_mobile_record_send(uint8_t *p_buff,uint16_t length)
 {
     app_ibrt_send_cmd_without_rsp( APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD,p_buff,length);
@@ -1461,6 +1483,14 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         app_ibrt_customif_eq6_mode_cmd_send,
         app_ibrt_customif_eq6_mode_cmd_receive,                  0,
         app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
+        APP_TWS_CMD_NTT_CONNECTED_PROMPT_SYNC, "NTT_CONNECTED_PROMPT_SYNC",
+        ntt_connected_prompt_sync_send,
+        ntt_connected_prompt_sync_receive, 0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null, app_ibrt_custom_cmd_rsp_handler_null,
         app_ibrt_custom_cmd_tx_done_handler_null,
         APP_TWS_CMD_PRIO_0
     },
