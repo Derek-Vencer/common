@@ -240,6 +240,8 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_CONN_PROMPT_TICK_MS             50
 #define NTT_CONN_PROMPT_START_TIMEOUT_MS   4000
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
+#define NTT_CONN_PROMPT_KEY_QUIET_MS 200
+#define NTT_CONN_PROMPT_OTA_STABLE_MS 500
 
 typedef struct
 {
@@ -286,6 +288,9 @@ static uint16_t ntt_conn_prompt_play_elapsed_ms = 0;
 static uint8_t ntt_conn_prompt_next_device = 0;
 // Both phones queued before the first prompt starts retain BOOT mode.
 static bool ntt_conn_prompt_boot_phase = true;
+static bool ntt_conn_prompt_last_audio_active = false;
+static uint16_t ntt_conn_prompt_audio_quiet_ms = 0;
+static uint16_t ntt_conn_prompt_ota_stable_ms = 0;
 
 
 #if defined(IBRT)
@@ -542,6 +547,14 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 {
     (void)param;
 
+    // Wait for a quiet window after the previous audio stream stops.
+    bool audio_active = app_prompt_is_streaming_on();
+    if (audio_active || ntt_conn_prompt_last_audio_active)
+        ntt_conn_prompt_audio_quiet_ms = 0;
+    else if (ntt_conn_prompt_audio_quiet_ms < 1000)
+        ntt_conn_prompt_audio_quiet_ms += NTT_CONN_PROMPT_TICK_MS;
+    ntt_conn_prompt_last_audio_active = audio_active;
+
     // Each device keeps its own BOOT or RECONNECT delay.
     for (uint8_t i = 0; i < NTT_CONN_PROMPT_DEVICE_COUNT; i++)
     {
@@ -628,6 +641,8 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 
     if (tws_connected && role_valid)
     {
+        if (ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS)
+            ntt_conn_prompt_ota_stable_ms += NTT_CONN_PROMPT_TICK_MS;
         if (ntt_bt_connected_prompt_last_role != ui_role)
         {
             ntt_bt_connected_prompt_last_role = ui_role;
@@ -648,6 +663,7 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     }
     else
     {
+        ntt_conn_prompt_ota_stable_ms = 0;
         ntt_bt_connected_prompt_stable_count = 0;
         ntt_bt_connected_prompt_last_role = NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
 
@@ -682,6 +698,15 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 
         DEBUG_INFO(1,"[NTT_CONN_PROMPT] no TWS, local fallback dev=%u",device_id);
     }
+
+    // OTA requires 500 ms of continuous TWS link and valid UI role.
+    // This is a stabilization guard, not a BESAUD readiness signal.
+    if (ntt_conn_prompt_slot[device_id].scenario == 3 && tws_connected &&
+        ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS)
+    {
+        ntt_conn_prompt_schedule();
+        return;
+    }
 #endif
 
     // Master alone submits the TWS synchronized prompt.
@@ -692,6 +717,16 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         return;
     }
 #endif
+
+    // On key boot, avoid racing the closing power-on audio stream.
+    // Only the first Connected Prompt is guarded.
+    if (ntt_conn_prompt_slot[device_id].scenario == 2 &&
+        ntt_conn_prompt_boot_phase &&
+        ntt_conn_prompt_audio_quiet_ms < NTT_CONN_PROMPT_KEY_QUIET_MS)
+    {
+        ntt_conn_prompt_schedule();
+        return;
+    }
 
     // Do not submit a second prompt while another is streaming.
     if (app_prompt_is_streaming_on())
