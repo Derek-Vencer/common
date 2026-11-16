@@ -1,3 +1,4 @@
+extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
 /***************************************************************************
  *
  * Copyright 2015-2019 BES.
@@ -3430,6 +3431,7 @@ static void ntt_first_out_start_mobile_reconnect(void)
         return;
     }
 
+    ntt_conn_prompt_set_scenario(1); // Test8 scenario tag only
     g_ntt_first_out_reconnect_started = true;
     g_ntt_first_out_reconnect_inflight = true;
 
