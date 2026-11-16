@@ -695,8 +695,11 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
          * Give the peer up to 10 seconds to reconnect before local
          * fallback; other scenarios retain the tested 3-second wait.
          */
+        // OTA boot can have a TWS ACL while the UI role is still invalid.
+        // Keep the pending prompt for up to 10 s instead of dropping at 3 s.
+        const bool ota_scenario = (ntt_conn_prompt_slot[device_id].scenario == 3);
         uint16_t tws_retry_limit =
-            (ntt_conn_prompt_slot[device_id].scenario == 3 && !tws_connected)
+            ota_scenario
                 ? NTT_BT_CONNECTED_PROMPT_OTA_TWS_RETRY
                 : NTT_BT_CONNECTED_PROMPT_MAX_RETRY;
 
@@ -709,9 +712,17 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 
         if (tws_connected)
         {
-            // TWS exists but the role is invalid.
-            // Do not generate a potentially unsynchronized prompt.
-            DEBUG_INFO(1,"[NTT_CONN_PROMPT] invalid role, drop dev=%u",device_id);
+            // Do not play on an invalid role. For OTA, retain the queued
+            // prompt during IBRT initialization; drop only after 10 s.
+            if (ota_scenario)
+            {
+                DEBUG_INFO(2,"[NTT_CONN_PROMPT][TEST14] OTA role timeout, drop dev=%u role=%u",
+                    device_id, ui_role);
+            }
+            else
+            {
+                DEBUG_INFO(1,"[NTT_CONN_PROMPT] invalid role, drop dev=%u",device_id);
+            }
 
             ntt_conn_prompt_slot[device_id].pending = false;
             ntt_conn_prompt_reset_ready();
