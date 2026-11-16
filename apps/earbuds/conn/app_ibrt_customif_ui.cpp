@@ -1,4 +1,3 @@
-extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
 /***************************************************************************
  *
  * Copyright 2015-2019 BES.
@@ -117,6 +116,8 @@ extern void ntt_tws_reconnect_after_mobile_profiles_ready_check(void);
 extern uint8_t out_of_case_reconnect;
 extern bool ntt_manual_pairing_mode;
 #ifdef IBRT
+extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario);
+
 static bool g_ntt_case_close_wait_poweroff = false;
 /* Test24-C: independent in-case role handover state. */
 #define NTT_INBOX_ROLE_RETRY_MS 200
