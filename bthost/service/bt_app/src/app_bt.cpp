@@ -92,6 +92,7 @@
 #include "bts_tws_if.h"
 #include "bts_tws_conn.h"
 #include "bts_tws_conn_sm.h"
+extern "C" void ntt_tws_connected_prompt_sync(const uint8_t *mobile_addr, bool connected);
 #if defined(IBRT_UI)
 #include "app_audio_control.h"
 #endif
@@ -852,6 +853,31 @@ static void ntt_bt_connected_prompt_cancel(uint8_t device_id)
 
     // Do not cancel another device's prompt or the active audio.
     ntt_conn_prompt_schedule();
+}
+
+// Test15: map peer phone address to this earbud's device ID.
+extern "C" void ntt_bt_connected_prompt_peer_event(const uint8_t *addr, bool connected)
+{
+#ifdef IBRT
+    if (!addr) return;
+    bt_bdaddr_t mobile;
+    memcpy(mobile.address, addr, 6);
+    uint8_t id = btif_me_get_device_id_from_addr(&mobile);
+    if (id >= NTT_CONN_PROMPT_DEVICE_COUNT)
+    {
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT][TEST15] unmapped peer phone id=%u",id);
+        return;
+    }
+    struct BT_DEVICE_T *dev = app_bt_get_device(id);
+    if (!dev || memcmp(dev->remote.address, addr, 6) != 0)
+    {
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT][TEST15] address mismatch id=%u",id);
+        return;
+    }
+    DEBUG_INFO(2,"[NTT_CONN_PROMPT][TEST15] mapped peer dev=%u connected=%u",id,connected);
+    if (connected) ntt_bt_connected_prompt_request(id);
+    else ntt_bt_connected_prompt_cancel(id);
+#endif
 }
 
 static void app_bt_profile_reconnect_timehandler(void const *param);
@@ -7215,6 +7241,10 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
 #endif
 #if defined(MEDIA_PLAYER_SUPPORT) //&& !defined(IBRT)
         ntt_bt_connected_prompt_request(id);
+#ifdef IBRT
+        if (app_ibrt_if_get_ui_role() == TWS_UI_SLAVE && bts_tws_if_is_tws_link_connected())
+            ntt_tws_connected_prompt_sync(curr_device->remote.address, true);
+#endif
 #endif
     }
 
@@ -7226,6 +7256,10 @@ void app_bt_profile_connect_manager_hf(int id, btif_hf_channel_t* Chan, struct h
         profile_mgr->profile_connected = false;
         DEBUG_INFO(0,"BT hfp disconnected!!! id = %d",id);
         ntt_bt_connected_prompt_cancel(id);
+#ifdef IBRT
+        if (app_ibrt_if_get_ui_role() == TWS_UI_SLAVE && bts_tws_if_is_tws_link_connected())
+            ntt_tws_connected_prompt_sync(curr_device->remote.address, false);
+#endif
 
 #ifdef GFPS_ENABLED
         if (gfps_is_last_response_pending())
@@ -7524,6 +7558,10 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
 #endif
 #if defined(MEDIA_PLAYER_SUPPORT) //&& !defined(IBRT)
         ntt_bt_connected_prompt_request(id);
+#ifdef IBRT
+        if (app_ibrt_if_get_ui_role() == TWS_UI_SLAVE && bts_tws_if_is_tws_link_connected())
+            ntt_tws_connected_prompt_sync(curr_device->remote.address, true);
+#endif
 #endif
     }
 
@@ -7535,6 +7573,10 @@ void app_bt_profile_connect_manager_a2dp(int id, a2dp_stream_t *Stream, const   
         profile_mgr->profile_connected = false;
         DEBUG_INFO(0,"BT a2dp disconnected!!! id = %d",id);
         ntt_bt_connected_prompt_cancel(id);
+#ifdef IBRT
+        if (app_ibrt_if_get_ui_role() == TWS_UI_SLAVE && bts_tws_if_is_tws_link_connected())
+            ntt_tws_connected_prompt_sync(curr_device->remote.address, false);
+#endif
 
 #ifdef GFPS_ENABLED
         if (gfps_is_last_response_pending())
