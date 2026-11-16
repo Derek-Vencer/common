@@ -914,14 +914,20 @@ void app_bt_phone_connected_event_process(void)
             app_status_indication_set(APP_STATUS_INDICATION_CONNECTED);
             app_tws_ledsta_to_slave_process(conn_devices, APP_STATUS_INDICATION_CONNECTED);
 
+            /* app_bt.cpp owns IBRT connected prompt scheduling per phone. */
+#ifndef IBRT
             ntt_bt_connected_prompt_request(0);
+#endif
 #ifdef BESUI_BOX_PUTINOUT_EN
             app_putinout_box_event_process(uicom.box_put_sta, true);
 #endif
         }
         else if(conn_devices == 2)
         {
+            /* app_bt.cpp owns IBRT connected prompt scheduling per phone. */
+#ifndef IBRT
             ntt_bt_connected_prompt_request(0);
+#endif
 #ifdef BESUI_BOX_PUTINOUT_EN
             app_putinout_box_event_process(uicom.box_put_sta, true);
 #endif
@@ -941,7 +947,10 @@ void app_bt_phone_connected_event_process(void)
                 app_status_indication_set(APP_STATUS_INDICATION_CONNECTED);
                 app_tws_ledsta_to_slave_process(conn_devices, APP_STATUS_INDICATION_CONNECTED);
 
-                ntt_bt_connected_prompt_request(0);
+                /* app_bt.cpp owns IBRT connected prompt scheduling per phone. */
+#ifndef IBRT
+            ntt_bt_connected_prompt_request(0);
+#endif
 #ifdef BESUI_BOX_PUTINOUT_EN
                 app_putinout_box_event_process(uicom.box_put_sta, true);
 #endif
@@ -956,7 +965,10 @@ void app_bt_phone_connected_event_process(void)
         {
             if(TWS_UI_MASTER == app_ibrt_if_get_ui_role())
             {
-                ntt_bt_connected_prompt_request(0);
+                /* app_bt.cpp owns IBRT connected prompt scheduling per phone. */
+#ifndef IBRT
+            ntt_bt_connected_prompt_request(0);
+#endif
                 #ifdef BESUI_BOX_PUTINOUT_EN
                 app_putinout_box_event_process(uicom.box_put_sta, true);
                 #endif
