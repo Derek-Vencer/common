@@ -91,6 +91,7 @@
 #include "bts_ibrt_conn.h"
 #include "bts_tws_if.h"
 #include "bts_tws_conn.h"
+#include "bts_tws_conn_sm.h"
 #if defined(IBRT_UI)
 #include "app_audio_control.h"
 #endif
@@ -242,6 +243,7 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 #define NTT_CONN_PROMPT_KEY_QUIET_MS 200
 #define NTT_CONN_PROMPT_OTA_STABLE_MS 500
+#define NTT_CONN_PROMPT_OTA_AUDIO_QUIET_MS 200
 #define NTT_CONN_PROMPT_BOOT_TWS_STABLE_MS 1800
 
 typedef struct
@@ -651,8 +653,18 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     {
         if (ntt_conn_prompt_boot_tws_stable_ms < NTT_CONN_PROMPT_BOOT_TWS_STABLE_MS)
             ntt_conn_prompt_boot_tws_stable_ms += NTT_CONN_PROMPT_TICK_MS;
-        if (ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS)
-            ntt_conn_prompt_ota_stable_ms += NTT_CONN_PROMPT_TICK_MS;
+        // OTA stability starts only after BESAUD is connected.
+        // ACL and a valid UI role alone are insufficient for peer prompts.
+        if (ntt_conn_prompt_slot[device_id].scenario == 3 &&
+            bts_tws_sm_is_besaud_connnected())
+        {
+            if (ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS)
+                ntt_conn_prompt_ota_stable_ms += NTT_CONN_PROMPT_TICK_MS;
+        }
+        else
+        {
+            ntt_conn_prompt_ota_stable_ms = 0;
+        }
         if (ntt_bt_connected_prompt_last_role != ui_role)
         {
             ntt_bt_connected_prompt_last_role = ui_role;
@@ -721,10 +733,11 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         return;
     }
 
-    // OTA requires 500 ms of continuous TWS link and valid UI role.
-    // This is a stabilization guard, not a BESAUD readiness signal.
+    // OTA requires BESAUD plus 500 ms stability; this is not an
+    // EVT_SHARE_INFO_COMPLETED callback and must be verified in logs.
     if (ntt_conn_prompt_slot[device_id].scenario == 3 && tws_connected &&
-        ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS)
+        (!bts_tws_sm_is_besaud_connnected() ||
+         ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS))
     {
         ntt_conn_prompt_schedule();
         return;
@@ -739,6 +752,15 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         return;
     }
 #endif
+
+    // OTA first prompt must not overlap the previous boot audio close.
+    if (ntt_conn_prompt_slot[device_id].scenario == 3 &&
+        ntt_conn_prompt_boot_phase &&
+        ntt_conn_prompt_audio_quiet_ms < NTT_CONN_PROMPT_OTA_AUDIO_QUIET_MS)
+    {
+        ntt_conn_prompt_schedule();
+        return;
+    }
 
     // On key boot, avoid racing the closing power-on audio stream.
     // Only the first Connected Prompt is guarded.
