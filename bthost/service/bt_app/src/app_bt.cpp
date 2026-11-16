@@ -242,6 +242,7 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 #define NTT_CONN_PROMPT_KEY_QUIET_MS 200
 #define NTT_CONN_PROMPT_OTA_STABLE_MS 500
+#define NTT_CONN_PROMPT_BOOT_TWS_STABLE_MS 1800
 
 typedef struct
 {
@@ -258,6 +259,12 @@ extern "C" void ntt_conn_prompt_set_scenario(uint8_t scenario)
 {
     if (scenario > 3)
         return;
+    // OTA reboot wins over the subsequent FIRST_OUT reconnect tag.
+    if (ntt_conn_prompt_scenario == 3 && scenario != 3)
+    {
+        DEBUG_INFO(1,"[NTT_CONN_PROMPT][TEST12] preserve OTA scenario, ignore=%u",scenario);
+        return;
+    }
     ntt_conn_prompt_scenario = scenario;
     DEBUG_INFO(1,"[NTT_CONN_PROMPT][TEST8] scenario set=%u",scenario);
 }
@@ -291,6 +298,7 @@ static bool ntt_conn_prompt_boot_phase = true;
 static bool ntt_conn_prompt_last_audio_active = false;
 static uint16_t ntt_conn_prompt_audio_quiet_ms = 0;
 static uint16_t ntt_conn_prompt_ota_stable_ms = 0;
+static uint16_t ntt_conn_prompt_boot_tws_stable_ms = 0;
 
 
 #if defined(IBRT)
@@ -641,6 +649,8 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 
     if (tws_connected && role_valid)
     {
+        if (ntt_conn_prompt_boot_tws_stable_ms < NTT_CONN_PROMPT_BOOT_TWS_STABLE_MS)
+            ntt_conn_prompt_boot_tws_stable_ms += NTT_CONN_PROMPT_TICK_MS;
         if (ntt_conn_prompt_ota_stable_ms < NTT_CONN_PROMPT_OTA_STABLE_MS)
             ntt_conn_prompt_ota_stable_ms += NTT_CONN_PROMPT_TICK_MS;
         if (ntt_bt_connected_prompt_last_role != ui_role)
@@ -663,6 +673,7 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     }
     else
     {
+        ntt_conn_prompt_boot_tws_stable_ms = 0;
         ntt_conn_prompt_ota_stable_ms = 0;
         ntt_bt_connected_prompt_stable_count = 0;
         ntt_bt_connected_prompt_last_role = NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
@@ -697,6 +708,17 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         }
 
         DEBUG_INFO(1,"[NTT_CONN_PROMPT] no TWS, local fallback dev=%u",device_id);
+    }
+
+    // Power-key and normal boot: first prompt must not race peer sync.
+    // Conservative 1.8 s TWS/role guard; not a Share Info event callback.
+    if (ntt_conn_prompt_boot_phase && tws_connected &&
+        (ntt_conn_prompt_slot[device_id].scenario == 0 ||
+         ntt_conn_prompt_slot[device_id].scenario == 2) &&
+        ntt_conn_prompt_boot_tws_stable_ms < NTT_CONN_PROMPT_BOOT_TWS_STABLE_MS)
+    {
+        ntt_conn_prompt_schedule();
+        return;
     }
 
     // OTA requires 500 ms of continuous TWS link and valid UI role.
