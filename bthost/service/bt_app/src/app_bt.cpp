@@ -228,11 +228,11 @@ extern bool app_prompt_is_streaming_on(void);
 #define APP_BT_PROFILE_CONNECT_RETRY_MS (10000)
 #define NTT_BT_DISCONNECTED_KEEP_ALIVE_TIMEOUT_MS    (300000) // Auto Power Off 300000 Sec.
 
-#define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       2000
-#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  500
+#define NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS       1000
+#define NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS  1000
 #define NTT_BT_CONNECTED_PROMPT_RETRY_MS           200
 #define NTT_BT_CONNECTED_PROMPT_MAX_RETRY           60
-#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        15
+#define NTT_BT_CONNECTED_PROMPT_STABLE_COUNT        1
 #define NTT_BT_CONNECTED_PROMPT_INVALID_ROLE      0xFF
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
@@ -573,7 +573,11 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
             ntt_conn_prompt_play_elapsed_ms = 0;
         }
 
-        ntt_conn_prompt_schedule();
+        // Advance the next pending phone promptly after stream completion.
+        if (ntt_conn_prompt_play_state == 0 && ntt_bt_connected_prompt_timer_id != NULL)
+            osTimerStart(ntt_bt_connected_prompt_timer_id, 1);
+        else
+            ntt_conn_prompt_schedule();
         return;
     }
 
@@ -647,6 +651,15 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
         }
 
         DEBUG_INFO(1,"[NTT_CONN_PROMPT] no TWS, local fallback dev=%u",device_id);
+    }
+#endif
+
+    // Only the master initiates the synchronized dual-ear transaction.
+#ifdef IBRT
+    if (tws_connected && ui_role != TWS_UI_MASTER)
+    {
+        ntt_conn_prompt_schedule();
+        return;
     }
 #endif
 
