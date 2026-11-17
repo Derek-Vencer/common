@@ -3352,6 +3352,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
         }
 #if defined(IBRT)
+        ntt_a2dp_gate_reset();
         app_bt_stream_ibrt_auto_synchronize_stop();
         app_tws_ibrt_audio_analysis_stop();
         app_tws_ibrt_audio_sync_stop();
