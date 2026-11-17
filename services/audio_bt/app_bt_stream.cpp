@@ -1407,6 +1407,55 @@ extern int32_t g_adj_eq;
 #endif
 
 static bool ntt_a2dp_first_pcm_logged = false;
+#if defined(IBRT)
+// NTT: gate only decoded A2DP PCM, before post-handler prompt mixing.
+// Keep BES decoder and native trigger running while waiting.
+extern "C" void ntt_a2dp_sync_ready_reset(void);
+extern "C" void ntt_a2dp_sync_ready_send(uint8_t session);
+extern "C" bool ntt_a2dp_sync_peer_ready(uint8_t session);
+static bool ntt_a2dp_gate_active = false;
+static bool ntt_a2dp_gate_finished = false;
+static uint32_t ntt_a2dp_gate_start_tick = 0;
+static void ntt_a2dp_gate_reset(void)
+{
+    ntt_a2dp_gate_active = false;
+    ntt_a2dp_gate_finished = false;
+    ntt_a2dp_gate_start_tick = 0;
+    ntt_a2dp_sync_ready_reset();
+}
+static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t len)
+{
+    struct BT_DEVICE_T *dev = app_bt_get_device(device_id);
+    if (!dev || !bts_tws_if_is_tws_link_connected())
+        return;
+    // Device id is the local A2DP stream identifier on both buds.
+    // No PCM or trigger blocking on the slave.
+    if (bts_ibrt_if_is_ibrt_link_connected(&dev->remote) &&
+        !bts_bt_if_is_dev_link_connected(&dev->remote)) {
+        ntt_a2dp_sync_ready_send(device_id);
+        return;
+    }
+    if (!bts_bt_if_is_dev_link_connected(&dev->remote) || ntt_a2dp_gate_finished)
+        return;
+    if (!ntt_a2dp_gate_active) {
+        ntt_a2dp_gate_active = true;
+        ntt_a2dp_gate_start_tick = hal_sys_timer_get();
+        AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_WAIT_START dev=%u", device_id);
+    }
+    if (ntt_a2dp_sync_peer_ready(device_id)) {
+        ntt_a2dp_gate_finished = true;
+        AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_READY_RELEASE dev=%u", device_id);
+        return;
+    }
+    if ((uint32_t)(hal_sys_timer_get() - ntt_a2dp_gate_start_tick) >= MS_TO_HWTICKS(500)) {
+        ntt_a2dp_gate_finished = true;
+        AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_TIMEOUT_500MS dev=%u", device_id);
+        return;
+    }
+    memset(buf, 0, len);
+}
+#endif
+
 
 FRAM_TEXT_LOC uint32_t bt_a2dp_player_more_data(uint8_t *buf, uint32_t len)
 {
@@ -1544,6 +1593,10 @@ FRAM_TEXT_LOC uint32_t bt_a2dp_player_more_data(uint8_t *buf, uint32_t len)
 #endif
 #endif
     }
+
+#if defined(IBRT)
+    ntt_a2dp_gate_decoded_pcm(device_id, buf, len);
+#endif
 
 #if defined(AUDIO_ADJ_EQ)
     AUDIO_BT_TRACE(0,"[%s] g_adj_eq = %d", __func__, g_adj_eq);
@@ -4453,6 +4506,9 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
 #endif
             a2dp_audio_init(freq, a2dp_audio_codec_type, &output_config, a2dp_audio_channel_sel, (uint16_t)dest_packet_mut, (uint16_t)chopping_dest_mut);
             ntt_a2dp_first_pcm_logged = false;
+#if defined(IBRT)
+            ntt_a2dp_gate_reset();
+#endif
             app_bt_stream_ibrt_reset_synchronize_status();
 
 #if defined(A2DP_SCALABLE_ON)
