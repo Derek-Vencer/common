@@ -958,6 +958,22 @@ void pmu_rtc_alarm_handler_dummy(uint32_t seconds)
 }
 #endif
 
+static volatile bool dut_timeout_shutdown_requested = false;
+
+bool app_is_dut_timeout_shutdown(void)
+{
+    return dut_timeout_shutdown_requested;
+}
+
+int app_shutdown_for_dut_timeout(void)
+{
+#ifndef IGNORE_APP_SHUTDOWN
+    // Publish the reason before app_shutdown wakes the main thread.
+    dut_timeout_shutdown_requested = true;
+#endif
+    return app_shutdown();
+}
+
 int app_shutdown(void)
 {
 #ifndef IGNORE_APP_SHUTDOWN

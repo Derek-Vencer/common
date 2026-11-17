@@ -1320,6 +1320,52 @@ static void app_ibrt_codec_user_info_sync(uint8_t *p_buff, uint16_t length);
 static void app_ibrt_codec_user_info_sync_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 #endif
 
+/* NTT A2DP Ready: use native 32-bit IBRT session, not local device ID. */
+static volatile bool ntt_a2dp_ready_valid = false;
+static volatile uint32_t ntt_a2dp_ready_session = 0;
+static volatile bool ntt_a2dp_ready_sent = false;
+
+extern "C" void ntt_a2dp_sync_ready_reset(void)
+{
+    ntt_a2dp_ready_valid = false;
+    ntt_a2dp_ready_sent = false;
+    ntt_a2dp_ready_session = 0;
+}
+
+extern "C" void ntt_a2dp_sync_ready_send(uint32_t session)
+{
+    if (!bts_tws_if_is_tws_link_connected() || ntt_a2dp_ready_sent)
+        return;
+    uint8_t payload[5] = {0xA2,
+        (uint8_t)session, (uint8_t)(session >> 8),
+        (uint8_t)(session >> 16), (uint8_t)(session >> 24)};
+    ntt_a2dp_ready_sent = true;
+    tws_ctrl_send_cmd(APP_TWS_CMD_NTT_A2DP_SLAVE_READY, payload, sizeof(payload));
+    EARBUDS_TRACE(1, "[NTT_A2DP_SYNC] SLAVE_READY_TX session=%u", (unsigned)session);
+}
+
+extern "C" bool ntt_a2dp_sync_peer_ready(uint32_t session)
+{
+    return ntt_a2dp_ready_valid && ntt_a2dp_ready_session == session;
+}
+
+static void ntt_a2dp_ready_send_handler(uint8_t *data, uint16_t length)
+{
+    app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_NTT_A2DP_SLAVE_READY, data, length);
+}
+
+static void ntt_a2dp_ready_receive_handler(uint16_t seq, uint8_t *data, uint16_t length)
+{
+    (void)seq;
+    if (!data || length != 5 || data[0] != 0xA2)
+        return;
+    const uint32_t session = (uint32_t)data[1] | ((uint32_t)data[2] << 8) |
+        ((uint32_t)data[3] << 16) | ((uint32_t)data[4] << 24);
+    ntt_a2dp_ready_session = session;
+    ntt_a2dp_ready_valid = true;
+    EARBUDS_TRACE(1, "[NTT_A2DP_SYNC] MASTER_READY_RX session=%u", (unsigned)session);
+}
+
 static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
 {
     {
@@ -1451,6 +1497,14 @@ static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
         app_ibrt_customif_music_eq_cmd_send,
         app_ibrt_customif_music_eq_cmd_send_handler,               0,
         app_ibrt_custom_cmd_rsp_timeout_handler_null,           app_ibrt_custom_cmd_rsp_handler_null,
+        app_ibrt_custom_cmd_tx_done_handler_null,
+        APP_TWS_CMD_PRIO_0
+    },
+    {
+        APP_TWS_CMD_NTT_A2DP_SLAVE_READY, "NTT_A2DP_SLAVE_READY",
+        ntt_a2dp_ready_send_handler, ntt_a2dp_ready_receive_handler, 0,
+        app_ibrt_custom_cmd_rsp_timeout_handler_null,
+        app_ibrt_custom_cmd_rsp_handler_null,
         app_ibrt_custom_cmd_tx_done_handler_null,
         APP_TWS_CMD_PRIO_0
     },

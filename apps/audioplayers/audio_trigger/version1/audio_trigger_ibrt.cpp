@@ -1104,6 +1104,10 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
                     sync_trigger.a2dp_session,
                     sync_trigger.trigger_time);
 
+                AUDIOPLAYERS_TRACE(0,
+                    "[NTT_A2DP_SYNC] MASTER_SEND_TRIGGER dev=%d session=%d tick=%u",
+                    device_id, sync_trigger.a2dp_session,
+                    (unsigned int)sync_trigger.trigger_time);
                 tws_ctrl_send_cmd(
                     APP_TWS_CMD_SET_TRIGGER_TIME,
                     (uint8_t *)&sync_trigger,
@@ -1202,6 +1206,10 @@ int app_bt_stream_ibrt_audio_slave_detect_next_packet_cb(uint8_t device_id, btif
                 return 0;
             }
             AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][SLAVE]cache ok use dma trigger2\n");
+            // NTT A2DP sync test: diagnostic only. This is the slave trigger
+            // preparation point, NOT proof that PCM playback is already ready.
+            // Do not gate the native trigger or Connected Prompt here.
+            AUDIOPLAYERS_TRACE(0, "[NTT_A2DP_SYNC] SLAVE_TRIGGER_PREPARED dev=%d", device_id);
             //flush all
             a2dp_audio_synchronize_dest_packet_mut(0);
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
@@ -1300,6 +1308,12 @@ int app_bt_stream_ibrt_auto_synchronize_status_set(APP_TWS_IBRT_AUDIO_SYNCHRONIZ
     AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC] status set:%d", status);
     ibrt_auto_synchronize_status = status;
     return 0;
+}
+
+// Quiet status probe for A2DP PCM callback: never print from the audio thread.
+extern "C" bool ntt_a2dp_slave_native_sync_ready(void)
+{
+    return ibrt_auto_synchronize_status == APP_TWS_IBRT_AUDIO_SYNCHRONIZE_STATUS_SYNCOK;
 }
 
 APP_TWS_IBRT_AUDIO_SYNCHRONIZE_STATUS_TYPE app_bt_stream_ibrt_auto_synchronize_status_get(void)
@@ -1873,6 +1887,9 @@ void app_bt_stream_ibrt_set_trigger_time(uint8_t device_id, APP_TWS_IBRT_AUDIO_S
                 }
                 app_bt_stream_ibrt_auto_synchronize_initsync_start(device_id, sync_trigger);
                 app_bt_stream_ibrt_auto_synchronize_status_set(APP_TWS_IBRT_AUDIO_SYNCHRONIZE_STATUS_SYNCOK);
+                // Diagnostic only: native IBRT sync accepted, not proof of audible PCM.
+                AUDIOPLAYERS_TRACE(0, "[NTT_A2DP_SYNC] SLAVE_NATIVE_SYNC_OK dev=%d trigger_tick=%u",
+                                   device_id, (unsigned int)tg_tick);
             }
         }else if (!app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM)){
             AUDIOPLAYERS_TRACE(0,"[STRM_TRIG][A2DP][IBRT] sbc player not active, so try to start it");
