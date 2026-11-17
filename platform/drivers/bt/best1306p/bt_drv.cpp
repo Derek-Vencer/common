@@ -19,6 +19,8 @@
 #include "bt_drv_reg_op.h"
 #include "bt_drv_interface.h"
 #include "hal_intersys.h"
+#include "cmsis.h"
+#include "hal_timer.h"
 #include "hal_trace.h"
 #include "hal_psc.h"
 #include "hal_sysfreq.h"
@@ -761,8 +763,15 @@ void btdrv_write_localinfo(const char *name, uint8_t len, const uint8_t *addr)
     btdrv_delay(20);
 }
 
+static uint32_t dut_connect_status = DUT_CONNECT_STATUS_DISCONNECTED;
+static uint32_t dut_idle_start_ticks = 0;
+
 void btdrv_enable_dut(void)
 {
+    uint32_t lock = int_lock();
+    dut_connect_status = DUT_CONNECT_STATUS_DISCONNECTED;
+    dut_idle_start_ticks = hal_sys_timer_get();
+    int_unlock(lock);
     btdrv_SendData(hci_cmd_enable_dut, sizeof(hci_cmd_enable_dut));
     btdrv_delay(100);
     btdrv_SendData(hci_cmd_enable_allscan, sizeof(hci_cmd_enable_allscan));
@@ -770,6 +779,12 @@ void btdrv_enable_dut(void)
     btdrv_SendData(hci_cmd_autoaccept_connect, sizeof(hci_cmd_autoaccept_connect));
     btdrv_delay(100);
     btdrv_dut_mode_enable = true;
+    lock = int_lock();
+    if (dut_connect_status == DUT_CONNECT_STATUS_DISCONNECTED)
+    {
+        dut_idle_start_ticks = hal_sys_timer_get();
+    }
+    int_unlock(lock);
 }
 
 void btdrv_enable_dut_again(void)
@@ -805,11 +820,23 @@ void btdrv_disable_scan(void)
     btdrv_delay(20);
 }
 
-static uint32_t dut_connect_status = DUT_CONNECT_STATUS_DISCONNECTED;
-
 uint32_t btdrv_dut_get_connect_status(void)
 {
     return dut_connect_status;
+}
+
+uint32_t btdrv_dut_get_idle_time_ms(void)
+{
+    uint32_t idle_ticks = 0;
+    uint32_t lock = int_lock();
+    if (btdrv_dut_mode_enable &&
+        dut_connect_status == DUT_CONNECT_STATUS_DISCONNECTED)
+    {
+        // Unsigned subtraction handles the system tick counter wrapping.
+        idle_ticks = (uint32_t)(hal_sys_timer_get() - dut_idle_start_ticks);
+    }
+    int_unlock(lock);
+    return TICKS_TO_MS(idle_ticks);
 }
 
 void btdrv_enable_dut_again(void);
@@ -827,12 +854,17 @@ void btdrv_dut_accessible_mode_manager(const unsigned char *data)
 #else
             btdrv_disable_scan();
 #endif
+            uint32_t lock = int_lock();
             dut_connect_status = DUT_CONNECT_STATUS_CONNECTED;
+            int_unlock(lock);
         }
         else if (data[0] == 0x04 && data[1] == 0x05 && data[2] == 0x04 && data[3] == 0x00)
         {
-            btdrv_enable_dut_again();
+            uint32_t lock = int_lock();
             dut_connect_status = DUT_CONNECT_STATUS_DISCONNECTED;
+            dut_idle_start_ticks = hal_sys_timer_get();
+            int_unlock(lock);
+            btdrv_enable_dut_again();
         }
     }
 }

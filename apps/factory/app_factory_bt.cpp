@@ -67,6 +67,9 @@ osTimerDef(bt_error_check_timer, bt_error_check_timer_handler);
 static osTimerId bt_error_check_timer_id = NULL;
 uint8_t test_mode_type=0;
 
+#define DUT_IDLE_POWEROFF_TIMEOUT_MS (30000U)
+static bool dut_idle_poweroff_enabled = false;
+
 #if 1 || defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
 #define POWEROFF_TIMEOUT        (60) //(60*15)
 
@@ -121,16 +124,30 @@ static void bt_error_check_timer_handler(void const *param)
         }
         pmu_reboot();
     }
-#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
-    dut_poweroff_cnt ++;
-    FACTORY_TRACE(2,"%s dut_poweroff_cnt:%d", __func__, dut_poweroff_cnt);
-    if(dut_poweroff_cnt >= POWEROFF_TIMEOUT)
+    if (dut_idle_poweroff_enabled && test_mode_type == 1 &&
+        btdrv_dut_get_idle_time_ms() >= DUT_IDLE_POWEROFF_TIMEOUT_MS)
     {
-        dut_poweroff_cnt = 0;
+        dut_idle_poweroff_enabled = false;
+        FACTORY_TRACE(0, "[DUT_IDLE] No tester connection for 30 seconds, shutdown");
 #if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
         uictl.shutdown_type = SHUTDOWN_DUT_TIMEOUT;
 #endif
-        app_shutdown();
+        app_shutdown_for_dut_timeout();
+    }
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+    // Signaling DUT uses connection-based idle time, not the legacy counter.
+    if (test_mode_type != 1)
+    {
+        dut_poweroff_cnt ++;
+        FACTORY_TRACE(2,"%s dut_poweroff_cnt:%d", __func__, dut_poweroff_cnt);
+        if(dut_poweroff_cnt >= POWEROFF_TIMEOUT)
+        {
+            dut_poweroff_cnt = 0;
+#if defined(BESUI_TWS_EN) || defined(BESUI_STEREO_EN)
+            uictl.shutdown_type = SHUTDOWN_DUT_TIMEOUT;
+#endif
+            app_shutdown();
+        }
     }
 #endif
 }
@@ -270,6 +287,7 @@ void app_factorymode_bt_xtalrangetest(APP_KEY_STATUS *status, void *param)
 void app_factorymode_bt_signalingtest(APP_KEY_STATUS *status, void *param)
 {
     dev_addr_name devinfo;
+    dut_idle_poweroff_enabled = false;
     FACTORY_TRACE(1,"%s",__func__);
     app_wdt_close();
 #ifndef BT_SIGNALTEST_SLEEP_EN
@@ -322,6 +340,7 @@ void app_factorymode_bt_signalingtest(APP_KEY_STATUS *status, void *param)
     pmu_sleep_en(1);
 #endif
 
+    dut_idle_poweroff_enabled = true;
 }
 
 static uint8_t test_end_timer_argument = TEST_ERROR_TYPE;

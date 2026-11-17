@@ -358,6 +358,8 @@ void btdrv_enable_tports(void);
 uint8_t btdrv_conhdl_to_linkid(uint16_t connect_hdl);
 void btdrv_ins_patch_test_init(void);
 uint32_t btdrv_dut_get_connect_status(void);
+// Returns zero while connected or outside DUT mode.
+uint32_t btdrv_dut_get_idle_time_ms(void);
 
 void btdrv_enable_one_packet_more_head(bool enable);
 void btdrv_reconn(bool en);

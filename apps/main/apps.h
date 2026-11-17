@@ -35,6 +35,9 @@ int app_deinit(int deinit_case);
 
 int app_shutdown(void);
 
+int app_shutdown_for_dut_timeout(void);
+bool app_is_dut_timeout_shutdown(void);
+
 int app_reset(void);
 
 void app_10_second_timer_check(void);

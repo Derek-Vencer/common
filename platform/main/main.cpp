@@ -603,15 +603,22 @@ int main(void)
     if ((sys_case == 1) || (sys_case == 0))
     {
         bool case_latch = pmu_ntt_case_closed_latch_get();
+        bool dut_timeout_shutdown = app_is_dut_timeout_shutdown();
 
         TR_INFO(TR_MOD(MAIN),"[NTT_SHUTDOWN_CHECK] final latch=%d sys_case=%d",case_latch, sys_case);
 
-        if (case_latch == 0)
+        // DUT idle shutdown must not be redirected to the case-open reboot path.
+        if (case_latch == 0 && !dut_timeout_shutdown)
         {
             TR_INFO(TR_MOD(MAIN),"[NTT_SHUTDOWN_CHECK] CASE OPEN -> redirect shutdown to reset");
 
             sys_case = 2;
             goto system_reset;
+        }
+
+        if (dut_timeout_shutdown)
+        {
+            TR_INFO(TR_MOD(MAIN), "[DUT_IDLE] bypass case-open reboot, power off");
         }
 
         TR_INFO(TR_MOD(MAIN), "shutdown\n");
