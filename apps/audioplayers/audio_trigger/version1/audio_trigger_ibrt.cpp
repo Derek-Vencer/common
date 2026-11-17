@@ -1202,6 +1202,10 @@ int app_bt_stream_ibrt_audio_slave_detect_next_packet_cb(uint8_t device_id, btif
                 return 0;
             }
             AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC][SLAVE]cache ok use dma trigger2\n");
+            // NTT A2DP sync test: diagnostic only. This is the slave trigger
+            // preparation point, NOT proof that PCM playback is already ready.
+            // Do not gate the native trigger or Connected Prompt here.
+            AUDIOPLAYERS_TRACE(0, "[NTT_A2DP_SYNC] SLAVE_TRIGGER_PREPARED dev=%d", device_id);
             //flush all
             a2dp_audio_synchronize_dest_packet_mut(0);
 #if defined(A2DP_LHDC_ON) || defined(A2DP_LHDCV5_ON)
