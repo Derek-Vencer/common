@@ -1408,6 +1408,15 @@ extern int32_t g_adj_eq;
 
 FRAM_TEXT_LOC uint32_t bt_a2dp_player_more_data(uint8_t *buf, uint32_t len)
 {
+    // Diagnostic only: record the first decoded A2DP PCM callback per stream.
+    // This callback precedes the playback post-handler prompt mixer.
+    static bool ntt_a2dp_first_pcm_logged = false;
+    if (!ntt_a2dp_first_pcm_logged)
+    {
+        ntt_a2dp_first_pcm_logged = true;
+        AUDIO_BT_TRACE(0, "[NTT_A2DP_SYNC] LOCAL_FIRST_PCM_CALLBACK len=%u",
+                       (unsigned int)len);
+    }
     POSSIBLY_UNUSED uint8_t nonType = bta_get_curr_a2dp_vender_codec_type();
     uint8_t device_id = app_bt_audio_get_curr_a2dp_device();
     app_bt_stream_trigger_checker_handler(TRIGGER_CHECKER_A2DP_PLAYERBLACK);
