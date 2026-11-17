@@ -1468,9 +1468,9 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
         AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_READY_RELEASE dev=%u", device_id);
         return;
     }
-    if ((uint32_t)(hal_sys_timer_get() - ntt_a2dp_gate_start_tick) >= MS_TO_HWTICKS(500)) {
+    if ((uint32_t)(hal_sys_timer_get() - ntt_a2dp_gate_start_tick) >= MS_TO_HWTICKS(300)) {
         ntt_a2dp_gate_finished = true;
-        AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_TIMEOUT_500MS dev=%u", device_id);
+        AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_TIMEOUT_300MS dev=%u", device_id);
         return;
     }
     memset(buf, 0, len);
