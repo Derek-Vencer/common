@@ -1414,6 +1414,7 @@ static bool ntt_a2dp_first_pcm_logged = false;
 extern "C" void ntt_a2dp_sync_ready_reset(void);
 extern "C" void ntt_a2dp_sync_ready_send(uint32_t session);
 extern "C" bool ntt_a2dp_sync_peer_ready(uint32_t session);
+extern "C" bool ntt_a2dp_slave_native_sync_ready(void);
 static bool ntt_a2dp_gate_active = false;
 static bool ntt_a2dp_gate_finished = false;
 static uint32_t ntt_a2dp_gate_start_tick = 0;
@@ -1449,7 +1450,10 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
     // Device id is the local A2DP stream identifier on both buds.
     // No PCM or trigger blocking on the slave.
     if (role == 2) {
-        ntt_a2dp_sync_ready_send(session);
+        // A decoded PCM callback alone does not prove the BES slave trigger is synced.
+        // Send Ready only after native IBRT initial synchronization succeeds.
+        if (ntt_a2dp_slave_native_sync_ready())
+            ntt_a2dp_sync_ready_send(session);
         return;
     }
     if (!mobile_link || ntt_a2dp_gate_finished)
