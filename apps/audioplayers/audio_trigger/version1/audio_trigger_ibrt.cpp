@@ -1104,6 +1104,10 @@ int app_bt_stream_ibrt_audio_master_detect_next_packet_cb(
                     sync_trigger.a2dp_session,
                     sync_trigger.trigger_time);
 
+                AUDIOPLAYERS_TRACE(0,
+                    "[NTT_A2DP_SYNC] MASTER_SEND_TRIGGER dev=%d session=%d tick=%u",
+                    device_id, sync_trigger.a2dp_session,
+                    (unsigned int)sync_trigger.trigger_time);
                 tws_ctrl_send_cmd(
                     APP_TWS_CMD_SET_TRIGGER_TIME,
                     (uint8_t *)&sync_trigger,
