@@ -1310,6 +1310,12 @@ int app_bt_stream_ibrt_auto_synchronize_status_set(APP_TWS_IBRT_AUDIO_SYNCHRONIZ
     return 0;
 }
 
+// Quiet status probe for A2DP PCM callback: never print from the audio thread.
+extern "C" bool ntt_a2dp_slave_native_sync_ready(void)
+{
+    return ibrt_auto_synchronize_status == APP_TWS_IBRT_AUDIO_SYNCHRONIZE_STATUS_SYNCOK;
+}
+
 APP_TWS_IBRT_AUDIO_SYNCHRONIZE_STATUS_TYPE app_bt_stream_ibrt_auto_synchronize_status_get(void)
 {
     AUDIOPLAYERS_TRACE(0,"[AUTO_SYNC] get status:%d", ibrt_auto_synchronize_status);
