@@ -1437,7 +1437,9 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
     const bool shadow_link = bts_ibrt_if_is_ibrt_link_connected(&dev->remote);
     const uint8_t role = mobile_link ? 1 : (shadow_link ? 2 : 0);
     if (ntt_a2dp_gate_role != role || ntt_a2dp_gate_device != device_id) {
-        ntt_a2dp_gate_reset();
+        // Preserve a Ready packet that arrived before the first Master PCM callback.
+        if (ntt_a2dp_gate_role != 0)
+            ntt_a2dp_gate_reset();
         ntt_a2dp_gate_role = role;
         ntt_a2dp_gate_device = device_id;
         AUDIO_BT_TRACE(2, "[NTT_A2DP_SYNC] ROLE_RESET role=%u dev=%u", role, device_id);
