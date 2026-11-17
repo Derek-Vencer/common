@@ -1416,11 +1416,16 @@ extern "C" bool ntt_a2dp_sync_peer_ready(uint8_t session);
 static bool ntt_a2dp_gate_active = false;
 static bool ntt_a2dp_gate_finished = false;
 static uint32_t ntt_a2dp_gate_start_tick = 0;
+// Track the currently active link role and stream to invalidate stale Ready.
+static uint8_t ntt_a2dp_gate_role = 0;
+static uint8_t ntt_a2dp_gate_device = 0xFF;
 static void ntt_a2dp_gate_reset(void)
 {
     ntt_a2dp_gate_active = false;
     ntt_a2dp_gate_finished = false;
     ntt_a2dp_gate_start_tick = 0;
+    ntt_a2dp_gate_role = 0;
+    ntt_a2dp_gate_device = 0xFF;
     ntt_a2dp_sync_ready_reset();
 }
 static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t len)
@@ -1428,14 +1433,22 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
     struct BT_DEVICE_T *dev = app_bt_get_device(device_id);
     if (!dev || !bts_tws_if_is_tws_link_connected())
         return;
+    const bool mobile_link = bts_bt_if_is_dev_link_connected(&dev->remote);
+    const bool shadow_link = bts_ibrt_if_is_ibrt_link_connected(&dev->remote);
+    const uint8_t role = mobile_link ? 1 : (shadow_link ? 2 : 0);
+    if (ntt_a2dp_gate_role != role || ntt_a2dp_gate_device != device_id) {
+        ntt_a2dp_gate_reset();
+        ntt_a2dp_gate_role = role;
+        ntt_a2dp_gate_device = device_id;
+        AUDIO_BT_TRACE(2, "[NTT_A2DP_SYNC] ROLE_RESET role=%u dev=%u", role, device_id);
+    }
     // Device id is the local A2DP stream identifier on both buds.
     // No PCM or trigger blocking on the slave.
-    if (bts_ibrt_if_is_ibrt_link_connected(&dev->remote) &&
-        !bts_bt_if_is_dev_link_connected(&dev->remote)) {
+    if (role == 2) {
         ntt_a2dp_sync_ready_send(device_id);
         return;
     }
-    if (!bts_bt_if_is_dev_link_connected(&dev->remote) || ntt_a2dp_gate_finished)
+    if (!mobile_link || ntt_a2dp_gate_finished)
         return;
     if (!ntt_a2dp_gate_active) {
         ntt_a2dp_gate_active = true;
