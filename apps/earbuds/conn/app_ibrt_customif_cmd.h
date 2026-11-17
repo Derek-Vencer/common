@@ -86,6 +86,7 @@ typedef enum
     APP_TWS_CMD_GET_PEER_FW_VERSION = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1B,
     APP_TWS_CMD_SYNC_EQ6_MODE    = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1C,
     APP_TWS_CMD_NTT_DELETE_MOBILE_RECORD = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1D,
+    APP_TWS_CMD_NTT_A2DP_SLAVE_READY = APP_IBRT_CMD_BASE | APP_IBRT_CUSTOM_CMD_PREFIX | 0x1E,
 #endif
 #endif
 //-------------------------------------------------------------------------------------------------------
@@ -199,5 +200,15 @@ bool ntt_case_state_is_valid(uint8_t state);
 void app_ibrt_customif_request_peer_fw_version(void);
 bool app_ibrt_customif_get_peer_fw_version(uint8_t version[NTT_EARBUD_FW_VERSION_LEN]);
 void app_ibrt_customif_clear_peer_fw_version(void);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void ntt_a2dp_sync_ready_reset(void);
+void ntt_a2dp_sync_ready_send(uint8_t session);
+bool ntt_a2dp_sync_peer_ready(uint8_t session);
+#ifdef __cplusplus
+}
+#endif
 
 #endif
