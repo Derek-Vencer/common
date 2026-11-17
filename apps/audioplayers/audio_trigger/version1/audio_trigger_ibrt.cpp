@@ -1877,6 +1877,9 @@ void app_bt_stream_ibrt_set_trigger_time(uint8_t device_id, APP_TWS_IBRT_AUDIO_S
                 }
                 app_bt_stream_ibrt_auto_synchronize_initsync_start(device_id, sync_trigger);
                 app_bt_stream_ibrt_auto_synchronize_status_set(APP_TWS_IBRT_AUDIO_SYNCHRONIZE_STATUS_SYNCOK);
+                // Diagnostic only: native IBRT sync accepted, not proof of audible PCM.
+                AUDIOPLAYERS_TRACE(0, "[NTT_A2DP_SYNC] SLAVE_NATIVE_SYNC_OK dev=%d trigger_tick=%u",
+                                   device_id, (unsigned int)tg_tick);
             }
         }else if (!app_bt_stream_isrun(APP_BT_STREAM_HFP_PCM)){
             AUDIOPLAYERS_TRACE(0,"[STRM_TRIG][A2DP][IBRT] sbc player not active, so try to start it");
