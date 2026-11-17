@@ -1406,11 +1406,12 @@ extern int get_ibrt_ch(void);
 extern int32_t g_adj_eq;
 #endif
 
+static bool ntt_a2dp_first_pcm_logged = false;
+
 FRAM_TEXT_LOC uint32_t bt_a2dp_player_more_data(uint8_t *buf, uint32_t len)
 {
     // Diagnostic only: record the first decoded A2DP PCM callback per stream.
     // This callback precedes the playback post-handler prompt mixer.
-    static bool ntt_a2dp_first_pcm_logged = false;
     if (!ntt_a2dp_first_pcm_logged)
     {
         ntt_a2dp_first_pcm_logged = true;
@@ -4451,6 +4452,7 @@ static int bt_a2dp_player(enum PLAYER_OPER_T on, enum APP_SYSFREQ_FREQ_T freq)
             }
 #endif
             a2dp_audio_init(freq, a2dp_audio_codec_type, &output_config, a2dp_audio_channel_sel, (uint16_t)dest_packet_mut, (uint16_t)chopping_dest_mut);
+            ntt_a2dp_first_pcm_logged = false;
             app_bt_stream_ibrt_reset_synchronize_status();
 
 #if defined(A2DP_SCALABLE_ON)
