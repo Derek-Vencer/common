@@ -1320,9 +1320,9 @@ static void app_ibrt_codec_user_info_sync(uint8_t *p_buff, uint16_t length);
 static void app_ibrt_codec_user_info_sync_handler(uint16_t rsp_seq, uint8_t *p_buff, uint16_t length);
 #endif
 
-/* NTT A2DP slave readiness handshake. No PCM gating until session validation. */
+/* NTT A2DP Ready: use native 32-bit IBRT session, not local device ID. */
 static volatile bool ntt_a2dp_ready_valid = false;
-static volatile uint8_t ntt_a2dp_ready_session = 0;
+static volatile uint32_t ntt_a2dp_ready_session = 0;
 static volatile bool ntt_a2dp_ready_sent = false;
 
 extern "C" void ntt_a2dp_sync_ready_reset(void)
@@ -1332,17 +1332,19 @@ extern "C" void ntt_a2dp_sync_ready_reset(void)
     ntt_a2dp_ready_session = 0;
 }
 
-extern "C" void ntt_a2dp_sync_ready_send(uint8_t session)
+extern "C" void ntt_a2dp_sync_ready_send(uint32_t session)
 {
     if (!bts_tws_if_is_tws_link_connected() || ntt_a2dp_ready_sent)
         return;
-    uint8_t payload[2] = {0xA2, session};
+    uint8_t payload[5] = {0xA2,
+        (uint8_t)session, (uint8_t)(session >> 8),
+        (uint8_t)(session >> 16), (uint8_t)(session >> 24)};
     ntt_a2dp_ready_sent = true;
     tws_ctrl_send_cmd(APP_TWS_CMD_NTT_A2DP_SLAVE_READY, payload, sizeof(payload));
-    EARBUDS_TRACE(1, "[NTT_A2DP_SYNC] SLAVE_READY_TX session=%u", session);
+    EARBUDS_TRACE(1, "[NTT_A2DP_SYNC] SLAVE_READY_TX session=%u", (unsigned)session);
 }
 
-extern "C" bool ntt_a2dp_sync_peer_ready(uint8_t session)
+extern "C" bool ntt_a2dp_sync_peer_ready(uint32_t session)
 {
     return ntt_a2dp_ready_valid && ntt_a2dp_ready_session == session;
 }
@@ -1355,11 +1357,13 @@ static void ntt_a2dp_ready_send_handler(uint8_t *data, uint16_t length)
 static void ntt_a2dp_ready_receive_handler(uint16_t seq, uint8_t *data, uint16_t length)
 {
     (void)seq;
-    if (!data || length != 2 || data[0] != 0xA2)
+    if (!data || length != 5 || data[0] != 0xA2)
         return;
-    ntt_a2dp_ready_session = data[1];
+    const uint32_t session = (uint32_t)data[1] | ((uint32_t)data[2] << 8) |
+        ((uint32_t)data[3] << 16) | ((uint32_t)data[4] << 24);
+    ntt_a2dp_ready_session = session;
     ntt_a2dp_ready_valid = true;
-    EARBUDS_TRACE(1, "[NTT_A2DP_SYNC] MASTER_READY_RX session=%u", data[1]);
+    EARBUDS_TRACE(1, "[NTT_A2DP_SYNC] MASTER_READY_RX session=%u", (unsigned)session);
 }
 
 static const app_tws_cmd_instance_t g_ibrt_custom_cmd_handler_table[]=
