@@ -135,6 +135,16 @@ void app_bt_stream_trigger_result(uint8_t device_id)
                                               (uint32_t)BTCLKS_TO_US(curr_ticks-tg_acl_trigger_start_time));
         app_bt_stream_set_trigger_time(0);
         app_bt_stream_trigger_stauts_set(BT_STREAM_TRIGGER_STATUS_OK);
+#if defined(IBRT)
+        // NTT test-only trace: native DMA trigger has completed on this bud.
+        // This is not a peer-ready handshake and does not alter PCM or prompts.
+        AUDIOPLAYERS_TRACE(0,
+            "[NTT_A2DP_SYNC] LOCAL_TRIGGER_OK dev=%d mobile_link=%d ibrt_link=%d tick=%u",
+            device_id,
+            bts_bt_if_is_dev_link_connected(&curr_device->remote),
+            bts_ibrt_if_is_ibrt_link_connected(&curr_device->remote),
+            (unsigned int)curr_ticks);
+#endif
     #if defined(IBRT)
         A2DP_AUDIO_HEADFRAME_INFO_T headframe_info;
         a2dp_audio_decoder_headframe_info_get(&headframe_info);
