@@ -18,6 +18,7 @@
 #include <assert.h>
 #include "cmsis_os.h"
 #include "bluetooth_bt_api.h"
+#include "bes_ibrt_api.h"
 #include "app_bt_audio.h"
 #include "tgt_hardware.h"
 #include "hal_uart.h"
@@ -1411,8 +1412,8 @@ static bool ntt_a2dp_first_pcm_logged = false;
 // NTT: gate only decoded A2DP PCM, before post-handler prompt mixing.
 // Keep BES decoder and native trigger running while waiting.
 extern "C" void ntt_a2dp_sync_ready_reset(void);
-extern "C" void ntt_a2dp_sync_ready_send(uint8_t session);
-extern "C" bool ntt_a2dp_sync_peer_ready(uint8_t session);
+extern "C" void ntt_a2dp_sync_ready_send(uint32_t session);
+extern "C" bool ntt_a2dp_sync_peer_ready(uint32_t session);
 static bool ntt_a2dp_gate_active = false;
 static bool ntt_a2dp_gate_finished = false;
 static uint32_t ntt_a2dp_gate_start_tick = 0;
@@ -1433,6 +1434,7 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
     struct BT_DEVICE_T *dev = app_bt_get_device(device_id);
     if (!dev || !bts_tws_if_is_tws_link_connected())
         return;
+    const uint32_t session = bta_tws_a2dp_get_ibrt_session(device_id);
     const bool mobile_link = bts_bt_if_is_dev_link_connected(&dev->remote);
     const bool shadow_link = bts_ibrt_if_is_ibrt_link_connected(&dev->remote);
     const uint8_t role = mobile_link ? 1 : (shadow_link ? 2 : 0);
@@ -1447,7 +1449,7 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
     // Device id is the local A2DP stream identifier on both buds.
     // No PCM or trigger blocking on the slave.
     if (role == 2) {
-        ntt_a2dp_sync_ready_send(device_id);
+        ntt_a2dp_sync_ready_send(session);
         return;
     }
     if (!mobile_link || ntt_a2dp_gate_finished)
@@ -1457,7 +1459,7 @@ static void ntt_a2dp_gate_decoded_pcm(uint8_t device_id, uint8_t *buf, uint32_t 
         ntt_a2dp_gate_start_tick = hal_sys_timer_get();
         AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_WAIT_START dev=%u", device_id);
     }
-    if (ntt_a2dp_sync_peer_ready(device_id)) {
+    if (ntt_a2dp_sync_peer_ready(session)) {
         ntt_a2dp_gate_finished = true;
         AUDIO_BT_TRACE(1, "[NTT_A2DP_SYNC] MASTER_READY_RELEASE dev=%u", device_id);
         return;
