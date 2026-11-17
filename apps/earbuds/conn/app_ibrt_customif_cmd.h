@@ -205,8 +205,8 @@ void app_ibrt_customif_clear_peer_fw_version(void);
 extern "C" {
 #endif
 void ntt_a2dp_sync_ready_reset(void);
-void ntt_a2dp_sync_ready_send(uint8_t session);
-bool ntt_a2dp_sync_peer_ready(uint8_t session);
+void ntt_a2dp_sync_ready_send(uint32_t session);
+bool ntt_a2dp_sync_peer_ready(uint32_t session);
 #ifdef __cplusplus
 }
 #endif
