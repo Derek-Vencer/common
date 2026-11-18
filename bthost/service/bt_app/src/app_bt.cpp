@@ -237,6 +237,7 @@ extern bool app_prompt_is_streaming_on(void);
 
 #define NTT_CONN_PROMPT_DEVICE_COUNT       2
 #define NTT_CONN_PROMPT_TICK_MS            50
+#define NTT_BT_CONNECTED_PROMPT_ROLE_WAIT_MAX_TICKS 400 // 20s total role wait
 #define NTT_CONN_PROMPT_START_TIMEOUT_MS   4000
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 
@@ -636,10 +637,24 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
 
         if (tws_connected)
         {
-            // TWS exists but the role is invalid.
-            // Do not generate a potentially unsynchronized prompt.
-            DEBUG_INFO(1,"[NTT_CONN_PROMPT] invalid role, drop dev=%u",device_id);
+            // Keep the request pending during a delayed TWS role switch.
+            // Playing with an invalid role risks an unsynchronized prompt.
+            // A later valid role will pass the normal 15-tick stability check.
+            if (ntt_bt_connected_prompt_retry_count <
+                NTT_BT_CONNECTED_PROMPT_ROLE_WAIT_MAX_TICKS)
+            {
+                ntt_bt_connected_prompt_retry_count++;
+                if ((ntt_bt_connected_prompt_retry_count % 20) == 0)
+                {
+                    DEBUG_INFO(2,"[NTT_CONN_PROMPT] wait valid role dev=%u retry=%u",
+                        device_id, ntt_bt_connected_prompt_retry_count);
+                }
+                ntt_conn_prompt_schedule();
+                return;
+            }
 
+            // Bound the wait to avoid a permanently active 50ms timer.
+            DEBUG_INFO(1,"[NTT_CONN_PROMPT] role wait timeout dev=%u",device_id);
             ntt_conn_prompt_slot[device_id].pending = false;
             ntt_conn_prompt_reset_ready();
             ntt_conn_prompt_schedule();
