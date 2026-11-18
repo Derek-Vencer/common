@@ -254,7 +254,7 @@ static osTimerId ntt_bt_connected_prompt_timer_id = NULL;
 static ntt_conn_prompt_slot_t
     ntt_conn_prompt_slot[NTT_CONN_PROMPT_DEVICE_COUNT] = {};
 
-static uint8_t ntt_bt_connected_prompt_retry_count = 0;
+static uint16_t ntt_bt_connected_prompt_retry_count = 0;
 static uint8_t ntt_bt_connected_prompt_stable_count = 0;
 static uint8_t ntt_bt_connected_prompt_last_role =
     NTT_BT_CONNECTED_PROMPT_INVALID_ROLE;
