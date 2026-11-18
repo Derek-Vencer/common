@@ -239,6 +239,7 @@ extern bool app_prompt_is_streaming_on(void);
 #define NTT_CONN_PROMPT_TICK_MS            50
 #define NTT_BT_CONNECTED_PROMPT_ROLE_WAIT_MAX_TICKS 400 // 20s total role wait
 #define NTT_CONN_PROMPT_START_TIMEOUT_MS   4000
+#define NTT_CONN_PROMPT_RECOVERY_DELAY_MS   1000
 #define NTT_CONN_PROMPT_FINISH_TIMEOUT_MS  8000
 
 typedef struct
@@ -264,6 +265,19 @@ static uint8_t ntt_conn_prompt_play_state = 0;
 static uint8_t ntt_conn_prompt_play_device = 0xFF;
 static uint16_t ntt_conn_prompt_play_elapsed_ms = 0;
 static uint8_t ntt_conn_prompt_next_device = 0;
+static volatile bool ntt_conn_prompt_tws_send_failed = false;
+static uint8_t ntt_conn_prompt_recovery_count[NTT_CONN_PROMPT_DEVICE_COUNT] = {};
+
+// Called by the prompt framework only when the peer-play command send fails.
+void ntt_connected_prompt_tws_send_failed(uint8_t device_id)
+{
+    if (device_id < NTT_CONN_PROMPT_DEVICE_COUNT &&
+        ntt_conn_prompt_play_state == 1 &&
+        ntt_conn_prompt_play_device == device_id)
+    {
+        ntt_conn_prompt_tws_send_failed = true;
+    }
+}
 // Both phones queued before the first prompt starts retain BOOT mode.
 static bool ntt_conn_prompt_boot_phase = true;
 
@@ -552,8 +566,30 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
             {
                 ntt_conn_prompt_play_state = 2;
                 ntt_conn_prompt_play_elapsed_ms = 0;
+                ntt_conn_prompt_tws_send_failed = false;
 
                 DEBUG_INFO(1,"[NTT_CONN_PROMPT] stream started dev=%u",ntt_conn_prompt_play_device);
+            }
+            else if (ntt_conn_prompt_tws_send_failed &&
+                     ntt_conn_prompt_play_elapsed_ms >= NTT_CONN_PROMPT_RECOVERY_DELAY_MS)
+            {
+                uint8_t dev = ntt_conn_prompt_play_device;
+                ntt_conn_prompt_tws_send_failed = false;
+                ntt_conn_prompt_play_state = 0;
+                ntt_conn_prompt_play_device = 0xFF;
+                ntt_conn_prompt_play_elapsed_ms = 0;
+                if (dev < NTT_CONN_PROMPT_DEVICE_COUNT &&
+                    ntt_conn_prompt_recovery_count[dev] == 0 &&
+                    ntt_conn_prompt_slot[dev].notified)
+                {
+                    ntt_conn_prompt_recovery_count[dev] = 1;
+                    ntt_conn_prompt_slot[dev].pending = true;
+                    ntt_conn_prompt_slot[dev].delay_ms = NTT_CONN_PROMPT_RECOVERY_DELAY_MS;
+                    ntt_conn_prompt_reset_ready();
+                    DEBUG_INFO(1,"[NTT_CONN_PROMPT] TWS send failed, retry once dev=%u",dev);
+                }
+                ntt_conn_prompt_schedule();
+                return;
             }
             else if (ntt_conn_prompt_play_elapsed_ms >= NTT_CONN_PROMPT_START_TIMEOUT_MS)
             {
@@ -684,6 +720,7 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     ntt_conn_prompt_play_device = device_id;
     ntt_conn_prompt_play_state = 1;
     ntt_conn_prompt_play_elapsed_ms = 0;
+    ntt_conn_prompt_tws_send_failed = false;
     ntt_conn_prompt_next_device = (device_id + 1) % NTT_CONN_PROMPT_DEVICE_COUNT;
     ntt_conn_prompt_reset_ready();
     DEBUG_INFO(2,"[NTT_CONN_PROMPT] play dev=%u mode=%s",
@@ -717,6 +754,7 @@ static void ntt_bt_connected_prompt_request(uint8_t device_id)
 
     slot->notified = true;
     slot->pending = true;
+    ntt_conn_prompt_recovery_count[device_id] = 0;
     slot->boot_mode = ntt_conn_prompt_boot_phase;
     slot->delay_ms = slot->boot_mode ? NTT_BT_CONNECTED_PROMPT_BOOT_DELAY_MS
                                      : NTT_BT_CONNECTED_PROMPT_RECONNECT_DELAY_MS;
@@ -732,6 +770,7 @@ static void ntt_bt_connected_prompt_cancel(uint8_t device_id)
 
     ntt_conn_prompt_slot[device_id].pending = false;
     ntt_conn_prompt_slot[device_id].notified = false;
+    ntt_conn_prompt_recovery_count[device_id] = 0;
     ntt_conn_prompt_slot[device_id].delay_ms = 0;
 
     DEBUG_INFO(1,"[NTT_CONN_PROMPT] cancel dev=%u",device_id);
