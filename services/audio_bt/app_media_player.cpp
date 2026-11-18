@@ -995,6 +995,13 @@ bool app_tws_let_peer_device_play_audio_prompt(uint32_t promptId,
     }
     else
     {
+        // Report only an explicit failure to send the synchronized Connected prompt.
+        // The scheduler retries at most once after allowing the failed request to settle.
+        if ((promptId & 0xFF) == AUD_ID_BT_CONNECTED)
+        {
+            extern void ntt_connected_prompt_tws_send_failed(uint8_t device_id);
+            ntt_connected_prompt_tws_send_failed(dev_id);
+        }
         return false;
     }
 }
