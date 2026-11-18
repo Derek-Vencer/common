@@ -602,8 +602,15 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
     bool tws_connected = bts_tws_if_is_tws_link_connected();
     uint8_t ui_role = app_ibrt_if_get_ui_role();
     bool role_valid = (ui_role == TWS_UI_MASTER || ui_role == TWS_UI_SLAVE);
+    // The UI role may become valid before the peer command ACL is ready.
+    // Never start a synchronized prompt without a usable peer ACL handle.
+    uint16_t tws_acl_handle = tws_connected ? bts_tws_if_get_tws_acl_handle()
+                                            : BT_INVALID_CONN_HANDLE;
+    bool tws_cmd_ready = tws_connected &&
+        (tws_acl_handle != 0) &&
+        (tws_acl_handle != BT_INVALID_CONN_HANDLE);
 
-    if (tws_connected && role_valid)
+    if (tws_cmd_ready && role_valid)
     {
         if (ntt_bt_connected_prompt_last_role != ui_role)
         {
@@ -646,8 +653,8 @@ static void ntt_bt_connected_prompt_timehandler(void const *param)
                 ntt_bt_connected_prompt_retry_count++;
                 if ((ntt_bt_connected_prompt_retry_count % 20) == 0)
                 {
-                    DEBUG_INFO(2,"[NTT_CONN_PROMPT] wait valid role dev=%u retry=%u",
-                        device_id, ntt_bt_connected_prompt_retry_count);
+                    DEBUG_INFO(4,"[NTT_CONN_PROMPT] wait TWS cmd ready dev=%u role=%u acl=0x%04X retry=%u",
+                        device_id, ui_role, tws_acl_handle, ntt_bt_connected_prompt_retry_count);
                 }
                 ntt_conn_prompt_schedule();
                 return;
