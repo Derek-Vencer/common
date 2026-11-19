@@ -1604,7 +1604,7 @@ extern "C" void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t, uint32_t);
 extern "C" void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t, uint8_t, uint32_t);
 static osTimerId ntt_eq_prompt_delay_timer = NULL;
 static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
-#define NTT_EQ_PROMPT_DELAY_MS 180U
+#define NTT_EQ_PROMPT_DELAY_MS 140U
 static void ntt_eq_delayed_prompt_cb(void const *arg)
 {
     (void)arg;
