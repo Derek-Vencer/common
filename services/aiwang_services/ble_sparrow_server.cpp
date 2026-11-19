@@ -1574,7 +1574,6 @@ static void ntt_eq_key_apply_cb(void const *arg)
         &audio_process.hw_dac_iir_cfg, AUDIO_EQ_TYPE_HW_DAC_IIR);
 #endif
 #endif
-    TRACE(2, "[NTT_EQ_TIMING] DSP_APPLY preset=%u tick=%u", (unsigned)preset, (unsigned)now);
     TRACE(2, "[NTT_EQ_FIX6] DSP_APPLY preset=%u now=%u",
           (unsigned)preset, (unsigned)now);
 }
@@ -1604,11 +1603,9 @@ extern "C" void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t, uint32_t);
 extern "C" void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t, uint8_t, uint32_t);
 static osTimerId ntt_eq_prompt_delay_timer = NULL;
 static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
-#define NTT_EQ_PROMPT_DELAY_MS 180U
 static void ntt_eq_delayed_prompt_cb(void const *arg)
 {
     (void)arg;
-    TRACE(2, "[NTT_EQ_TIMING] MEDIA_PLAY_CALL aud_id=%u", (unsigned)ntt_eq_pending_prompt);
     media_PlayAudio(ntt_eq_pending_prompt, 0);
 }
 osTimerDef(NTT_EQ_DELAYED_PROMPT, ntt_eq_delayed_prompt_cb);
@@ -1649,14 +1646,11 @@ static void ntt_keymap_play_eq_mode_prompt(uint8_t eq_preset)
     if (ntt_eq_prompt_delay_timer)
     {
         osTimerStop(ntt_eq_prompt_delay_timer);
-        osTimerStart(ntt_eq_prompt_delay_timer, NTT_EQ_PROMPT_DELAY_MS);
-        TRACE(1, "[NTT_EQ_TIMING] TIMER_START delay_ms=%u", (unsigned)NTT_EQ_PROMPT_DELAY_MS);
+        osTimerStart(ntt_eq_prompt_delay_timer, 320);
+        TRACE(0, "[NTT_EQ_DUCK] PROMPT_DELAY 320ms");
     }
     else
-    {
-        TRACE(2, "[NTT_EQ_TIMING] MEDIA_PLAY_FALLBACK aud_id=%u", (unsigned)ntt_eq_pending_prompt);
         media_PlayAudio(ntt_eq_pending_prompt, 0);
-    }
 }
 
 
