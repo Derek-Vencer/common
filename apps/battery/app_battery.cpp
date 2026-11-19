@@ -389,8 +389,28 @@ static bool ntt_battery_role_switch_hfp_busy(void)
 }
 
 
+static bool ntt_battery_role_switch_a2dp_streaming(void)
+{
+    // Check both mobile slots for multipoint streaming.
+    for (uint8_t device_id = 0; device_id < BT_DEVICE_NUM; device_id++)
+    {
+        if (app_bt_is_a2dp_streaming(device_id))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool ntt_battery_role_switch_is_blocked(void)
 {
+    // Defer battery-driven role switch until all A2DP streams pause/stop.
+    if (ntt_battery_role_switch_a2dp_streaming())
+    {
+        BATTERY_TRACE(0, "[LOW_BAT_ROLE] BLOCK: A2DP streaming");
+        return true;
+    }
+
     /*
      * OTA firmware upgrade protection
      */

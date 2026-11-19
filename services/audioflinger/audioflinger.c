@@ -3171,6 +3171,11 @@ uint32_t af_stream_start(enum AUD_STREAM_ID_T id, enum AUD_STREAM_T stream)
     role = af_get_stream_role(id, stream);
     AUDIOFLINGER_TRACE(3,"[%s] id = %d, stream = %d", __func__, id, stream);
 
+    if (stream == AUD_STREAM_PLAYBACK) {
+        AUDIOFLINGER_TRACE(2, "[NTT_EQ_TIMING] AF_STREAM_START id=%u stream=%u",
+                          (unsigned)id, (unsigned)stream);
+    }
+
     af_lock_thread();
 
     //check stream is open and not start.

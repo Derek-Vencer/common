@@ -105,7 +105,7 @@ static rssi_contrl_t rssi_contrl;
  *
  * Condition:
  *
- * Slave Mobile RSSI - Master Mobile RSSI > 10 dB
+ * Slave Mobile RSSI - Master Mobile RSSI > 15 dB
  *
  * Confirm 3 consecutive peer RSSI responses.
  *
@@ -330,7 +330,7 @@ static void ntt_rssi_role_switch_check(int8_t master_rssi,int8_t slave_rssi)
 
     /*
      * Slave must be stronger than Master
-     * by MORE than 10 dB.
+     * by MORE than 15 dB.
      */
     if (diff <= NTT_RSSI_ROLE_SWITCH_THRESHOLD_DB)
     {
