@@ -634,7 +634,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
             {
                 batt_last = level_buf;
                 uicom.bat_curr_level = level_buf;
-                app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+                app_ibrt_customif_cmd_sync_battery_level(app_battery_get_precise_percent());
             }
             else
             {
@@ -657,7 +657,7 @@ uint8_t app_battery_level_tran_process(uint16_t battery_volt)
             {
                 batt_last = level_buf;
                 uicom.bat_curr_level = level_buf;
-                app_ibrt_customif_cmd_sync_battery_level(app_battery_current_level());
+                app_ibrt_customif_cmd_sync_battery_level(app_battery_get_precise_percent());
             }
             else
             {
