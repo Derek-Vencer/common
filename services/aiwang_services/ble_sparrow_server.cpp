@@ -553,6 +553,11 @@ extern "C" void ntt_battery_notify_0x31(void)
 
     batteryArray[2] = boxBattery;
 
+    TRACE(7, "[NTT_BAT_DIAG][BLE] right_ui=%u right_hw=%u role=%u L=%u R=%u C=%u tws=%u",
+          (unsigned)app_ibrt_if_is_right_side(), (unsigned)isRightOfTheEarBuds(),
+          (unsigned)app_ibrt_if_get_ui_role(), (unsigned)batteryArray[0],
+          (unsigned)batteryArray[1], (unsigned)batteryArray[2], (unsigned)twsConnected);
+
     TRACE(0, "[BAT31][PUSH] L=%d R=%d BOX=%d TWS=%d", batteryArray[0], batteryArray[1], batteryArray[2], twsConnected);
 
     sparraw_tx_msg(0x31, batteryArray, 3);
