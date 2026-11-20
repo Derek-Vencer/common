@@ -2513,7 +2513,7 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
 
         if (app_battery_measure.currlevel <= 100)
         {
-            app_ibrt_customif_cmd_sync_battery_level(app_battery_measure.currlevel);
+            app_ibrt_customif_cmd_sync_battery_level(app_battery_get_precise_percent());
         }
     }
 
