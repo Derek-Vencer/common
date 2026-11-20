@@ -159,6 +159,7 @@ osMailQDef(sparraw_event_mailbox_id, SPARRAW_EVENT_MAX_MAILBOX, SPARRAW_MESSAGE_
 int app_reset(void);
 uint8_t getBoxChargerBattery(void);
 uint8_t getPeerBattery(void);
+extern bool isRightOfTheEarBuds(void);
 
 static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
 //#if need_send_data_by_notify
@@ -639,7 +640,6 @@ void handleGetBatteryLevel(const uint8_t *data,
 #endif
 }
 
-extern bool isRightOfTheEarBuds(void);
 static uint8_t g_bat31_last_value[3] = { 0xFF, 0xFF, 0xFF };
 static bool g_bat31_last_value_valid = false;
 static bool g_bat31_peer_disconnected = false;
