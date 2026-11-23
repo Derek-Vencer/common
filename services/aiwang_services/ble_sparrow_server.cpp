@@ -553,24 +553,20 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     return true;
 }
 
+/* Share the 0x31 last-sent cache between BLE notify-ready and periodic
+ * battery updates. The first valid report is still sent immediately;
+ * identical subsequent reports are suppressed.
+ */
+void sparrow_push_battery_level_notify(bool slave_disconnected);
+
 extern "C" void ntt_battery_notify_0x31(void)
 {
-    uint8_t batteryArray[3] = { 0xFF, 0xFF, 0xFF };
-
-    /* BLE notify-ready event: keep the original immediate push behavior.
-     * Use the same L/R monotonic filter as 0x31 periodic and 0x32 read.
-     * Charging-case reporting remains unchanged.
+    /* Preserve peer-unavailable reporting; do not treat BLE notify-ready
+     * as a TWS reconnection when the peer link is actually down.
      */
-    if (!sparrow_get_battery_report_values(batteryArray))
-    {
-        TRACE(0, "[BAT31][NOTIFY] battery not ready");
-        return;
-    }
-
-    TRACE(0, "[BAT31][NOTIFY] L=%u R=%u CASE=%u",
-          batteryArray[0], batteryArray[1], batteryArray[2]);
-
-    sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray));
+    const bool peer_disconnected = !bts_tws_if_is_tws_link_connected();
+    TRACE(0, "[BAT31][NOTIFY] ready peer_disc=%u", peer_disconnected);
+    sparrow_push_battery_level_notify(peer_disconnected);
 }
 
 void handleGetBatteryLevel(const uint8_t *data,
