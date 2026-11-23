@@ -380,6 +380,47 @@ static void ntt_api_send_error_notify(uint8_t rsp_cmd,uint8_t err)
         payload_len);
 }
 
+/*
+ * APP battery display is discharge-only while the earbuds are powered on.
+ * Charging happens with the case closed and the earbuds powered off.
+ * Keep independent RAM history for the physical LEFT and RIGHT earbuds.
+ * 0xFF means peer unavailable; a subsequent valid reading starts a new baseline.
+ * Charging-case battery is intentionally NOT filtered: retain its existing design.
+ */
+static uint8_t g_ntt_app_ear_battery_last[2] = { 0xFF, 0xFF };
+
+static void ntt_app_filter_ear_battery(uint8_t battery_array[3])
+{
+    for (uint8_t side = 0; side < 2; ++side)
+    {
+        const uint8_t raw = battery_array[side];
+        const uint8_t last = g_ntt_app_ear_battery_last[side];
+
+        if (raw == 0xFF)
+        {
+            g_ntt_app_ear_battery_last[side] = 0xFF;
+            continue;
+        }
+
+        if (raw > 100)
+        {
+            battery_array[side] = last;
+            continue;
+        }
+
+        if ((last != 0xFF) && (raw > last))
+        {
+            battery_array[side] = last;
+            TRACE(0, "[NTT_BAT_FILTER][%s] raw=%u last=%u out=%u",
+                  side == 0 ? "L" : "R", raw, last, battery_array[side]);
+        }
+        else
+        {
+            g_ntt_app_ear_battery_last[side] = raw;
+        }
+    }
+}
+
 static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
 {
     uint8_t local_battery = 0xFF;
@@ -497,6 +538,8 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
           tws_connected,
           box_battery);
 
+    ntt_app_filter_ear_battery(battery_array);
+
     TRACE(0,
           "[BAT_COMMON] report L=%u R=%u C=%u",
           battery_array[0],
@@ -508,60 +551,22 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
 
 extern "C" void ntt_battery_notify_0x31(void)
 {
-    uint8_t localBattery;
-    uint8_t peerBattery;
-    uint8_t boxBattery;
+    uint8_t batteryArray[3] = { 0xFF, 0xFF, 0xFF };
 
-    uint8_t batteryArray[3];
-
-    bool twsConnected;
-
-    localBattery = app_battery_get_percent();
-
-    if (!app_battery_is_measurement_valid() || localBattery == 0xFF || localBattery > 100)
+    /* BLE notify-ready event: keep the original immediate push behavior.
+     * Use the same L/R monotonic filter as 0x31 periodic and 0x32 read.
+     * Charging-case reporting remains unchanged.
+     */
+    if (!sparrow_get_battery_report_values(batteryArray))
     {
-        TRACE(0,
-            "[BAT31][NOTIFY] local battery not ready");
+        TRACE(0, "[BAT31][NOTIFY] battery not ready");
         return;
     }
 
-    peerBattery = app_ibrt_customif_get_tws_peer_battery_level();
+    TRACE(0, "[BAT31][NOTIFY] L=%u R=%u CASE=%u",
+          batteryArray[0], batteryArray[1], batteryArray[2]);
 
-    boxBattery = getBoxChargerBattery();
-
-    twsConnected = bts_tws_if_is_tws_link_connected();
-
-    if (!twsConnected || peerBattery > 100)
-    {
-        peerBattery = 0xFF;
-    }
-
-#ifdef IBRT
-    if (app_ibrt_if_is_right_side())
-    {
-        batteryArray[0] = peerBattery;
-        batteryArray[1] = localBattery;
-    }
-    else
-    {
-        batteryArray[0] = localBattery;
-        batteryArray[1] = peerBattery;
-    }
-#else
-    batteryArray[0] = localBattery;
-    batteryArray[1] = 0xFF;
-#endif
-
-    batteryArray[2] = boxBattery;
-
-    TRACE(7, "[NTT_BAT_DIAG][BLE] right_ui=%u right_hw=%u role=%u L=%u R=%u C=%u tws=%u",
-          (unsigned)app_ibrt_if_is_right_side(), (unsigned)isRightOfTheEarBuds(),
-          (unsigned)app_ibrt_if_get_ui_role(), (unsigned)batteryArray[0],
-          (unsigned)batteryArray[1], (unsigned)batteryArray[2], (unsigned)twsConnected);
-
-    TRACE(0, "[BAT31][PUSH] L=%d R=%d BOX=%d TWS=%d", batteryArray[0], batteryArray[1], batteryArray[2], twsConnected);
-
-    sparraw_tx_msg(0x31, batteryArray, 3);
+    sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray));
 }
 
 void handleGetBatteryLevel(const uint8_t *data,
