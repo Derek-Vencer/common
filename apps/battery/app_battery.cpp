@@ -287,7 +287,7 @@ extern "C" void wired_uart_mobile_connected_get_box_battery(void);
 #define NTT_FAST_REMOVE_MAX_WAIT_MS 5000
 #define NTT_FAST_REMOVE_SAMPLE_MS 200
 #define NTT_FAST_REMOVE_SAMPLE_COUNT 5
-#define NTT_FAST_REMOVE_WEAK_DBM (-45) /* Factory fallback, never overwritten */
+#define NTT_FAST_REMOVE_WEAK_DBM (-42) /* Factory fallback, never overwritten */
 #define NTT_FAST_REMOVE_DROP_DB 8
 static bool s_fast_remove_boot_session = false;
 static bool s_fast_remove_active = false;
@@ -2513,7 +2513,7 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
 
         if (app_battery_measure.currlevel <= 100)
         {
-            app_ibrt_customif_cmd_sync_battery_level(app_battery_measure.currlevel);
+            app_ibrt_customif_cmd_sync_battery_level(app_battery_get_precise_percent());
         }
     }
 

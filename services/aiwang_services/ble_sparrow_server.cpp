@@ -159,6 +159,7 @@ osMailQDef(sparraw_event_mailbox_id, SPARRAW_EVENT_MAX_MAILBOX, SPARRAW_MESSAGE_
 int app_reset(void);
 uint8_t getBoxChargerBattery(void);
 uint8_t getPeerBattery(void);
+extern bool isRightOfTheEarBuds(void);
 
 static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
 //#if need_send_data_by_notify
@@ -553,6 +554,11 @@ extern "C" void ntt_battery_notify_0x31(void)
 
     batteryArray[2] = boxBattery;
 
+    TRACE(7, "[NTT_BAT_DIAG][BLE] right_ui=%u right_hw=%u role=%u L=%u R=%u C=%u tws=%u",
+          (unsigned)app_ibrt_if_is_right_side(), (unsigned)isRightOfTheEarBuds(),
+          (unsigned)app_ibrt_if_get_ui_role(), (unsigned)batteryArray[0],
+          (unsigned)batteryArray[1], (unsigned)batteryArray[2], (unsigned)twsConnected);
+
     TRACE(0, "[BAT31][PUSH] L=%d R=%d BOX=%d TWS=%d", batteryArray[0], batteryArray[1], batteryArray[2], twsConnected);
 
     sparraw_tx_msg(0x31, batteryArray, 3);
@@ -634,7 +640,6 @@ void handleGetBatteryLevel(const uint8_t *data,
 #endif
 }
 
-extern bool isRightOfTheEarBuds(void);
 static uint8_t g_bat31_last_value[3] = { 0xFF, 0xFF, 0xFF };
 static bool g_bat31_last_value_valid = false;
 static bool g_bat31_peer_disconnected = false;
@@ -1604,7 +1609,7 @@ extern "C" void app_ibrt_customif_cmd_sync_music_eq_key(uint8_t, uint32_t);
 extern "C" void app_ibrt_customif_cmd_sync_eq6_mode_key(uint8_t, uint8_t, uint32_t);
 static osTimerId ntt_eq_prompt_delay_timer = NULL;
 static AUD_ID_ENUM ntt_eq_pending_prompt = AUD_ID_SOUND_Normal_EQ;
-#define NTT_EQ_PROMPT_DELAY_MS 140U
+#define NTT_EQ_PROMPT_DELAY_MS 230U
 static void ntt_eq_delayed_prompt_cb(void const *arg)
 {
     (void)arg;

@@ -575,7 +575,8 @@ void wired_uart_get_battery_level(void)
         s_last_tws_connected = (int8_t)tws_connected;
     }
 
-    app_ibrt_customif_cmd_sync_battery_level(raw_level);
+    /* TWS/APP uses precise percent; keep raw_level for case protocol conversion. */
+    app_ibrt_customif_cmd_sync_battery_level(app_battery_get_precise_percent());
 
 
     /*

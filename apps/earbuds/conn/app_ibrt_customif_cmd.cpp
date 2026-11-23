@@ -760,6 +760,9 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
         force,
         app_ibrt_if_get_ui_role());
 
+    EARBUDS_TRACE(4,"[NTT_BAT_DIAG][TX] role=%u battery=%u box=%u force=%u",
+        (unsigned)app_ibrt_if_get_ui_role(),(unsigned)current_level,(unsigned)box_level,(unsigned)force);
+
     tws_ctrl_send_cmd(APP_TWS_CMD_BATTERY_LEVEL_SYNC,cmd_sync_battery_level,sizeof(cmd_sync_battery_level));
 
     s_last_level = current_level;
@@ -908,6 +911,10 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     {
         return;
     }
+
+    EARBUDS_TRACE(4,"[NTT_BAT_DIAG][RX] role=%u old_peer=%u new_peer=%u box=%u",
+        (unsigned)role,(unsigned)app_ibrt_customif_get_tws_peer_battery_level(),
+        (unsigned)peer_percent,(unsigned)peer_box_raw);
 
     g_tws_peer_battery_level = peer_percent;
     g_tws_peer_battery_valid = true;
