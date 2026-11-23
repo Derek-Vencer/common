@@ -384,7 +384,8 @@ static void ntt_api_send_error_notify(uint8_t rsp_cmd,uint8_t err)
  * APP battery display is discharge-only while the earbuds are powered on.
  * Charging happens with the case closed and the earbuds powered off.
  * Keep independent RAM history for the physical LEFT and RIGHT earbuds.
- * 0xFF means peer unavailable; a subsequent valid reading starts a new baseline.
+ * 0xFF means peer unavailable. Keep the previous valid baseline across
+ * TWS disconnect/reconnect and role switch: only a power cycle resets RAM.
  * Charging-case battery is intentionally NOT filtered: retain its existing design.
  */
 static uint8_t g_ntt_app_ear_battery_last[2] = { 0xFF, 0xFF };
@@ -398,7 +399,10 @@ static void ntt_app_filter_ear_battery(uint8_t battery_array[3])
 
         if (raw == 0xFF)
         {
-            g_ntt_app_ear_battery_last[side] = 0xFF;
+            /* Report unavailable peer as 0xFF, but never erase its
+             * last valid battery percentage. Reconnection must not
+             * permit a higher percentage during the same boot.
+             */
             continue;
         }
 
