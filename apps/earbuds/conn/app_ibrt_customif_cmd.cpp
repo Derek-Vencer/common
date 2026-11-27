@@ -879,7 +879,7 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
     uint32_t app_epoch = 0;
     if (app_battery_is_measurement_valid() && current_level <= 100)
         app_level = ntt_app_battery_local_apply_internal(
-            app_battery_get_percent(), &app_flags, &app_epoch);
+            app_battery_get_app_percent(), &app_flags, &app_epoch);
 
     if (!bts_tws_if_is_tws_link_connected())
     {

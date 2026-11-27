@@ -396,7 +396,7 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3],
         return false;
     }
 
-    local_battery = app_battery_get_percent();
+    local_battery = app_battery_get_app_percent();
     peer_battery  = ntt_app_battery_peer_get();
     box_battery = getBoxChargerBattery();
     tws_connected = !peer_disconnected && bts_tws_if_is_tws_link_connected();

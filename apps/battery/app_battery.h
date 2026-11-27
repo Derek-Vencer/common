@@ -118,6 +118,8 @@ void ntt_case_poweroff_enable(void);
 void app_battery_opened_callback(void);
 uint8_t app_battery_get_display_percent(void);
 uint8_t app_battery_get_percent(void);
+/* Rounded APP-only percentage, with the 4100mV display endpoint. */
+uint8_t app_battery_get_app_percent(void);
 uint8_t app_battery_get_precise_percent(void);
 bool app_battery_is_measurement_valid(void);
 

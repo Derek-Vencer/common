@@ -1579,9 +1579,14 @@ uint8_t app_battery_get_precise_percent(void)
     return percent;
 }
 
-uint8_t app_battery_get_percent(void)
+/*
+ * Common rounded battery curve. Only the APP display path uses the
+ * calibrated full-voltage endpoint; raw TWS, role policy and case
+ * protocol keep their previous conversion.
+ */
+static uint8_t app_battery_get_rounded_percent(uint16_t volt, uint16_t full_mv)
 {
-    static const uint16_t battery_voltage_table[] =
+    const uint16_t battery_voltage_table[] =
     {
         3200, /*   0% */
         3656, /*  10% */
@@ -1593,7 +1598,7 @@ uint8_t app_battery_get_percent(void)
         3918, /*  70% */
         3987, /*  80% */
         4077, /*  90% */
-        4140, /* 100% */
+        full_mv, /* 100% */
     };
 
     static const uint8_t battery_percent_table[] =
@@ -1612,14 +1617,13 @@ uint8_t app_battery_get_percent(void)
     };
 
     const uint8_t table_count = sizeof(battery_voltage_table) / sizeof(battery_voltage_table[0]);
-    uint16_t volt = app_battery_measure.currvolt;
     uint8_t percent = 0;
     uint8_t index;
 
     /*
      * Battery discharge curve:
      *
-     * 4195mV = 100%
+     * full_mv = 100% (4140 policy / 4100 APP)
      * 4077mV =  90%
      * 3987mV =  80%
      * 3918mV =  70%
@@ -1674,7 +1678,23 @@ uint8_t app_battery_get_percent(void)
         }
     }
 
+    return percent;
+}
+
+uint8_t app_battery_get_percent(void)
+{
+    const uint16_t volt = app_battery_measure.currvolt;
+    const uint8_t percent = app_battery_get_rounded_percent(volt, 4140);
     BATTERY_TRACE(2,"[BAT_PERCENT] volt=%d percent=%d",volt,percent);
+    return percent;
+}
+
+/* APP display only: preserve the 0-90% curve and calibrate 100% to 4100mV. */
+uint8_t app_battery_get_app_percent(void)
+{
+    const uint16_t volt = app_battery_measure.currvolt;
+    const uint8_t percent = app_battery_get_rounded_percent(volt, 4100);
+    BATTERY_TRACE(2,"[BAT_APP_PERCENT] volt=%d percent=%d full_mv=4100",volt,percent);
     return percent;
 }
 
