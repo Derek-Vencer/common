@@ -192,6 +192,11 @@ void app_ibrt_customif_cmd_sync_bt_name(uint8_t *p_buff, uint16_t length);
 void set_tws_peer_battery_percent(uint8_t battery);
 uint8_t get_tws_peer_battery_percent(void);
 uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
+/* APP-only battery history is owned by the physical ear, not the UI role. */
+uint8_t ntt_app_battery_local_apply(uint8_t raw);
+void ntt_app_battery_local_reset_for_shutdown(void);
+uint8_t ntt_app_battery_peer_get(void);
+void ntt_app_battery_peer_link_lost(void);
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);
 void ntt_master_sync_all_user_settings_to_peer(void);
 bool ntt_case_state_is_valid(uint8_t state);

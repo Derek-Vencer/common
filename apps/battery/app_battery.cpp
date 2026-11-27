@@ -1193,6 +1193,10 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
 
             BATTERY_TRACE(0,"[POWER_OFF] shutdown started -> block timer restore");
             BATTERY_TRACE(2,"[NTT_POWER_OFF_PROMPT] case_close=%d ota=%d",g_ntt_case_fast_prompt_enabled,ota_is_in_progress());
+#ifdef IBRT
+            if (app_battery_is_charging() == 1)
+                ntt_app_battery_local_reset_for_shutdown();
+#endif
             app_shutdown();
 
             return;
@@ -1346,7 +1350,11 @@ static void earBudsCloseOff_PogonIn_handler(void const *param)
         pmu_charger_get_status(),
         ntt_charging_pwron_pending_shutdown,
         g_ntt_case_shutdown_started);
-        
+
+#ifdef IBRT
+    if (app_battery_is_charging() == 1)
+        ntt_app_battery_local_reset_for_shutdown();
+#endif
     app_shutdown();
 }
 

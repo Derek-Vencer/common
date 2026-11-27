@@ -1648,6 +1648,7 @@ void app_ibrt_customif_tws_on_acl_state_changed(ibrt_conn_tws_conn_state_event *
         case IBRT_CONN_ACL_DISCONNECTED:
         {
             EARBUDS_TRACE(0,"[NTT_USER_SYNC] app_ibrt_customif_tws_on_acl_state_changed IBRT_CONN_ACL_DISCONNECTED");
+            ntt_app_battery_peer_link_lost();
             bool mobile_connected = app_bt_ibrt_has_mobile_link_connected();
             bool pairing = app_ui_in_pairing_mode();
             EARBUDS_TRACE(0,"[NTT_TWS_DISC] mobile=%d pairing=%d manual=%d first_no_mobile=%d reason=0x%x",
@@ -2299,6 +2300,19 @@ void app_ibrt_customif_switch_ui_role_run_complete_callback(TWS_UI_ROLE_E curren
     }
 
 #ifdef IBRT
+    if (!errCode && current_role == TWS_UI_SLAVE)
+    {
+        /* The old Master's physical baseline is still valid. Only retire
+         * its now-unused peer cache and send one normal-format forced
+         * sync to the new Master; no new periodic timer. */
+        ntt_app_battery_peer_link_lost();
+        if (app_battery_is_measurement_valid())
+        {
+            uint8_t percent = app_battery_get_precise_percent();
+            if (percent <= 100)
+                app_ibrt_customif_cmd_sync_battery_level_force(percent);
+        }
+    }
     if (g_ntt_inbox_role_pending)
     {
         EARBUDS_TRACE(2, "[NTT_INBOX_ROLE][TEST24C] completion role=%d err=%d", current_role, errCode);

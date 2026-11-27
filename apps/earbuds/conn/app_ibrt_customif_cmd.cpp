@@ -67,6 +67,7 @@
 #include "factory_section.h"
 #include "app_bt_stream.h"
 #include "app_battery.h"
+#include "cmsis.h"
 
 extern "C" uint8_t app_ibrt_if_get_ui_role(void);
 
@@ -80,6 +81,148 @@ static uint8_t g_tws_peer_battery_level = 0xFF;
 static bool g_tws_peer_battery_valid = false;
 static uint8_t g_tws_peer_box_battery_level = 0xFF;
 static bool g_tws_peer_box_battery_valid = false;
+
+/*
+ * APP-only battery filter. Each physical ear owns its own RAM baseline,
+ * regardless of UI role. Keep the original raw TWS battery for HFP and
+ * role-switch policy; send the APP percentage as a separate extension.
+ *
+ * Wire format (same APP_TWS_CMD_BATTERY_LEVEL_SYNC):
+ * [0] raw percent [1] case percent [2] APP percent [3] flags.
+ * Legacy 1/2-byte RX remains supported. New RX always trusts the owner's
+ * APP percent, even if its first boot-marked frame was lost.
+ */
+#define NTT_APP_BAT_FLAG_MAGIC   0xA0
+#define NTT_APP_BAT_FLAG_OUT     0x01
+#define NTT_APP_BAT_FLAG_BOOT    0x02
+#define NTT_APP_BAT_FLAGS_MASK  0xFC
+
+static bool g_ntt_app_bat_enabled = false;
+static uint8_t g_ntt_app_bat_last = 0xFF;
+static uint32_t g_ntt_app_bat_epoch = 0;
+static bool g_ntt_app_bat_boot_log = true;
+static bool g_ntt_app_bat_boot_tx = true;
+static bool g_ntt_app_bat_force_sync = true;
+
+static uint8_t g_ntt_app_peer_bat_last = 0xFF;
+static bool g_ntt_app_peer_bat_fresh = false;
+
+static uint8_t ntt_app_battery_local_apply_internal(uint8_t raw,
+                                                   uint8_t *flags,
+                                                   uint32_t *epoch)
+{
+    if (raw > 100)
+        return raw;
+
+    uint32_t lock = int_lock();
+    bool enabled = g_ntt_app_bat_enabled;
+    uint8_t last = g_ntt_app_bat_last;
+    bool boot_log = g_ntt_app_bat_boot_log;
+    g_ntt_app_bat_boot_log = false;
+    uint8_t out = raw;
+
+    if (enabled)
+    {
+        if (last <= 100 && raw > last)
+            out = last;
+        g_ntt_app_bat_last = out;
+    }
+    /* In the disabled state do not keep a discharge-only baseline. */
+
+    if (flags != NULL)
+        *flags = NTT_APP_BAT_FLAG_MAGIC |
+                 (enabled ? NTT_APP_BAT_FLAG_OUT : 0) |
+                 (g_ntt_app_bat_boot_tx ? NTT_APP_BAT_FLAG_BOOT : 0);
+    if (epoch != NULL)
+        *epoch = g_ntt_app_bat_epoch;
+    int_unlock(lock);
+
+    if (boot_log)
+        EARBUDS_TRACE(1, "[NTT_BAT_FILTER] BOOT default=OFF current=%u", enabled);
+    if (enabled && last == 0xFF)
+        EARBUDS_TRACE(1, "[NTT_BAT_FILTER] BASELINE=%u", out);
+    else if (enabled && raw > out)
+        EARBUDS_TRACE(2, "[NTT_BAT_FILTER] raw=%u report=%u BLOCK_UP", raw, out);
+    return out;
+}
+
+uint8_t ntt_app_battery_local_apply(uint8_t raw)
+{
+    return ntt_app_battery_local_apply_internal(raw, NULL, NULL);
+}
+
+static void ntt_app_battery_local_out_case(void)
+{
+    uint32_t lock = int_lock();
+    g_ntt_app_bat_enabled = true;
+    g_ntt_app_bat_last = 0xFF;
+    ++g_ntt_app_bat_epoch;
+    int_unlock(lock);
+    EARBUDS_TRACE(0, "[NTT_BAT_FILTER] OUT_CASE filter=ON baseline=invalid");
+}
+
+void ntt_app_battery_local_reset_for_shutdown(void)
+{
+    uint32_t lock = int_lock();
+    g_ntt_app_bat_enabled = false;
+    g_ntt_app_bat_last = 0xFF;
+    ++g_ntt_app_bat_epoch;
+    int_unlock(lock);
+    EARBUDS_TRACE(0, "[NTT_BAT_FILTER] POWER_OFF charger=1 RESET_LOCAL");
+}
+
+uint8_t ntt_app_battery_peer_get(void)
+{
+    uint32_t lock = int_lock();
+    uint8_t level = g_ntt_app_peer_bat_fresh ? g_ntt_app_peer_bat_last : 0xFF;
+    int_unlock(lock);
+    return level;
+}
+
+void ntt_app_battery_peer_link_lost(void)
+{
+    /* Invalidate freshness only. Never reset a running ear's baseline. */
+    uint32_t lock = int_lock();
+    g_ntt_app_peer_bat_fresh = false;
+    g_ntt_app_bat_force_sync = true;
+    int_unlock(lock);
+}
+
+static void ntt_app_battery_peer_receive(const uint8_t *data, uint16_t length,
+                                         uint8_t raw)
+{
+    bool extended = length >= 4 &&
+                    (data[3] & NTT_APP_BAT_FLAGS_MASK) == NTT_APP_BAT_FLAG_MAGIC &&
+                    data[2] <= 100;
+    if (length > 2 && !extended)
+    {
+        EARBUDS_TRACE(1, "[NTT_BAT_FILTER] invalid APP extension len=%u", length);
+        return;
+    }
+
+    uint32_t lock = int_lock();
+    uint8_t old = g_ntt_app_peer_bat_last;
+    uint8_t out = raw;
+    if (extended)
+    {
+        /* Replace the stale cached value with the peer's authoritative
+         * filtered value. No receive-side min() across a peer power cycle. */
+        out = data[2];
+    }
+    else if (old <= 100 && raw > old)
+    {
+        /* Legacy peer lacks the APP extension: preserve old min policy. */
+        out = old;
+    }
+    g_ntt_app_peer_bat_last = out;
+    g_ntt_app_peer_bat_fresh = true;
+    int_unlock(lock);
+
+    if (extended && (data[3] & NTT_APP_BAT_FLAG_BOOT))
+        EARBUDS_TRACE(2, "[NTT_BAT_FILTER] TWS_RECV_RESET peer old=%u new=%u", old, out);
+    EARBUDS_TRACE(3, "[NTT_BAT_FILTER] PEER_APP raw=%u report=%u extended=%u",
+                  raw, out, extended);
+}
 
 uint8_t getBoxChargerBattery(void);
 extern "C" void ntt_color_code_nv_set(uint8_t color);
@@ -706,6 +849,19 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
     static uint32_t s_last_sync_ms = 0;
     static uint8_t s_last_level = 0xFF;
     static uint8_t s_last_box_level = 0xFF;
+    static uint32_t s_last_app_epoch = 0;
+
+    /*
+     * Update this ear's APP history even when it is the Master or when
+     * TWS is offline. The same history survives a later UI role swap.
+     * Use the same rounded percentage as the local BLE report.
+     */
+    uint8_t app_level = 0xFF;
+    uint8_t app_flags = 0;
+    uint32_t app_epoch = 0;
+    if (app_battery_is_measurement_valid() && current_level <= 100)
+        app_level = ntt_app_battery_local_apply_internal(
+            app_battery_get_percent(), &app_flags, &app_epoch);
 
     if (!bts_tws_if_is_tws_link_connected())
     {
@@ -721,7 +877,7 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
     /*
      * Never send boot default battery level.
      */
-    if (!app_battery_is_measurement_valid())
+    if (!app_battery_is_measurement_valid() || app_level > 100)
     {
         EARBUDS_TRACE(0,"[BAT_SYNC][TX] skip: ADC not ready");
         return;
@@ -743,16 +899,23 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
      * Keep original 120-second duplicate suppression.
      * Force synchronization bypasses this condition.
      */
-    if (!force && s_last_level == current_level && s_last_box_level == box_level && ((now_ms - s_last_sync_ms) < 120000))
+    uint32_t lock = int_lock();
+    bool pending = g_ntt_app_bat_force_sync || g_ntt_app_bat_boot_tx;
+    int_unlock(lock);
+    if (!force && !pending && s_last_level == current_level &&
+        s_last_box_level == box_level && s_last_app_epoch == app_epoch &&
+        ((now_ms - s_last_sync_ms) < 120000))
     {
         EARBUDS_TRACE(1,"[BAT_SYNC][TX] duplicate skip=%d",current_level);
         return;
     }
 
-    uint8_t cmd_sync_battery_level[2];
+    uint8_t cmd_sync_battery_level[4];
 
     cmd_sync_battery_level[0] = current_level;
     cmd_sync_battery_level[1] = box_level;
+    cmd_sync_battery_level[2] = app_level;
+    cmd_sync_battery_level[3] = app_flags;
 
     EARBUDS_TRACE(4,"[BAT_SYNC][TX] percent=%d box=%d force=%d role=%d",
         current_level,
@@ -767,6 +930,7 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
 
     s_last_level = current_level;
     s_last_box_level = box_level;
+    s_last_app_epoch = app_epoch;
     s_last_sync_ms = now_ms;
 }
 
@@ -802,7 +966,22 @@ static void app_ibrt_customif_sync_battery_level_send(uint8_t *p_buff,uint16_t l
 
     EARBUDS_TRACE(3,"[BAT_SYNC][SEND] ear=%u%% box=%u%% length=%u",ear_battery,box_battery,length);
 
+    bool extended = length >= 4 &&
+        (p_buff[3] & NTT_APP_BAT_FLAGS_MASK) == NTT_APP_BAT_FLAG_MAGIC;
+    bool boot = extended && (p_buff[3] & NTT_APP_BAT_FLAG_BOOT);
+    uint8_t app_level = extended ? p_buff[2] : 0xFF;
     app_ibrt_send_cmd_without_rsp(APP_TWS_CMD_BATTERY_LEVEL_SYNC,p_buff,length);
+
+    if (extended)
+    {
+        uint32_t lock = int_lock();
+        g_ntt_app_bat_force_sync = false;
+        if (boot)
+            g_ntt_app_bat_boot_tx = false;
+        int_unlock(lock);
+        if (boot)
+            EARBUDS_TRACE(1, "[NTT_BAT_FILTER] TWS_SEND_RESET app=%u", app_level);
+    }
 
     EARBUDS_TRACE(1,"[BAT_SYNC][SEND] APP_TWS_CMD_BATTERY_LEVEL_SYNC sent, length=%u",length);
 }
@@ -915,6 +1094,10 @@ static void app_ibrt_customif_sync_battery_level_send_handler(
     EARBUDS_TRACE(4,"[NTT_BAT_DIAG][RX] role=%u old_peer=%u new_peer=%u box=%u",
         (unsigned)role,(unsigned)app_ibrt_customif_get_tws_peer_battery_level(),
         (unsigned)peer_percent,(unsigned)peer_box_raw);
+
+    /* Update APP history before the existing 0x31 Notify. Raw peer
+     * percentage below is intentionally unchanged for non-APP users. */
+    ntt_app_battery_peer_receive(p_buff, length, peer_percent);
 
     g_tws_peer_battery_level = peer_percent;
     g_tws_peer_battery_valid = true;
@@ -2133,7 +2316,10 @@ void ntt_case_state_sync_local_update(bool in_case)
 
     g_ntt_local_case_state = new_state;
     if (new_state == NTT_CASE_STATE_OUT_CASE)
+    {
+        ntt_app_battery_local_out_case();
         g_ntt_auto_pairing_led_local = false;
+    }
     /*
      * Test19 Fix4: enforce pairing shutdown at the case-state source,
      * before reconnect/role-switch callbacks and peer notification.

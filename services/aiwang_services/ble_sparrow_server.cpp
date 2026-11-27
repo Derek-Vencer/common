@@ -380,52 +380,8 @@ static void ntt_api_send_error_notify(uint8_t rsp_cmd,uint8_t err)
         payload_len);
 }
 
-/*
- * APP battery display is discharge-only while the earbuds are powered on.
- * Charging happens with the case closed and the earbuds powered off.
- * Keep independent RAM history for the physical LEFT and RIGHT earbuds.
- * 0xFF means peer unavailable. Keep the previous valid baseline across
- * TWS disconnect/reconnect and role switch: only a power cycle resets RAM.
- * Charging-case battery is intentionally NOT filtered: retain its existing design.
- */
-static uint8_t g_ntt_app_ear_battery_last[2] = { 0xFF, 0xFF };
-
-static void ntt_app_filter_ear_battery(uint8_t battery_array[3])
-{
-    for (uint8_t side = 0; side < 2; ++side)
-    {
-        const uint8_t raw = battery_array[side];
-        const uint8_t last = g_ntt_app_ear_battery_last[side];
-
-        if (raw == 0xFF)
-        {
-            /* Report unavailable peer as 0xFF, but never erase its
-             * last valid battery percentage. Reconnection must not
-             * permit a higher percentage during the same boot.
-             */
-            continue;
-        }
-
-        if (raw > 100)
-        {
-            battery_array[side] = last;
-            continue;
-        }
-
-        if ((last != 0xFF) && (raw > last))
-        {
-            battery_array[side] = last;
-            TRACE(0, "[NTT_BAT_FILTER][%s] raw=%u last=%u out=%u",
-                  side == 0 ? "L" : "R", raw, last, battery_array[side]);
-        }
-        else
-        {
-            g_ntt_app_ear_battery_last[side] = raw;
-        }
-    }
-}
-
-static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
+static bool sparrow_get_battery_report_values(uint8_t battery_array[3],
+                                             bool peer_disconnected = false)
 {
     uint8_t local_battery = 0xFF;
     uint8_t peer_battery  = 0xFF;
@@ -441,9 +397,9 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
     }
 
     local_battery = app_battery_get_percent();
-    peer_battery  = app_ibrt_customif_get_tws_peer_battery_level();
+    peer_battery  = ntt_app_battery_peer_get();
     box_battery = getBoxChargerBattery();
-    tws_connected = bts_tws_if_is_tws_link_connected();
+    tws_connected = !peer_disconnected && bts_tws_if_is_tws_link_connected();
     local_valid = app_battery_is_measurement_valid() && (local_battery != 0xFF) && (local_battery <= 100);
 
     peer_valid = tws_connected && (peer_battery != 0xFF) && (peer_battery <= 100);
@@ -484,6 +440,9 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
         return false;
     }
 
+    /* The local physical ear owns its APP baseline across role changes. */
+    const uint8_t local_app_battery = ntt_app_battery_local_apply(local_battery);
+
     /*
      * When TWS is connected, the peer battery must also be valid.
      * Returning false prevents a 0x31 response containing 0xFF.
@@ -519,7 +478,7 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
          * Peer  = LEFT
          */
         battery_array[0] = peer_valid ? peer_battery : 0xFF;
-        battery_array[1] = local_battery;
+        battery_array[1] = local_app_battery;
     }
     else
     {
@@ -527,7 +486,7 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
          * Local = LEFT
          * Peer  = RIGHT
          */
-        battery_array[0] = local_battery;
+        battery_array[0] = local_app_battery;
         battery_array[1] = peer_valid ? peer_battery : 0xFF;
     }
 
@@ -541,8 +500,6 @@ static bool sparrow_get_battery_report_values(uint8_t battery_array[3])
           peer_valid,
           tws_connected,
           box_battery);
-
-    ntt_app_filter_ear_battery(battery_array);
 
     TRACE(0,
           "[BAT_COMMON] report L=%u R=%u C=%u",
@@ -695,7 +652,7 @@ void sparrow_push_battery_level_notify(bool slave_disconnected)
 {
     uint8_t batteryArray[3] = { 0xFF, 0xFF, 0xFF };
 
-    if (!sparrow_get_battery_report_values(batteryArray))
+    if (!sparrow_get_battery_report_values(batteryArray, slave_disconnected))
     {
         TRACE(0, "[BAT31][PUSH] battery not ready");
         return;
