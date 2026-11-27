@@ -868,6 +868,64 @@ static void ntt_poweron_reason_init(void)
 static volatile bool g_ntt_1wire_active = false;
 static volatile uint32_t g_ntt_1wire_last_rx_time = 0;
 
+#ifdef IBRT
+/* Only the existing UART idle callback can qualify an idle observation.
+ * A CRC-valid case frame clears it, even if the command is a duplicate.
+ * This state affects APP battery filtering only. */
+static volatile bool s_ntt_bat_uart_idle_seen = false;
+
+void ntt_app_battery_case_contact_check(void)
+{
+    if (!wiredUartInitFlag)
+        return;
+
+    /* Live PMU input is positive contact evidence, independent of the
+     * app's latched charging mode and the UI reconnect state. */
+    if (pmu_charger_get_status() == PMU_CHARGER_PLUGIN)
+    {
+        ntt_app_battery_local_case_confirm(true);
+        return;
+    }
+
+    if (ntt_app_battery_local_filter_enabled())
+        return;
+
+    if (!s_ntt_bat_uart_idle_seen || g_ntt_1wire_active ||
+        pmu_ntt_case_closed_latch_get() ||
+        app_battery_is_charging() ||
+        ntt_case_state_get_local() != NTT_CASE_STATE_OUT_CASE)
+        return;
+
+    const uint32_t last_rx = g_ntt_1wire_last_rx_time;
+    if (last_rx != 0 &&
+        TICKS_TO_MS(hal_sys_timer_get() - last_rx) < UART_IDLE_TIMEOUT_MS)
+        return;
+
+    /* RSSI/OUT_CASE and charger=0 are not sufficient. The existing UART
+     * idle interval plus both electrical inputs absent are required.
+     * Read failure, VIN present, OVP or short do not qualify removal. */
+    const uint8_t sts2 = icp1205_get_chrg_sts2();
+    if (sts2 == 0xFF ||
+        (sts2 & (CHRGSTS2_VIN_STS | CHRGSTS2_VIN_OVP_STS | CHRGSTS2_SHORT_STS)))
+    {
+        DBGPRINT("[NTT_BAT_CONTACT] keep filter OFF STS2=0x%02X", sts2);
+        return;
+    }
+
+    /* Recheck after I2C: a case frame or charger event may have arrived. */
+    if (!s_ntt_bat_uart_idle_seen || g_ntt_1wire_active ||
+        g_ntt_1wire_last_rx_time != last_rx ||
+        pmu_charger_get_status() != PMU_CHARGER_PLUGOUT ||
+        pmu_ntt_case_closed_latch_get() ||
+        app_battery_is_charging() ||
+        ntt_case_state_get_local() != NTT_CASE_STATE_OUT_CASE)
+        return;
+
+    DBGPRINT("[NTT_BAT_CONTACT] OUT evidence UART_IDLE=1 PMU=PLUGOUT STS2=0x%02X", sts2);
+    ntt_app_battery_local_case_confirm(false);
+}
+#endif
+
 extern "C" bool ntt_1wire_is_active(void)
 {
     return g_ntt_1wire_active;
@@ -1627,6 +1685,13 @@ static void wired_uart_communication_cmd_handle_process(uint8_t *uart_cmd_dat, u
     	printf("%s data two short", __func__);
         return;
     }
+
+#ifdef IBRT
+    /* A CRC-valid case frame proves electrical contact, including OPEN
+     * 0x07, EAR_PUTIN 0x11 and repeated battery/handshake frames. */
+    s_ntt_bat_uart_idle_seen = false;
+    ntt_app_battery_local_case_confirm(true);
+#endif
 
 	// 重置空闲定时器
 	if (uart_idle_timer_id != NULL) {
@@ -2518,6 +2583,9 @@ static void uart_idle_timeout_callback(void const *argument)
     }
 
     g_ntt_1wire_active = false;
+#ifdef IBRT
+    s_ntt_bat_uart_idle_seen = true;
+#endif
 
     /*
     * NTT:
@@ -2773,6 +2841,11 @@ static void uart_idle_timeout_callback(void const *argument)
 exit:
     osTimerDelete(uart_idle_timer_id);
     uart_idle_timer_id = NULL;
+#ifdef IBRT
+    /* The existing UI decision is finished. Only the separate hardware
+     * evidence check can enable the APP battery filter. */
+    ntt_app_battery_case_contact_check();
+#endif
 }
 
 /**

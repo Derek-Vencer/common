@@ -151,14 +151,31 @@ uint8_t ntt_app_battery_local_apply(uint8_t raw)
     return ntt_app_battery_local_apply_internal(raw, NULL, NULL);
 }
 
-static void ntt_app_battery_local_out_case(void)
+bool ntt_app_battery_local_filter_enabled(void)
 {
     uint32_t lock = int_lock();
-    g_ntt_app_bat_enabled = true;
-    g_ntt_app_bat_last = 0xFF;
-    ++g_ntt_app_bat_epoch;
+    bool enabled = g_ntt_app_bat_enabled;
     int_unlock(lock);
-    EARBUDS_TRACE(0, "[NTT_BAT_FILTER] OUT_CASE filter=ON baseline=invalid");
+    return enabled;
+}
+
+void ntt_app_battery_local_case_confirm(bool in_case)
+{
+    const bool enable = !in_case;
+    uint32_t lock = int_lock();
+    const bool changed = (g_ntt_app_bat_enabled != enable);
+    if (changed)
+    {
+        g_ntt_app_bat_enabled = enable;
+        g_ntt_app_bat_last = 0xFF;
+        ++g_ntt_app_bat_epoch;
+    }
+    int_unlock(lock);
+
+    /* Repeated contact evidence never resets a running baseline. */
+    if (changed)
+        EARBUDS_TRACE(2, "[NTT_BAT_FILTER] CONTACT_%s filter=%s baseline=invalid",
+                      in_case ? "IN" : "OUT", enable ? "ON" : "OFF");
 }
 
 void ntt_app_battery_local_reset_for_shutdown(void)
@@ -850,6 +867,7 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
     static uint8_t s_last_level = 0xFF;
     static uint8_t s_last_box_level = 0xFF;
     static uint32_t s_last_app_epoch = 0;
+    static uint8_t s_last_app_level = 0xFF;
 
     /*
      * Update this ear's APP history even when it is the Master or when
@@ -904,6 +922,7 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
     int_unlock(lock);
     if (!force && !pending && s_last_level == current_level &&
         s_last_box_level == box_level && s_last_app_epoch == app_epoch &&
+        s_last_app_level == app_level &&
         ((now_ms - s_last_sync_ms) < 120000))
     {
         EARBUDS_TRACE(1,"[BAT_SYNC][TX] duplicate skip=%d",current_level);
@@ -931,6 +950,7 @@ static void ntt_tws_battery_sync_internal(uint8_t current_level,bool force)
     s_last_level = current_level;
     s_last_box_level = box_level;
     s_last_app_epoch = app_epoch;
+    s_last_app_level = app_level;
     s_last_sync_ms = now_ms;
 }
 
@@ -2315,11 +2335,10 @@ void ntt_case_state_sync_local_update(bool in_case)
     }
 
     g_ntt_local_case_state = new_state;
+    /* Logical OUT_CASE also supports reconnect and RSSI inference.
+     * It must not enable the APP discharge-only filter by itself. */
     if (new_state == NTT_CASE_STATE_OUT_CASE)
-    {
-        ntt_app_battery_local_out_case();
         g_ntt_auto_pairing_led_local = false;
-    }
     /*
      * Test19 Fix4: enforce pairing shutdown at the case-state source,
      * before reconnect/role-switch callbacks and peer notification.

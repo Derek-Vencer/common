@@ -2152,22 +2152,8 @@ int app_battery_handle_process_normal(uint32_t status,  union APP_BATTERY_MSG_PR
                             "[BAT_SYNC] percent=%d",
                             app_percent);
 
-                /*
-                 * The phone's BLE session belongs to the TWS Master.
-                 * On a local percentage change, the Master can immediately
-                 * update App battery data through proactive 0x31 Notify.
-                 * A Slave only synchronizes its value above; the Master's
-                 * TWS receive handler calls
-                 * app_battery_notify_peer_percent_changed().
-                 */
-                if (app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
-                {
-                    BATTERY_TRACE(1,
-                                  "[BAT31] local battery changed=%d -> push",
-                                  app_percent);
-
-                    sparrow_push_battery_level_notify(false);
-                }
+                /* APP 0x31 is checked on every valid ADC event below.
+                 * Do not gate it on the truncated raw TWS percentage. */
             }
             else if (app_percent == 0xFF)
             {
@@ -2494,6 +2480,14 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
     }
     else
     {
+#ifdef IBRT
+        const bool voltage_sample =
+            (status == APP_BATTERY_STATUS_NORMAL ||
+             status == APP_BATTERY_STATUS_OVERVOLT ||
+             status == APP_BATTERY_STATUS_UNDERVOLT);
+        if (voltage_sample)
+            ntt_app_battery_case_contact_check();
+#endif
         switch (app_battery_measure.status)
         {
             case APP_BATTERY_STATUS_NORMAL:
@@ -2523,6 +2517,17 @@ static int app_battery_handle_process(APP_MESSAGE_BODY *msg_body)
         {
             app_ibrt_customif_cmd_sync_battery_level(app_battery_get_precise_percent());
         }
+#ifdef IBRT
+        /* Use the same rounded and filtered APP value as 0x32. The BLE
+         * last-accepted cache suppresses unchanged values; a missed or
+         * unavailable first notify can retry at the next valid ADC sample.
+         * No new ADC or TWS periodic timer. */
+        if (voltage_sample && app_battery_is_measurement_valid() &&
+            app_ibrt_if_get_ui_role() == TWS_UI_MASTER)
+        {
+            sparrow_push_battery_level_notify(!bts_tws_if_is_tws_link_connected());
+        }
+#endif
     }
 
     if (NULL != app_battery_measure.user_cb)
@@ -2997,6 +3002,10 @@ static void app_battery_pluginout_debounce_handler(void const *param)
          * ==================================================
          */
         BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] current=%d last=%d",status_charger,g_ntt_last_case_state);
+#ifdef IBRT
+        if (status_charger == APP_BATTERY_CHARGER_PLUGIN)
+            ntt_app_battery_local_case_confirm(true);
+#endif
         if (status_charger != g_ntt_last_case_state)
         {
             BATTERY_TRACE(2,"[NTT_CASE_BRIDGE] state changed %d -> %d",g_ntt_last_case_state,status_charger);

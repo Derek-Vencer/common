@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 
-#define DuAL_EARBUDS_VERSION   "0.9.47"
+#define DuAL_EARBUDS_VERSION   "0.9.48"
 
 #define NTT_FW_VER_MAJOR  (DuAL_EARBUDS_VERSION[0] - '0')
 #define NTT_FW_VER_MINOR  (DuAL_EARBUDS_VERSION[2] - '0')
@@ -195,6 +195,11 @@ uint8_t app_ibrt_customif_get_tws_peer_battery_level(void);
 /* APP-only battery history is owned by the physical ear, not the UI role. */
 uint8_t ntt_app_battery_local_apply(uint8_t raw);
 void ntt_app_battery_local_reset_for_shutdown(void);
+/* APP filter contact state is independent of the reconnect/UI box state. */
+void ntt_app_battery_local_case_confirm(bool in_case);
+bool ntt_app_battery_local_filter_enabled(void);
+/* Implemented in singleWiredUart.cpp; called on existing ADC events. */
+void ntt_app_battery_case_contact_check(void);
 uint8_t ntt_app_battery_peer_get(void);
 void ntt_app_battery_peer_link_lost(void);
 uint8_t app_ibrt_customif_get_tws_peer_box_battery_level(void);

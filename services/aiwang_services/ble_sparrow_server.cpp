@@ -163,7 +163,7 @@ extern bool isRightOfTheEarBuds(void);
 
 static void sparraw_tx_cmd_data_rsp_ack(uint8_t cmd_type, uint8_t sub_cmd);
 //#if need_send_data_by_notify
-static void sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
+static bool sparraw_tx_msg(uint8_t rsp_type, const uint8_t* data, uint16_t len);
 //#endif
 
 typedef enum
@@ -605,6 +605,7 @@ void handleGetBatteryLevel(const uint8_t *data,
 static uint8_t g_bat31_last_value[3] = { 0xFF, 0xFF, 0xFF };
 static bool g_bat31_last_value_valid = false;
 static bool g_bat31_peer_disconnected = false;
+static SPARROW_API_TRANSPORT_E g_bat31_last_transport = SPARROW_API_TRANSPORT_BLE;
 /*
  * Battery may be ready before the BLE client enables the 0x31 CCCD.
  * Keep the boot notification pending until a usable app transport exists.
@@ -618,7 +619,8 @@ static void sparrow_try_push_initial_battery_notify(void)
 {
     uint8_t battery_array[3] = { 0xFF, 0xFF, 0xFF };
 
-    if (!g_bat31_initial_notify_pending)
+    if (!g_bat31_initial_notify_pending && g_bat31_last_value_valid &&
+        g_bat31_last_transport == g_sparrow_api_transport)
     {
         return;
     }
@@ -638,7 +640,7 @@ static void sparrow_try_push_initial_battery_notify(void)
         return;
     }
 
-    g_bat31_initial_notify_pending = false;
+    /* The push path clears pending only when transport accepts the packet. */
     g_bat31_force_next_notify = true;
 
     TRACE(0, "[BAT31][BOOT] transport=%s, push initial battery",
@@ -694,8 +696,10 @@ void sparrow_push_battery_level_notify(bool slave_disconnected)
     * true  -> false：Peer 回連，送正常電量
     */
     if (!g_bat31_force_next_notify &&
+        !g_bat31_initial_notify_pending &&
         !peer_state_changed &&
         g_bat31_last_value_valid &&
+        g_bat31_last_transport == g_sparrow_api_transport &&
         (memcmp(g_bat31_last_value,
                 batteryArray,
                 sizeof(batteryArray)) == 0))
@@ -709,15 +713,6 @@ void sparrow_push_battery_level_notify(bool slave_disconnected)
         return;
     }
 
-    g_bat31_peer_disconnected = slave_disconnected;
-    g_bat31_force_next_notify = false;
-
-    memcpy(g_bat31_last_value,
-           batteryArray,
-           sizeof(g_bat31_last_value));
-
-    g_bat31_last_value_valid = true;
-
     TRACE(0,
           "[BAT31][PUSH] L=%u R=%u CASE=%u slave_disc=%u",
           batteryArray[0],
@@ -726,10 +721,22 @@ void sparrow_push_battery_level_notify(bool slave_disconnected)
           slave_disconnected);
 
 #if need_send_data_by_notify
-    sparraw_tx_msg(
-        0x31,                       // Proactive battery Notify
-        batteryArray,
-        sizeof(batteryArray));
+    const SPARROW_API_TRANSPORT_E transport = g_sparrow_api_transport;
+    if (!sparraw_tx_msg(0x31, batteryArray, sizeof(batteryArray)))
+    {
+        TRACE(0, "[BAT31][PUSH] transport not accepted, keep last-sent cache");
+        return;
+    }
+
+    /* Do not record a packet that was skipped because CCCD was disabled
+     * or rejected by the transport. Success here means accepted for TX,
+     * not a phone-side application acknowledgement. */
+    g_bat31_peer_disconnected = slave_disconnected;
+    g_bat31_last_transport = transport;
+    g_bat31_force_next_notify = false;
+    g_bat31_initial_notify_pending = false;
+    memcpy(g_bat31_last_value, batteryArray, sizeof(g_bat31_last_value));
+    g_bat31_last_value_valid = true;
 #endif
 }
 
@@ -3649,7 +3656,7 @@ void sparraw_tx_key_click_notify_msg(uint8_t kick_type)
 //#if need_send_data_by_notify
 extern bool app_spp_tota_send_data(uint8_t *ptrData, uint16_t length);
 
-static void sparraw_tx_msg(uint8_t rsp_type,
+static bool sparraw_tx_msg(uint8_t rsp_type,
                            const uint8_t *data,
                            uint16_t len)
 {
@@ -3663,7 +3670,7 @@ static void sparraw_tx_msg(uint8_t rsp_type,
               "[SPARROW_TX] overflow len=%u",
               (unsigned)rsp_len);
 
-        return;
+        return false;
     }
 
     memset(rsp_buffer, 0, sizeof(rsp_buffer));
@@ -3706,7 +3713,7 @@ static void sparraw_tx_msg(uint8_t rsp_type,
               "[SPARROW_TX][SPP] send ret=%d",
               ret ? 1 : 0);
 
-        return;
+        return ret;
     }
 
     if (app_sparraw_env.notifyEnable)
@@ -3718,18 +3725,20 @@ static void sparraw_tx_msg(uint8_t rsp_type,
               (unsigned)len,
               (unsigned)rsp_len);
 
-        ble_aiwang_srv_send_data_via_notification(
+        const uint8_t ret = ble_aiwang_srv_send_data_via_notification(
             rsp_buffer,
             rsp_len);
+        if (rsp_type == 0x31)
+            TRACE(1, "[BAT31][TX] BLE status=%u", ret);
+        return ret == BT_STS_SUCCESS || ret == BT_STS_PENDING;
     }
-    else
-    {
-        TRACE(0,
-              "[SPARROW_TX][BLE] notify disabled "
-              "rsp=0x%02X len=%u",
-              rsp_type,
-              (unsigned)rsp_len);
-    }
+
+    TRACE(0,
+          "[SPARROW_TX][BLE] notify disabled "
+          "rsp=0x%02X len=%u",
+          rsp_type,
+          (unsigned)rsp_len);
+    return false;
 }
 //#endif
 static void sparraw_read_rsp_msg(uint8_t rsp_type,uint16_t aw_connhdl,uint32_t aw_token,const uint8_t *data,uint16_t len)
@@ -4159,6 +4168,8 @@ void sparraw_connected(uint8_t conidx, bool enableNotify)
 {
     TRACE(0, "%s.", __func__);
 
+    const bool new_subscription = enableNotify &&
+        (!app_sparraw_env.notifyEnable || app_sparraw_env.conidx != conidx);
     app_sparraw_env.conidx = conidx;
     app_sparraw_env.notifyEnable = enableNotify;
 
@@ -4166,8 +4177,14 @@ void sparraw_connected(uint8_t conidx, bool enableNotify)
 
     if (enableNotify)
     {
-        TRACE(0, "[BAT31] BLE notify ready");
-
+        sparrow_api_set_transport(SPARROW_API_TRANSPORT_BLE);
+        if (new_subscription)
+        {
+            g_bat31_initial_notify_pending = true;
+            g_bat31_force_next_notify = true;
+            g_bat31_last_value_valid = false;
+            TRACE(0, "[BAT31] BLE notify ready -> force first valid report");
+        }
         ntt_battery_notify_0x31();
     }
 }
@@ -4175,6 +4192,9 @@ void sparraw_connected(uint8_t conidx, bool enableNotify)
 void sparraw_disconnected(void)
 {
 	TRACE(0,"%s.", __func__);
+    g_bat31_initial_notify_pending = true;
+    g_bat31_force_next_notify = true;
+    g_bat31_last_value_valid = false;
 	sparraw_ble_init();
 	sparraw_event_mailbox_free_all();
 	sparraw_rx_cmd_init();
